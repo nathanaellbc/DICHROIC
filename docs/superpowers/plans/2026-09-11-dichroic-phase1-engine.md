@@ -130,11 +130,26 @@ Harapan: tiga berkas tertulis. `SpektraHanatos2025Spectra.f32` berukuran tepat `
 
 - [ ] **Step 4: Buat venv referensi dan pasang paket spektrafilm**
 
+Jangan pakai `pip install -e` polos. `pyproject.toml` hulu menaruh `qtpy`,
+`pyside6`, `napari`, `Pillow`, `pyconify`, dan `markdown` di daftar dependensi
+utama, padahal komentar penulisnya sendiri menyatakan runtime inti tidak
+mengimpornya — ia terpasang hanya karena paket itu juga mengapalkan aplikasi
+GUI. Menariknya berarti ratusan megabyte dan dua paket paling rapuh di Windows,
+untuk kode yang tidak akan pernah kita panggil.
+
 ```bash
-python -m venv ~/.venvs/spektra-ref && ~/.venvs/spektra-ref/Scripts/pip install -e "$SPEKTRAFILM_PY"
+python -m venv D:/Projects/upstream/.venv-ref
+D:/Projects/upstream/.venv-ref/Scripts/pip install --no-deps -e "$SPEKTRAFILM_PY"
+D:/Projects/upstream/.venv-ref/Scripts/pip install numpy scipy colour-science scikit-image matplotlib opt-einsum numba OpenImageIO pyfftw rawpy exiv2 lensfunpy
 ```
 
-Jika `OpenImageIO` atau `pyfftw` gagal dibangun di Windows, ulangi langkah ini di WSL atau Docker dan catat itu di `tools/README.md`. Ini konsekuensi yang sudah diantisipasi, bukan kegagalan rencana.
+Jika `SimulationPipeline` ternyata mengimpor sesuatu dari daftar GUI secara
+transitif, `smoke_upstream.py` akan menangkapnya seketika — pasang paket itu
+saja, jangan kembali memasang seluruh stack GUI.
+
+Jika `OpenImageIO` atau `pyfftw` gagal dibangun di Windows, ulangi langkah ini
+di WSL atau Docker dan catat itu di `tools/README.md`. Ini konsekuensi yang
+sudah diantisipasi, bukan kegagalan rencana.
 
 - [ ] **Step 5: Tulis smoke test hulu**
 
