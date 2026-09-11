@@ -29,29 +29,13 @@ there. Venvs (`.venv-bake`, `.venv-ref`) live alongside the clones in
 
 ## Step 1–3: bake venv and bake script (PASSED)
 
-```bash
-mkdir -p D:/Projects/upstream
-git clone https://github.com/andreavolpato/spektrafilm.git D:/Projects/upstream/spektrafilm
-git clone https://github.com/chaert-s/spektrafilm-ofx.git D:/Projects/upstream/spektrafilm-ofx
-
-export SPEKTRAFILM_PY=D:/Projects/upstream/spektrafilm
-export SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx
-
-python -m venv D:/Projects/upstream/.venv-bake
-D:/Projects/upstream/.venv-bake/Scripts/pip install numpy scipy colour-science
-```
+Exact commands: `tools/setup_envs.md`, Steps 1–3. (Clone both repos, set
+`SPEKTRAFILM_PY`/`SPEKTRAFILM_OFX`, create `.venv-bake`, install `numpy
+scipy colour-science`, run `generate_profile_curves.py`.)
 
 Installed versions (unpinned, latest compatible with Python 3.13): `numpy
 2.5.3`, `scipy 1.18.1`, `colour-science 0.4.7`. Clean install, no build
 failures.
-
-```bash
-D:/Projects/upstream/.venv-bake/Scripts/python \
-  "$SPEKTRAFILM_OFX/tools/generate_profile_curves.py" \
-  --output /tmp/spektra-probe/SpektraGeneratedProfileCurves.cpp \
-  --hanatos-output /tmp/spektra-probe/SpektraHanatos2025Spectra.f32 \
-  --output-gamut-compression-output /tmp/spektra-probe/SpektraOutputGamutCompression.f32
-```
 
 Ran clean (one harmless `ColourUsageWarning` about matplotlib not being
 installed in the bake venv — matplotlib is not needed for this script's
@@ -92,14 +76,10 @@ calls.
 
 **Ruling applied:** install the package with `--no-deps`, then install
 only the twelve packages the core runtime under `spektrafilm/` actually
-needs (per the `pyproject.toml` core-runtime dependency block):
-
-```bash
-rm -rf D:/Projects/upstream/.venv-ref
-python -m venv D:/Projects/upstream/.venv-ref
-D:/Projects/upstream/.venv-ref/Scripts/pip install --no-deps -e D:/Projects/upstream/spektrafilm
-D:/Projects/upstream/.venv-ref/Scripts/pip install numpy scipy colour-science scikit-image matplotlib opt-einsum numba OpenImageIO pyfftw rawpy exiv2 lensfunpy
-```
+needs (per the `pyproject.toml` core-runtime dependency block). Exact
+commands: `tools/setup_envs.md`, Step 4 — that file is the single source
+of truth for the command sequence; it is not repeated here so the two
+files cannot drift apart again.
 
 All twelve installed as prebuilt Windows wheels — no source builds, no
 `OpenImageIO`/`pyfftw` build failures on Windows (the anticipated risk in
@@ -178,9 +158,7 @@ reading `spektrafilm/runtime/topology.py` directly.
 
 ## Step 6: smoke test (PASSED)
 
-```bash
-D:/Projects/upstream/.venv-ref/Scripts/python.exe spektra/tools/smoke_upstream.py
-```
+Exact command: `tools/setup_envs.md`, Step 5.
 
 Output:
 
@@ -192,28 +170,10 @@ Exit code `0`. Gate passed.
 
 ## Summary: reproduce from a clean machine
 
-```bash
-mkdir -p D:/Projects/upstream
-git clone https://github.com/andreavolpato/spektrafilm.git D:/Projects/upstream/spektrafilm
-git clone https://github.com/chaert-s/spektrafilm-ofx.git D:/Projects/upstream/spektrafilm-ofx
-export SPEKTRAFILM_PY=D:/Projects/upstream/spektrafilm
-export SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx
-
-python -m venv D:/Projects/upstream/.venv-bake
-D:/Projects/upstream/.venv-bake/Scripts/pip install numpy scipy colour-science
-D:/Projects/upstream/.venv-bake/Scripts/python "$SPEKTRAFILM_OFX/tools/generate_profile_curves.py" \
-  --output /tmp/spektra-probe/SpektraGeneratedProfileCurves.cpp \
-  --hanatos-output /tmp/spektra-probe/SpektraHanatos2025Spectra.f32 \
-  --output-gamut-compression-output /tmp/spektra-probe/SpektraOutputGamutCompression.f32
-
-python -m venv D:/Projects/upstream/.venv-ref
-D:/Projects/upstream/.venv-ref/Scripts/pip install --no-deps -e "$SPEKTRAFILM_PY"
-D:/Projects/upstream/.venv-ref/Scripts/pip install numpy scipy colour-science scikit-image matplotlib opt-einsum numba OpenImageIO pyfftw rawpy exiv2 lensfunpy
-
-D:/Projects/upstream/.venv-ref/Scripts/python spektra/tools/smoke_upstream.py
-```
-
-Expect the last command to print `OK: cmy_film shape=(16, 32, 3) min=...
+`tools/setup_envs.md` is the single source of truth for the exact
+command sequence (Steps 1–5) — run it end to end. It is not duplicated
+here so this file and that one cannot silently drift apart again. The
+last command it runs should print `OK: cmy_film shape=(16, 32, 3) min=...
 max=...` and exit `0`.
 
 ## Deviations summary

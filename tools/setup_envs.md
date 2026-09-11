@@ -46,10 +46,21 @@ Expect `SpektraHanatos2025Spectra.f32` to be exactly `192 * 192 * 81 * 4 =
 
 ## 4. Reference venv (the `spektrafilm` package itself)
 
+Do **not** run a plain `pip install -e "$SPEKTRAFILM_PY"`. That pulls the
+package's full `pyproject.toml` `dependencies` list, which includes GUI
+packages (`pyside6`, `napari`, `qtpy`, `Pillow`, `pyconify`, `markdown`)
+the core runtime never imports — `napari` alone drags in a huge transitive
+tree (Sphinx, IPython, app-model, etc.) that can spend many minutes
+resolving before anything installs. Install with `--no-deps` instead, then
+add only the twelve packages the core runtime under `spektrafilm/` needs:
+
 ```bash
 python -m venv D:/Projects/upstream/.venv-ref
-D:/Projects/upstream/.venv-ref/Scripts/pip install -e "$SPEKTRAFILM_PY"
+D:/Projects/upstream/.venv-ref/Scripts/pip install --no-deps -e "$SPEKTRAFILM_PY"
+D:/Projects/upstream/.venv-ref/Scripts/pip install numpy scipy colour-science scikit-image matplotlib opt-einsum numba OpenImageIO pyfftw rawpy exiv2 lensfunpy
 ```
+
+See `tools/README.md`, "Deviation 2", for why.
 
 ## 5. Smoke test
 
