@@ -31,6 +31,19 @@ function allSourceFiles(dir: string, acc: string[] = []): string[] {
  * the string, and the negated character class excludes all three so a
  * template literal's `${...}` interpolation doesn't break the match.
  *
+ * `import`/`export`/`from` are matched with `\b` word boundaries and `\s*`
+ * (zero or more, not one or more) surrounding whitespace, not literal
+ * spaces: real JS/TS tokenizes `import{x}from'...'` (no spaces at all —
+ * exactly what a minifier, or someone deliberately dodging this check,
+ * would produce) as the same three tokens as the spaced-out form, since `{`
+ * and `'` aren't identifier characters and don't need a space to separate
+ * them from a keyword. The `\b` after each keyword is what keeps this safe:
+ * it requires the next character to be non-identifier (whitespace, `{`,
+ * `'`, `"`, `` ` ``, `(`), so it can never match inside a longer identifier
+ * like `importantData` or `reimportCount` — those aren't real `import`/
+ * `export` tokens in valid source, and `\s*` alone (without `\b`) would
+ * have started matching inside them.
+ *
  * This matches on raw text, not a parsed AST, so a string or comment that
  * merely *looks* like a crossing import (e.g. inside a code sample in a
  * comment) can also trigger it. That's a deliberate choice: it fails safe
@@ -41,10 +54,10 @@ function allSourceFiles(dir: string, acc: string[] = []): string[] {
 function crossesBoundaryTo(source: string, target: string): boolean {
   const ref = `(['"\`])[^'"\`]*\\/${target}(?:\\/[^'"\`]*)?\\1`;
   const patterns = [
-    new RegExp(`import\\s+[^;]*?from\\s+${ref}`), // import ... from '.../target/...'
-    new RegExp(`import\\s+${ref}`), // import '.../target/...' (side-effect)
-    new RegExp(`import\\s*\\(\\s*${ref}\\s*\\)`), // import('.../target/...') (dynamic)
-    new RegExp(`export\\s+[^;]*?from\\s+${ref}`), // export ... from '.../target/...' (re-export)
+    new RegExp(`\\bimport\\b\\s*[^;]*?\\bfrom\\b\\s*${ref}`), // import ... from '.../target/...'
+    new RegExp(`\\bimport\\b\\s*${ref}`), // import '.../target/...' (side-effect)
+    new RegExp(`\\bimport\\b\\s*\\(\\s*${ref}\\s*\\)`), // import('.../target/...') (dynamic)
+    new RegExp(`\\bexport\\b\\s*[^;]*?\\bfrom\\b\\s*${ref}`), // export ... from '.../target/...' (re-export)
   ];
   return patterns.some((re) => re.test(source));
 }
@@ -78,5 +91,60 @@ describe('batas lisensi', () => {
       crossesBoundaryTo(readFileSync(f, 'utf8'), 'spektra'),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * Unit tests for crossesBoundaryTo itself, against string literals — no
+ * filesystem access, so these run in milliseconds and never depend on
+ * whether web/ exists.
+ *
+ * The two describe-level tests above are green today only because the real
+ * trees they scan happen to contain no violations; they say nothing about
+ * whether the pattern itself still works. Three regressions already reached
+ * this file that way (missing side-effect/dynamic-import forms, missing
+ * backtick delimiters, missing no-whitespace forms) — each one only caught
+ * by a manual probe that was written, run, and thrown away. This table is
+ * what replaces "prove it once, forget it" with permanent coverage: every
+ * form this file has ever had to learn about stays pinned here.
+ */
+describe('crossesBoundaryTo', () => {
+  const mustDetect: Array<[string, string]> = [
+    ['static import-from', "import { x } from '../../web/src/a';"],
+    ['side-effect import (no "from")', "import '../../web/src/a';"],
+    ['dynamic import()', "const m = import('../../web/src/a');"],
+    ['re-export (export * from)', "export * from '../../web/src/a';"],
+    ['named re-export (export { a } from)', "export { a } from '../../web/src/a';"],
+    ['export type re-export', "export type { X } from '../../web/src/a';"],
+    ['backtick, static path', 'import x from `../../web/src/a`;'],
+    ['backtick with ${...} interpolation', 'import(`../../web/src/${name}`);'],
+    ['import spanning multiple lines', 'import {\n  a,\n  b,\n} from \'../../web/src/a\';'],
+    ['import type', "import type { X } from '../../web/src/a';"],
+    ['different relative depth', "import x from '../../../../web/a';"],
+    ['double quotes', 'import x from "../../web/src/a";'],
+    ['await import(...) spanning multiple lines', "const m = await import(\n  '../../web/src/a'\n);"],
+    ['no space after "from"', "import x from'../../web/src/a';"],
+    ['no space at all', "import{x}from'../../web/src/a';"],
+    ['default + named combined', "import Def, { Named } from '../../web/src/a';"],
+  ];
+
+  const mustPass: Array<[string, string]> = [
+    ["bare package literally named 'webpack'", "import webpack from 'webpack';"],
+    ['sibling dir that starts with "web" (./web3/x)', "import x from './web3/x';"],
+    ['sibling dir that starts with "web" (./website/x)', "import x from './website/x';"],
+    ['ordinary string containing the word "web"', "const msg = 'visit our web site sometime';"],
+    [
+      'identifier containing "import" as a substring, unrelated "from"',
+      "const importantData = getData(); processFrom(importantData, from);",
+    ],
+    ['identifier containing "import" as a substring, no from/export nearby', 'const reimportCount = 3;'],
+  ];
+
+  it.each(mustDetect)('mendeteksi: %s', (_label, source) => {
+    expect(crossesBoundaryTo(source, 'web')).toBe(true);
+  });
+
+  it.each(mustPass)('tidak salah tangkap: %s', (_label, source) => {
+    expect(crossesBoundaryTo(source, 'web')).toBe(false);
   });
 });
