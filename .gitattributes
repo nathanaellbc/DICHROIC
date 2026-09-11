@@ -8,3 +8,12 @@
 # the repo.
 test/fixtures/**/*.f32 binary
 test/fixtures/**/*.json text eol=lf
+
+# public/data/ holds the baked web assets from tools/bake_web_assets.py
+# (Task 4): manifest.json is compared byte-for-byte against what the
+# baker wrote (offsets must tile the binary blobs with no gaps), and the
+# .f32/.f16 blobs are read as raw binary by the browser loader. Same
+# autocrlf hazard as the fixtures above -- pin it here too.
+public/data/**/*.json text eol=lf
+public/data/**/*.f32 binary
+public/data/**/*.f16 binary

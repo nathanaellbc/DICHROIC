@@ -1,0 +1,323 @@
+{
+  "hanatos": {
+    "width": 192,
+    "height": 192,
+    "bands": 81
+  },
+  "stocks": [
+    {
+      "id": "kodak_ektar_100",
+      "name": "Kodak Ektar 100",
+      "type": "negative",
+      "offsetFloats": 0,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_160",
+      "name": "Kodak Portra 160",
+      "type": "negative",
+      "offsetFloats": 1024,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_400",
+      "name": "Kodak Portra 400",
+      "type": "negative",
+      "offsetFloats": 2048,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_800",
+      "name": "Kodak Portra 800",
+      "type": "negative",
+      "offsetFloats": 3072,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_800_push1",
+      "name": "Kodak Portra 800 (Push 1)",
+      "type": "negative",
+      "offsetFloats": 4096,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_800_push2",
+      "name": "Kodak Portra 800 (Push 2)",
+      "type": "negative",
+      "offsetFloats": 5120,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_gold_200",
+      "name": "Kodak Gold 200",
+      "type": "negative",
+      "offsetFloats": 6144,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_ultramax_400",
+      "name": "Kodak Ultramax 400",
+      "type": "negative",
+      "offsetFloats": 7168,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_vision3_50d",
+      "name": "Kodak Vision3 50D",
+      "type": "negative",
+      "offsetFloats": 8192,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_vision3_250d",
+      "name": "Kodak Vision3 250D",
+      "type": "negative",
+      "offsetFloats": 9216,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_verita_200d",
+      "name": "Kodak Verita 200D",
+      "type": "negative",
+      "offsetFloats": 10240,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_vision3_200t",
+      "name": "Kodak Vision3 200T",
+      "type": "negative",
+      "offsetFloats": 11264,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_vision3_500t",
+      "name": "Kodak Vision3 500T",
+      "type": "negative",
+      "offsetFloats": 12288,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_pro_400h",
+      "name": "Fujifilm Pro 400H",
+      "type": "negative",
+      "offsetFloats": 13312,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_c200",
+      "name": "Fujifilm C200",
+      "type": "negative",
+      "offsetFloats": 14336,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_xtra_400",
+      "name": "Fujifilm X-Tra 400",
+      "type": "negative",
+      "offsetFloats": 15360,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_ektachrome_100",
+      "name": "Kodak Ektachrome 100",
+      "type": "positive",
+      "offsetFloats": 16384,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_kodachrome_64",
+      "name": "Kodak Kodachrome 64",
+      "type": "positive",
+      "offsetFloats": 17408,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_velvia_100",
+      "name": "Fujifilm Velvia 100",
+      "type": "positive",
+      "offsetFloats": 18432,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_provia_100f",
+      "name": "Fujifilm Provia 100F",
+      "type": "positive",
+      "offsetFloats": 19456,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_endura_premier",
+      "name": "Kodak Professional Endura Premier",
+      "type": "negative",
+      "offsetFloats": 20480,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_ultra_endura",
+      "name": "Kodak Professional Ultra Endura",
+      "type": "negative",
+      "offsetFloats": 21504,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_ektacolor_edge",
+      "name": "Kodak Ektacolor Edge",
+      "type": "negative",
+      "offsetFloats": 22528,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_supra_endura",
+      "name": "Kodak Professional Supra Endura",
+      "type": "negative",
+      "offsetFloats": 23552,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_portra_endura",
+      "name": "Kodak Professional Portra Endura",
+      "type": "negative",
+      "offsetFloats": 24576,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "fujifilm_crystal_archive_typeii",
+      "name": "Fujifilm Crystal Archive Type II",
+      "type": "negative",
+      "offsetFloats": 25600,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_2383",
+      "name": "Kodak Vision 2383",
+      "type": "negative",
+      "offsetFloats": 26624,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    },
+    {
+      "id": "kodak_2393",
+      "name": "Kodak Vision Premier 2393",
+      "type": "negative",
+      "offsetFloats": 27648,
+      "lengthFloats": 1024,
+      "curvePoints": 256,
+      "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
+      "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+    }
+  ],
+  "static": {
+    "outputGamutCompression": {
+      "offsetFloats": 0,
+      "lengthFloats": 468
+    }
+  }
+}
