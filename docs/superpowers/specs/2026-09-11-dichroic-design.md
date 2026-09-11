@@ -227,10 +227,18 @@ sejenisnya. Perkiraan: belasan fungsi, bukan empat puluh.
 
 | Aset | Format | Ukuran |
 |---|---|---|
-| LUT spektral Hanatos | f16 biner, 192×192×81 | 5,70 MB |
-| Kurva 28 stock | f32 biner (~4.044 float/stock) | ~0,45 MB |
-| Kompresi gamut, matriks, filter, metadata | f32 biner + JSON kecil | < 0,1 MB |
-| **Total** | | **≈ 6,3 MB** |
+| LUT spektral Hanatos | f16 biner, 192×192×81 | 5,695 MB |
+| Kurva dan data spektral 28 stock | f32 biner, 23 field per stock | 0,541 MB |
+| Tabel global (14: CMF, illuminant, matriks, LUT transfer warna) | f32 biner | 0,825 MB |
+| Manifes | JSON | 0,101 MB |
+| **Total** | | **7,16 MB** |
+
+Angka ini terukur setelah Task 4 berjalan, menggantikan perkiraan awal ≈6,3 MB
+yang dibuat sebelum kontrak aset GPU yang sebenarnya diketahui. Selisihnya
+berasal dari `colorDecodeLuts` dan `colorEncodeLuts` — masing-masing 26 colour
+space × 4.096 entri — dan dari 21 field spektral per-stock yang tidak
+terhitung di perkiraan awal. Lihat `SpektraProfileCurves.h` untuk kontrak
+lengkapnya.
 
 Dua keputusan:
 
