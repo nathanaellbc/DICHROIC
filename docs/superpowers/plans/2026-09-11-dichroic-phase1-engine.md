@@ -2531,6 +2531,10 @@ git commit -m "feat(spektra): diffusion stage with upstream pyramid path preserv
 
 Grain bersifat stokastik. Ia digerbangi secara statistik, bukan per piksel — tetapi dengan seed identik, bukan dengan ambang yang longgar.
 
+**Catatan dari Task 3:** grain di Python sebenarnya *deterministik* secara default. `model/grain.py:84-87` menyetel `seed = [0, 1, 2]` justru ketika `fixed_seed` bernilai `None` — penamaan yang membingungkan, tetapi akibatnya realisasi grain Python stabil antar-run. Yang benar-benar bervariasi di keluarga stokastik hanyalah glare.
+
+Itu tidak mengubah rancangan gerbang ini. Alasan grain digerbangi secara statistik bukan karena Python-nya acak, melainkan karena RNG WGSL yang kita tulis adalah algoritma yang berbeda. Dua implementasi yang benar akan menghasilkan butir yang berbeda pada piksel yang sama, dengan statistik yang sama. Jangan tergoda menaikkannya menjadi gerbang per piksel karena sisi Python ternyata dapat direproduksi.
+
 `moments()` yang ditulis di sini dipakai ulang oleh Task 18 untuk menggerbangi glare, yang stokastik dengan alasan yang sama. Rancang ia agar berdiri sendiri terhadap kasus uji mana pun, bukan khusus grain.
 
 - [ ] **Step 1: Bangkitkan fixture `gray_ramp_grain` dengan seed tetap**
