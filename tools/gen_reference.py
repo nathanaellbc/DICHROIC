@@ -77,6 +77,25 @@ CASES = {
 }
 
 
+def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
+    """Write JSON with LF-only line endings, regardless of platform.
+
+    Path.write_text() opens in text mode, which on Windows translates
+    every '\\n' to os.linesep ('\\r\\n') -- the file this script produces
+    would differ byte-for-byte from the one a Linux/macOS run produces,
+    even though the content is identical. That's exactly what the sha256
+    manifest is supposed to catch as a *real* difference, so it must
+    never be true of a platform quirk. Building the string with '\\n' and
+    writing it as bytes bypasses newline translation entirely -- the
+    generator now produces the same bytes on every platform, which is
+    what the checked-in .gitattributes (text eol=lf for this directory)
+    also enforces from git's side of a checkout.
+    """
+    path.write_bytes(
+        (json.dumps(obj, indent=2, sort_keys=sort_keys) + "\n").encode("utf-8")
+    )
+
+
 def _build_params(*, stochastic: bool):
     """init_params() membangun objek mentah; digest_params() WAJIB
     dipanggil sebelum dipakai pipeline (lihat docstring hulu).
@@ -120,16 +139,13 @@ def _generate_case(image: np.ndarray, case_dir: Path, name: str, *, stochastic: 
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
         written.append({"tap": tap, "channels": int(arr.shape[2])})
 
-    (case_dir / "case.json").write_text(
-        json.dumps({
-            "name": name,
-            "height": int(image.shape[0]),
-            "width": int(image.shape[1]),
-            "stochastic": stochastic,
-            "taps": written,
-        }, indent=2),
-        encoding="utf-8",
-    )
+    _write_json_lf(case_dir / "case.json", {
+        "name": name,
+        "height": int(image.shape[0]),
+        "width": int(image.shape[1]),
+        "stochastic": stochastic,
+        "taps": written,
+    })
     print(f"Wrote {case_dir} ({len(written)} taps, stochastic={stochastic})")
 
 
@@ -151,10 +167,7 @@ def _write_manifest(out_dir: Path) -> None:
         for f in sorted(out_dir.rglob("*"))
         if f.is_file() and f.name != "manifest.json"
     }
-    (out_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    _write_json_lf(out_dir / "manifest.json", manifest, sort_keys=True)
     print(f"Wrote {out_dir / 'manifest.json'} ({len(manifest)} files)")
 
 

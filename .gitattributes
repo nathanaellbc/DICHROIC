@@ -1,0 +1,10 @@
+# The reference fixtures under test/fixtures/ are hashed with sha256 by
+# gen_reference.py --manifest and compared bit-for-bit in
+# fixtures.test.ts against test/fixtures/manifest.json. That comparison
+# is only meaningful if every checkout produces identical bytes --
+# core.autocrlf, a future top-level .gitattributes, or a different
+# platform must never be allowed to rewrite line endings underneath the
+# oracle. Scoped to spektra/ only; does not touch web/ or the rest of
+# the repo.
+test/fixtures/**/*.f32 binary
+test/fixtures/**/*.json text eol=lf
