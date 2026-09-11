@@ -401,7 +401,11 @@ git commit -m "feat(spektra): scaffold DICHROIC project with GPL-3.0 boundary en
 - Create: `spektra/test/fixtures/` (diisi oleh skrip)
 
 **Interfaces:**
-- Consumes: `SPEKTRAFILM_PY`, venv `spektra-ref` dari Task 1
+- Consumes: `SPEKTRAFILM_PY`, venv referensi dari Task 1 (`D:/Projects/upstream/.venv-ref`)
+- API hulu yang sudah diverifikasi di Task 1 — pakai persis ini, bukan tebakan:
+  - `init_params(film_profile="kodak_portra_400", print_profile="kodak_portra_endura") -> RuntimePhotoParams`
+  - `digest_params(params, apply_stocks_specifics=True) -> RuntimePhotoParams` — **wajib** dipanggil sebelum params dipakai pipeline
+  - `SimulationPipeline(params).process(image, *, inject=None, collect=None)` — **tidak ada** metode `.run()`
 - Produces: untuk tiap kasus, `test/fixtures/<case>/<tap>.f32` (little-endian f32, RGB interleaved, row-major) dan `test/fixtures/<case>/case.json` berisi `{name, width, height, params, taps}`
 
 - [ ] **Step 1: Tulis gen_reference.py**
@@ -421,7 +425,7 @@ from pathlib import Path
 
 import numpy as np
 
-from spektrafilm.runtime.params_builder import init_params
+from spektrafilm.runtime.params_builder import digest_params, init_params
 from spektrafilm.runtime.pipeline import SimulationPipeline
 from spektrafilm.runtime.topology import Tap
 
@@ -489,8 +493,14 @@ def main() -> int:
 
         written = []
         for tap in TAPS:
-            params = init_params()
-            result = SimulationPipeline(params).run(image, collect=tap)
+            # init_params() membangun objek mentah; digest_params() WAJIB
+            # sebelum dipakai pipeline (lihat docstring hulu). Verifikasi
+            # params.settings.preview_mode bernilai False — digest_params
+            # menolkan enlarger.lens_blur saat mode itu aktif, dan referensi
+            # kita harus mode produksi.
+            params = digest_params(init_params())
+            assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
+            result = SimulationPipeline(params).process(image, collect=tap)
             arr = np.ascontiguousarray(result, dtype="<f4")
             (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
             written.append({"tap": tap, "channels": int(arr.shape[2])})
@@ -2106,10 +2116,18 @@ export async function runTapParity(opts: TapParityOptions): Promise<void> {
 ```
 
 Buat juga `spektra/test/parity/params.ts` yang memancarkan `CoreParams` yang
-cocok dengan `init_params()` Python. Baca setiap nilai default dari
+cocok dengan **hasil `digest_params(init_params())`** Python — bukan
+`init_params()` mentah. Ini penting: `digest_params` menerapkan filter print
+netral dari basis data dan logika khusus stock, sehingga nilai yang benar-benar
+dipakai pipeline berbeda dari nilai yang baru dibangun. Baca
 `$SPEKTRAFILM_PY/src/spektrafilm/runtime/params_builder.py` dan cocokkan satu
 per satu — jangan menebak. Nilai yang salah di sini akan terlihat seperti bug
 shader di setiap tugas berikutnya.
+
+Cara termurah memperolehnya: tambahkan flag ke `gen_reference.py` yang
+men-dump params ter-digest sebagai JSON di samping fixture, lalu terjemahkan
+berkas itu ke `params.ts`. Membaca nilai dari objek yang benar-benar dipakai
+mengalahkan membacanya dari sumber.
 
 - [ ] **Step 5: Tulis host/spectral.ts**
 
