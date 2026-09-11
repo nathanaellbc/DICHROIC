@@ -21,6 +21,7 @@ RNG numba milik hulu, ter-seed atau tidak. Jadi:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -101,9 +102,15 @@ def _build_params(*, stochastic: bool):
 def _generate_case(image: np.ndarray, case_dir: Path, name: str, *, stochastic: bool) -> None:
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    (case_dir / "input.f32").write_bytes(
-        np.ascontiguousarray(image, dtype="<f4").tobytes()
-    )
+    # Kedua keluarga memakai persis citra input yang sama (CASES[name]()
+    # dipanggil sekali oleh main() dan dibagikan ke kedua panggilan
+    # _generate_case). Menulis input.f32 di kedua direktori akan
+    # meng-commit dua salinan identik dari berkas yang sama -- disimpan
+    # sekali saja, di direktori kasus dasar (bukan varian _stochastic).
+    if not stochastic:
+        (case_dir / "input.f32").write_bytes(
+            np.ascontiguousarray(image, dtype="<f4").tobytes()
+        )
 
     written = []
     for tap in TAPS:
@@ -126,10 +133,42 @@ def _generate_case(image: np.ndarray, case_dir: Path, name: str, *, stochastic: 
     print(f"Wrote {case_dir} ({len(written)} taps, stochastic={stochastic})")
 
 
+def _write_manifest(out_dir: Path) -> None:
+    """Write test/fixtures/manifest.json: sha256 of every fixture file
+    currently on disk under ``out_dir``.
+
+    Scans the actual filesystem rather than just the files this
+    invocation wrote, so the manifest always reflects reality -- a
+    partial run (--case) still produces a manifest that matches disk
+    exactly, and fixtures.test.ts can check every entry, not just the
+    ones most recently regenerated. This is what turns the one-off manual
+    determinism proof into something a regression can't silently pass:
+    anyone who regenerates and gets a different hash knows immediately
+    that something changed upstream, in the venv, or in this script.
+    """
+    manifest = {
+        f.relative_to(out_dir).as_posix(): hashlib.sha256(f.read_bytes()).hexdigest()
+        for f in sorted(out_dir.rglob("*"))
+        if f.is_file() and f.name != "manifest.json"
+    }
+    (out_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Wrote {out_dir / 'manifest.json'} ({len(manifest)} files)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--case", choices=sorted(CASES), action="append")
+    parser.add_argument(
+        "--manifest", action="store_true",
+        help="Also (re)write <out>/manifest.json: a sha256 of every file "
+             "currently under --out, checked by fixtures.test.ts. Scans "
+             "the whole --out directory, so it stays accurate even after "
+             "a --case-filtered partial run.",
+    )
     args = parser.parse_args()
 
     names = args.case or sorted(CASES)
@@ -137,6 +176,9 @@ def main() -> int:
         image = CASES[name]()
         _generate_case(image, args.out / name, name, stochastic=False)
         _generate_case(image, args.out / f"{name}_stochastic", name, stochastic=True)
+
+    if args.manifest:
+        _write_manifest(args.out)
     return 0
 
 
