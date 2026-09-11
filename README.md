@@ -37,9 +37,28 @@ The `web/` directory at the root of this repository is **EMULSION**, a
 separate, unrelated project with its own licence. EMULSION is **not**
 covered by DICHROIC's GPL-3.0-or-later licence, and DICHROIC's GPL-3.0
 does not extend to it. The two projects intentionally do not share a
-dependency graph: `spektra/` has its own `package.json`, and an ESLint
-rule plus a test (`spektra/test/boundary.test.ts`) enforce that no source
-file in `spektra/src` imports anything from `web/`, in either direction.
+dependency graph: `spektra/` has its own `package.json`.
+
+The boundary is enforced in both directions, by different mechanisms,
+because only `spektra/`'s own tooling can reach both trees:
+
+- **`spektra/` importing `web/`** — blocked twice: by the `no-restricted-imports`
+  ESLint rule in `spektra/eslint.config.js` (`npm run lint`, which runs
+  `eslint src test` inside `spektra/`), and by the first check in
+  `spektra/test/boundary.test.ts`, which scans every `.ts`/`.tsx` file under
+  `spektra/src` for any import/export form that references `web/`.
+- **`web/` importing `spektra/`** — the more dangerous direction, since it
+  would pull GPL-3.0 code into non-GPL EMULSION. There is no ESLint
+  coverage for it (`spektra`'s `lint` script only lints inside `spektra/`,
+  and `web/` has its own separate lint config this project does not touch).
+  It is enforced by the second check in `spektra/test/boundary.test.ts`,
+  which reads (read-only — it never modifies `web/` or its config) every
+  `.ts`/`.tsx` file under `../web/src` and fails if any of them reference
+  `spektra`.
+
+Both checks in `boundary.test.ts` catch static `import ... from '...'`,
+side-effect `import '...'`, dynamic `import('...')`, and re-export
+`export ... from '...'` — not just the first form.
 
 ## Third-party notices (upstream `spektrafilm-ofx`, verbatim copy)
 
