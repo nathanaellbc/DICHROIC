@@ -637,7 +637,15 @@ git commit -m "feat(spektra): generate reference fixtures from Python Simulation
 
 **Interfaces:**
 - Consumes: `SPEKTRAFILM_OFX`, venv `spektra-bake` dari Task 1
-- Produces: `public/data/manifest.json`, `stocks.f32`, `hanatos.f16`, `static.f32`. Bentuk manifest: `{ hanatos: {width, height, bands}, stocks: [{id, name, type, offsetFloats, lengthFloats, curvePoints, license, citation, datasource}], static: {<tableName>: {offsetFloats, lengthFloats}} }`
+- Produces: `public/data/manifest.json`, `stocks.f32`, `hanatos.f16`, `static.f32`.
+
+**Cakupan sebenarnya, dikoreksi setelah Task 4 dijalankan.** Daftar definitif apa yang harus dipancarkan bukan tebakan: `$SPEKTRAFILM_OFX/src/SpektraProfileCurves.h` adalah kontrak yang dikonsumsi GPU. Ia mendeklarasikan `struct ProfileCurveSet` dengan **27 field per-stock** dan **16 fungsi akses tabel global**. Versi pertama tugas ini hanya memancarkan dua field per-stock (`logExposure`, `densityCurves`) dan satu tabel global — jauh dari cukup, dan Task 11 akan buntu seketika tanpa sisanya.
+
+Per-stock yang harus ikut: `wavelengths`, `logSensitivity`, `bandpassHanatos2025`, `hanatos2026WindowParams`, `referenceIlluminantSpectrum`, `inputToReferenceXyz`, `inputToSrgb`, `mallettBasisIlluminant`, `mallettRawMidgrayGreen`, `channelDensity`, `baseDensity`, `densityCurveMinimum`, `densityCurveLayers`, `densityCurveLayerMaxima`, `halationStrength`, `halationFirstSigmaUm`, `dirGammaSameLayerRgb`, `dirGammaRToGb`, `dirGammaGToRb`, `dirGammaBToRg`, `scanIlluminant`, `scanToOutputRgb`, beserta `wavelengthCount` dan `exposureCount`.
+
+Global yang harus ikut: `inputMeterXyzMatrices`, `colorTransferKinds`, `colorTransferParams`, `colorDecodeLuts`, `colorEncodeLuts`, `standardObserverCmfs`, `thKg3Illuminant`, `customEnlargerFilters`, `neutralPrintFilters`, `academyPrinterDensityResponsivities`, `academyPrinterDensityNeutralOffsets`, `academyPrinterDensityData`, `academyPrinterDensityInfluxSpectrum`, batas `colorDecodeLutMin/Max` dan `colorEncodeLutMin/Max`, label ke-26 colour space, serta konstanta `kSpektraColorSpaceCount = 26`, `kSpektraColorTransferLutSize = 4096`, dan `kSpektraOutputGamutCompressionStride = 18`.
+
+Perkiraan ukuran di §5.2 spec (stocks ≈0,45 MB, total ≈6,3 MB) diturunkan sebelum daftar ini diketahui dan akan direvisi dari angka sebenarnya setelah bake lengkap berjalan. `colorDecodeLuts` dan `colorEncodeLuts` saja masing-masing 26 × 4096 float. Bentuk manifest: `{ hanatos: {width, height, bands}, stocks: [{id, name, type, offsetFloats, lengthFloats, curvePoints, license, citation, datasource}], static: {<tableName>: {offsetFloats, lengthFloats}} }`
 
 - [ ] **Step 1: Tulis bake_web_assets.py**
 
