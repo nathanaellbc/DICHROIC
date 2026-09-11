@@ -146,7 +146,7 @@ Buat `spektra/tools/smoke_upstream.py`:
 import sys
 import numpy as np
 
-from spektrafilm.runtime.params_builder import init_params
+from spektrafilm.runtime.params_builder import digest_params, init_params
 from spektrafilm.runtime.pipeline import SimulationPipeline
 from spektrafilm.runtime.topology import Tap
 
@@ -171,8 +171,8 @@ def main() -> int:
         np.linspace(0.01, 1.0, 32, dtype=np.float64)[None, :, None], 16, axis=0
     ).repeat(3, axis=2)
 
-    params = init_params()
-    out = SimulationPipeline(params).run(ramp, collect=Tap.CMY_FILM)
+    params = digest_params(init_params())
+    out = SimulationPipeline(params).process(ramp, collect=Tap.CMY_FILM)
 
     if out.shape[:2] != ramp.shape[:2]:
         print(f"FAIL: bentuk keluaran {out.shape} tidak cocok dengan input {ramp.shape}")
