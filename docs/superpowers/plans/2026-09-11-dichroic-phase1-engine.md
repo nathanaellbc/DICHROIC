@@ -421,7 +421,24 @@ git commit -m "feat(spektra): scaffold DICHROIC project with GPL-3.0 boundary en
   - `init_params(film_profile="kodak_portra_400", print_profile="kodak_portra_endura") -> RuntimePhotoParams`
   - `digest_params(params, apply_stocks_specifics=True) -> RuntimePhotoParams` — **wajib** dipanggil sebelum params dipakai pipeline
   - `SimulationPipeline(params).process(image, *, inject=None, collect=None)` — **tidak ada** metode `.run()`
-- Produces: untuk tiap kasus, `test/fixtures/<case>/<tap>.f32` (little-endian f32, RGB interleaved, row-major) dan `test/fixtures/<case>/case.json` berisi `{name, width, height, params, taps}`
+- Produces: untuk tiap kasus, `test/fixtures/<case>/<tap>.f32` (little-endian f32, RGB interleaved, row-major) dan `test/fixtures/<case>/case.json` berisi `{name, width, height, stochastic, taps}` — `taps` adalah daftar `{tap, channels}`, dan `stochastic` menandai keluarga mana kasus itu
+
+**Dua keluarga fixture, dan alasannya.**
+
+Uji determinisme di tugas ini menemukan bahwa `rgb_out` **tidak** stabil antar-run: `add_glare` (`spektrafilm/model/glare.py`) menarik medan derau lognormal lewat kernel numba `@njit(parallel=True)` yang memanggil `np.random.randn()` di dalam `prange`. Keadaan RNG paralel numba terpisah dari `numpy.random` dan tidak dapat di-seed lewat field params mana pun — tidak seperti `film_render.grain`, yang mengekspos `seed=`.
+
+Tetapi ini bukan hambatan yang harus diakali; ia mengungkap cacat perencanaan. **Gerbang `rgb_out` pixel-exact dengan glare aktif tidak pernah mungkin**, karena RNG WGSL kita akan selalu algoritma yang berbeda dari milik Python, ter-seed atau tidak. Perbandingan piksel-demi-piksel atas efek stokastik lintas dua implementasi RNG tidak punya arti.
+
+Maka fixture dibangkitkan dalam dua keluarga:
+
+| Keluarga | Setelan | Dipakai oleh | Metode gerbang |
+|---|---|---|---|
+| **Deterministik** | `debug.deactivate_stochastic_effects = True` | Task 11–15, 17, 18 | per piksel, ≤ 1e-5 |
+| **Stokastik** | default hulu (glare dan grain aktif) | Task 16 (grain), Task 18 (glare) | statistik: mean, varians, spektrum daya |
+
+Saklar `deactivate_stochastic_effects` adalah milik hulu dan mematikan tepat dua hal — `film_render.grain.active` dan `print_render.glare.active` — sehingga garis yang ia tarik persis garis antara kedua keluarga ini. Ini bukan pelonggaran toleransi: gerbang deterministik tetap 1e-5, dan gerbang statistik memang statistik menurut sifat efeknya, bukan menurut kompromi.
+
+Kasus keluarga stokastik diberi akhiran `_stochastic` pada namanya.
 
 - [ ] **Step 1: Tulis gen_reference.py**
 
@@ -513,8 +530,15 @@ def main() -> int:
             # params.settings.preview_mode bernilai False — digest_params
             # menolkan enlarger.lens_blur saat mode itu aktif, dan referensi
             # kita harus mode produksi.
-            params = digest_params(init_params())
+            raw = init_params()
+            # Efek stokastik dimatikan untuk keluarga deterministik. Saklar ini
+            # milik hulu dan mematikan tepat dua hal: film_render.grain.active
+            # dan print_render.glare.active (params_builder.py:140-142).
+            raw.debug.deactivate_stochastic_effects = True
+            params = digest_params(raw)
             assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
+            assert not params.print_render.glare.active, "glare harus mati di keluarga deterministik"
+            assert not params.film_render.grain.active, "grain harus mati di keluarga deterministik"
             result = SimulationPipeline(params).process(image, collect=tap)
             arr = np.ascontiguousarray(result, dtype="<f4")
             (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
@@ -525,6 +549,7 @@ def main() -> int:
                 "name": name,
                 "height": int(image.shape[0]),
                 "width": int(image.shape[1]),
+                "stochastic": stochastic,
                 "taps": written,
             }, indent=2),
             encoding="utf-8",
@@ -2506,6 +2531,8 @@ git commit -m "feat(spektra): diffusion stage with upstream pyramid path preserv
 
 Grain bersifat stokastik. Ia digerbangi secara statistik, bukan per piksel — tetapi dengan seed identik, bukan dengan ambang yang longgar.
 
+`moments()` yang ditulis di sini dipakai ulang oleh Task 18 untuk menggerbangi glare, yang stokastik dengan alasan yang sama. Rancang ia agar berdiri sendiri terhadap kasus uji mana pun, bukan khusus grain.
+
 - [ ] **Step 1: Bangkitkan fixture `gray_ramp_grain` dengan seed tetap**
 
 Setel `grain_enabled=true`, `grain_model=production`, dan seed eksplisit di `gen_reference.py`. Catat seed itu di `case.json`.
@@ -2891,7 +2918,15 @@ cd spektra && npm test -- parity/scannerPost
 
 Harapan: PASS.
 
-- [ ] **Step 5: Jalankan seluruh rangkaian parity**
+- [ ] **Step 5: Tambahkan gerbang statistik untuk glare**
+
+`rgb_out` digerbangi per piksel pada keluarga fixture **deterministik**, di mana glare mati. Glare sendiri masih harus diverifikasi, dan seperti grain ia stokastik — `add_glare` menarik medan lognormal acak, dan RNG WGSL kita bukan RNG numba, jadi perbandingan piksel-demi-piksel tidak punya arti berapa pun toleransinya.
+
+Verifikasi ia dengan cara yang sama seperti grain di Task 16: bangkitkan kasus `_stochastic`, lalu bandingkan `moments()` dari `test/parity/statistics.ts` — mean dalam `1e-4`, varians dalam selisih relatif 2%, spektrum daya radial bin demi bin dalam 5%.
+
+Spektrum daya radial adalah bagian yang penting di sini: `glareBlur` (0,5 default) dan `glareRoughness` (0,7) menentukan skala spasial medan itu. Dua implementasi bisa punya varians identik dengan struktur yang sama sekali berbeda, dan hanya spektrum daya yang membedakannya.
+
+- [ ] **Step 6: Jalankan seluruh rangkaian parity**
 
 ```bash
 cd spektra && npm test
@@ -2899,7 +2934,7 @@ cd spektra && npm test
 
 Harapan: seluruh tap lulus untuk seluruh kasus. **Ini tonggak Fase 1:** engine cocok dengan implementasi referensi dari ujung ke ujung.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add spektra/src/shaders/scannerPost.wgsl spektra/src/engine/stages/scannerPost.ts spektra/test/parity/scannerPost.test.ts
