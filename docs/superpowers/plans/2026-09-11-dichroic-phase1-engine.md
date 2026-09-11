@@ -711,12 +711,32 @@ const DATA = join('public', 'data');
 const manifest = JSON.parse(readFileSync(join(DATA, 'manifest.json'), 'utf8'));
 
 describe('aset ter-bake', () => {
-  it('memuat 28 stock: 20 film, 8 kertas', () => {
+  it('memuat tepat 20 film dan 8 kertas yang diharapkan', () => {
+    // Daftar ini adalah _LEGACY_FILM_ORDER dan _LEGACY_PAPER_ORDER hulu.
+    // Verifikasi terhadap $SPEKTRAFILM_OFX/tools/ofx_stock_lists.py sebelum
+    // mengubahnya; kalau daftar hulu berbeda, hulu yang benar.
+    const FILM = [
+      'kodak_ektar_100', 'kodak_portra_160', 'kodak_portra_400',
+      'kodak_portra_800', 'kodak_portra_800_push1', 'kodak_portra_800_push2',
+      'kodak_gold_200', 'kodak_ultramax_400', 'kodak_vision3_50d',
+      'kodak_vision3_250d', 'kodak_verita_200d', 'kodak_vision3_200t',
+      'kodak_vision3_500t', 'fujifilm_pro_400h', 'fujifilm_c200',
+      'fujifilm_xtra_400', 'kodak_ektachrome_100', 'kodak_kodachrome_64',
+      'fujifilm_velvia_100', 'fujifilm_provia_100f',
+    ];
+    const PAPER = [
+      'kodak_endura_premier', 'kodak_ultra_endura', 'kodak_ektacolor_edge',
+      'kodak_supra_endura', 'kodak_portra_endura',
+      'fujifilm_crystal_archive_typeii', 'kodak_2383', 'kodak_2393',
+    ];
+
+    const ids = new Set(manifest.stocks.map((s: { id: string }) => s.id));
+    expect(FILM).toHaveLength(20);
+    expect(PAPER).toHaveLength(8);
+    for (const id of [...FILM, ...PAPER]) {
+      expect(ids.has(id), `stock hilang: ${id}`).toBe(true);
+    }
     expect(manifest.stocks).toHaveLength(28);
-    const films = manifest.stocks.filter(
-      (s: { type: string }) => s.type === 'negative' || s.type === 'positive',
-    );
-    expect(films.length + (28 - films.length)).toBe(28);
   });
 
   it('LUT Hanatos berdimensi 192x192x81 dan f16', () => {
@@ -1469,10 +1489,15 @@ git commit -m "feat(spektra): pack read-only tables into arena buffers under the
 **Interfaces:**
 - Consumes: `EngineDevice` (Task 6), `CoreParams` + `CORE_PARAMS_WGSL` (Task 7), `TapName` (Task 2)
 - Produces:
-  - `interface StageContext { device: GPUDevice; params: CoreParams; paramsBuffer: GPUBuffer; source: GPUBuffer; dest: GPUBuffer }`
-  - `interface Stage { name: string; writesTap: TapName | null; encode(encoder: GPUCommandEncoder, ctx: StageContext): void }`
+  - `interface StageContext { device: GPUDevice; params: CoreParams; paramsBuffer: GPUBuffer; source: GPUBuffer; dest: GPUBuffer; scratch(label: string, bytes: number): GPUBuffer }`
+  - `interface Stage { name: string; writesTaps: readonly TapName[]; encode(encoder: GPUCommandEncoder, ctx: StageContext): void }`
   - `class RenderGraph { constructor(engine: EngineDevice); addStage(stage: Stage): void; async run(input: Float32Array, params: CoreParams, collect: TapName): Promise<Float32Array> }`
   - `function createFormatConvertStage(device: GPUDevice): Stage`
+
+**Dua keputusan yang mengikat seluruh tahap berikutnya** (hasil pemindaian pra-terbang; lihat ledger):
+
+1. **Sebuah tahap menyatakan setiap tap yang ditulisnya, dan beberapa tahap menulis tap yang sama.** Ini mencerminkan topologi Python: sebuah node *membaca dan menulis* tap bernama. `CurveDevelop`, `Dir`, `Halation`, `Grain`, dan `Diffusion['camera']` semuanya menulis `cmy_film` — masing-masing menyempurnakan keadaan yang sama. Karena itu `RenderGraph.run` mencari tahap **terakhir** yang menulis tap yang diminta (`findLastIndex`), bukan yang pertama. Memakai `findIndex` akan menghentikan graf di `CurveDevelop` dan membuat Task 13–16 lulus tanpa pernah menjalankan tahap yang sedang diuji.
+2. **Tahap multi-pass memperoleh buffer antara dari `ctx.scratch()`,** bukan dengan mengalokasikan sendiri. `RenderGraph` memiliki kolamnya dan memakai ulang buffer berlabel sama, sehingga render ter-tile di Task 19 tidak meledakkan VRAM.
 
 - [ ] **Step 1: Tulis test yang gagal**
 
@@ -1605,7 +1630,7 @@ export function createFormatConvertStage(device: GPUDevice): Stage {
 
   return {
     name: 'formatConvert',
-    writesTap: Tap.RGB_IN,
+    writesTaps: [Tap.RGB_IN],
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const bindGroup = ctx.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
@@ -1643,16 +1668,20 @@ export interface StageContext {
   paramsBuffer: GPUBuffer;
   source: GPUBuffer;
   dest: GPUBuffer;
+  /** Buffer antara milik graf, dipakai ulang antar dispatch berlabel sama. */
+  scratch(label: string, bytes: number): GPUBuffer;
 }
 
 export interface Stage {
   name: string;
-  writesTap: TapName | null;
+  /** Setiap tap kanonis yang ditulis tahap ini. Kosong untuk tahap murni internal. */
+  writesTaps: readonly TapName[];
   encode(encoder: GPUCommandEncoder, ctx: StageContext): void;
 }
 
 export class RenderGraph {
   private readonly stages: Stage[] = [];
+  private readonly pool = new Map<string, GPUBuffer>();
 
   constructor(private readonly engine: EngineDevice) {}
 
@@ -1660,16 +1689,40 @@ export class RenderGraph {
     this.stages.push(stage);
   }
 
+  private scratch(label: string, bytes: number): GPUBuffer {
+    const existing = this.pool.get(label);
+    if (existing && existing.size >= bytes) return existing;
+    existing?.destroy();
+
+    const buffer = this.engine.device.createBuffer({
+      label: `scratch:${label}`,
+      size: bytes,
+      usage:
+        GPUBufferUsage.STORAGE |
+        GPUBufferUsage.COPY_SRC |
+        GPUBufferUsage.COPY_DST,
+    });
+    this.pool.set(label, buffer);
+    return buffer;
+  }
+
   async run(
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
   ): Promise<Float32Array> {
-    const stopAt = this.stages.findIndex((s) => s.writesTap === collect);
+    // Beberapa tahap menyempurnakan tap yang sama (cmy_film ditulis oleh
+    // CurveDevelop, Dir, Halation, Grain, dan Diffusion kamera). Yang diminta
+    // adalah keadaan SETELAH semuanya, jadi cari yang terakhir.
+    const stopAt = this.stages.findLastIndex((s) =>
+      s.writesTaps.includes(collect),
+    );
     if (stopAt === -1) {
       throw new Error(
         `Tidak ada tahap yang menulis tap '${collect}'. ` +
-          `Tahap terdaftar: ${this.stages.map((s) => `${s.name}→${s.writesTap}`).join(', ')}`,
+          `Tahap terdaftar: ${this.stages
+            .map((s) => `${s.name}→[${s.writesTaps.join('|')}]`)
+            .join(', ')}`,
       );
     }
 
@@ -1695,6 +1748,7 @@ export class RenderGraph {
     for (let i = 0; i <= stopAt; i += 1) {
       this.stages[i]!.encode(encoder, {
         device, params, paramsBuffer, source: front, dest: back,
+        scratch: (label, bytes) => this.scratch(label, bytes),
       });
       [front, back] = [back, front];
     }
@@ -1715,6 +1769,8 @@ export class RenderGraph {
     paramsBuffer.destroy();
     front.destroy();
     back.destroy();
+    for (const buffer of this.pool.values()) buffer.destroy();
+    this.pool.clear();
     return result;
   }
 }
@@ -1753,8 +1809,8 @@ git commit -m "feat(spektra): render graph with tap collection and FormatConvert
   - `interface Comparison { maxAbsError: number; meanAbsError: number; worstIndex: number }`
   - `function compareRgb(actualRgba: Float32Array, expectedRgb: Float32Array): Comparison`
   - `function expectWithinTolerance(comparison: Comparison, tolerance: number, label: string): void`
-  - `function defaultCoreParams(width: number, height: number, bundle: AssetBundle): CoreParams` — cerminan `init_params()` Python
-  - `async function runTapParity(opts: { case: string; tap: TapName; tolerance: number; stages: (device: GPUDevice, arenas: Arenas) => Stage[]; stockId?: string }): Promise<void>` — memuat fixture, menyusun graf, menjalankan, membandingkan, dan melempar galat jika di luar ambang. Setiap uji parity tahap memakai ini, sehingga tidak ada test yang disalin-tempel.
+
+`run.ts` dan `params.ts` **tidak** dibuat di sini: keduanya mengimpor `buildArenas` dari `src/host/spectral.ts`, yang baru lahir di Task 11, dan menulisnya sekarang akan membuat `npm run typecheck` merah di akhir tugas ini. Keduanya dibuat di Task 11 (hasil pemindaian pra-terbang; lihat ledger).
 
 - [ ] **Step 1: Tulis test yang gagal**
 
@@ -1918,63 +1974,7 @@ cd spektra && npm test -- parity/compare
 
 Harapan: PASS.
 
-- [ ] **Step 5: Tulis runner parity bersama**
-
-Buat `spektra/test/parity/run.ts`:
-
-```typescript
-import { acquireDevice } from '../../src/engine/device';
-import { RenderGraph } from '../../src/engine/graph';
-import { buildArenas } from '../../src/host/spectral';
-import { loadAssets } from '../../src/profiles/load';
-import type { Arenas } from '../../src/engine/arena';
-import type { Stage } from '../../src/engine/graph';
-import type { TapName } from '../../src/engine/taps';
-import {
-  compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap,
-} from './compare';
-import { defaultCoreParams } from './params';
-
-export interface TapParityOptions {
-  case: string;
-  tap: TapName;
-  tolerance: number;
-  stages: (device: GPUDevice, arenas: Arenas) => Stage[];
-  stockId?: string;
-}
-
-export async function runTapParity(opts: TapParityOptions): Promise<void> {
-  const engine = await acquireDevice();
-  const bundle = await loadAssets('public/data');
-  const arenas = buildArenas(
-    engine.device, bundle, opts.stockId ?? 'kodak_portra_400',
-  );
-
-  const graph = new RenderGraph(engine);
-  for (const stage of opts.stages(engine.device, arenas)) graph.addStage(stage);
-
-  const meta = loadCase(opts.case);
-  const actual = await graph.run(
-    loadInputAsRgba(opts.case),
-    defaultCoreParams(meta.width, meta.height, bundle),
-    opts.tap,
-  );
-
-  expectWithinTolerance(
-    compareRgb(actual, loadTap(opts.case, opts.tap)),
-    opts.tolerance,
-    `${opts.tap} / ${opts.case}`,
-  );
-}
-```
-
-Buat juga `spektra/test/parity/params.ts` yang memancarkan `CoreParams` yang
-cocok dengan `init_params()` Python. Baca setiap nilai default dari
-`$SPEKTRAFILM_PY/src/spektrafilm/runtime/params_builder.py` dan cocokkan satu
-per satu — jangan menebak. Nilai yang salah di sini akan terlihat seperti bug
-shader di setiap tugas berikutnya.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add spektra/test/parity
@@ -1987,11 +1987,16 @@ git commit -m "test(spektra): parity comparison harness with non-negotiable tole
 
 **Files:**
 - Create: `spektra/src/shaders/filmExposure.wgsl`, `spektra/src/engine/stages/filmExposure.ts`, `spektra/src/host/spectral.ts`
+- Create: `spektra/test/parity/run.ts`, `spektra/test/parity/params.ts` — dipindahkan ke sini dari Task 10 karena keduanya mengimpor `buildArenas`
 - Test: `spektra/test/parity/filmExposure.test.ts`
 
 **Interfaces:**
 - Consumes: `ArenaBuilder` (Task 8), `RenderGraph`/`Stage` (Task 9), `AssetBundle` (Task 5), harness (Task 10)
-- Produces: `function createFilmExposureStage(device: GPUDevice, arenas: { static: Arena; stock: Arena; dynamic: Arena }): Stage` dengan `writesTap = Tap.LOG_E_FILM`
+- Produces:
+  - `function buildArenas(device: GPUDevice, bundle: AssetBundle, stockId: string): Arenas`
+  - `function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stage` dengan `writesTaps = [Tap.LOG_E_FILM]`
+  - `function defaultCoreParams(width: number, height: number, bundle: AssetBundle): CoreParams` — cerminan `init_params()` Python, di `test/parity/params.ts`
+  - `async function runTapParity(opts: { case: string; tap: TapName; tolerance: number; stages: (device: GPUDevice, arenas: Arenas) => Stage[]; stockId?: string }): Promise<void>` — di `test/parity/run.ts`; setiap uji parity tahap memakainya, sehingga tidak ada test yang disalin-tempel
 
 **Sumber hulu:**
 - Python: `$SPEKTRAFILM_PY/src/spektrafilm/runtime/stages/filming.py`, `model/stocks.py`, `model/illuminants.py`
@@ -2050,21 +2055,77 @@ cd spektra && npm test -- parity/filmExposure
 
 Harapan: FAIL, modul tidak ditemukan.
 
-- [ ] **Step 4: Tulis host/spectral.ts**
+- [ ] **Step 4: Tulis test/parity/run.ts dan test/parity/params.ts**
+
+Buat `spektra/test/parity/run.ts`:
+
+```typescript
+import { acquireDevice } from '../../src/engine/device';
+import { RenderGraph } from '../../src/engine/graph';
+import { buildArenas } from '../../src/host/spectral';
+import { loadAssets } from '../../src/profiles/load';
+import type { Arenas } from '../../src/engine/arena';
+import type { Stage } from '../../src/engine/graph';
+import type { TapName } from '../../src/engine/taps';
+import {
+  compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap,
+} from './compare';
+import { defaultCoreParams } from './params';
+
+export interface TapParityOptions {
+  case: string;
+  tap: TapName;
+  tolerance: number;
+  stages: (device: GPUDevice, arenas: Arenas) => Stage[];
+  stockId?: string;
+}
+
+export async function runTapParity(opts: TapParityOptions): Promise<void> {
+  const engine = await acquireDevice();
+  const bundle = await loadAssets('public/data');
+  const arenas = buildArenas(
+    engine.device, bundle, opts.stockId ?? 'kodak_portra_400',
+  );
+
+  const graph = new RenderGraph(engine);
+  for (const stage of opts.stages(engine.device, arenas)) graph.addStage(stage);
+
+  const meta = loadCase(opts.case);
+  const actual = await graph.run(
+    loadInputAsRgba(opts.case),
+    defaultCoreParams(meta.width, meta.height, bundle),
+    opts.tap,
+  );
+
+  expectWithinTolerance(
+    compareRgb(actual, loadTap(opts.case, opts.tap)),
+    opts.tolerance,
+    `${opts.tap} / ${opts.case}`,
+  );
+}
+```
+
+Buat juga `spektra/test/parity/params.ts` yang memancarkan `CoreParams` yang
+cocok dengan `init_params()` Python. Baca setiap nilai default dari
+`$SPEKTRAFILM_PY/src/spektrafilm/runtime/params_builder.py` dan cocokkan satu
+per satu — jangan menebak. Nilai yang salah di sini akan terlihat seperti bug
+shader di setiap tugas berikutnya.
+
+- [ ] **Step 5: Tulis host/spectral.ts**
 
 Bangun ketiga arena dari `AssetBundle`. Tabel yang bergantung parameter (`HanatosRawResponse`) dihitung di sini — port dari `remapHanatosResponseForInputGamutCompression` di `$SPEKTRAFILM_OFX/src/SpektraVulkanRenderer.cpp` dan padanan Python-nya di `model/stocks.py`. Bandingkan keluaran fungsi TS ini dengan keluaran Python untuk parameter yang sama sebelum menjalankan test GPU — bug di sini akan terlihat seperti bug shader dan jauh lebih mahal dilacak dari sana.
 
-- [ ] **Step 5: Transliterasi filmExposure.wgsl**
+- [ ] **Step 6: Transliterasi filmExposure.wgsl**
 
 Terapkan tabel aturan mekanis dari Task 9 Step 3. Ganti setiap akses buffer terikat menjadi akses arena berbasis offset: `mallettRawMatrix[i]` menjadi `staticArena[ARENA_MALLETTRAWMATRIX_OFFSET + i]`.
 
 **Periksa lebih dulu:** tahap ini adalah yang pertama mengalikan matriks. Konvensi `matN * vec` WGSL adalah column-major, sama seperti GLSL — tetapi *tata letak data* di buffer yang ditulis host mungkin row-major. Jika tap meleset dengan pola yang terlihat seperti transposisi (galat kecil di diagonal, besar di luar diagonal), itu penyebabnya.
 
-- [ ] **Step 6: Tulis filmExposure.ts**
+- [ ] **Step 7: Tulis filmExposure.ts**
 
-Ikuti bentuk `formatConvert.ts` dari Task 9 Step 4: buat modul shader dengan `CORE_PARAMS_WGSL` dan konstanta arena disambung di depan, buat pipeline, kembalikan `Stage` dengan `writesTap: Tap.LOG_E_FILM`.
+Ikuti bentuk `formatConvert.ts` dari Task 9 Step 4: buat modul shader dengan `CORE_PARAMS_WGSL` dan konstanta arena disambung di depan, buat pipeline, kembalikan `Stage` dengan `writesTaps: [Tap.LOG_E_FILM]`.
 
-- [ ] **Step 7: Jalankan test parity**
+- [ ] **Step 8: Jalankan test parity**
 
 ```bash
 cd spektra && npm test -- parity/filmExposure
@@ -2074,7 +2135,7 @@ Harapan: PASS untuk ketiga kasus, max abs error di orde 1e-7.
 
 Jika meleset: jangan naikkan `TOLERANCE`. Periksa berurutan — (1) apakah `defaultCoreParams` benar-benar cocok dengan `init_params()`, (2) apakah arena TS cocok dengan tabel Python, (3) konvensi matriks, (4) urutan operasi di dalam shader.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add spektra/src/shaders/filmExposure.wgsl spektra/src/engine/stages/filmExposure.ts spektra/src/host/spectral.ts spektra/test/parity
@@ -2091,7 +2152,7 @@ git commit -m "feat(spektra): FilmExposure stage matching Python reference at lo
 
 **Interfaces:**
 - Consumes: arena `stock` (Task 8), `Stage` (Task 9)
-- Produces: `function createCurveDevelopStage(device: GPUDevice, arenas: Arenas): Stage` dengan `writesTap = Tap.CMY_FILM`
+- Produces: `function createCurveDevelopStage(device: GPUDevice, arenas: Arenas): Stage` dengan `writesTaps = [Tap.CMY_FILM]`
 
 **Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/density_curves.py` dan `model/develop.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraCurveDevelop.comp` (246 baris, binding 0,1,2,3).
 
@@ -2170,7 +2231,7 @@ git commit -m "feat(spektra): CurveDevelop stage matching Python reference at cm
 
 **Interfaces:**
 - Consumes: arena `stock` dan `dynamic`
-- Produces: `function createDirStage(device: GPUDevice, arenas: Arenas): Stage` dengan `writesTap = null` (tahap dalam, tidak menulis tap kanonis)
+- Produces: `function createDirStage(device: GPUDevice, arenas: Arenas): Stage` dengan `writesTaps = [Tap.CMY_FILM]` — ia membaca dan menyempurnakan tap itu, sama seperti node DIR di topologi Python
 
 **Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/couplers.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraDir.comp` (329 baris).
 
@@ -2250,7 +2311,7 @@ git commit -m "feat(spektra): DIR coupler stage with 9-gamma crosstalk and two-s
 - Test: `spektra/test/parity/halation.test.ts`
 
 **Interfaces:**
-- Produces: `function createHalationStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTap = null`
+- Produces: `function createHalationStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.CMY_FILM]`
 
 **Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/glare.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraHalation.comp` (322 baris).
 
@@ -2324,7 +2385,7 @@ git commit -m "feat(spektra): halation scatter stage"
 - Test: `spektra/test/parity/diffusion.test.ts`
 
 **Interfaces:**
-- Produces: `function createDiffusionStage(device: GPUDevice, arenas: Arenas, site: 'camera' | 'print'): Stage`, `writesTap = null`
+- Produces: `function createDiffusionStage(device: GPUDevice, arenas: Arenas, site: 'camera' | 'print'): Stage`, `writesTaps = [Tap.CMY_FILM]` untuk `site: 'camera'` dan `[Tap.CMY_PRINT]` untuk `site: 'print'`
 
 **Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/diffusion.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraDiffusion.comp` (513 baris).
 
@@ -2404,7 +2465,7 @@ git commit -m "feat(spektra): diffusion stage with upstream pyramid path preserv
 **Interfaces:**
 - Consumes: buffer scratch tambahan (`AuxPixelsA/B`, `MicroPixelsA/B`, `GrainLayerA/B`)
 - Produces:
-  - `function createGrainStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTap = null`
+  - `function createGrainStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.CMY_FILM]`
   - `interface Moments { mean: number; variance: number; radialPower: Float32Array }`
   - `function moments(rgba: Float32Array, width: number, height: number): Moments`
 
@@ -2475,7 +2536,13 @@ import { RenderGraph } from '../../src/engine/graph';
 import { buildArenas } from '../../src/host/spectral';
 import { loadAssets } from '../../src/profiles/load';
 import { Tap } from '../../src/engine/taps';
-import { fullChain } from './chain';
+import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
+import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
+import { createDirStage } from '../../src/engine/stages/dir';
+import { createHalationStage } from '../../src/engine/stages/halation';
+import { createGrainStage } from '../../src/engine/stages/grain';
+import { createDiffusionStage } from '../../src/engine/stages/diffusion';
 import { loadCase, loadInputAsRgba, loadTap } from './compare';
 import { defaultCoreParams } from './params';
 import { moments } from './statistics';
@@ -2487,7 +2554,15 @@ describe('parity: grain (statistik)', () => {
     const arenas = buildArenas(engine.device, bundle, 'kodak_portra_400');
 
     const graph = new RenderGraph(engine);
-    for (const stage of fullChain(engine.device, arenas)) graph.addStage(stage);
+    for (const stage of [
+      createFormatConvertStage(device),
+      createFilmExposureStage(device, arenas),
+      createCurveDevelopStage(device, arenas),
+      createDirStage(device, arenas),
+      createHalationStage(device, arenas),
+      createGrainStage(device, arenas),
+      createDiffusionStage(device, arenas, 'camera'),
+    ]) graph.addStage(stage);
 
     const meta = loadCase('gray_ramp_grain');
     const actual = await graph.run(
@@ -2568,7 +2643,10 @@ git commit -m "feat(spektra): grain stage gated statistically against Python ref
 
 **Interfaces:**
 - Produces:
-  - `function createPrintScanStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTap = Tap.CMY_PRINT`
+  - `function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.LOG_E_PRINT]`
+  - `function createPrintDevelopStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.CMY_PRINT]`
+
+Satu modul WGSL, dua tahap TS. `log_e_print` adalah keadaan di tengah shader hulu, jadi ia tidak dapat digerbangi jika seluruh 1.488 baris itu menjadi satu tahap tunggal — dan tahap terbesar di rencana ini adalah tahap yang paling butuh checkpoint. Ini pola yang sama dengan `Diffusion`: satu shader, beberapa titik sisip. (Hasil pemindaian pra-terbang; lihat ledger.)
   - `interface EnlargerParams { filterC: number; filterMShift: number; filterYShift: number; printTiming: 'filteredEnlarger' | 'apdPrinterDensity' }`
   - `function filteredEnlargerIlluminant(params: EnlargerParams, bundle: AssetBundle): Float32Array` — port dari `filteredEnlargerIlluminantCpu` hulu
 
@@ -2588,25 +2666,62 @@ Buat `spektra/test/parity/printScan.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { fullChain } from './chain';
+import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
+import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
+import { createDirStage } from '../../src/engine/stages/dir';
+import { createHalationStage } from '../../src/engine/stages/halation';
+import { createGrainStage } from '../../src/engine/stages/grain';
+import { createDiffusionStage } from '../../src/engine/stages/diffusion';
+import {
+  createPrintExposureStage, createPrintDevelopStage,
+} from '../../src/engine/stages/printScan';
 import { Tap } from '../../src/engine/taps';
 import { runTapParity } from './run';
 
+const filmSide = (device: GPUDevice, arenas: Arenas) => [
+        createFormatConvertStage(device),
+        createFilmExposureStage(device, arenas),
+        createCurveDevelopStage(device, arenas),
+        createDirStage(device, arenas),
+        createHalationStage(device, arenas),
+        createGrainStage(device, arenas),
+        createDiffusionStage(device, arenas, 'camera'),
+];
+
 describe('parity: PrintScan', () => {
-  for (const tap of [Tap.LOG_E_PRINT, Tap.CMY_PRINT]) {
-    for (const name of ['gray_ramp', 'color_patches']) {
-      it(`${tap} cocok dengan referensi Python untuk ${name}`, async () => {
-        await runTapParity({
-          case: name, tap, tolerance: 1e-5, stages: fullChain,
-        });
+  for (const name of ['gray_ramp', 'color_patches']) {
+    it(`log_e_print cocok dengan referensi Python untuk ${name}`, async () => {
+      await runTapParity({
+        case: name,
+        tap: Tap.LOG_E_PRINT,
+        tolerance: 1e-5,
+        stages: (device, arenas) => [
+          ...filmSide(device, arenas),
+          createPrintExposureStage(device, arenas),
+        ],
       });
-    }
+    });
+
+    it(`cmy_print cocok dengan referensi Python untuk ${name}`, async () => {
+      await runTapParity({
+        case: name,
+        tap: Tap.CMY_PRINT,
+        tolerance: 1e-5,
+        stages: (device, arenas) => [
+          ...filmSide(device, arenas),
+          createPrintExposureStage(device, arenas),
+          createPrintDevelopStage(device, arenas),
+        ],
+      });
+    });
   }
 });
 ```
 
-`fullChain` didefinisikan di Task 18 Step 1; buat berkas itu sekarang jika
-belum ada, dengan tahap yang sudah selesai saja, lalu lengkapi di Task 18.
+Tambahkan `import type { Arenas } from '../../src/engine/arena';` di atas.
+
+Gerbangi `log_e_print` lebih dulu sampai hijau sebelah menyentuh `cmy_print`.
 
 - [ ] **Step 3: Jalankan untuk memastikan gagal**
 
@@ -2655,7 +2770,7 @@ git commit -m "feat(spektra): PrintScan stage with 30 upstream bindings packed i
 - Test: `spektra/test/parity/scannerPost.test.ts`
 
 **Interfaces:**
-- Produces: `function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTap = Tap.RGB_OUT`
+- Produces: `function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.RGB_OUT]`
 
 **Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/runtime/stages/scanning.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraScannerPost.comp` (600 baris).
 
@@ -2688,8 +2803,10 @@ describe('parity: rgb_out', () => {
 });
 ```
 
-Buat juga `spektra/test/parity/chain.ts`, satu-satunya tempat urutan lengkap
-sembilan tahap dirakit — termasuk kedua titik sisip Diffusion:
+Buat juga `spektra/test/parity/chain.ts` — **dibuat di sini, di tugas ini**,
+dan satu-satunya tempat urutan lengkap dirakit. Tugas sebelumnya memakai daftar
+tahap eksplisit karena tahap di hilirnya belum ada. Perhatikan kedua titik sisip
+Diffusion dan dua tahap sisi print:
 
 ```typescript
 import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
@@ -2699,7 +2816,9 @@ import { createDirStage } from '../../src/engine/stages/dir';
 import { createHalationStage } from '../../src/engine/stages/halation';
 import { createGrainStage } from '../../src/engine/stages/grain';
 import { createDiffusionStage } from '../../src/engine/stages/diffusion';
-import { createPrintScanStage } from '../../src/engine/stages/printScan';
+import {
+  createPrintExposureStage, createPrintDevelopStage,
+} from '../../src/engine/stages/printScan';
 import { createScannerPostStage } from '../../src/engine/stages/scannerPost';
 import type { Arenas } from '../../src/engine/arena';
 import type { Stage } from '../../src/engine/graph';
@@ -2713,7 +2832,8 @@ export function fullChain(device: GPUDevice, arenas: Arenas): Stage[] {
     createHalationStage(device, arenas),
     createGrainStage(device, arenas),
     createDiffusionStage(device, arenas, 'camera'),
-    createPrintScanStage(device, arenas),
+    createPrintExposureStage(device, arenas),
+    createPrintDevelopStage(device, arenas),
     createDiffusionStage(device, arenas, 'print'),
     createScannerPostStage(device, arenas),
   ];
