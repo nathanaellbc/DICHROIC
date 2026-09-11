@@ -4,320 +4,3124 @@
     "height": 192,
     "bands": 81
   },
+  "colorSpaces": {
+    "count": 26,
+    "transferLutSize": 4096,
+    "outputGamutCompressionStride": 18,
+    "labels": [
+      "ARRI LogC4",
+      "ARRI LogC3 EI800",
+      "BMDFilm WideGamut Gen5",
+      "DaVinci Intermediate WideGamut",
+      "RED Log3G10 REDWideGamutRGB",
+      "Sony S-Log3 S-Gamut3",
+      "Sony S-Log3 S-Gamut3.Cine",
+      "Canon Log2 CinemaGamut D55",
+      "Canon Log3 CinemaGamut D55",
+      "Panasonic V-Log V-Gamut",
+      "ACES2065-1",
+      "ACEScg",
+      "ACEScct",
+      "ACEScc",
+      "Linear Rec.2020",
+      "Linear Rec.709",
+      "Linear P3-D65",
+      "sRGB",
+      "Display P3",
+      "ProPhoto RGB",
+      "Adobe RGB (1998)",
+      "DCI-P3",
+      "P3-D65 Gamma 2.2",
+      "P3-D65 Gamma 2.6",
+      "Rec.709 Gamma 2.2",
+      "Rec.709 Gamma 2.4"
+    ],
+    "decodeLutMin": -0.125,
+    "decodeLutMax": 1.5,
+    "encodeLutMin": -0.25,
+    "encodeLutMax": 64.0
+  },
+  "counts": {
+    "filmCount": 20,
+    "paperCount": 8,
+    "defaultFilmIndex": 2,
+    "defaultPaperIndex": 4,
+    "academyPrinterDensityEnabled": false
+  },
   "stocks": [
     {
       "id": "kodak_ektar_100",
       "name": "Kodak Ektar 100",
       "type": "negative",
-      "offsetFloats": 0,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1345370949692017,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 234,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 315,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 558,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 801,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 805,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 886,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 1120,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 1363,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 1619,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 2387,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 2630,
+          "lengthFloats": 81,
+          "nullCount": 25
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 2711,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 2714,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 5018,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 5027,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 5030,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 5033,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 5036,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 5038,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 5040,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 5042,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 5123,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_160",
       "name": "Kodak Portra 160",
       "type": "negative",
-      "offsetFloats": 1024,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1363852379591262,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 5357,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 5438,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 5681,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 5924,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 5928,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 6009,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 6243,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 6486,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 6742,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 7510,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 7753,
+          "lengthFloats": 81,
+          "nullCount": 22
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 7834,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 7837,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 10141,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 10150,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 10153,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 10156,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 10159,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 10161,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 10163,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 10165,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 10246,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_400",
       "name": "Kodak Portra 400",
       "type": "negative",
-      "offsetFloats": 2048,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1434116119145272,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 10480,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 10561,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 10804,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 11047,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 11051,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 11132,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 11366,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 11609,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 11865,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 12633,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 12876,
+          "lengthFloats": 81,
+          "nullCount": 20
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 12957,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 12960,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 15264,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 15273,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 15276,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 15279,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 15282,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 15284,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 15286,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 15288,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 15369,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_800",
       "name": "Kodak Portra 800",
       "type": "negative",
-      "offsetFloats": 3072,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1484524786891384,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 15603,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 15684,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 15927,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 16170,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 16174,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 16255,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 16489,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 16732,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 16988,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 17756,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 17999,
+          "lengthFloats": 81,
+          "nullCount": 22
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 18080,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 18083,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 20387,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 20396,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 20399,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 20402,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 20405,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 20407,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 20409,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 20411,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 20492,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_800_push1",
       "name": "Kodak Portra 800 (Push 1)",
       "type": "negative",
-      "offsetFloats": 4096,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1484524786891384,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 20726,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 20807,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 21050,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 21293,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 21297,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 21378,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 21612,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 21855,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 22111,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 22879,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 23122,
+          "lengthFloats": 81,
+          "nullCount": 22
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 23203,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 23206,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 25510,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 25519,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 25522,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 25525,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 25528,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 25530,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 25532,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 25534,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 25615,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_800_push2",
       "name": "Kodak Portra 800 (Push 2)",
       "type": "negative",
-      "offsetFloats": 5120,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1484524786891384,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 25849,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 25930,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 26173,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 26416,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 26420,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 26501,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 26735,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 26978,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 27234,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 28002,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 28245,
+          "lengthFloats": 81,
+          "nullCount": 22
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 28326,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 28329,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 30633,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 30642,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 30645,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 30648,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 30651,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 30653,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 30655,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 30657,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 30738,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_gold_200",
       "name": "Kodak Gold 200",
       "type": "negative",
-      "offsetFloats": 6144,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1434029490657476,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 30972,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 31053,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 31296,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 31539,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 31543,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 31624,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 31858,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 32101,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 32357,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 33125,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 33368,
+          "lengthFloats": 81,
+          "nullCount": 20
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 33449,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 33452,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 35756,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 35765,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 35768,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 35771,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 35774,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 35776,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 35778,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 35780,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 35861,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_ultramax_400",
       "name": "Kodak Ultramax 400",
       "type": "negative",
-      "offsetFloats": 7168,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1494335499870996,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 36095,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 36176,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 36419,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 36662,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 36666,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 36747,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 36981,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 37224,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 37480,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 38248,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 38491,
+          "lengthFloats": 81,
+          "nullCount": 21
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 38572,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 38575,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 40879,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 40888,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 40891,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 40894,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 40897,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 40899,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 40901,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 40903,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 40984,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_vision3_50d",
       "name": "Kodak Vision3 50D",
       "type": "negative",
-      "offsetFloats": 8192,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.154021176125793,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 41218,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 41299,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 41542,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 41785,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 41789,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 41870,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 42104,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 42347,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 42603,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 43371,
+          "lengthFloats": 243,
+          "nullCount": 23
+        },
+        "baseDensity": {
+          "offsetFloats": 43614,
+          "lengthFloats": 81,
+          "nullCount": 9
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 43695,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 43698,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 46002,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 46011,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 46014,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 46017,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 46020,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 46022,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 46024,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 46026,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 46107,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_vision3_250d",
       "name": "Kodak Vision3 250D",
       "type": "negative",
-      "offsetFloats": 9216,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1505255435482293,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 46341,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 46422,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 46665,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 46908,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 46912,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 46993,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 47227,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 47470,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 47726,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 48494,
+          "lengthFloats": 243,
+          "nullCount": 15
+        },
+        "baseDensity": {
+          "offsetFloats": 48737,
+          "lengthFloats": 81,
+          "nullCount": 4
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 48818,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 48821,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 51125,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 51134,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 51137,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 51140,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 51143,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 51145,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 51147,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 51149,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 51230,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_verita_200d",
       "name": "Kodak Verita 200D",
       "type": "negative",
-      "offsetFloats": 10240,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1458627495111589,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 51464,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 51545,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 51788,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 52031,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 52035,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 52116,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 52350,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 52593,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 52849,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 53617,
+          "lengthFloats": 243,
+          "nullCount": 23
+        },
+        "baseDensity": {
+          "offsetFloats": 53860,
+          "lengthFloats": 81,
+          "nullCount": 22
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 53941,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 53944,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 56248,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 56257,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 56260,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 56263,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 56266,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 56268,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 56270,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 56272,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 56353,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_vision3_200t",
       "name": "Kodak Vision3 200T",
       "type": "negative",
-      "offsetFloats": 11264,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "T",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 0.8516751360625213,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 56587,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 56668,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 56911,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 57154,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 57158,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 57239,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 57473,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 57716,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 57972,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 58740,
+          "lengthFloats": 243,
+          "nullCount": 15
+        },
+        "baseDensity": {
+          "offsetFloats": 58983,
+          "lengthFloats": 81,
+          "nullCount": 4
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 59064,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 59067,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 61371,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 61380,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 61383,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 61386,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 61389,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 61391,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 61393,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 61395,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 61476,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_vision3_500t",
       "name": "Kodak Vision3 500T",
       "type": "negative",
-      "offsetFloats": 12288,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "T",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 0.8517337396448421,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 61710,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 61791,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 62034,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 62277,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 62281,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 62362,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 62596,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 62839,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 63095,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 63863,
+          "lengthFloats": 243,
+          "nullCount": 15
+        },
+        "baseDensity": {
+          "offsetFloats": 64106,
+          "lengthFloats": 81,
+          "nullCount": 4
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 64187,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 64190,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 66494,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 66503,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 66506,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 66509,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 66512,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 66514,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 66516,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 66518,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 66599,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_pro_400h",
       "name": "Fujifilm Pro 400H",
       "type": "negative",
-      "offsetFloats": 13312,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1553295477603616,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 66833,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 66914,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 67157,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 67400,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 67404,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 67485,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 67719,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 67962,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 68218,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 68986,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 69229,
+          "lengthFloats": 81,
+          "nullCount": 17
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 69310,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 69313,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 71617,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 71626,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 71629,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 71632,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 71635,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 71637,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 71639,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 71641,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 71722,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_c200",
       "name": "Fujifilm C200",
       "type": "negative",
-      "offsetFloats": 14336,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1523714173253359,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 71956,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 72037,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 72280,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 72523,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 72527,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 72608,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 72842,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 73085,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 73341,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 74109,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 74352,
+          "lengthFloats": 81,
+          "nullCount": 17
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 74433,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 74436,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 76740,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 76749,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 76752,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 76755,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 76758,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 76760,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 76762,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 76764,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 76845,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_xtra_400",
       "name": "Fujifilm X-Tra 400",
       "type": "negative",
-      "offsetFloats": 15360,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1531089913446915,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 77079,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 77160,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 77403,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 77646,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 77650,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 77731,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 77965,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 78208,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 78464,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 79232,
+          "lengthFloats": 243,
+          "nullCount": 22
+        },
+        "baseDensity": {
+          "offsetFloats": 79475,
+          "lengthFloats": 81,
+          "nullCount": 17
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 79556,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 79559,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 81863,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 81872,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 81875,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 81878,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 81881,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 81883,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 81885,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 81887,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 81968,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_ektachrome_100",
       "name": "Kodak Ektachrome 100",
       "type": "positive",
-      "offsetFloats": 16384,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.1488872899674283,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 82202,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 82283,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 82526,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 82769,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 82773,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 82854,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 83088,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 83331,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 83587,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 84355,
+          "lengthFloats": 243,
+          "nullCount": 63
+        },
+        "baseDensity": {
+          "offsetFloats": 84598,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 84679,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 84682,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 86986,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 86995,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 86998,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 87001,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 87004,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 87006,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 87008,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 87010,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 87091,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_kodachrome_64",
       "name": "Kodak Kodachrome 64",
       "type": "positive",
-      "offsetFloats": 17408,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.152802652163387,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 87325,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 87406,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 87649,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 87892,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 87896,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 87977,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 88211,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 88454,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 88710,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 89478,
+          "lengthFloats": 243,
+          "nullCount": 78
+        },
+        "baseDensity": {
+          "offsetFloats": 89721,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 89802,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 89805,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 92109,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 92118,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 92121,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 92124,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 92127,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 92129,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 92131,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 92133,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 92214,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_velvia_100",
       "name": "Fujifilm Velvia 100",
       "type": "positive",
-      "offsetFloats": 18432,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.147769724884909,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 92448,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 92529,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 92772,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 93015,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 93019,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 93100,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 93334,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 93577,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 93833,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 94601,
+          "lengthFloats": 243,
+          "nullCount": 56
+        },
+        "baseDensity": {
+          "offsetFloats": 94844,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 94925,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 94928,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 97232,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 97241,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 97244,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 97247,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 97250,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 97252,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 97254,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 97256,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 97337,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_provia_100f",
       "name": "Fujifilm Provia 100F",
       "type": "positive",
-      "offsetFloats": 19456,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "D55",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 1.144858454033471,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 97571,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 97652,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": {
+          "offsetFloats": 97895,
+          "lengthFloats": 243
+        },
+        "hanatos2026WindowParams": {
+          "offsetFloats": 98138,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 98142,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 98223,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 98457,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 98700,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 98956,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 99724,
+          "lengthFloats": 243,
+          "nullCount": 42
+        },
+        "baseDensity": {
+          "offsetFloats": 99967,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 100048,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 100051,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 102355,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 102364,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 102367,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 102370,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 102373,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 102375,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 102377,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 102379,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 102460,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_endura_premier",
       "name": "Kodak Professional Endura Premier",
       "type": "negative",
-      "offsetFloats": 20480,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 24.07927576598487,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 102694,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 102775,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 103018,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 103022,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 103103,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 103337,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 103580,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 103836,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 104604,
+          "lengthFloats": 243,
+          "nullCount": 66
+        },
+        "baseDensity": {
+          "offsetFloats": 104847,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 104928,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 104931,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 107235,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 107244,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 107247,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 107250,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 107253,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 107255,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 107257,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 107259,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 107340,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_ultra_endura",
       "name": "Kodak Professional Ultra Endura",
       "type": "negative",
-      "offsetFloats": 21504,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 24.124647312466408,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 107574,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 107655,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 107898,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 107902,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 107983,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 108217,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 108460,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 108716,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 109484,
+          "lengthFloats": 243,
+          "nullCount": 65
+        },
+        "baseDensity": {
+          "offsetFloats": 109727,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 109808,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 109811,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 112115,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 112124,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 112127,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 112130,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 112133,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 112135,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 112137,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 112139,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 112220,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_ektacolor_edge",
       "name": "Kodak Ektacolor Edge",
       "type": "negative",
-      "offsetFloats": 22528,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 24.449704844787338,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 112454,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 112535,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 112778,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 112782,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 112863,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 113097,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 113340,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 113596,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 114364,
+          "lengthFloats": 243,
+          "nullCount": 64
+        },
+        "baseDensity": {
+          "offsetFloats": 114607,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 114688,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 114691,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 116995,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 117004,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 117007,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 117010,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 117013,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 117015,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 117017,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 117019,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 117100,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_supra_endura",
       "name": "Kodak Professional Supra Endura",
       "type": "negative",
-      "offsetFloats": 23552,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 24.24007699771658,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 117334,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 117415,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 117658,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 117662,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 117743,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 117977,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 118220,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 118476,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 119244,
+          "lengthFloats": 243,
+          "nullCount": 64
+        },
+        "baseDensity": {
+          "offsetFloats": 119487,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 119568,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 119571,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 121875,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 121884,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 121887,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 121890,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 121893,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 121895,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 121897,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 121899,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 121980,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_portra_endura",
       "name": "Kodak Professional Portra Endura",
       "type": "negative",
-      "offsetFloats": 24576,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 24.24007699771658,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 122214,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 122295,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 122538,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 122542,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 122623,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 122857,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 123100,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 123356,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 124124,
+          "lengthFloats": 243,
+          "nullCount": 64
+        },
+        "baseDensity": {
+          "offsetFloats": 124367,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 124448,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 124451,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 126755,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 126764,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 126767,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 126770,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 126773,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 126775,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 126777,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 126779,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 126860,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "fujifilm_crystal_archive_typeii",
       "name": "Fujifilm Crystal Archive Type II",
       "type": "negative",
-      "offsetFloats": 25600,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "D50",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 22.587817748900566,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 127094,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 127175,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 127418,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 127422,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 127503,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 127737,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 127980,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 128236,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 129004,
+          "lengthFloats": 243,
+          "nullCount": 37
+        },
+        "baseDensity": {
+          "offsetFloats": 129247,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 129328,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 129331,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 131635,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 131644,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 131647,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 131650,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 131653,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 131655,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 131657,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 131659,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 131740,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_2383",
       "name": "Kodak Vision 2383",
       "type": "negative",
-      "offsetFloats": 26624,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "K75P",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 10.094680697942167,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 131974,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 132055,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 132298,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 132302,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 132383,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 132617,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 132860,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 133116,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 133884,
+          "lengthFloats": 243,
+          "nullCount": 19
+        },
+        "baseDensity": {
+          "offsetFloats": 134127,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 134208,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 134211,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 136515,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 136524,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 136527,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 136530,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 136533,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 136535,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 136537,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 136539,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 136620,
+          "lengthFloats": 234
+        }
+      }
     },
     {
       "id": "kodak_2393",
       "name": "Kodak Vision Premier 2393",
       "type": "negative",
-      "offsetFloats": 27648,
-      "lengthFloats": 1024,
-      "curvePoints": 256,
+      "referenceIlluminant": "TH-KG3",
+      "viewingIlluminant": "K75P",
+      "wavelengthCount": 81,
+      "exposureCount": 256,
+      "mallettRawMidgrayGreen": 10.331026236382183,
       "license": "This profile is part of spektrafilm, licensed under GNU GPL v3.0. See https://github.com/andreavolpato/spektrafilm/blob/main/LICENSE for details.",
       "citation": "If you use this profile in your work, please cite the spektrafilm project: https://github.com/andreavolpato/spektrafilm, see CITATION.cff for details.",
-      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available."
+      "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
+      "fields": {
+        "wavelengths": {
+          "offsetFloats": 136854,
+          "lengthFloats": 81
+        },
+        "logSensitivity": {
+          "offsetFloats": 136935,
+          "lengthFloats": 243
+        },
+        "bandpassHanatos2025": null,
+        "hanatos2026WindowParams": {
+          "offsetFloats": 137178,
+          "lengthFloats": 4
+        },
+        "referenceIlluminantSpectrum": {
+          "offsetFloats": 137182,
+          "lengthFloats": 81
+        },
+        "inputToReferenceXyz": {
+          "offsetFloats": 137263,
+          "lengthFloats": 234
+        },
+        "inputToSrgb": {
+          "offsetFloats": 0,
+          "lengthFloats": 234
+        },
+        "mallettBasisIlluminant": {
+          "offsetFloats": 137497,
+          "lengthFloats": 243
+        },
+        "logExposure": {
+          "offsetFloats": 137740,
+          "lengthFloats": 256
+        },
+        "densityCurves": {
+          "offsetFloats": 137996,
+          "lengthFloats": 768
+        },
+        "channelDensity": {
+          "offsetFloats": 138764,
+          "lengthFloats": 243,
+          "nullCount": 21
+        },
+        "baseDensity": {
+          "offsetFloats": 139007,
+          "lengthFloats": 81
+        },
+        "densityCurveMinimum": {
+          "offsetFloats": 139088,
+          "lengthFloats": 3
+        },
+        "densityCurveLayers": {
+          "offsetFloats": 139091,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 141395,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 141404,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 141407,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 141410,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 141413,
+          "lengthFloats": 2
+        },
+        "dirGammaGToRb": {
+          "offsetFloats": 141415,
+          "lengthFloats": 2
+        },
+        "dirGammaBToRg": {
+          "offsetFloats": 141417,
+          "lengthFloats": 2
+        },
+        "scanIlluminant": {
+          "offsetFloats": 141419,
+          "lengthFloats": 81
+        },
+        "scanToOutputRgb": {
+          "offsetFloats": 141500,
+          "lengthFloats": 234
+        }
+      }
     }
   ],
   "static": {
     "outputGamutCompression": {
       "offsetFloats": 0,
       "lengthFloats": 468
+    },
+    "inputMeterXyzMatrices": {
+      "offsetFloats": 468,
+      "lengthFloats": 234
+    },
+    "colorTransferKinds": {
+      "offsetFloats": 702,
+      "lengthFloats": 26
+    },
+    "colorTransferParams": {
+      "offsetFloats": 728,
+      "lengthFloats": 26
+    },
+    "colorDecodeLuts": {
+      "offsetFloats": 754,
+      "lengthFloats": 106496
+    },
+    "colorEncodeLuts": {
+      "offsetFloats": 107250,
+      "lengthFloats": 106496
+    },
+    "standardObserverCmfs": {
+      "offsetFloats": 213746,
+      "lengthFloats": 243
+    },
+    "thKg3Illuminant": {
+      "offsetFloats": 213989,
+      "lengthFloats": 81
+    },
+    "customEnlargerFilters": {
+      "offsetFloats": 214070,
+      "lengthFloats": 243
+    },
+    "neutralPrintFilters": {
+      "offsetFloats": 214313,
+      "lengthFloats": 480
+    },
+    "academyPrinterDensityResponsivities": {
+      "offsetFloats": 214793,
+      "lengthFloats": 243
+    },
+    "academyPrinterDensityNeutralOffsets": {
+      "offsetFloats": 215036,
+      "lengthFloats": 480
+    },
+    "academyPrinterDensityData": {
+      "offsetFloats": 215516,
+      "lengthFloats": 723
+    },
+    "academyPrinterDensityInfluxSpectrum": {
+      "offsetFloats": 216239,
+      "lengthFloats": 81
     }
   }
 }
