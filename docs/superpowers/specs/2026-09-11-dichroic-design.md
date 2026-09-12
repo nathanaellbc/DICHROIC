@@ -176,6 +176,30 @@ sampler, tekstur, `barrier()`, memori `shared`, operasi atomik, subgroup, tipe
 64-bit, atau `#extension` apa pun. Ia murni storage-buffer in/out — kandidat
 port sebaik yang realistis bisa diharapkan.
 
+### 4.3.1 Batas yang terukur
+
+Diukur di Task 6, bukan diasumsikan.
+
+**Compute: muat tanpa sisa.** Kesepuluh shader hulu memakai tepat **256 invokasi
+per workgroup** — `32×8×1` untuk delapan di antaranya, `256×1×1` untuk
+`SpektraCopy` dan `SpektraFormatConvert`. Keduanya pas di dalam jaminan minimum
+WebGPU (`maxComputeInvocationsPerWorkgroup` 256, `maxComputeWorkgroupSizeX` 256)
+tanpa kelonggaran sama sekali.
+
+Karena itu **limit compute tidak dinaikkan.** Port ini muat di dalam yang
+dijamin, jadi ia berjalan di perangkat WebGPU konforman apa pun. Meminta lebih
+menukar jaminan itu dengan ketergantungan pada kemurahan adapter, tanpa imbalan.
+
+**Storage buffer: kebalikannya, dan itu memperkuat rancangan arena.** Adapter
+pada mesin pengembangan menawarkan `maxStorageBuffersPerShaderStage` **16**,
+sementara `SpektraPrintScan` mengikat **30**. Bahkan pada maksimum adapter ia
+tidak muat. Arena packing (§4.3) bukan kehati-hatian — ia wajib.
+
+**Ukuran buffer diminta pada maksimum adapter:** `maxStorageBufferBindingSize`
+dan `maxBufferSize` keduanya 2 GiB di mesin ini. Buffer lebih besar berarti
+lebih sedikit tile, dan lebih sedikit tile berarti lebih sedikit kesempatan
+jahitan pada efek spasial — konsisten dengan aturan §2.
+
 ### 4.4 Tiling
 
 `CoreParams` sudah membawa `tileOriginX/Y` dan `activeWidth/Height`, dan
