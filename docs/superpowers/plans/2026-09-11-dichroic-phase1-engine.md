@@ -1697,9 +1697,37 @@ Transliterasi dari `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraFormatConvert.comp` (
 | `mod(a, b)` | `a % b` untuk integer; `a - b * floor(a / b)` untuk float (semantik GLSL) |
 | `matN * vec` | `matN * vec` — WGSL juga column-major; **verifikasi ini pada tap pertama yang melibatkan matriks** |
 
-`SpektraCopy.comp` (24 baris) **tidak di-port.** Ia hanya menyalin satu buffer
-ke buffer lain; `GPUCommandEncoder.copyBufferToBuffer` melakukan hal yang sama
-tanpa shader. Sembilan tahap yang tersisa adalah seluruh pipeline.
+**Dua dari sepuluh shader hulu tidak di-port**, masing-masing dengan alasannya,
+dan satu primitif baru ditambahkan yang port ini butuhkan sendiri. Keduanya
+ditemukan dengan membaca shader-nya, bukan diasumsikan dari namanya.
+
+`SpektraCopy.comp` (24 baris) tidak di-port: ia hanya menyalin satu buffer ke
+buffer lain, dan `GPUCommandEncoder.copyBufferToBuffer` melakukan hal yang sama
+tanpa shader.
+
+`SpektraFormatConvert.comp` (90 baris) tidak di-port — **temuan Task 9, dan
+koreksi atas dugaan rencana ini.** Ia bukan salinan `vec4` per-piksel: ia membawa
+blok push-constant sendiri (`FormatConvertParams { pixelCount; mode; }`),
+men-dispatch 1D atas array kata mentah, dan melakukan konversi fp16↔fp32 dengan
+dithering TPDF. Perannya — mengonversi buffer host OFX yang bisa berformat
+half-float ke format kerja internal — **tidak ada di port browser ini**: setiap
+sumber piksel DICHROIC adalah `Float32Array` dari ujung ke ujung, jadi tidak ada
+batas half-float untuk dikonversi. Mem-port-nya apa adanya akan mengubah rasio
+ukuran buffer sumber/tujuan (2 kata per piksel versus 4) dan kehilangan presisi
+lewat dithering — keduanya bertentangan dengan buffer ping-pong berukuran tetap
+dan dengan aturan kualitas di Global Constraints.
+
+Menggantinya, port ini menambahkan satu primitif yang memang dibutuhkannya:
+**materialisasi region aktif** — menyalin sub-rektangel (`activeOriginX/Y`,
+`activeWidth/Height`) dari buffer sumber penuh (`fullWidth/Height`) ke buffer
+tujuan, `vec4<f32>` demi `vec4<f32>`, tanpa konversi bit apa pun. Ia **tidak**
+dapat digantikan `copyBufferToBuffer`, karena sub-rektangel dari buffer yang
+tertata 2D bukan rentang kontigu — jadi jangan menghapusnya sebagai redundan.
+Field `activeOrigin`/`activeWidth`/`activeHeight` memang ada di `CoreParams`
+untuk pemakaian per-tile ini (Task 19), sehingga workgroup 2D `32×8×1` lebih
+tepat di sini daripada `256×1×1` hulu, yang cocok untuk dispatch 1D atas kata.
+
+Delapan shader hulu yang di-port plus satu primitif ini adalah seluruh pipeline.
 
 ```wgsl
 // Transliterasi dari SpektraFormatConvert.comp hulu.
