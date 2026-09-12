@@ -89,6 +89,21 @@ describe('loadAssets', () => {
     );
   });
 
+  it('ReadonlyFloat32Array.slice() sungguh menyalin -- menulis ke hasil slice tidak menyentuh blob bersama', () => {
+    // Ini mengunci asumsi yang seluruh aturan subarray-vs-slice di
+    // types.ts bersandar padanya: `.slice()` bawaan Float32Array
+    // mengalokasikan buffer baru, tidak berbagi memori dengan view yang
+    // di-slice. Kalau asumsi ini pernah salah (mis. mesin JS lain, atau
+    // polyfill yang keliru), test runtime ini akan gagal meski typecheck
+    // tetap lulus -- keduanya perlu untuk saling menutup satu sama lain.
+    const view = bundle.stockField('kodak_portra_400', 'logExposure')!;
+    const before = view[0]!;
+    const copy = view.slice(0, 4);
+    copy[0] = before + 1000; // mutasi sah -- copy adalah Float32Array biasa
+    expect(view[0], 'blob bersama tidak boleh berubah setelah menulis ke slice()').toBe(before);
+    expect(copy[0]).toBe(before + 1000);
+  });
+
   describe('stockField: setiap slice cocok tepat dengan offset/panjang manifest, di seluruh 28 stock x 23 field', () => {
     const rawStocks = readRawBlob('stocks.f32');
 

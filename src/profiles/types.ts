@@ -28,10 +28,34 @@
  * yang bertipe hanya-baca ini, bukan keberadaan pemilik mutable di tempat
  * lain (di sini, tidak ada -- `load.ts` tidak pernah menyimpan referensi
  * mutable ke slice yang sudah dibagikan keluar).
+ *
+ * Aturan `.subarray()` vs. `.slice()` -- keduanya punya tanda tangan
+ * bawaan yang identik (`(start?, end?) => Float32Array`), tapi perilakunya
+ * berlawanan, dan tipe ini HARUS memperlakukan mereka berbeda:
+ *
+ * - **`.subarray()` membuat ALIAS**, view baru ke buffer yang SAMA. Kalau
+ *   dibiarkan mewarisi tanda tangan bawaan, ia mengembalikan `Float32Array`
+ *   biasa lagi -- lolos typecheck, lalu `view.subarray(0, 10)[0] = 1`
+ *   menembus balik ke buffer bersama, persis pola yang tipe ini ada untuk
+ *   dicegah. Karena itu di-override di bawah agar mengembalikan
+ *   `ReadonlyFloat32Array`, BUKAN di-omit -- sub-rentang untuk dibaca
+ *   (mis. GPU-arena builder mengambil bagian yang lebih kecil dari satu
+ *   field sebelum diunggah) adalah kebutuhan yang sah dan harus tetap bisa
+ *   dipanggil, hanya hasilnya yang tetap dijaga.
+ * - **`.slice()` membuat SALINAN** -- `Float32Array.prototype.slice`
+ *   mengalokasikan buffer baru, tidak berbagi memori dengan sumbernya.
+ *   Method ini SENGAJA tidak disebut di `TypedArrayMutableMethods` atau
+ *   di-override: tanda tangannya tetap `(start?, end?) => Float32Array`
+ *   (mutable) apa adanya, karena `.slice()` adalah cara resmi pemanggil
+ *   mendapatkan buffer kerja yang boleh dimutasi kalau memang perlu.
+ *   Mempersempit `.slice()` juga akan sama saja dengan menghapus satu-
+ *   satunya jalan keluar yang sah dari tipe ini.
  */
-type TypedArrayMutableMethods = 'set' | 'fill' | 'sort' | 'copyWithin' | 'reverse';
+type TypedArrayMutableMethods = 'set' | 'fill' | 'sort' | 'copyWithin' | 'reverse' | 'subarray';
 export interface ReadonlyFloat32Array extends Omit<Float32Array, TypedArrayMutableMethods> {
   readonly [index: number]: number;
+  /** Alias hanya-baca ke sub-rentang yang sama -- lihat aturan di atas. */
+  subarray(begin?: number, end?: number): ReadonlyFloat32Array;
 }
 
 /** Referensi ke satu rentang float32 di dalam `stocks.f32` atau `static.f32`. */
