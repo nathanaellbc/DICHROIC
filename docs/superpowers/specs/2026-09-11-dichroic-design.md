@@ -393,6 +393,65 @@ Engine DICHROIC **mencerminkan nama tap yang sama**, dan setiap tap dapat
 di-collect. Akibatnya gerbang per-tahap menjadi sifat bawaan arsitektur, bukan
 sesuatu yang ditempelkan untuk keperluan pengujian.
 
+### 6.3.2 Satu tap TIDAK sama dengan satu tahap GPU
+
+Tujuh nama tap di atas benar, tetapi asumsi tersembunyi di bawahnya salah, dan
+Task 11 menabraknya: **satu tap Python tidak memetakan satu-ke-satu ke satu
+shader compute hulu.**
+
+`FilmingStage.expose()` (`runtime/stages/filming.py:52-71`) memanggil, dalam
+satu fungsi, sebelum `log10` yang menghasilkan `log_e_film`:
+
+```
+_rgb_to_film_raw → *2**exposure_compensation_ev → boost_highlights
+  → apply_diffusion_filter_um → apply_gaussian_blur_um → apply_halation_um
+  → *black_white_filming_exposure_correction → log10
+```
+
+Empat dari langkah itu **spasial** (konvolusi), dan hulu memisahkannya ke shader
+Vulkan-nya sendiri: `SpektraFilmExposure.comp` (263 baris) tidak punya kode
+halation sama sekali; `SpektraHalation.comp` adalah 322 baris terpisah. Jadi
+`log_e_film` yang dibangkitkan Python **tidak bisa** direproduksi oleh tahap
+FilmExposure sendirian, apa pun benarnya port itu. Task 11 mengukur residual
+seragam 3.41e-5 lintas ketiga kasus dan mengonfirmasinya dengan A/B di Python:
+halation-off versus fixture yang sudah dikomit memberi 3.397e-5 maks / 3.040e-5
+rata-rata — cocok dengan residual gerbangnya.
+
+Ini bukan kabar buruk, karena hulu sudah menyediakan jawabannya.
+
+### 6.3.3 Keluarga fixture: `lut_mode` adalah regime yang kita kapalkan
+
+`DebugParams` (`runtime/params_schema.py:197-205`) punya TIGA saklar, bukan
+satu, dan kita baru memakai satu:
+
+| Saklar | Yang dimatikan |
+|---|---|
+| `deactivate_stochastic_effects` | `grain.active`, `glare.active` — hanya itu |
+| `deactivate_spatial_effects` | halation (flag + sigma), `dir_couplers.diffusion_size_um`, semua lens blur, diffusion filter, unsharp |
+| `lut_mode` | mempromosikan KEDUANYA, plus `auto_exposure`, `exposure_compensation_ev`, `halation.boost_ev`, dan koreksi white/black/unsharp scanner |
+
+`deactivate_stochastic_effects` — satu-satunya yang dipakai Task 3 — **tidak
+menyentuh halation**, dan itulah kenapa fixture "deterministik" kita tetap
+mengandung efek spasial.
+
+Keputusan: gerbang per-piksel (Task 11, 12, 13, 17, 18) diukur terhadap
+keluarga fixture `lut_mode`; tahap spasial (halation Task 14, diffusion Task 15)
+dan stokastik (grain Task 16) diukur di tapnya sendiri terhadap keluarga yang
+efeknya HIDUP. Tidak ada yang dilewatkan — halation tetap diverifikasi, hanya
+tidak di gerbang yang tidak mengimplementasikannya.
+
+Dan `lut_mode` bukan konsesi supaya gerbang lulus. Produk DICHROIC adalah foto
+plus ekspor LUT `.cube`; `lut_mode` adalah deskripsi hulu sendiri tentang
+"pipeline sebagai transform per-piksel deterministik yang layak di-sample LUT".
+Itu **persis regime yang jalur LUT kita harus reproduksi**. Komentar hulu di
+`params_builder.py:105-114` bahkan menjelaskan kenapa `boost_ev` harus mati di
+`lut_mode`: ia menormalkan dengan `np.max(x)` seluruh gambar, jadi tidak bisa
+diwakili LUT 3D statis. Alasan yang sama berlaku untuk auto-exposure — dan
+emulasi auto-exposure CPU yang Task 11 tulis (`measureAutoExposureEv` di
+`test/parity/params.ts`) menjadi tidak perlu untuk keluarga ini. Kode itu tetap
+disimpan, bukan dihapus: keluarga non-`lut_mode` di Task 14-16 masih
+membutuhkannya.
+
 ### 6.3.1 Ketika hulu tidak sepakat dengan dirinya sendiri: Python yang menang
 
 Ditemukan saat Task 11 buntu, dan ini mengoreksi asumsi verifikasi kita.
