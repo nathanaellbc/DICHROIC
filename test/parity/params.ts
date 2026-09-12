@@ -165,11 +165,41 @@ export function measureAutoExposureEv(
  *   - `activeOrigin*`/`tileOrigin*` — 0; `activeWidth/Height` — 0 (berarti
  *     "seluruh buffer", lih. `params.ts`).
  */
+/**
+ * Keluarga fixture yang menentukan bagaimana `filmExposureEv` dihitung --
+ * lih. spec §6.3.3 dan task-11-report.md untuk kenapa ini WAJIB eksplisit,
+ * bukan disimpulkan dari nama kasus:
+ *
+ *   'measured' — `camera.auto_exposure` default `True` Python TIDAK
+ *                dimatikan (keluarga `<case>`/`<case>_stochastic`).
+ *                `filmExposureEv` = exposureCompensationEv +
+ *                `measureAutoExposureEv(...)`, karena EV bergantung isi
+ *                gambar (dibuktikan di task-11-report.md, bagian
+ *                `defaultCoreParams`).
+ *   'lut'      — `debug.lut_mode = True` (keluarga `<case>_lut`).
+ *                `params_builder.py:105-107` memaksa `camera.auto_exposure
+ *                = False` DAN `camera.exposure_compensation_ev = 0.0` di
+ *                bawah `lut_mode` -- `filmExposureEv` HARUS 0, TITIK.
+ *                Memanggil `measureAutoExposureEv` di sini akan
+ *                menghasilkan angka yang KELIHATAN masuk akal (bergantung
+ *                gambar, dalam rentang EV wajar) tapi SALAH, karena Python
+ *                tidak pernah menjalankan auto-exposure untuk fixture ini
+ *                sama sekali -- persis kesalahan senyap yang harus dicegah
+ *                gerbang ini.
+ *
+ * Tidak ada nilai baku: pemanggil HARUS menyatakan family secara eksplisit.
+ * Kombinasi yang salah (mis. family 'measured' dipakai untuk fixture
+ * `_lut`, atau sebaliknya) harus gagal keras di `runTapParity`
+ * (`test/parity/run.ts`), bukan di sini -- lih. komentar di sana.
+ */
+export type CoreParamsFamily = 'measured' | 'lut';
+
 export function defaultCoreParams(
   width: number,
   height: number,
   bundle: AssetBundle,
   inputRgba: Float32Array,
+  family: CoreParamsFamily,
 ): CoreParams {
   const { colorSpaces } = bundle.manifest;
   const inputColorSpace = colorSpaces.labels.indexOf('ProPhoto RGB');
@@ -178,15 +208,28 @@ export function defaultCoreParams(
   }
 
   const meterMatrix = bundle.staticTable('inputMeterXyzMatrices');
-  const exposureCompensationEv = 0; // CameraParams.exposure_compensation_ev default
-  const autoExposureEv = measureAutoExposureEv(inputRgba, width, height, meterMatrix, inputColorSpace);
+  const exposureCompensationEv = 0; // CameraParams.exposure_compensation_ev default -- juga dipaksa 0.0 oleh lut_mode, jadi nilai ini benar di KEDUA family.
+
+  let filmExposureEv: number;
+  if (family === 'lut') {
+    // debug.lut_mode memaksa camera.auto_exposure=False (params_builder.py:106)
+    // -- TIDAK ada metering untuk keluarga ini. Sengaja TIDAK memanggil
+    // measureAutoExposureEv di cabang ini.
+    filmExposureEv = exposureCompensationEv;
+  } else if (family === 'measured') {
+    const autoExposureEv = measureAutoExposureEv(inputRgba, width, height, meterMatrix, inputColorSpace);
+    filmExposureEv = exposureCompensationEv + autoExposureEv;
+  } else {
+    const exhaustive: never = family;
+    throw new Error(`defaultCoreParams: family tidak dikenal: ${String(exhaustive)}`);
+  }
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
 
   return {
     width,
     height,
-    filmExposureEv: exposureCompensationEv + autoExposureEv,
+    filmExposureEv,
     filmGamma: 1, // tidak dibaca filmExposure.wgsl
     exposureCount: 0, // tidak dibaca filmExposure.wgsl
     inputColorSpace,

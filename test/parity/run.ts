@@ -10,6 +10,7 @@ import type { Stage } from '../../src/engine/graph';
 import type { TapName } from '../../src/engine/taps';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './compare';
 import { defaultCoreParams } from './params';
+import type { CoreParamsFamily } from './params';
 
 /**
  * Dipindahkan ke sini dari Task 10 (lih. ledger K5): `run.ts` mengimpor
@@ -21,6 +22,25 @@ export interface TapParityOptions {
   tolerance: number;
   stages: (device: GPUDevice, arenas: Arenas) => Stage[];
   stockId?: string;
+  /**
+   * Keluarga fixture `case` mewakili -- WAJIB, tidak ada default (lih.
+   * `params.ts::CoreParamsFamily`). Menentukan bagaimana `filmExposureEv`
+   * dihitung di `defaultCoreParams`; kombinasi yang salah (mis. `family:
+   * 'measured'` dipakai untuk direktori `_lut`) digagalkan di bawah,
+   * bukan dibiarkan menghasilkan EV yang kelihatan masuk akal tapi salah.
+   */
+  family: CoreParamsFamily;
+  /**
+   * Direktori fixture yang menyimpan `input.f32`, jika BUKAN `case` itu
+   * sendiri. `gen_reference.py` hanya menulis `input.f32` sekali, di
+   * direktori kasus dasar -- `<case>_stochastic` dan `<case>_lut` berbagi
+   * berkas yang sama dengan `<case>` (lih. `_generate_case`), jadi
+   * pemanggil yang membaca tap dari `<case>_lut` harus menyatakan
+   * `inputCase: '<case>'` di sini. Baku ke `case` bila tidak diberikan
+   * (benar untuk keluarga dasar/`measured` yang namanya sudah direktori
+   * dasar).
+   */
+  inputCase?: string;
 }
 
 /**
@@ -77,20 +97,55 @@ async function sharedResources(stockId: string) {
   return { engine, bundle, arenas };
 }
 
+/**
+ * Penjaga kombinasi (case, family) -- lih. komentar `family` di
+ * `TapParityOptions` dan `CoreParamsFamily` di `params.ts`. Direktori
+ * `_lut` dibangkitkan dengan `debug.lut_mode = True`, yang mematikan
+ * `camera.auto_exposure` sepenuhnya di sisi Python (params_builder.py:
+ * 105-107); direktori lain (`<case>`/`<case>_stochastic`) TIDAK
+ * mematikannya. Menyilangkan keduanya tidak menghasilkan crash -- ia
+ * menghasilkan `filmExposureEv` yang salah tapi "kelihatan masuk akal"
+ * (nomor real, dalam rentang EV wajar), persis kegagalan senyap yang
+ * brief minta dicegah. Digagalkan di sini, di satu tempat, bukan
+ * diharapkan setiap pemanggil `runTapParity` mengingatnya sendiri.
+ */
+function assertFamilyMatchesCase(caseName: string, family: CoreParamsFamily): void {
+  const isLutFixture = caseName.endsWith('_lut');
+  if (family === 'lut' && !isLutFixture) {
+    throw new Error(
+      `runTapParity: family 'lut' diminta untuk case "${caseName}", yang tidak ` +
+        'berakhiran "_lut". Fixture keluarga lut_mode HARUS memakai direktori ' +
+        '<case>_lut (lih. tools/gen_reference.py) -- kombinasi ini kemungkinan salah ketik.',
+    );
+  }
+  if (family === 'measured' && isLutFixture) {
+    throw new Error(
+      `runTapParity: family 'measured' diminta untuk case "${caseName}", yang ` +
+        'BERAKHIRAN "_lut". Fixture ini dibangkitkan dengan debug.lut_mode=True ' +
+        '(camera.auto_exposure dipaksa mati) -- measureAutoExposureEv akan ' +
+        'menghitung EV dari isi gambar dan menghasilkan angka yang kelihatan ' +
+        'masuk akal tapi SALAH. Pakai family: \'lut\'.',
+    );
+  }
+}
+
 export async function runTapParity(opts: TapParityOptions): Promise<void> {
   const { engine, bundle, arenas } = await sharedResources(
     opts.stockId ?? 'kodak_portra_400',
   );
 
+  assertFamilyMatchesCase(opts.case, opts.family);
+
   const graph = new RenderGraph(engine);
   for (const stage of opts.stages(engine.device, arenas)) graph.addStage(stage);
 
   const meta = loadCase(opts.case);
-  const inputRgba = loadInputAsRgba(opts.case);
+  const inputRgba = loadInputAsRgba(opts.inputCase ?? opts.case);
   // `defaultCoreParams` butuh `inputRgba` untuk meniru auto-exposure metering
   // Python (bergantung isi gambar) -- lih. test/parity/params.ts untuk bukti
   // kenapa ini bukan sekadar (width, height, bundle) seperti sketsa brief.
-  const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba);
+  // `family` menentukan apakah EV itu benar-benar dipakai (lih. params.ts).
+  const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, opts.family);
 
   const actual = await graph.run(inputRgba, params, opts.tap);
 

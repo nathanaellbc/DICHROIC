@@ -4,8 +4,9 @@
 Dijalankan sekali; keluarannya di-commit. Pengembangan harian dan CI tidak
 memerlukan Python.
 
-Dua keluarga fixture per kasus dasar (lihat task-3-brief.md untuk alasan
-lengkap): gerbang rgb_out pixel-exact dengan glare aktif tidak pernah
+Tiga keluarga fixture per kasus dasar (lihat task-3-brief.md untuk alasan
+tentang dua keluarga pertama, dan spec §6.3.3 / task-11-report.md untuk
+keluarga ketiga): gerbang rgb_out pixel-exact dengan glare aktif tidak pernah
 mungkin, karena RNG WGSL yang akan ditulis selalu berbeda algoritmanya dari
 RNG numba milik hulu, ter-seed atau tidak. Jadi:
 
@@ -17,6 +18,22 @@ RNG numba milik hulu, ter-seed atau tidak. Jadi:
   <case>_stochastic   setelan default hulu (grain & glare aktif), satu
                        realisasi. Gerbang: statistik (mean, varians,
                        spektrum daya) -- bukan per piksel.
+  <case>_lut          debug.lut_mode = True sebelum digest_params() --
+                      mempromosikan deactivate_spatial_effects DAN
+                      deactivate_stochastic_effects, plus mematikan
+                      auto_exposure, exposure_compensation_ev,
+                      halation.boost_ev, dan koreksi white/black/unsharp
+                      scanner (params_builder.py:99-118). Ini regime "pipeline
+                      sebagai transform per-piksel deterministik yang layak
+                      di-sample LUT" yang hulu deskripsikan sendiri di
+                      DebugParams.lut_mode (params_schema.py:197-205) -- dan
+                      persis regime yang ekspor .cube DICHROIC kapalkan.
+                      Gerbang tap per-piksel (log_e_film dkk.) diukur
+                      terhadap keluarga ini, bukan <case> biasa, karena
+                      <case> biasa TIDAK mematikan halation (halation bukan
+                      efek stokastik, jadi deactivate_stochastic_effects
+                      tidak menyentuhnya) -- lih. task-11-report.md untuk
+                      bukti penuh. Gerbang: per piksel, <= 1e-5.
 """
 from __future__ import annotations
 
@@ -96,7 +113,7 @@ def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
     )
 
 
-def _build_params(*, stochastic: bool):
+def _build_params(*, stochastic: bool, lut_mode: bool = False):
     """init_params() membangun objek mentah; digest_params() WAJIB
     dipanggil sebelum dipakai pipeline (lihat docstring hulu).
 
@@ -106,47 +123,81 @@ def _build_params(*, stochastic: bool):
     dan print_render.glare.active (params_builder.py:140-142). Garis yang
     ia tarik persis garis antara kedua keluarga fixture. Keluarga
     stokastik memakai setelan default hulu tanpa modifikasi apa pun.
+
+    Keluarga `lut_mode` mempromosikan `debug.lut_mode` SEBELUM
+    digest_params() -- satu saklar hulu yang menegakkan
+    deactivate_spatial_effects DAN deactivate_stochastic_effects, plus
+    mematikan auto_exposure, exposure_compensation_ev, halation.boost_ev,
+    dan koreksi white/black/unsharp scanner (params_builder.py:99-118).
+    `stochastic` diabaikan ketika `lut_mode=True` (lut_mode tidak pernah
+    stokastik oleh definisi hulu) -- dipertahankan sebagai argumen
+    terpisah, bukan digabung ke satu enum, supaya pemanggil yang sudah ada
+    (`_generate_case(stochastic=...)`) tidak perlu berubah tanda tangan.
     """
     raw = init_params()
-    if not stochastic:
+    if lut_mode:
+        raw.debug.lut_mode = True
+    elif not stochastic:
         raw.debug.deactivate_stochastic_effects = True
     params = digest_params(raw)
     assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
-    if not stochastic:
+    if lut_mode:
+        assert not params.print_render.glare.active, "glare harus mati di lut_mode"
+        assert not params.film_render.grain.active, "grain harus mati di lut_mode"
+        assert not params.film_render.halation.active, "halation harus mati di lut_mode"
+        assert params.camera.auto_exposure is False, "auto_exposure harus mati di lut_mode"
+        assert params.camera.exposure_compensation_ev == 0.0, "exposure_compensation_ev harus 0 di lut_mode"
+        assert params.film_render.halation.boost_ev == 0.0, "halation.boost_ev harus 0 di lut_mode"
+    elif not stochastic:
         assert not params.print_render.glare.active, "glare harus mati di keluarga deterministik"
         assert not params.film_render.grain.active, "grain harus mati di keluarga deterministik"
     return params
 
 
-def _generate_case(image: np.ndarray, case_dir: Path, name: str, *, stochastic: bool) -> None:
+def _generate_case(
+    image: np.ndarray, case_dir: Path, name: str, *, stochastic: bool, lut_mode: bool = False,
+) -> None:
     case_dir.mkdir(parents=True, exist_ok=True)
 
-    # Kedua keluarga memakai persis citra input yang sama (CASES[name]()
-    # dipanggil sekali oleh main() dan dibagikan ke kedua panggilan
-    # _generate_case). Menulis input.f32 di kedua direktori akan
-    # meng-commit dua salinan identik dari berkas yang sama -- disimpan
-    # sekali saja, di direktori kasus dasar (bukan varian _stochastic).
-    if not stochastic:
+    # Ketiga keluarga memakai persis citra input yang sama (CASES[name]()
+    # dipanggil sekali oleh main() dan dibagikan ke setiap panggilan
+    # _generate_case). Menulis input.f32 di semua direktori akan
+    # meng-commit salinan identik dari berkas yang sama -- disimpan
+    # sekali saja, di direktori kasus dasar (bukan varian _stochastic
+    # atau _lut).
+    if not stochastic and not lut_mode:
         (case_dir / "input.f32").write_bytes(
             np.ascontiguousarray(image, dtype="<f4").tobytes()
         )
 
     written = []
     for tap in TAPS:
-        params = _build_params(stochastic=stochastic)
+        params = _build_params(stochastic=stochastic, lut_mode=lut_mode)
         result = SimulationPipeline(params).process(image, collect=tap)
         arr = np.ascontiguousarray(result, dtype="<f4")
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
         written.append({"tap": tap, "channels": int(arr.shape[2])})
 
-    _write_json_lf(case_dir / "case.json", {
+    # PENTING: struktur dict di bawah, dan urutan key-nya, harus TETAP
+    # SAMA PERSIS dengan sebelum family _lut ditambahkan ketika
+    # lut_mode=False -- manifest.json mengunci sha256 case.json yang
+    # SUDAH dikomit untuk <case> dan <case>_stochastic, dan
+    # json.dumps(sort_keys=False) serialisasi berurutan sesuai insertion
+    # order. Menambah "lutMode" tanpa syarat di sini akan mengubah byte
+    # case.json kedua family lama itu -- persis "mengubah oracle" yang
+    # dilarang. "lutMode" hanya disisipkan untuk family _lut (berkas
+    # BARU, tidak ada hash lama untuk dicocoki).
+    meta = {
         "name": name,
         "height": int(image.shape[0]),
         "width": int(image.shape[1]),
         "stochastic": stochastic,
         "taps": written,
-    })
-    print(f"Wrote {case_dir} ({len(written)} taps, stochastic={stochastic})")
+    }
+    if lut_mode:
+        meta["lutMode"] = True
+    _write_json_lf(case_dir / "case.json", meta)
+    print(f"Wrote {case_dir} ({len(written)} taps, stochastic={stochastic}, lut_mode={lut_mode})")
 
 
 def _write_manifest(out_dir: Path) -> None:
@@ -189,6 +240,7 @@ def main() -> int:
         image = CASES[name]()
         _generate_case(image, args.out / name, name, stochastic=False)
         _generate_case(image, args.out / f"{name}_stochastic", name, stochastic=True)
+        _generate_case(image, args.out / f"{name}_lut", name, stochastic=False, lut_mode=True)
 
     if args.manifest:
         _write_manifest(args.out)
