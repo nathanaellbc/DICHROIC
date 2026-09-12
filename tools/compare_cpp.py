@@ -75,9 +75,22 @@ FIELD_TO_CPP_SUFFIX = {
     "scanToOutputRgb": "scan_to_output_rgb",
 }
 
-# Tabel global -> nama larik C++. Semua 14 tabel float dari
+# Tabel di manifest["static"] yang sengaja TIDAK dibandingkan di sini,
+# dengan alasan eksplisit -- lihat check_field_coverage(): kelalaian diam-diam
+# persis kegagalan yang harness ini ada untuk mencegah, jadi tiap pengecualian
+# harus tertulis dan beralasan, bukan sekadar tidak disebut.
+STATIC_COMPARISON_EXEMPT = {
+    # Tidak ada literal C++ untuk tabel ini -- generate_profile_curves.py
+    # tidak pernah memancarkannya sebagai larik bernama (dikonfirmasi: 0
+    # kecocokan untuk "gamut" di .cpp). Ia hanya ada lewat berkas biner
+    # --output-gamut-compression-output hulu sendiri, dibandingkan terpisah
+    # lewat --gamut-bin di main().
+    "outputGamutCompression",
+}
+
+# Tabel global -> nama larik C++. Semua 13 tabel float dari
 # SpektraProfileCurves.h yang benar-benar muncul sebagai literal C++
-# (outputGamutCompression sengaja tidak di sini -- lihat main()).
+# (outputGamutCompression sengaja tidak di sini -- lihat STATIC_COMPARISON_EXEMPT).
 STATIC_TO_CPP = {
     "inputMeterXyzMatrices": ("float", "input_meter_xyz"),
     "colorTransferKinds": ("uint", "color_transfer_kinds"),
@@ -169,6 +182,34 @@ class Comparison:
         self.rows.append((label, ours.size, max_diff, status))
         self.all_ok = self.all_ok and status == "PASS"
 
+    def check_coverage(self, label: str, manifest_keys: set, compared_keys: set, exempt: set = frozenset()) -> None:
+        """Fail loudly, by name, if the hand-maintained lookup tables above
+        (FIELD_TO_CPP_SUFFIX / STATIC_TO_CPP) have drifted out of sync with
+        what bake_web_assets.py actually emits.
+
+        The per-field/per-table loops below already fail closed if a field
+        is *renamed* or *removed* (the C++-side lookup raises/misses and
+        that's reported as a FAIL row). What they can't catch on their own
+        is a field *added* to bake_web_assets.py's `fields`/`static` dicts
+        and never added here: nothing would iterate over it, so it would
+        never be compared against upstream at all, and this harness would
+        still print ALL PASS -- silently defeating the one check that's
+        supposed to catch exactly this kind of divergence. This assertion
+        exists so that gap fails the run instead of passing silently.
+        """
+        uncovered = sorted(manifest_keys - compared_keys - exempt)
+        stale = sorted(compared_keys - manifest_keys)
+        if uncovered or stale:
+            parts = []
+            if uncovered:
+                parts.append(f"in manifest but never compared: {', '.join(uncovered)}")
+            if stale:
+                parts.append(f"compared but no longer in manifest: {', '.join(stale)}")
+            self.rows.append((label, len(manifest_keys), None, f"FAIL({'; '.join(parts)})"))
+            self.all_ok = False
+        else:
+            self.rows.append((label, len(manifest_keys), 0.0, "PASS"))
+
     def print_report(self) -> None:
         print()
         print(f"{'table':<75} {'n':>8} {'maxdiff':>14}  status")
@@ -211,6 +252,17 @@ def main() -> int:
         prefix = f"{group}_{index}_{stock_id}"
         entry = stocks_by_id[stock_id]
 
+        # See Comparison.check_coverage's docstring: this is what catches a
+        # field added to bake_web_assets.py's pack_stock() but never added
+        # to FIELD_TO_CPP_SUFFIX above -- without it, that field would
+        # simply never be iterated below and this script would still print
+        # ALL PASS.
+        cmp.check_coverage(
+            f"{stock_id}.fields coverage (manifest keys vs. FIELD_TO_CPP_SUFFIX)",
+            set(entry["fields"]),
+            set(FIELD_TO_CPP_SUFFIX) | {"inputToSrgb"},
+        )
+
         for field, cpp_suffix in FIELD_TO_CPP_SUFFIX.items():
             ref = entry["fields"][field]
             cpp_name = f"{prefix}_{cpp_suffix}"
@@ -228,7 +280,11 @@ def main() -> int:
         # inputToSrgb: shared per-group array (see bake_web_assets.py:pack_stocks)
         ref = entry["fields"]["inputToSrgb"]
         cpp_name = f"{group}_input_to_srgb"
-        cmp.compare(f"{stock_id}.inputToSrgb (shared {cpp_name})", slice_of(stocks_blob, ref), float_arrays[cpp_name])
+        if cpp_name not in float_arrays:
+            cmp.rows.append((f"{stock_id}.inputToSrgb (shared {cpp_name})", ref["lengthFloats"], None, f"FAIL(cpp array {cpp_name!r} not found)"))
+            cmp.all_ok = False
+        else:
+            cmp.compare(f"{stock_id}.inputToSrgb (shared {cpp_name})", slice_of(stocks_blob, ref), float_arrays[cpp_name])
 
         # mallettRawMidgrayGreen: scalar embedded inline in the ProfileCurveSet
         # struct literal, not a named array -- pull it out of that record's line.
@@ -247,10 +303,21 @@ def main() -> int:
             cmp.all_ok = False
 
     # --- global static tables ---
+    cmp.check_coverage(
+        "static coverage (manifest.static keys vs. STATIC_TO_CPP)",
+        set(manifest["static"]),
+        set(STATIC_TO_CPP),
+        exempt=STATIC_COMPARISON_EXEMPT,
+    )
     for key, (kind, cpp_name) in STATIC_TO_CPP.items():
         ref = manifest["static"][key]
         ours = slice_of(static_blob, ref)
-        theirs = uint_arrays[cpp_name].astype("<f4") if kind == "uint" else float_arrays[cpp_name]
+        table = uint_arrays if kind == "uint" else float_arrays
+        if cpp_name not in table:
+            cmp.rows.append((f"static.{key}", ref["lengthFloats"], None, f"FAIL(cpp array {cpp_name!r} not found)"))
+            cmp.all_ok = False
+            continue
+        theirs = table[cpp_name].astype("<f4") if kind == "uint" else table[cpp_name]
         cmp.compare(f"static.{key}", ours, theirs)
 
     # outputGamutCompression has NO C++ literal (confirmed: generate_profile_curves.py
