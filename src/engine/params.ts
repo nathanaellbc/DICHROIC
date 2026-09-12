@@ -82,6 +82,18 @@
 export const FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING = 1 << 1;
 
 /**
+ * Bit 0 dari slot1. Dipakai HANYA oleh FilmExposure (`kColorAdaptationInputCompression`
+ * hulu) untuk memilih separuh mana dari `HanatosRawResponse` (Task 11) yang
+ * dibaca -- separuh pertama (offset 0) adalah tabel mentah, separuh kedua
+ * (offset `hanatosWidth*hanatosHeight`) adalah versi yang direstriksi ke
+ * gamut input (`remapHanatosResponseForInputGamutCompression` hulu). Bit ini
+ * TIDAK berlaku untuk slot1 di CurveDevelop (di sana slot1 dipakai
+ * FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING, bit 1) atau di shader lain -- lihat
+ * catatan per-slot di atas.
+ */
+export const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
+
+/**
  * TIGA RUANG KOORDINAT BERBEDA hidup berdampingan di `CoreParams`, dan
  * kedelapan tahap Task 11-18 (plus tahap `materializeActiveRegion` yang
  * membangun `rgb_in`, Task 9) membaca ketiganya lewat konstanta ini —
