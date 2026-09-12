@@ -209,10 +209,22 @@ const VALID_ENTRY_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
  * Mengumpulkan tabel read-only kecil ke dalam satu storage buffer.
  *
  * Pemakaian: panggil `add()` berulang (urutan panggilan == urutan tiling di
- * buffer), lalu `build()` sekali untuk memperoleh `Arena` yang sudah
+ * buffer), lalu `build()` SEKALI untuk memperoleh `Arena` yang sudah
  * mengunggah data ke GPU. `ArenaBuilder` sendiri tidak menyentuh GPU sampai
  * `build()` dipanggil, jadi bisa dipakai sepenuhnya di luar test yang
  * memerlukan device (lih. test "menolak nama entri yang sama dua kali").
+ *
+ * Sekali-bangun ditegakkan, bukan cuma didokumentasikan: builder ini
+ * mengunci dirinya sendiri di `build()` (lihat `#built`). Memanggil `add()`
+ * atau `build()` lagi pada instance yang sama SETELAH `build()` pertama akan
+ * melempar. Alasannya bukan higienis — Task 11 membangun EMPAT arena
+ * (static/stock/dynamic/frameState) berturut-turut; bila satu builder
+ * terpakai ulang karena salah salin-tempel, `add()` kedua akan menumpuk di
+ * atas `cursor` yang sudah maju dari `build()` pertama, menghasilkan arena
+ * kedua yang ukurannya masuk akal tapi berisi entri lama DAN baru pada
+ * offset yang salah — diam-diam, tanpa galat kompilasi atau galat WebGPU
+ * apa pun. Itu persis kelas bug yang modul ini ada untuk mencegah, jadi
+ * niat "sekali-bangun" yang cuma tertulis di komentar tidak cukup.
  */
 export class ArenaBuilder {
   private readonly chunks: Array<{ entry: ArenaEntry; data: Float32Array }> = [];
@@ -220,6 +232,7 @@ export class ArenaBuilder {
   /** kanonik -> nama asli, untuk pesan galat kolisi yang menyebut keduanya. */
   private readonly canonicalToName = new Map<string, string>();
   private cursor = 0;
+  #built = false;
 
   /**
    * Menambahkan satu tabel ke posisi berikutnya dalam arena (offset =
@@ -233,6 +246,13 @@ export class ArenaBuilder {
    * itu sudah salah terlepas dari bagaimana arena ini dibangun.
    */
   add(name: string, data: Float32Array): void {
+    if (this.#built) {
+      throw new Error(
+        `ArenaBuilder ini sudah dibangun (build() sudah dipanggil) — tidak bisa ` +
+          `menambahkan entri '${name}' lagi. Buat ArenaBuilder baru untuk arena ` +
+          'berikutnya alih-alih memakai ulang instance ini.',
+      );
+    }
     if (!VALID_ENTRY_NAME.test(name)) {
       throw new Error(
         `Nama entri arena '${name}' tidak sah — harus diawali huruf dan hanya ` +
@@ -272,8 +292,19 @@ export class ArenaBuilder {
    *
    * @throws ArenaOverflowError bila total ukuran melebihi
    *   `device.limits.maxStorageBufferBindingSize`.
+   * @throws Error bila builder ini sudah pernah di-`build()` sebelumnya.
    */
   build(device: GPUDevice, label: string): Arena {
+    if (this.#built) {
+      throw new Error(
+        `ArenaBuilder ini sudah dibangun sekali (label sebelumnya boleh jadi ` +
+          `berbeda dari '${label}') — build() kedua pada instance yang sama akan ` +
+          'menghasilkan arena yang menumpuk entri lama dan baru pada offset yang ' +
+          'salah, secara diam-diam. Buat ArenaBuilder baru untuk setiap arena.',
+      );
+    }
+    this.#built = true;
+
     const totalFloats = this.cursor;
     const byteLength = totalFloats * Float32Array.BYTES_PER_ELEMENT;
     assertWithinStorageBufferLimit(label, byteLength, device.limits.maxStorageBufferBindingSize);

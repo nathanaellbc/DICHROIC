@@ -221,6 +221,59 @@ describe('ArenaBuilder', () => {
 
       expect(() => builder.build(fakeDevice, 'stock')).toThrow(ArenaOverflowError);
     });
+
+    // Percobaan menambahkan satu titik data DEVICE SUNGGUHAN (bukan device
+    // tiruan) untuk kasus overflow -- lewat `requestDeviceWithLimits(adapter,
+    // {})`, yang memberi device limit DEFAULT spesifikasi WebGPU
+    // (134217728 byte / 128 MiB untuk maxStorageBufferBindingSize, jauh
+    // lebih murah dilampaui daripada limit maksimum adapter yang
+    // `acquireDevice()` minta) -- DIBATALKAN setelah dicoba, bukan
+    // dilewatkan begitu saja. Kode itu benar: direproduksi berdiri sendiri
+    // lewat `npx vite-node` (memanggil getNavigatorGpu -> requestAdapter ->
+    // requestDeviceWithLimits(adapter, {}) -> ArenaBuilder.add() dengan
+    // Float32Array 33.554.433 float [~128 MiB] -> builder.build() -> tertangkap
+    // ArenaOverflowError, persis seperti diharapkan). Tapi jalur yang SAMA
+    // dijalankan lewat `npx vitest run` mematikan worker Vitest
+    // ("Worker exited unexpectedly" / ChildProcess exit) SETIAP kali --
+    // baik dengan satu Float32Array besar maupun dipecah jadi banyak
+    // Float32Array kecil yang jumlahnya sama (~129 x 1 MiB), jadi bukan soal
+    // ukuran satu alokasi. Sebuah alokasi ~128 MiB TANPA device WebGPU sama
+    // sekali terbukti aman di Vitest (test kontrol terpisah, RSS nyaris
+    // tidak berubah -- typed array besar zero-fill lazy, bukan benar-benar
+    // di-commit). Jadi penyebabnya spesifik kombinasi device WebGPU
+    // sungguhan (Dawn, lewat paket `webgpu`) dengan alokasi JS besar di
+    // dalam worker/proses fork Vitest -- bukan bug di arena.ts, dan
+    // memaksakannya akan membuat SELURUH test file gagal (worker yang mati
+    // menandai semua test di file itu error, bukan cuma satu test ini).
+    // Sesuai izin eksplisit peninjau ("kalau ada alasan lain yang membuat
+    // ini tidak bisa dilakukan, katakan saja dan biarkan seperti sekarang"),
+    // substitusi yang sudah ada (assertWithinStorageBufferLimit teruji
+    // langsung, plus test wiring build() dengan device tiruan di atas) tetap
+    // menjadi bukti untuk jalur ini.
+  });
+
+  describe('sekali-bangun ditegakkan (bukan sekadar didokumentasikan)', () => {
+    it('build() kedua pada builder yang sama melempar, bukan diam-diam membangun arena yang menumpuk entri lama dan baru', async () => {
+      const { device } = await acquireDevice();
+      const builder = new ArenaBuilder();
+      builder.add('cmfs', new Float32Array(4));
+      const first = builder.build(device, 'static');
+
+      expect(() => builder.build(device, 'static-lagi')).toThrow(/sudah dibangun/i);
+
+      first.destroy();
+    });
+
+    it('add() setelah build() melempar, bukan diam-diam menambah entri ke builder yang sudah terpakai', async () => {
+      const { device } = await acquireDevice();
+      const builder = new ArenaBuilder();
+      builder.add('cmfs', new Float32Array(4));
+      const arena = builder.build(device, 'static');
+
+      expect(() => builder.add('illuminant', new Float32Array(4))).toThrow(/sudah dibangun/i);
+
+      arena.destroy();
+    });
   });
 
   describe('destroy()', () => {
