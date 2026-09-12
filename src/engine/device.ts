@@ -9,6 +9,27 @@ export class WebGPUUnavailableError extends Error {
   }
 }
 
+/**
+ * Berbeda dari WebGPUUnavailableError secara sengaja: di sini WebGPU ITU ADA
+ * (browser/adapter cocok), tetapi permintaan device dengan limit tertentu
+ * ditolak — biasanya karena kita meminta maxStorageBufferBindingSize/
+ * maxBufferSize pada maksimum adapter (kebijakan "kualitas di atas
+ * performa"), dan perangkat ini tidak menyanggupinya. Tindakan pengguna
+ * berbeda pula: bukan "ganti browser", melainkan "coba render dengan limit
+ * lebih rendah, atau pakai perangkat lain". Pemanggil membedakan lewat
+ * `instanceof`, bukan mencocokkan teks pesan.
+ */
+export class WebGPUDeviceRequestError extends Error {
+  constructor(reason: string) {
+    super(
+      `Adapter WebGPU ditemukan, tetapi menolak limit device yang diminta: ${reason}. ` +
+        'Perangkat ini mungkin tidak sanggup untuk render penuh pada limit tersebut — ' +
+        'coba lagi dengan permintaan limit yang lebih rendah, atau gunakan perangkat/browser lain.',
+    );
+    this.name = 'WebGPUDeviceRequestError';
+  }
+}
+
 export interface EngineDevice {
   device: GPUDevice;
   limits: GPUSupportedLimits;
@@ -24,10 +45,33 @@ export interface EngineDevice {
  * satunya jalur pengujian — bila itu pun tidak tersedia, error yang sebenarnya
  * dari impornya diteruskan sebagai alasan.
  */
-async function getNavigatorGpu(): Promise<GPU> {
+export async function getNavigatorGpu(): Promise<GPU> {
   if (typeof navigator !== 'undefined' && navigator.gpu) return navigator.gpu;
   const mod = (await import('webgpu')) as { create(flags: string[]): GPU };
   return mod.create([]);
+}
+
+/**
+ * Minta device dari `adapter` dengan `requiredLimits` tertentu, membungkus
+ * penolakan asli adapter (mis. DOMException `OperationError` saat limit
+ * tak terpenuhi) menjadi WebGPUDeviceRequestError yang menyebutkan alasan
+ * aslinya, bukan meneruskan galat mentah WebGPU ke pemanggil.
+ *
+ * Diekstrak dari acquireDevice() agar jalur kegagalan ini bisa diuji secara
+ * langsung — dengan limit yang sengaja mustahil dipenuhi — tanpa mengubah
+ * limit yang benar-benar diminta pada jalur produksi.
+ */
+export async function requestDeviceWithLimits(
+  adapter: GPUAdapter,
+  requiredLimits: Record<string, number>,
+): Promise<GPUDevice> {
+  try {
+    return await adapter.requestDevice({ requiredLimits });
+  } catch (cause) {
+    throw new WebGPUDeviceRequestError(
+      `permintaan ${JSON.stringify(requiredLimits)} ditolak (${String(cause)})`,
+    );
+  }
 }
 
 export async function acquireDevice(): Promise<EngineDevice> {
@@ -44,12 +88,20 @@ export async function acquireDevice(): Promise<EngineDevice> {
   // Kualitas di atas performa: minta ukuran binding sebesar yang diizinkan
   // adapter, agar render full-frame tidak perlu di-tile lebih awal dari
   // yang diperlukan. Jumlah storage buffer sengaja TIDAK dinaikkan — arena
-  // dirancang untuk muat di batas terjamin 8.
-  const device = await adapter.requestDevice({
-    requiredLimits: {
-      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-      maxBufferSize: adapter.limits.maxBufferSize,
-    },
+  // dirancang untuk muat di batas terjamin 8 (adapter ini sendiri hanya
+  // menawarkan 16, dan kernel terbesar upstream, SpektraPrintScan, mengikat
+  // 30 — jadi packing arena adalah KEWAJIBAN, bukan sekadar kehati-hatian).
+  //
+  // Limit workgroup compute (maxComputeWorkgroupSizeX/Y/Z,
+  // maxComputeInvocationsPerWorkgroup) SENGAJA dibiarkan pada default
+  // WebGPU (256/256/64/256) dan TIDAK diminta naik: kesepuluh shader hulu
+  // upstream memakai tepat 256 invokasi per workgroup (32×8×1, atau
+  // 256×1×1 untuk Copy/FormatConvert) — pas di batas minimum yang dijamin
+  // spesifikasi. Menaikkannya tidak dibutuhkan dan hanya akan membuat
+  // engine ini bergantung pada perangkat yang lebih murah hati.
+  const device = await requestDeviceWithLimits(adapter, {
+    maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+    maxBufferSize: adapter.limits.maxBufferSize,
   });
 
   if (device.limits.maxStorageBuffersPerShaderStage < 8) {
