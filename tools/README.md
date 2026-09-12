@@ -322,3 +322,131 @@ supports a larger figure.
 LUT source (`$SPEKTRAFILM_OFX/Resources/data/luts/spectral_upsampling/irradiance_xy_tc.npy`,
 loaded via `gpc.HANATOS_LUT_PATH`) is genuinely float16 — the emitter's
 `assert lut.dtype == np.float16` passed without needing to be relaxed.
+
+**Superseded by fix round 1 below** — the sizes above reflect the
+original (too-narrow) scope, 2 of 27 `ProfileCurveSet` fields per stock.
+Kept here rather than rewritten so the size table's own history stays
+readable.
+
+---
+
+## Fix round 1: full `ProfileCurveSet` / global-table contract
+
+Coordinator review found the scope above emitted 2 of 27 per-stock
+fields and 1 of 16 global table accessors declared in
+`$SPEKTRAFILM_OFX/src/SpektraProfileCurves.h` — the definitive contract
+the GPU consumes (plan corrected in commit `6b5d93e`). `bake_web_assets.py`
+was rewritten to emit the full contract (later reconciled to 30 members
+total once `license`/`citation`/`datasource`/`viewingIlluminant` were
+accounted for — all four legitimate: the first three are required by
+spec §3 for GPL attribution, and `viewingIlluminant` is read by the
+Python scanning stage so Task 18 needs it). Every value still comes from
+an existing upstream function call — see the inline comment on each
+field in `bake_web_assets.py:pack_stock()` naming its exact source line.
+
+Full details (the `None`→NaN convention mirroring upstream's own
+`_float_literal`, the `inputToSrgb` dedup, the manifest shape) are in
+`.superpowers/sdd/2026-09-11-dichroic-phase1-engine/task-4-report.md`
+(gitignored — session-local, not part of the repo).
+
+### Updated emitted asset sizes
+
+| File | Bytes | MB |
+|---|---|---|
+| `stocks.f32` | 566,936 | 0.541 |
+| `hanatos.f16` | 5,971,968 | 5.695 |
+| `static.f32` | 865,280 | 0.825 |
+| `manifest.json` | 105,490 | 0.101 |
+| **Total** | **7,509,674** | **7.162** |
+
+`stocks.f32` grew from 114,688 → 566,936 bytes (2 fields/stock → 22
+array fields); `static.f32` is new in this round, dominated by
+`colorDecodeLuts`/`colorEncodeLuts` at 106,496 floats (425,984 bytes)
+each. `hanatos.f16` is unchanged.
+
+## Fix round 2: `compare_cpp.py` promoted to a real, runnable script
+
+The Step 5 comparison above (and its expansion to the full 30-member
+contract) was originally run from a scratchpad probe script that would
+have been lost at session end — the same anti-pattern Task 3 hit once
+already: "evidence that gets thrown away doesn't protect anything from
+regression." Since Step 5 is the *only* check that this emitter didn't
+silently diverge from upstream's own derivation, that check needs to be
+re-runnable, not just a one-time transcript in a report.
+
+`spektra/tools/compare_cpp.py` is that script now, committed to the
+repo. It is not wired into CI (CI has no Python — by design, matching
+`spektra/tools/README.md`'s framing of the bake tools as one-time,
+locally-run generators, not a build step), but it's a real, documented,
+re-runnable command:
+
+```bash
+# 1. Regenerate upstream's own C++ literal fresh, same env as the bake:
+D:/Projects/upstream/.venv-bake/Scripts/python \
+  "$SPEKTRAFILM_OFX/tools/generate_profile_curves.py" \
+  --output /tmp/SpektraGeneratedProfileCurves.cpp \
+  --hanatos-output /tmp/SpektraHanatos2025Spectra.f32 \
+  --output-gamut-compression-output /tmp/SpektraOutputGamutCompression.f32
+
+# 2. Bake (or reuse the already-committed) spektra/public/data/:
+D:/Projects/upstream/.venv-bake/Scripts/python \
+  spektra/tools/bake_web_assets.py --out spektra/public/data
+
+# 3. Compare:
+D:/Projects/upstream/.venv-bake/Scripts/python \
+  spektra/tools/compare_cpp.py \
+  --cpp /tmp/SpektraGeneratedProfileCurves.cpp \
+  --gamut-bin /tmp/SpektraOutputGamutCompression.f32
+```
+
+`--data` defaults to `spektra/public/data` (relative to the script's own
+location, so it works regardless of the caller's cwd); `--gamut-bin` is
+optional since `outputGamutCompression` has no C++ literal to compare
+against (confirmed: `generate_profile_curves.py` never emits it as a
+named array — it only exists via that dedicated binary sibling file) and
+is skipped with a note on stderr if omitted. `SPEKTRAFILM_OFX` must be
+set, exactly as for `bake_web_assets.py`.
+
+**Exit code is the signal**: `0` when every table matches (to a
+combined absolute/relative float32 tolerance — see the `Comparison.compare`
+docstring for why an exact-equality check is wrong here), `1` when
+anything doesn't, `2` if `SPEKTRAFILM_OFX` isn't set. No need to read the
+table output to know the result.
+
+Re-ran after moving the script into `tools/` (proving the path move
+didn't break anything — the most common way a relocated script silently
+rots):
+
+```
+$ SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
+  D:/Projects/upstream/.venv-bake/Scripts/python.exe spektra/tools/compare_cpp.py \
+  --cpp /tmp/spektra-task4-probe2/SpektraGeneratedProfileCurves.cpp \
+  --gamut-bin /tmp/spektra-task4-probe2/SpektraOutputGamutCompression.f32
+...
+86 comparisons: ALL PASS
+$ echo $?
+0
+```
+
+Also verified the script actually fails loudly on a real corruption (not
+just a script that always prints PASS): shifted `kodak_portra_400`'s
+`densityCurves` offset by 3 floats in `manifest.json`, re-ran —
+
+```
+kodak_portra_400.densityCurves    768   1.869e-02  FAIL(NaN mismatch)
+85 comparisons: SOME FAILED
+$ echo $?
+1
+```
+
+— then restored the manifest and confirmed `0`/`ALL PASS` again.
+
+### Dead code removed
+
+`_BlobWriter.reserve()` in `bake_web_assets.py` was never called; its
+docstring claimed it was the mechanism for the shared `inputToSrgb`
+table, but the real mechanism is reusing the dict `.write()` already
+returned (see `pack_stocks()`: `shared_input_to_srgb = writer.write(...)`
+is computed once and assigned directly into every stock's `fields`).
+Dead code whose comment describes a mechanism nothing uses is worse than
+no code — removed rather than wired up to a use that doesn't exist.

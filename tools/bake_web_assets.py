@@ -98,10 +98,6 @@ class _BlobWriter:
         self._cursor += int(arr.size)
         return entry
 
-    def reserve(self, offset: int, length: int) -> dict:
-        """Reference to a region already written (e.g. the shared inputToSrgb table)."""
-        return {"offsetFloats": offset, "lengthFloats": length}
-
     def concat(self) -> np.ndarray:
         if not self._chunks:
             return np.zeros(0, dtype="<f4")
