@@ -36,6 +36,37 @@ export interface EngineDevice {
   maxStorageBufferBindingSize: number;
 }
 
+/** Minimum storage buffer per shader stage yang dijamin spesifikasi WebGPU untuk device apa pun yang konforman. */
+const MIN_STORAGE_BUFFERS_PER_STAGE = 8;
+
+/**
+ * WebGPU menjamin minimal 8 storage buffer per shader stage untuk device
+ * konforman apa pun — jadi kondisi ini semestinya mustahil terjadi.
+ * Dipertahankan sebagai LEMPAR, bukan dihapus atau di-log-lalu-lanjut,
+ * dengan alasan: biayanya nol (satu perbandingan), dan bila kondisi
+ * "mustahil" ini toh terjadi (device non-konforman, bug driver, harness
+ * pengujian yang aneh), ia mengubah kegagalan itu dari galat validasi
+ * bind-group WebGPU yang generik dan jauh dari penyebabnya — kemungkinan
+ * muncul di Task 17 saat mengikat enam binding shader hulu — menjadi galat
+ * yang dekat, jelas, dan bisa ditindaklanjuti persis di titik akuisisi
+ * device. Device yang tidak menyanggupi batas terjamin ini bukan device
+ * WebGPU yang bisa dipakai engine ini sama sekali, yang persis situasi
+ * yang WebGPUUnavailableError ada untuk menyampaikannya.
+ *
+ * Diekstrak agar bisa diuji langsung dengan objek limit tiruan, tanpa
+ * menyentuh device WebGPU sungguhan.
+ */
+export function assertGuaranteedStorageBufferLimit(
+  limits: Pick<GPUSupportedLimits, 'maxStorageBuffersPerShaderStage'>,
+): void {
+  if (limits.maxStorageBuffersPerShaderStage < MIN_STORAGE_BUFFERS_PER_STAGE) {
+    throw new WebGPUUnavailableError(
+      `device melaporkan hanya ${limits.maxStorageBuffersPerShaderStage} storage buffer per shader stage, ` +
+        `di bawah minimum ${MIN_STORAGE_BUFFERS_PER_STAGE} yang dijamin spesifikasi WebGPU untuk device konforman apa pun`,
+    );
+  }
+}
+
 /**
  * Deteksi lingkungan berdasarkan keberadaan `navigator.gpu` yang sebenarnya,
  * bukan pola URL atau nama platform yang hanya berkorelasi dengannya (lih.
@@ -104,13 +135,7 @@ export async function acquireDevice(): Promise<EngineDevice> {
     maxBufferSize: adapter.limits.maxBufferSize,
   });
 
-  if (device.limits.maxStorageBuffersPerShaderStage < 8) {
-    console.error(
-      `Peringatan: device WebGPU ini hanya melaporkan ${device.limits.maxStorageBuffersPerShaderStage} ` +
-        'storage buffer per shader stage, di bawah batas terjamin spesifikasi WebGPU (8). ' +
-        'Arena buffer DICHROIC dirancang untuk 8 dan mungkin gagal mengikat semua tabel yang diperlukan.',
-    );
-  }
+  assertGuaranteedStorageBufferLimit(device.limits);
 
   device.lost.then((info) => {
     console.error(`Device WebGPU hilang: ${info.reason} — ${info.message}`);
