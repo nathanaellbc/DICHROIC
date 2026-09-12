@@ -6,6 +6,34 @@
  * mendeklarasikan tipe TypeScript yang cocok dengannya.
  */
 
+/**
+ * Float32Array yang tidak bisa ditulisi lewat referensi bertipe ini.
+ *
+ * `load.ts` mengembalikan *view* (`subarray`), bukan salinan, ke atas satu
+ * buffer bersama per blob (`stocks.f32`/`static.f32`/`hanatos.f16`
+ * terekspansi) -- delapan tahap GPU-arena (Task 11-18) semuanya cuma perlu
+ * membaca darinya, jadi menyalin di setiap panggilan akan sia-sia. Tapi
+ * `Float32Array.subarray()` biasa tetap bisa ditulisi: `view[0] = 1` akan
+ * menimpa field/tabel LAIN yang kebetulan berbagi buffer itu, untuk setiap
+ * stock dan setiap konsumen lain, tanpa galat di mana pun -- gejalanya
+ * muncul di tahap yang sama sekali tidak menyentuh data itu.
+ * `Object.freeze` tidak menolong (properti berindeks-integer pada typed
+ * array dikecualikan darinya), jadi larangannya ditegakkan di level tipe:
+ * index signature bawaan di-override jadi `readonly` dan method mutasi
+ * (`set`, `fill`, `sort`, `copyWithin`, `reverse`) dibuang, sehingga
+ * `view[i] = x` atau `view.fill(0)` adalah galat kompilasi di tempat
+ * pemanggilan, bukan korupsi data senyap saat runtime. Menugaskan
+ * `Float32Array` mutable ke variabel bertipe ini tetap sah (sama seperti
+ * `T[]` ke `readonly T[]`) -- yang dicegah hanya menulis LEWAT referensi
+ * yang bertipe hanya-baca ini, bukan keberadaan pemilik mutable di tempat
+ * lain (di sini, tidak ada -- `load.ts` tidak pernah menyimpan referensi
+ * mutable ke slice yang sudah dibagikan keluar).
+ */
+type TypedArrayMutableMethods = 'set' | 'fill' | 'sort' | 'copyWithin' | 'reverse';
+export interface ReadonlyFloat32Array extends Omit<Float32Array, TypedArrayMutableMethods> {
+  readonly [index: number]: number;
+}
+
 /** Referensi ke satu rentang float32 di dalam `stocks.f32` atau `static.f32`. */
 export interface BlobRef {
   offsetFloats: number;
@@ -142,6 +170,6 @@ export interface Manifest {
 /** Kurva H&D siap pakai satu stock: log-exposure (n titik) + densitas 3-kanal (n*3, row-major RGB). */
 export interface Stock {
   entry: StockEntry;
-  logExposure: Float32Array;
-  densityCurves: Float32Array;
+  logExposure: ReadonlyFloat32Array;
+  densityCurves: ReadonlyFloat32Array;
 }

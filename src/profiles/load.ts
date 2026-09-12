@@ -3,6 +3,7 @@ import {
   STATIC_TABLE_NAMES,
   type BlobRef,
   type Manifest,
+  type ReadonlyFloat32Array,
   type Stock,
   type StockEntry,
   type StockFieldName,
@@ -14,6 +15,7 @@ export {
   STATIC_TABLE_NAMES,
   type BlobRef,
   type Manifest,
+  type ReadonlyFloat32Array,
   type Stock,
   type StockEntry,
   type StockFieldName,
@@ -30,11 +32,11 @@ export {
 export interface AssetBundle {
   readonly manifest: Manifest;
   /** Blob mentah `stocks.f32`, untuk akses tingkat rendah bila perlu. */
-  readonly stocks: Float32Array;
+  readonly stocks: ReadonlyFloat32Array;
   /** LUT Hanatos, sudah diekspansi dari f16 ke f32 (lihat `expandF16`). */
-  readonly hanatos: Float32Array;
+  readonly hanatos: ReadonlyFloat32Array;
   /** Blob mentah `static.f32`. */
-  readonly static: Float32Array;
+  readonly static: ReadonlyFloat32Array;
   /** Metadata satu stock. Melempar galat untuk id yang tidak dikenal. */
   stockEntry(id: string): StockEntry;
   /**
@@ -45,7 +47,7 @@ export interface AssetBundle {
    * dikenal -- tidak pernah mengembalikan larik kosong sebagai pengganti
    * galat.
    */
-  stockField(id: string, field: StockFieldName): Float32Array | null;
+  stockField(id: string, field: StockFieldName): ReadonlyFloat32Array | null;
   /**
    * Salah satu dari 14 tabel global, sebagai view ke `static`. Melempar
    * galat untuk nama tabel yang tidak dikenal. Ke-4 tabel
@@ -53,7 +55,7 @@ export interface AssetBundle {
    * `manifest.counts.academyPrinterDensityEnabled` bernilai false -- itu
    * fitur nonaktif hulu, bukan celah data (beda dari NaN `nullCount`).
    */
-  staticTable(name: StaticTableName): Float32Array;
+  staticTable(name: StaticTableName): ReadonlyFloat32Array;
   /** Kurva H&D siap pakai (logExposure + densityCurves) untuk satu stock. */
   stock(id: string): Stock;
 }
@@ -140,13 +142,19 @@ function assertKnownTable(name: string): void {
   }
 }
 
-function sliceRef(blob: Float32Array, ref: BlobRef): Float32Array {
+function sliceRef(blob: Float32Array, ref: BlobRef): ReadonlyFloat32Array {
   return blob.subarray(ref.offsetFloats, ref.offsetFloats + ref.lengthFloats);
 }
 
 export async function loadAssets(baseUrl: string): Promise<AssetBundle> {
   const join = (name: string) => `${baseUrl.replace(/\/$/, '')}/${name}`;
 
+  // Tidak ada validasi skema runtime di sini -- ini percaya begitu saja pada
+  // bentuk JSON. Pengamannya adalah test suite (`test/assets.test.ts` +
+  // `test/profiles.test.ts`), yang menutup seluruh bentuk manifest (23
+  // field per stock, 14 tabel global, offset/panjang, nullCount, dst.)
+  // secara langsung terhadap berkas nyata. Kalau baker berubah bentuk lagi,
+  // test itulah yang akan gagal duluan -- bukan cast di baris ini.
   const manifest = JSON.parse(
     new TextDecoder().decode(await fetchBytes(join('manifest.json'))),
   ) as Manifest;
@@ -165,14 +173,14 @@ export async function loadAssets(baseUrl: string): Promise<AssetBundle> {
     return entry;
   }
 
-  function stockField(id: string, field: StockFieldName): Float32Array | null {
+  function stockField(id: string, field: StockFieldName): ReadonlyFloat32Array | null {
     const entry = stockEntry(id);
     assertKnownField(field);
     const ref = entry.fields[field];
     return ref ? sliceRef(stocks, ref) : null;
   }
 
-  function staticTable(name: StaticTableName): Float32Array {
+  function staticTable(name: StaticTableName): ReadonlyFloat32Array {
     assertKnownTable(name);
     return sliceRef(staticTables, manifest.static[name]);
   }

@@ -2,7 +2,12 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadAssets, expandF16, STOCK_FIELD_NAMES, STATIC_TABLE_NAMES } from '../src/profiles/load';
-import type { AssetBundle, StockFieldName, StaticTableName } from '../src/profiles/load';
+import type {
+  AssetBundle,
+  ReadonlyFloat32Array,
+  StockFieldName,
+  StaticTableName,
+} from '../src/profiles/load';
 
 const DATA = join('public', 'data');
 
@@ -31,7 +36,7 @@ function readRawBlob(name: string): Float32Array {
  * vitest atas TypedArray sudah menganggap NaN === NaN, tapi perbandingan
  * manual ini membuat kegagalan menunjuk ke indeks yang tepat.
  */
-function expectSameFloats(got: Float32Array, want: Float32Array, label: string): void {
+function expectSameFloats(got: ReadonlyFloat32Array, want: Float32Array, label: string): void {
   expect(got.length, label).toBe(want.length);
   // Bandingkan dengan loop biasa (tanpa `expect` per elemen -- itu terlalu
   // lambat untuk larik besar seperti colorDecodeLuts, 26*4096 elemen) dan
@@ -90,9 +95,19 @@ describe('loadAssets', () => {
     it('nilai identik dengan slice blob mentah dihitung langsung dari offsetFloats/lengthFloats; null hanya untuk bandpassHanatos2025 pada kertas', () => {
       for (const entry of bundle.manifest.stocks) {
         for (const field of STOCK_FIELD_NAMES) {
+          // `field in entry.fields`, bukan `entry.fields[field] == null`:
+          // `==` memperlakukan `undefined` (kunci benar-benar tidak ada --
+          // tanda STOCK_FIELD_NAMES salah eja dan tidak cocok dengan manifest
+          // nyata) sama dengan `null` (kunci ada, sengaja bernilai null --
+          // satu-satunya kasus sah: bandpassHanatos2025 pada kertas). Kalau
+          // ini gagal, itu nama field yang typo di types.ts, bukan data yang
+          // sungguh absen.
+          expect(field in entry.fields, `${entry.id} tidak punya kunci ${field} sama sekali`).toBe(
+            true,
+          );
           const ref = entry.fields[field];
           const got = bundle.stockField(entry.id, field);
-          if (ref == null) {
+          if (ref === null) {
             expect(got, `${entry.id}.${field}`).toBeNull();
             continue;
           }
