@@ -152,11 +152,28 @@ bukan padding.** Mereka slot serbaguna yang maknanya berbeda per tahap, dan host
 mengisinya berbeda tiap dispatch (`SpektraVulkanRenderer.cpp:6272-6274`:
 `_pad0 = operation; _pad1 = sigmaMode; _pad2 = component`).
 
-| Slot | Dipakai sebagai | Kemunculan di shader |
-|---|---|---|
-| `_pad0` | `operation` pada Diffusion; flag `== 1u` pada FilmExposure | 8 |
-| `_pad1` | bitfield colour-adaptation (`kColorAdaptationCurveSmoothing = 1u << 1u`) pada CurveDevelop dan FilmExposure; `sigmaMode` pada Diffusion | 8 |
-| `_pad2` | nilai ter-pack (groupCount + downsampleScale) pada Diffusion; selektor source-index pada FilmExposure | 16 |
+| Shader | slot0 (pos 14) | slot1 (pos 15) | slot2 (pos 16) |
+|---|---|---|---|
+| CurveDevelop | `_pad0` | `_pad1` (bitfield colour-adaptation) | `_pad2` |
+| Diffusion | `operation` | `componentIndex` | `_pad2` (packed: groupCount + downsampleScale) |
+| Dir | `operation` | `component` | `_pad2` |
+| FilmExposure | `_pad0` (flag `== 1u`) | `_pad1` (bitfield colour-adaptation) | `_pad2` (selektor source-index) |
+| Grain | `operation` | `_pad1` | `_pad2` |
+| Halation | `operation` | `sigmaMode` | `component` |
+| PrintScan | `_pad0` | `_pad1` | `_pad2` |
+| ScannerPost | `operation` | `_pad1` | `_pad2` |
+
+Tabel di atas diukur dari kedelapan shader yang berbagi blok ini, bukan tiga.
+Perhatikan bahwa **hulu sendiri tidak sepakat dengan dirinya soal nama slot ini**
+— slot0 disebut `operation` di lima shader dan dibiarkan `_pad0` di tiga, dan
+slot1 berganti nama empat kali. Itu justru alasan struct kita memakai nama
+netral: nama semantik apa pun akan benar di sebagian tahap dan menyesatkan di
+sisanya.
+
+Koreksi atas koreksi: versi sebelumnya dokumen ini mengatribusikan `sigmaMode`
+ke Diffusion. Itu salah — `sigmaMode` adalah nama slot1 milik **Halation**, dan
+baris `SpektraVulkanRenderer.cpp:6271-6274` yang dikutip berada di dalam lambda
+`dispatchHalation`. Diffusion menamai slot1-nya `componentIndex`.
 
 Ketiganya dipertahankan sebagai field terpisah dengan nama netral. Memberi satu
 nama semantik akan menjadi dusta di dua dari tiga tahap, dan meleburkannya jadi
