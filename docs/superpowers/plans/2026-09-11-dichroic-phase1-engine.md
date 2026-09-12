@@ -849,6 +849,17 @@ git commit -m "feat(spektra): bake web assets by reusing upstream profile-curve 
 
 ## Task 5: Pemuat profil
 
+> **Peringatan: tipe dan kode di tugas ini ditulis sebelum Task 4 dijalankan, dan bentuk manifesnya kini berbeda.** Perlakukan seluruh `interface` dan kode di bawah sebagai ilustrasi maksud, bukan spesifikasi. Bentuk sebenarnya, dari `spektra/public/data/manifest.json` yang dipancarkan Task 4:
+>
+> - Tiap entri `stocks` memuat skalar dan string di tingkat atas — `id`, `name`, `type`, `referenceIlluminant`, `viewingIlluminant`, `wavelengthCount`, `exposureCount`, `mallettRawMidgrayGreen`, `license`, `citation`, `datasource` — dan **23 larik di bawah `fields`**, masing-masing berbentuk `{ offsetFloats, lengthFloats }` (sebagian juga membawa `nullCount`).
+> - `manifest.static` memuat 14 tabel global dengan bentuk offset yang sama.
+> - `manifest.colorSpaces` memuat `count` (26), `transferLutSize` (4096), `outputGamutCompressionStride` (18), 26 `labels`, dan batas `decodeLutMin/Max`, `encodeLutMin/Max`.
+> - `manifest.counts` memuat `filmCount`, `paperCount`, `defaultFilmIndex`, `defaultPaperIndex`, `academyPrinterDensityEnabled`.
+>
+> Turunkan tipe TypeScript dari manifes yang benar-benar ada di disk, bukan dari ilustrasi ini. Asumsi `StockEntry` yang datar dengan `curvePoints` sudah tidak berlaku.
+>
+> Satu hal yang tetap berlaku dan penting: `hanatos.f16` dikirim sebagai f16 dan **wajib diekspansi ke f32 saat muat**. Itu satu-satunya tempat presisi transport berbeda dari presisi komputasi, dan spec §5.2 melarang jalur f16 di shader.
+
 **Files:**
 - Create: `spektra/src/profiles/types.ts`, `spektra/src/profiles/load.ts`
 - Test: `spektra/test/profiles.test.ts`
