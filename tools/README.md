@@ -450,3 +450,90 @@ returned (see `pack_stocks()`: `shared_input_to_srgb = writer.write(...)`
 is computed once and assigned directly into every stock's `fields`).
 Dead code whose comment describes a mechanism nothing uses is worse than
 no code — removed rather than wired up to a use that doesn't exist.
+
+## Task 7: `compare_params.py` — independent check for `CoreParams` field order
+
+`spektra/src/engine/params.ts` ports upstream's 26-scalar `CoreParams`
+push-constant block to a WGSL uniform struct. Its compile-time
+exhaustiveness guard catches the `CoreParams` interface gaining a field
+that never made it into the internal `FIELDS` array — but nothing bound
+`FIELDS`'s *order* to the upstream block. If someone reordered `FIELDS`
+and then "fixed" the resulting test failure by reordering
+`params.test.ts`'s hand-maintained `EXPECTED_FIELDS` to match, the struct
+would silently diverge from upstream and every shader from Task 9 onward
+would read shifted values — with `npm test` staying green throughout,
+because the test would only be checking the implementation against
+itself.
+
+`spektra/tools/compare_params.py` is the independent check, same pattern
+as `compare_cpp.py` above: read ground truth straight from the upstream
+repo, compare, exit non-zero on any mismatch. Not wired into `npm test`
+(no Node access to the upstream checkout) or CI (no Python, and CI has no
+access to the upstream repo either) — a manually re-run gate, like
+`compare_cpp.py`.
+
+It checks, in order:
+
+1. All eight upstream shaders that share the `CoreParams` block
+   (`SpektraCurveDevelop`, `SpektraDiffusion`, `SpektraDir`,
+   `SpektraFilmExposure`, `SpektraGrain`, `SpektraHalation`,
+   `SpektraPrintScan`, `SpektraScannerPost` — confirmed by grepping every
+   `.comp` file in `shaders/vulkan/` for `layout(push_constant)`;
+   `SpektraCopy`/`SpektraFormatConvert` have their own unrelated, much
+   smaller blocks) each declare exactly 26 fields.
+2. All eight agree with the reference (`SpektraCurveDevelop.comp`) on
+   type at every position, and on name at every position *except* the
+   three slot indices (13/14/15, upstream's `_pad0`/`_pad1`/`_pad2`) —
+   there, local names are allowed to differ, because they actually do:
+   slot0 is called `operation` in five shaders and left `_pad0` in three;
+   slot1 has four different local names across the eight
+   (`_pad1`/`componentIndex`/`component`/`sigmaMode`). That upstream
+   doesn't agree with itself here is the strongest argument for the
+   neutral `slot0`/`slot1`/`slot2` naming `params.ts` uses.
+3. `params.ts`'s `FIELDS` agrees with the reference block on type at all
+   26 positions and name at the 23 non-slot positions.
+4. **The gap #3 leaves open on purpose**: `slot0`/`slot1`/`slot2` in
+   `FIELDS` are bound to the *absolute* indices 13/14/15 (not to their
+   order relative to each other). Swapping `slot0` and `slot1` in
+   `FIELDS` is both `u32`, so check #3's type comparison passes and its
+   name comparison is skipped at those indices by design — check #4 is
+   the one specifically pinned to `slot0` at index 13 and `slot1` at
+   index 14, so it catches exactly that swap.
+
+```bash
+SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
+  python3 spektra/tools/compare_params.py
+```
+
+**Exit code is the signal**: `0` when all checks pass, `1` when any
+field's name or type diverges (named explicitly in that row), `2` if
+`SPEKTRAFILM_OFX` isn't set or an expected upstream shader file is
+missing. Plain `python3` — no venv, no third-party packages; this script
+only does regex text parsing.
+
+Ran clean:
+
+```
+$ SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx python3 spektra/tools/compare_params.py
+...
+17 checks: ALL PASS
+$ echo $?
+0
+```
+
+Proved it actually bites, two different ways, then restored:
+
+1. Swapped `['width', 'u32']` and `['height', 'u32']` (indices 0/1, a
+   non-slot pair) in `FIELDS` — check #3 failed and named both:
+   `#0 nama height (params.ts FIELDS) != width (SpektraCurveDevelop.comp);
+   #1 nama width (params.ts FIELDS) != height (SpektraCurveDevelop.comp)`,
+   exit `1`.
+2. Restored, then swapped `['slot0', 'u32']` and `['slot1', 'u32']`
+   (indices 13/14 — the exact case check #3 alone would miss, since both
+   are `u32` and name-checking is skipped there by design). Check #3
+   stayed green; check #4 failed and named both:
+   `indeks 13: nama slot1 != slot0; indeks 14: nama slot0 != slot1`,
+   exit `1`.
+
+Restored `params.ts` (`git checkout src/engine/params.ts`) after each and
+confirmed `17 checks: ALL PASS` / exit `0` again.
