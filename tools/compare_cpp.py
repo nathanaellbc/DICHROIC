@@ -27,9 +27,14 @@ Cara pakai:
       --cpp /tmp/SpektraGeneratedProfileCurves.cpp \\
       --gamut-bin /tmp/SpektraOutputGamutCompression.f32
 
-Keluar dengan kode 0 kalau semua tabel cocok sampai presisi float32, kode 1
-kalau ada satu saja yang tidak -- supaya siapa pun yang menjalankannya tahu
-hasilnya dari kode keluar saja, tanpa perlu membaca kode ini.
+Keluar dengan kode 0 kalau semua tabel cocok sampai presisi float32 ATAU
+menyimpang hanya lewat penyimpangan yang SUDAH dideklarasikan di
+INTENTIONAL_DEVIATIONS (dicetak sebagai baris DEVIATION(intentional, ...),
+bukan PASS/FAIL), kode 1 kalau ada satu saja penyimpangan yang tidak
+terdeklarasi -- supaya siapa pun yang menjalankannya tahu hasilnya dari
+kode keluar saja, tanpa perlu membaca kode ini, dan tahu langsung mana
+penyimpangan yang disengaja (Python menang, spec Sec.6.3.1) versus mana
+yang benar-benar regresi.
 """
 from __future__ import annotations
 
@@ -73,6 +78,24 @@ FIELD_TO_CPP_SUFFIX = {
     "dirGammaBToRg": "dir_gamma_b_to_rg",
     "scanIlluminant": "scan_illuminant",
     "scanToOutputRgb": "scan_to_output_rgb",
+}
+
+# Field per-stock yang SENGAJA menyimpang dari literal C++ hulu (spec
+# Sec.6.3.1: kalau C++ bake dan Python runtime hulu tidak sepakat, Python
+# menang, karena Python yang menghasilkan fixture parity kita, bukan C++).
+# Cocok dengan literal C++ TIDAK berarti benar; ini bukan kegagalan harness,
+# ini bukti bahwa penyimpangan itu diukur dan dijelaskan, bukan ditebak atau
+# didiamkan. Lihat bake_web_assets.py::_input_to_reference_xyz_matrices_cat16
+# untuk pembuktian numerik penuh (Task 11).
+INTENTIONAL_DEVIATIONS: dict[str, str] = {
+    "inputToReferenceXyz": (
+        "CAT02 (generate_profile_curves.py:470, C++ bake) vs CAT16 "
+        "(spectral_upsampling.py:_rgb_to_tc_b, Python runtime that produced "
+        "our fixtures) chromatic adaptation transform for input-RGB -> "
+        "reference-XYZ. Measured divergence at ProPhoto RGB/D55: "
+        "1.57e-7 (neutral) to 5.18e-3 (saturated blue), max matrix entry "
+        "8.27e-3 -- see task-11-report.md."
+    ),
 }
 
 # Tabel di manifest["static"] yang sengaja TIDAK dibandingkan di sini,
@@ -152,7 +175,7 @@ class Comparison:
         self.rows: list[tuple[str, int, float | None, str]] = []
         self.all_ok = True
 
-    def compare(self, label: str, ours: np.ndarray, theirs: np.ndarray) -> None:
+    def compare(self, label: str, ours: np.ndarray, theirs: np.ndarray, *, intentional_deviation: str | None = None) -> None:
         if ours.size != theirs.size:
             self.rows.append((label, ours.size, None, f"FAIL(size {ours.size} vs {theirs.size})"))
             self.all_ok = False
@@ -177,10 +200,17 @@ class Comparison:
             status = "FAIL(NaN mismatch)"
         elif max_diff <= tolerance:
             status = "PASS"
+        elif intentional_deviation is not None:
+            # Declared, not silenced: still prints the measured magnitude
+            # every run, so a *change* in that magnitude (e.g. upstream
+            # changing its CAT choice, or a regression riding along with
+            # this deviation) is still visible -- it just isn't reported
+            # as a harness failure. See INTENTIONAL_DEVIATIONS above.
+            status = f"DEVIATION(intentional, maxdiff={max_diff:.6g}): {intentional_deviation}"
         else:
             status = f"FAIL(maxdiff={max_diff:.6g}, tol={tolerance:.6g})"
         self.rows.append((label, ours.size, max_diff, status))
-        self.all_ok = self.all_ok and status == "PASS"
+        self.all_ok = self.all_ok and not status.startswith("FAIL")
 
     def check_coverage(self, label: str, manifest_keys: set, compared_keys: set, exempt: set = frozenset()) -> None:
         """Fail loudly, by name, if the hand-maintained lookup tables above
@@ -275,7 +305,12 @@ def main() -> int:
                 cmp.rows.append((f"{stock_id}.{field}", ref["lengthFloats"], None, "FAIL(cpp array not found)"))
                 cmp.all_ok = False
                 continue
-            cmp.compare(f"{stock_id}.{field}", slice_of(stocks_blob, ref), float_arrays[cpp_name])
+            cmp.compare(
+                f"{stock_id}.{field}",
+                slice_of(stocks_blob, ref),
+                float_arrays[cpp_name],
+                intentional_deviation=INTENTIONAL_DEVIATIONS.get(field),
+            )
 
         # inputToSrgb: shared per-group array (see bake_web_assets.py:pack_stocks)
         ref = entry["fields"]["inputToSrgb"]

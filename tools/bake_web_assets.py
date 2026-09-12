@@ -41,6 +41,79 @@ import generate_profile_curves as gpc  # noqa: E402
 import ofx_stock_lists as stocks  # noqa: E402
 
 
+def _input_to_reference_xyz_matrices_cat16(reference_illuminant: str) -> list[list[float]]:
+    """CAT16 counterpart of gpc._input_to_reference_xyz_matrices.
+
+    Task 11 (log_e_film gate): spec Sec.6.3.1 -- where upstream's C++ bake
+    (generate_profile_curves.py, which emits the literal we'd otherwise
+    match byte-for-byte) and upstream's Python runtime (spektrafilm, which
+    produced our parity fixtures) disagree, Python wins. Matching the C++
+    literal is not proof of correctness; matching the fixture is.
+
+    generate_profile_curves._color_space_to_xyz_matrix (:470) hard-codes
+    chromatic_adaptation_transform="CAT02" for exactly this conversion:
+    input RGB, white-balanced at the profile's reference_illuminant,
+    projected to XYZ. The Python runtime performs the SAME physical
+    conversion in spectral_upsampling._rgb_to_tc_b (used by
+    rgb_to_raw_hanatos2025 -- the only rgb_to_raw_method our current parity
+    fixtures exercise) with chromatic_adaptation_transform='CAT16' instead,
+    explicitly, with a comment there explaining CAT16 (Li et al. 2017) was
+    chosen over CAT02 for better-behaved blue/violet cone primaries.
+
+    Measured divergence (Task 11, ProPhoto RGB at D55 -- this function's
+    exact configuration, the log_e_film gate's color_patches case):
+    neutral 0.5 grey 1.57e-7, saturated skin-tone yellow 1.98e-4, saturated
+    red 1.33e-3, saturated green 1.87e-3, saturated blue 5.18e-3, max single
+    matrix entry 8.27e-3. A CAT maps source white to target white by
+    definition, so it leaves white/near-white untouched and only moves
+    saturated colours -- exactly the four-orders-of-magnitude achromatic-
+    vs-chromatic split the log_e_film gate measured (gray_ramp/
+    log_gray_ramp within ~3.4x of the 1e-5 tolerance; color_patches ~2700x
+    over, before this fix).
+
+    Audited at the same time: every OTHER field bake_web_assets.py emits
+    was checked for the same CAT02-vs-CAT16 pattern and found NOT to
+    diverge --
+      - scanToOutputRgb (gpc._scan_to_output_rgb_matrices) also hard-codes
+        CAT02 in the C++ bake, but the Python runtime's equivalent
+        conversion (spektrafilm/runtime/stages/scanning.py, colour.XYZ_to_RGB
+        with no chromatic_adaptation_transform argument at all) relies on
+        colour-science's own default -- confirmed directly against the
+        pinned version (colour-science==0.4.6, colour/models/rgb/
+        rgb_colourspace.py: XYZ_to_RGB(..., chromatic_adaptation_transform
+        = "CAT02")) -- which IS "CAT02". Both sides agree; no fix needed.
+      - inputToSrgb (gpc._input_to_srgb_matrices) is colour.RGB_to_RGB with
+        no explicit CAT, i.e. also colour-science's CAT02 default. Its
+        Python runtime counterpart for the same input-RGB-to-working-RGB
+        step, spectral_upsampling.rgb_to_raw_mallett2019, calls
+        colour.RGB_to_RGB the same way, with no override either. Both
+        sides agree; no fix needed (also moot for THIS gate: the shader
+        only reaches multiplyInputToSrgb on the rgbToRawMethod==1/mallett
+        branch, not the rgbToRawMethod==0/hanatos2025 branch these fixtures
+        exercise -- but it will matter once a mallett2019 gate exists).
+      - inputMeterXyzMatrices (gpc._input_to_meter_xyz_matrices) never
+        passes an `illuminant` argument, so source and target white are
+        identical and any CAT choice is a no-op regardless.
+    inputToReferenceXyz is the only emitted table this pattern affects.
+    """
+    matrices: list[list[float]] = []
+    reference_xy = gpc._illuminant_to_xy(reference_illuminant)
+    for space in gpc.COLOR_SPACES:
+        columns = []
+        for rgb in np.eye(3):
+            columns.append(
+                gpc.colour.RGB_to_XYZ(
+                    rgb,
+                    colourspace=space["matrix_space"],
+                    apply_cctf_decoding=False,
+                    illuminant=reference_xy,
+                    chromatic_adaptation_transform="CAT16",
+                )
+            )
+        matrices.extend(gpc._matrix_to_rows(np.stack(columns, axis=1)))
+    return matrices
+
+
 def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
     """Write JSON with LF-only line endings, regardless of platform.
 
@@ -134,8 +207,11 @@ def pack_stock(writer: _BlobWriter, stock_id: str, *, is_film: bool, shared_inpu
     fields["referenceIlluminantSpectrum"] = writer.write(
         [float(v) for v in gpc.standard_illuminant(reference_illuminant)]
     )
-    # _input_to_reference_xyz_matrices(reference_illuminant) -- :1022
-    fields["inputToReferenceXyz"] = writer.write(gpc._input_to_reference_xyz_matrices(reference_illuminant))
+    # _input_to_reference_xyz_matrices(reference_illuminant) -- :1022.
+    # NOT gpc._input_to_reference_xyz_matrices: spec Sec.6.3.1, Python wins
+    # over C++ where they disagree. See _input_to_reference_xyz_matrices_cat16
+    # docstring above for the full CAT02-vs-CAT16 proof.
+    fields["inputToReferenceXyz"] = writer.write(_input_to_reference_xyz_matrices_cat16(reference_illuminant))
     # {group_name}_input_to_srgb -- :1023,1075. _input_to_srgb_matrices() takes no
     # per-profile argument, so upstream's own per-group array is identical film vs.
     # paper (verified: same values either way). Written once, shared by reference.
