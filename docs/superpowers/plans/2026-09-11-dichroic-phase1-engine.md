@@ -1182,6 +1182,28 @@ git commit -m "feat(spektra): acquire WebGPU device with clear unavailability er
 
 ## Task 7: Struct CoreParams
 
+> **KOREKSI PENTING — versi pertama tugas ini salah, dan salahnya mahal.**
+>
+> Tugas ini semula menyatakan blok `CoreParams` punya 26 skalar dengan "tiga field padding yang dipakai sebagai bitfield flag", lalu meleburkan ketiganya menjadi satu field `flags` — menghasilkan 24 field. Itu keliru di tiga tingkat.
+>
+> **Ketiga field itu bukan padding.** Mereka slot serbaguna yang maknanya berbeda per tahap, dan host mengisinya berbeda tiap dispatch (`SpektraVulkanRenderer.cpp:6272-6274`: `_pad0 = operation; _pad1 = sigmaMode; _pad2 = component`). Yang terukur dari shader hulu:
+>
+> | Slot | Dipakai sebagai | Kemunculan |
+> |---|---|---|
+> | `_pad0` | `operation` pada Diffusion; flag dibandingkan `== 1u` pada FilmExposure | 8 |
+> | `_pad1` | bitfield flag colour-adaptation pada CurveDevelop dan FilmExposure; `sigmaMode` pada Diffusion | 8 |
+> | `_pad2` | nilai ter-pack (groupCount + downsampleScale) pada Diffusion; selektor source-index pada FilmExposure | 16 |
+>
+> **Akibat kalau tidak dikoreksi:** meleburkannya menghapus dua dari tiga slot. Task 11 (FilmExposure) akan kehilangan dua selektor, dan Task 15 (Diffusion) hancur total — dispatcher operasinya sepenuhnya dikendalikan `_pad0` dan `_pad2`.
+>
+> **Yang benar:**
+> - Struct punya **26 field**, bukan 24. `CORE_PARAMS_BYTES` = `ceil(26 × 4 / 16) × 16` = **112**, bukan 96.
+> - Pertahankan **tiga slot terpisah**. Jangan beri satu nama semantik — nama apa pun akan menjadi dusta di dua dari tiga tahap. Pakai nama netral (`slot0`, `slot1`, `slot2` atau serupa) dengan komentar yang mendaftarkan apa yang dibawa masing-masing per tahap, seperti tabel di atas.
+> - `FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING = 1 << 1` berlaku khusus untuk **slot1**, bukan untuk "flags" secara umum. Ikat konstanta itu ke slot1 di dokumentasinya.
+> - Test yang mengharapkan 24 field harus mengharapkan **26**.
+>
+> **Untuk Task 11, 13, dan 15:** jangan menebak arti slot dari nama. Baca blok push-constant di shader hulu yang sedang kamu port, dan baca tempat `SpektraVulkanRenderer.cpp` mengisinya untuk dispatch itu. Ketiga tahap itu memakai slot yang sama untuk hal yang berbeda.
+
 **Files:**
 - Create: `spektra/src/engine/params.ts`
 - Test: `spektra/test/params.test.ts`
@@ -1224,7 +1246,7 @@ const sample: CoreParams = {
   colorSpaceCount: 26, transferLutSize: 4096,
   colorDecodeMin: -0.25, colorDecodeMax: 16.0,
   hanatosWidth: 192, hanatosHeight: 192,
-  flags: FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING,
+  slot0: 0, slot1: FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING, slot2: 0,
   filmPushPullMode: 0, filmPushPullStops: -1.0,
   fullWidth: 1920, fullHeight: 1080,
   tileOriginX: 0, tileOriginY: 0,
@@ -1235,7 +1257,7 @@ const sample: CoreParams = {
 describe('CoreParams', () => {
   it('berukuran kelipatan 16 byte agar sah sebagai uniform', () => {
     expect(CORE_PARAMS_BYTES % 16).toBe(0);
-    expect(CORE_PARAMS_BYTES).toBeGreaterThanOrEqual(26 * 4);
+    expect(CORE_PARAMS_BYTES).toBe(112); // ceil(26*4/16)*16
   });
 
   it('menulis width dan height pada dua slot pertama', () => {
@@ -1259,7 +1281,7 @@ describe('CoreParams', () => {
 
   it('WGSL mendeklarasikan struct dengan jumlah field yang sama', () => {
     const fields = CORE_PARAMS_WGSL.match(/^\s+\w+\s*:/gm) ?? [];
-    expect(fields).toHaveLength(24);
+    expect(fields).toHaveLength(26);
   });
 });
 ```
@@ -1300,7 +1322,12 @@ export interface CoreParams {
   colorDecodeMax: number;
   hanatosWidth: number;
   hanatosHeight: number;
-  flags: number;
+  /** Slot serbaguna; arti berbeda per tahap — lihat koreksi di awal tugas ini. */
+  slot0: number;
+  /** Bitfield colour-adaptation pada CurveDevelop/FilmExposure; sigmaMode pada Diffusion. */
+  slot1: number;
+  /** Nilai ter-pack pada Diffusion; selektor source-index pada FilmExposure. */
+  slot2: number;
   filmPushPullMode: number;
   filmPushPullStops: number;
   fullWidth: number;
@@ -1329,7 +1356,9 @@ const FIELDS: ReadonlyArray<readonly [keyof CoreParams, Kind]> = [
   ['colorDecodeMax', 'f32'],
   ['hanatosWidth', 'u32'],
   ['hanatosHeight', 'u32'],
-  ['flags', 'u32'],
+  ['slot0', 'u32'],
+  ['slot1', 'u32'],
+  ['slot2', 'u32'],
   ['filmPushPullMode', 'i32'],
   ['filmPushPullStops', 'f32'],
   ['fullWidth', 'u32'],

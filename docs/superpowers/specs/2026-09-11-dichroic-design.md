@@ -147,10 +147,25 @@ buffer, ditulis ulang per-dispatch. `Copy` dan `FormatConvert` yang hanya
 memerlukan dua field tetap memakai struct yang sama — membuang 24 field yang
 tak terpakai lebih murah daripada memelihara dua jalur binding.
 
-Catatan: field `_pad1` dipakai sebagai bitfield untuk flag colour adaptation
-(`kColorAdaptationCurveSmoothing = 1u << 1u`). Ini harus diikuti persis;
-menamainya ulang menjadi sesuatu yang deskriptif diperbolehkan, mengubah letak
-bit-nya tidak.
+Catatan penting, diukur di Task 7: **ketiga field `_pad0`/`_pad1`/`_pad2`
+bukan padding.** Mereka slot serbaguna yang maknanya berbeda per tahap, dan host
+mengisinya berbeda tiap dispatch (`SpektraVulkanRenderer.cpp:6272-6274`:
+`_pad0 = operation; _pad1 = sigmaMode; _pad2 = component`).
+
+| Slot | Dipakai sebagai | Kemunculan di shader |
+|---|---|---|
+| `_pad0` | `operation` pada Diffusion; flag `== 1u` pada FilmExposure | 8 |
+| `_pad1` | bitfield colour-adaptation (`kColorAdaptationCurveSmoothing = 1u << 1u`) pada CurveDevelop dan FilmExposure; `sigmaMode` pada Diffusion | 8 |
+| `_pad2` | nilai ter-pack (groupCount + downsampleScale) pada Diffusion; selektor source-index pada FilmExposure | 16 |
+
+Ketiganya dipertahankan sebagai field terpisah dengan nama netral. Memberi satu
+nama semantik akan menjadi dusta di dua dari tiga tahap, dan meleburkannya jadi
+satu bitfield akan menghapus dua slot — dispatcher operasi Diffusion sepenuhnya
+dikendalikan `_pad0` dan `_pad2`, jadi kehilangan itu akan membuat tahap tersebut
+tidak dapat dibangun sama sekali.
+
+Karena itu struct berisi **26 field**, dan blok uniform-nya **112 byte**
+(`ceil(26 × 4 / 16) × 16`).
 
 **Batas storage buffer.** WebGPU menjamin hanya 8 storage buffer per stage.
 `SpektraPrintScan` memakai 30, `SpektraGrain` 13, `SpektraDiffusion` 9.
