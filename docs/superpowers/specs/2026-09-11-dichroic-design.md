@@ -393,6 +393,39 @@ Engine DICHROIC **mencerminkan nama tap yang sama**, dan setiap tap dapat
 di-collect. Akibatnya gerbang per-tahap menjadi sifat bawaan arsitektur, bukan
 sesuatu yang ditempelkan untuk keperluan pengujian.
 
+### 6.3.1 Ketika hulu tidak sepakat dengan dirinya sendiri: Python yang menang
+
+Ditemukan saat Task 11 buntu, dan ini mengoreksi asumsi verifikasi kita.
+
+Task 4 memvalidasi setiap tabel yang dipancarkan terhadap literal C++ hulu, dan
+seluruhnya lulus. Tetapi **oracle kita adalah Python**, dan di satu tempat kedua
+sisi hulu berbeda: `tools/generate_profile_curves.py:470` mem-bake
+`inputToReferenceXyz` dengan `chromatic_adaptation_transform="CAT02"`, sementara
+runtime Python (`utils/spectral_upsampling.py:136`) menghitung dengan `'CAT16'`
+— dipilih sadar, dengan komentar yang menyebut CAT16 menggantikan
+ketidakstabilan cone-primary CAT02 di sekitar biru dan violet.
+
+Terukur, untuk ProPhoto RGB terhadap D55:
+
+| Piksel | Selisih xy, CAT02 vs CAT16 |
+|---|---|
+| Netral 0,5 | 1,57e-07 |
+| Merah jenuh | 1,33e-03 |
+| Hijau jenuh | 1,87e-03 |
+| Biru jenuh | 5,18e-03 |
+
+Setiap CAT memetakan putih sumber ke putih target menurut definisinya, jadi
+netral nyaris tak tersentuh sementara warna jenuh bergeser. Itu persis yang
+diamati gerbang `log_e_film` Task 11: akromatik 3,415e-5 versus kromatik
+2,702e-2.
+
+**Aturannya, sejak sekarang:** di mana bake C++ hulu dan runtime Python hulu
+berbeda, **Python yang menang** — ia yang menghasilkan fixture referensi. Bake
+kita mencocoki Python, bukan C++. `compare_cpp.py` (Task 4) tetap berguna
+sebagai deteksi divergensi, tetapi kecocokan dengannya bukan bukti kebenaran;
+setiap ketidakcocokan terhadap Python adalah cacat kita, dan setiap kecocokan
+dengan C++ yang bertentangan dengan Python adalah cacat juga.
+
 ### 6.4 Aturan gerbang
 
 Sebuah tahap belum selesai sampai tap keluarannya cocok dengan Python. Nilai
