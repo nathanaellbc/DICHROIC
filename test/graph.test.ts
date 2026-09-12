@@ -22,6 +22,23 @@ const gpuBufferUsage: typeof GPUBufferUsage =
       ).globals.GPUBufferUsage;
 
 function paramsFor(width: number, height: number): CoreParams {
+  return paramsForRegion(width, height, 0, 0, width, height);
+}
+
+/**
+ * Seperti `paramsFor`, tapi dengan region aktif yang bisa diatur bebas —
+ * dibutuhkan untuk menguji `materializeActiveRegion` dengan region yang
+ * BENAR-BENAR ter-crop (origin bukan nol, ukuran lebih kecil dari buffer),
+ * bukan hanya kasus "region aktif == seluruh buffer" yang paramsFor tutup.
+ */
+function paramsForRegion(
+  width: number,
+  height: number,
+  activeOriginX: number,
+  activeOriginY: number,
+  activeWidth: number,
+  activeHeight: number,
+): CoreParams {
   return {
     width, height,
     filmExposureEv: 0, filmGamma: 1,
@@ -33,8 +50,8 @@ function paramsFor(width: number, height: number): CoreParams {
     filmPushPullMode: 0, filmPushPullStops: 0,
     fullWidth: width, fullHeight: height,
     tileOriginX: 0, tileOriginY: 0,
-    activeOriginX: 0, activeOriginY: 0,
-    activeWidth: width, activeHeight: height,
+    activeOriginX, activeOriginY,
+    activeWidth, activeHeight,
   };
 }
 
@@ -238,6 +255,91 @@ describe('RenderGraph', () => {
     expect(sink[2]).not.toBe(sink[1]);
     expect(sink[2]!.size).toBeGreaterThanOrEqual(4096);
 
+    graph.dispose();
+  });
+
+  it('materializeActiveRegion menyalin HANYA region aktif yang di-crop, meninggalkan piksel luar tak tersentuh', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+
+    // Buffer 6x4 (24 piksel); region aktif adalah sub-rektangel 3x2 pada
+    // origin (2, 1) — BUKAN seluruh buffer. activeOrigin + activeWidth
+    // (2+3=5 <= 6) dan activeOrigin + activeHeight (1+2=3 <= 4) tetap di
+    // dalam batas, jadi ini menguji crop itu sendiri, bukan penjaga batas.
+    const width = 6;
+    const height = 4;
+    const activeOriginX = 2;
+    const activeOriginY = 1;
+    const activeWidth = 3;
+    const activeHeight = 2;
+    const params = paramsForRegion(width, height, activeOriginX, activeOriginY, activeWidth, activeHeight);
+
+    // Setiap piksel diberi nilai berbeda (indeks liniernya sendiri, di
+    // keempat komponen) sehingga "disalin dengan benar" dan "kebetulan nol"
+    // tidak bisa tertukar secara diam-diam.
+    const input = new Float32Array(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixelIndex = y * width + x;
+        for (let c = 0; c < 4; c += 1) input[pixelIndex * 4 + c] = pixelIndex;
+      }
+    }
+
+    const output = await graph.run(input, params, Tap.RGB_IN);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixelIndex = y * width + x;
+        const insideActiveRegion =
+          x >= activeOriginX &&
+          x < activeOriginX + activeWidth &&
+          y >= activeOriginY &&
+          y < activeOriginY + activeHeight;
+        for (let c = 0; c < 4; c += 1) {
+          const value = output[pixelIndex * 4 + c]!;
+          if (insideActiveRegion) {
+            // Di dalam region: disalin dari sumber, jadi sama dengan input.
+            expect(value, `piksel (${x},${y}) komponen ${c}, DI DALAM region`).toBeCloseTo(
+              pixelIndex,
+              6,
+            );
+          } else {
+            // Di luar region: buffer tujuan baru dan zero-initialized
+            // menurut spesifikasi WebGPU (lih. GPUDevice.createBuffer) —
+            // shader mengembalikan lebih dulu untuk piksel ini, jadi nilai
+            // yang bertahan HARUS nol, bukan nilai piksel input yang bocor
+            // dari luar region (yang akan lolos kalau indeksnya salah).
+            expect(value, `piksel (${x},${y}) komponen ${c}, DI LUAR region`).toBe(0);
+          }
+        }
+      }
+    }
+    graph.dispose();
+  });
+
+  it('activeWidth/activeHeight == 0 berarti seluruh buffer, BUKAN nol piksel (konvensi hulu)', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+
+    const width = 4;
+    const height = 3;
+    // activeWidth/activeHeight sengaja 0 — SpektraCurveDevelop.comp:231-232
+    // dan SpektraFilmExposure.comp:232-233 keduanya membaca 0 sebagai
+    // "seluruh buffer". Bila shader/dispatch di sini memakai literal 0
+    // apa adanya (bukan diselesaikan ke width/height dulu), TIDAK ADA
+    // piksel yang akan disalin sama sekali.
+    const params = paramsForRegion(width, height, 0, 0, 0, 0);
+
+    const input = new Float32Array(width * height * 4);
+    for (let i = 0; i < input.length; i += 1) input[i] = i + 1; // tidak ada yang nol secara alami
+
+    const output = await graph.run(input, params, Tap.RGB_IN);
+
+    for (let i = 0; i < input.length; i += 1) {
+      expect(output[i]!, `elemen ${i}`).toBeCloseTo(input[i]!, 6);
+    }
     graph.dispose();
   });
 });

@@ -81,8 +81,50 @@
  */
 export const FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING = 1 << 1;
 
+/**
+ * TIGA RUANG KOORDINAT BERBEDA hidup berdampingan di `CoreParams`, dan
+ * kedelapan tahap Task 11-18 (plus tahap `materializeActiveRegion` yang
+ * membangun `rgb_in`, Task 9) membaca ketiganya lewat konstanta ini —
+ * bukan lewat komentar shader satu per satu. Dipatok di sini, satu kali,
+ * dengan rujukan baris hulu yang bisa diverifikasi ulang siapa pun, karena
+ * salah menyamakan salah satu dari tiga ini adalah cara paling murah untuk
+ * menghasilkan "gambar yang salah secara masuk akal" tanpa galat apa pun —
+ * persis kelas bug yang `arena.ts` dan modul ini sendiri sudah waspadai
+ * untuk kasus lain (offset arena, urutan field).
+ *
+ *   - `width`/`height` — dimensi BUFFER YANG SEDANG DIPROSES (satu tile,
+ *     TERMASUK apron bila ada). Ini adalah STRIDE pengindeksan linear:
+ *     `index = gid.y * params.width + gid.x`. Sumber dan tujuan berbagi
+ *     stride yang sama dalam satu dispatch.
+ *   - `activeOriginX/Y`, `activeWidth/Height` — sub-rektangel DI DALAM
+ *     buffer itu yang benar-benar ditulis dispatch ini (pusat tile, TANPA
+ *     apron). `activeWidth == 0u` (dan sama untuk height) berarti "seluruh
+ *     buffer" — bukan "nol piksel" — persis pola
+ *     `SpektraCurveDevelop.comp:231-232` dan `SpektraFilmExposure.comp:232-
+ *     233` (`params.activeWidth == 0u ? params.width : params.activeWidth`).
+ *     Kedua shader itu JUGA memeriksa batas DUA KALI: sekali terhadap ukuran
+ *     aktif efektif (SEBELUM origin ditambahkan — `SpektraCurveDevelop.
+ *     comp:233`, `SpektraFilmExposure.comp:234`), sekali lagi terhadap
+ *     `width`/`height` (SETELAH origin ditambahkan — `SpektraCurveDevelop.
+ *     comp:238`, `SpektraFilmExposure.comp:239`). Keduanya setara HANYA
+ *     bila `activeOrigin + activeWidth <= width`; pemeriksaan kedua ada
+ *     justru untuk pemanggil yang melanggar itu — tanpanya, dispatch
+ *     menulis di luar batas buffer secara senyap (WGSL membuangnya tanpa
+ *     galat). Setiap tahap yang mengindeks lewat `activeWidth/Height` HARUS
+ *     mengadopsi KEDUA pemeriksaan ini, bukan hanya yang pertama.
+ *   - `fullWidth`/`fullHeight` — ruang koordinat SELURUH GAMBAR, dipakai
+ *     bersama `tileOriginX/Y` untuk memperoleh posisi ABSOLUT pada efek
+ *     yang bervariasi spasial (mis. jatuhnya halation dari tepi frame,
+ *     bukan tepi tile) — lih. `SpektraFilmExposure.comp` sekitar baris 242
+ *     (`absoluteGid = gid + tileOrigin`, lalu `fullWidth`/`fullHeight`
+ *     dipakai untuk menormalisasi posisi itu). TIDAK dipakai untuk
+ *     pengindeksan buffer manapun secara langsung — itu peran `width`/
+ *     `height`.
+ */
 export interface CoreParams {
+  /** Stride buffer yang sedang diproses (tile, termasuk apron) — lihat dokumentasi di atas. */
   width: number;
+  /** Stride buffer yang sedang diproses (tile, termasuk apron) — lihat dokumentasi di atas. */
   height: number;
   filmExposureEv: number;
   filmGamma: number;
@@ -103,13 +145,19 @@ export interface CoreParams {
   slot2: number;
   filmPushPullMode: number;
   filmPushPullStops: number;
+  /** Ruang koordinat seluruh gambar, dipakai bersama tileOrigin — lihat dokumentasi di atas. */
   fullWidth: number;
+  /** Ruang koordinat seluruh gambar, dipakai bersama tileOrigin — lihat dokumentasi di atas. */
   fullHeight: number;
   tileOriginX: number;
   tileOriginY: number;
+  /** Origin sub-rektangel aktif DI DALAM buffer (width/height) — lihat dokumentasi di atas. */
   activeOriginX: number;
+  /** Origin sub-rektangel aktif DI DALAM buffer (width/height) — lihat dokumentasi di atas. */
   activeOriginY: number;
+  /** 0 berarti "seluruh buffer" (width), BUKAN "nol piksel" — lihat dokumentasi di atas. */
   activeWidth: number;
+  /** 0 berarti "seluruh buffer" (height), BUKAN "nol piksel" — lihat dokumentasi di atas. */
   activeHeight: number;
 }
 

@@ -45,7 +45,21 @@
 //     dibutuhkan port ini.
 //
 // CORE_PARAMS_WGSL disisipkan di sini saat pembuatan modul (lih.
-// materializeActiveRegion.ts).
+// materializeActiveRegion.ts). Semantik width/fullWidth/activeWidth
+// dipatok di params.ts (bukan di sini) karena delapan tahap Task 11-18
+// membacanya di sana, bukan di komentar shader ini — lihat dokumentasi
+// `CoreParams` untuk definisi dan rujukan baris hulu lengkap.
+//
+// Dua penjaga di bawah meniru hulu PERSIS (SpektraCurveDevelop.comp:231-238,
+// SpektraFilmExposure.comp:232-239 — dua shader yang memakai pola identik):
+//   1. `activeWidth`/`activeHeight` bernilai 0 berarti "seluruh buffer" —
+//      diselesaikan SEBELUM dipakai untuk pemeriksaan batas apa pun.
+//   2. Batas diperiksa DUA KALI: sekali terhadap ukuran aktif efektif
+//      (sebelum origin ditambahkan), sekali lagi terhadap `params.width`/
+//      `height` (SETELAH origin ditambahkan). Keduanya setara HANYA bila
+//      `activeOrigin + activeWidth <= width` — pemanggil yang melewatkan
+//      rect aktif yang melampaui buffer akan tertangkap oleh pemeriksaan
+//      kedua ini, bukan menulis di luar batas secara senyap.
 
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> dst: array<vec4<f32>>;
@@ -53,10 +67,23 @@
 
 @compute @workgroup_size(32, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  if (gid.x >= params.activeWidth || gid.y >= params.activeHeight) {
+  // Penjaga 1: 0 berarti "seluruh buffer" (SpektraCurveDevelop.comp:231-232).
+  let activeWidth = select(params.activeWidth, params.width, params.activeWidth == 0u);
+  let activeHeight = select(params.activeHeight, params.height, params.activeHeight == 0u);
+  if (gid.x >= activeWidth || gid.y >= activeHeight) {
     return;
   }
-  let index = (gid.y + params.activeOriginY) * params.width
-            + (gid.x + params.activeOriginX);
+
+  let absoluteX = gid.x + params.activeOriginX;
+  let absoluteY = gid.y + params.activeOriginY;
+  // Penjaga 2: batas terhadap buffer PENUH setelah origin ditambahkan
+  // (SpektraCurveDevelop.comp:238) — bukan sekadar setara dengan penjaga 1
+  // di atas kecuali activeOrigin + activeWidth <= width selalu dijaga
+  // pemanggil; ini menangkap rect aktif yang melampaui buffer.
+  if (absoluteX >= params.width || absoluteY >= params.height) {
+    return;
+  }
+
+  let index = absoluteY * params.width + absoluteX;
   dst[index] = src[index];
 }

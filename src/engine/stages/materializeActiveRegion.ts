@@ -32,14 +32,17 @@ export function createMaterializeActiveRegionStage(device: GPUDevice): Stage {
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
         ],
       });
+      // 0 berarti "seluruh buffer" (lih. dokumentasi CoreParams di params.ts
+      // dan penjaga 1 di materializeActiveRegion.wgsl) — dispatch harus
+      // menutupi ukuran EFEKTIF, bukan literal 0 (yang berarti nol invokasi).
+      const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
+      const activeHeight =
+        ctx.params.activeHeight === 0 ? ctx.params.height : ctx.params.activeHeight;
+
       const pass = encoder.beginComputePass({ label: 'materializeActiveRegion' });
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, bindGroup);
-      pass.dispatchWorkgroups(
-        Math.ceil(ctx.params.activeWidth / 32),
-        Math.ceil(ctx.params.activeHeight / 8),
-        1,
-      );
+      pass.dispatchWorkgroups(Math.ceil(activeWidth / 32), Math.ceil(activeHeight / 8), 1);
       pass.end();
     },
   };
