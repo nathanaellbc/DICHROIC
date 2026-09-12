@@ -1596,6 +1596,11 @@ git commit -m "feat(spektra): pack read-only tables into arena buffers under the
 >
 > Konsekuensinya untuk tugas-tugas berikutnya: **jaga gambar uji tetap kecil.** Fixture Task 3 berukuran 32×16 sampai 64×64 dan aman. Jangan mencoba render full-frame atau gambar berukuran produksi di dalam Vitest — kalau suatu tahap perlu diuji pada ukuran besar, jalankan di luar suite lewat skrip terpisah dan laporkan hasilnya, jangan jadikan ia bagian dari `npm test`.
 
+> **Catatan penamaan (pasca-eksekusi Task 9).** Nama `formatConvert` di bawah ini adalah nama RENCANA.
+> Implementasinya diganti nama menjadi `materializeActiveRegion` karena `SpektraFormatConvert.comp` hulu
+> tidak diport — lih. `task-9-report.md`, "Ruling penamaan". Bagian Task 9 ini dibiarkan apa adanya sebagai
+> catatan sejarah; Task 11 dan seterusnya sudah memakai nama sebenarnya.
+
 **Files:**
 - Create: `spektra/src/engine/graph.ts`, `spektra/src/engine/stages/formatConvert.ts`, `spektra/src/shaders/formatConvert.wgsl`
 - Test: `spektra/test/graph.test.ts`
@@ -2167,7 +2172,7 @@ Buat `spektra/test/parity/filmExposure.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { Tap } from '../../src/engine/taps';
 import { runTapParity } from './run';
@@ -2180,7 +2185,7 @@ describe('parity: log_e_film', () => {
         tap: Tap.LOG_E_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [
-          createFormatConvertStage(device),
+          createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
         ],
       });
@@ -2312,7 +2317,7 @@ Buat `spektra/test/parity/curveDevelop.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { Tap } from '../../src/engine/taps';
@@ -2326,7 +2331,7 @@ describe('parity: cmy_film', () => {
         tap: Tap.CMY_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [
-          createFormatConvertStage(device),
+          createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
         ],
@@ -2403,7 +2408,7 @@ Buat `spektra/test/parity/dir.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2417,7 +2422,7 @@ describe('parity: DIR coupler', () => {
       tap: Tap.CMY_FILM,
       tolerance: 1e-5,
       stages: (device, arenas) => [
-        createFormatConvertStage(device),
+        createMaterializeActiveRegionStage(device),
         createFilmExposureStage(device, arenas),
         createCurveDevelopStage(device, arenas),
         createDirStage(device, arenas),
@@ -2475,7 +2480,7 @@ Buat `spektra/test/parity/halation.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2490,7 +2495,7 @@ describe('parity: halation', () => {
       tap: Tap.CMY_FILM,
       tolerance: 1e-5,
       stages: (device, arenas) => [
-          createFormatConvertStage(device),
+          createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
           createDirStage(device, arenas),
@@ -2549,7 +2554,7 @@ Buat `spektra/test/parity/diffusion.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2565,7 +2570,7 @@ describe('parity: diffusion kamera', () => {
       tap: Tap.CMY_FILM,
       tolerance: 1e-5,
       stages: (device, arenas) => [
-          createFormatConvertStage(device),
+          createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
           createDirStage(device, arenas),
@@ -2692,7 +2697,7 @@ import { RenderGraph } from '../../src/engine/graph';
 import { buildArenas } from '../../src/host/spectral';
 import { loadAssets } from '../../src/profiles/load';
 import { Tap } from '../../src/engine/taps';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2711,7 +2716,7 @@ describe('parity: grain (statistik)', () => {
 
     const graph = new RenderGraph(engine);
     for (const stage of [
-      createFormatConvertStage(device),
+      createMaterializeActiveRegionStage(device),
       createFilmExposureStage(device, arenas),
       createCurveDevelopStage(device, arenas),
       createDirStage(device, arenas),
@@ -2822,7 +2827,7 @@ Buat `spektra/test/parity/printScan.test.ts`:
 
 ```typescript
 import { describe, it } from 'vitest';
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2836,7 +2841,7 @@ import { Tap } from '../../src/engine/taps';
 import { runTapParity } from './run';
 
 const filmSide = (device: GPUDevice, arenas: Arenas) => [
-        createFormatConvertStage(device),
+        createMaterializeActiveRegionStage(device),
         createFilmExposureStage(device, arenas),
         createCurveDevelopStage(device, arenas),
         createDirStage(device, arenas),
@@ -2965,7 +2970,7 @@ tahap eksplisit karena tahap di hilirnya belum ada. Perhatikan kedua titik sisip
 Diffusion dan dua tahap sisi print:
 
 ```typescript
-import { createFormatConvertStage } from '../../src/engine/stages/formatConvert';
+import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
@@ -2981,7 +2986,7 @@ import type { Stage } from '../../src/engine/graph';
 
 export function fullChain(device: GPUDevice, arenas: Arenas): Stage[] {
   return [
-    createFormatConvertStage(device),
+    createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
     createCurveDevelopStage(device, arenas),
     createDirStage(device, arenas),
