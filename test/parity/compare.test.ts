@@ -16,6 +16,24 @@ describe('harness perbandingan', () => {
     expect(result.meanAbsError).toBe(0);
   });
 
+  // Setiap test lain di sini punya total galat nol (pembagi apa pun
+  // memberi 0) atau membangun objek Comparison dengan tangan, jadi tidak
+  // satu pun benar-benar menegaskan bahwa compareRgb() sendiri membagi
+  // dengan pembagi yang benar (pixels * 3, bukan pixels atau 3 saja).
+  // Angka di sini dihitung tangan lalu diverifikasi lewat Node langsung
+  // (float32 punya noise di orde 1e-8 dari representasi desimal, karena
+  // itu toBeCloseTo, bukan toBe, untuk mean dan max -- tapi worstIndex
+  // deterministik dan diperiksa dengan toBe).
+  it('menghitung meanAbsError dengan pembagi yang benar (pixels * 3), lewat compareRgb sungguhan', () => {
+    const expected = new Float32Array([0.10, 0.20, 0.30, 0.40, 0.50, 0.60]);
+    const actual = new Float32Array([0.12, 0.20, 0.35, 1, 0.40, 0.55, 0.60, 1]);
+    const result = compareRgb(actual, expected);
+    // galat per elemen: [0.02, 0, 0.05, 0, 0.05, 0] -> jumlah 0.12 / 6 = 0.02
+    expect(result.meanAbsError).toBeCloseTo(0.02, 6);
+    expect(result.maxAbsError).toBeCloseTo(0.05, 6);
+    expect(result.worstIndex).toBe(4); // piksel 1, kanal G -> 1*3 + 1
+  });
+
   it('menemukan indeks terburuk', () => {
     const expected = new Float32Array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
     const actual = new Float32Array([0.1, 0.2, 0.3, 1, 0.4, 0.5, 0.9, 1]);
