@@ -61,7 +61,7 @@
 
 import type { AssetBundle } from '../profiles/load';
 import { ArenaBuilder } from '../engine/arena';
-import type { Arena, Arenas } from '../engine/arena';
+import type { Arenas } from '../engine/arena';
 
 /**
  * Perkiraan fungsi galat (erf), Abramowitz & Stegun 7.1.26 -- galat
@@ -166,28 +166,42 @@ function computeErf4Window(
  * dibagi normalisasinya sendiri sebelum dikontraksikan dengan spektrum.
  */
 /**
- * CATATAN LINGKUNGAN (bukan koreksi algoritma) -- baca task-11-report.md
- * bagian "Crash lingkungan Node/Dawn" sebelum menganggap fungsi ini sebagai
- * penyebab crash apa pun yang terlihat saat menjalankan test.
+ * CATATAN LINGKUNGAN (bukan koreksi algoritma).
  *
- * Loop di bawah (192*192*81*3 ~9 juta operasi float untuk hanatos width=192)
- * murni CPU. Ditemukan empiris bahwa di lingkungan Node v26.5.1 + paket
- * `webgpu` (Dawn) worktree ini, menjalankan pekerjaan floating-point berat
- * di thread utama SEBELUM/DI SEKITAR pemakaian WebGPU py device yang sudah
- * diakuisisi punya peluang men-segfault proses Node -- dibuktikan dengan
- * loop `erf`/`sin`/`cos` yang TIDAK ADA hubungannya dengan WGSL/arena
- * apa pun. Perilakunya RACY (bergantung timing, bukan deterministik): pada
- * satu konfigurasi uji, memecah loop dengan `await setImmediate()` di
- * antaranya MENGHILANGKAN crash; pada konfigurasi lain (device sudah live
- * lebih dulu, atau `device.lost` sudah pernah disubscribe) yielding di
- * tengah loop justru MEMPERBURUK peluang crash (mengekspos lebih banyak
- * titik saat penyebab asli -- diduga notifikasi `device.lost` yang
- * ter-race -- bisa menembak). Karena mitigasi apa pun yang dicoba di sisi
- * TypeScript TERBUKTI tidak reliable menutup celah ini (root cause ada di
- * internal Dawn/Node, di luar kendali modul ini), fungsi ini dibiarkan
- * SINKRON dan SEDERHANA, sesuai kontrak `buildArenas` brief -- retry di
- * level proses (bukan yield di dalam loop) adalah mitigasi yang benar-benar
- * terbukti, lihat laporan.
+ * Fungsi ini dulu membawa catatan yang menyatakan crash Node/Dawn di
+ * sekitarnya RACY dan tak bisa ditutup dari sisi TypeScript. Catatan itu
+ * SALAH, dan dikoreksi di sini karena ia mengarahkan orang menjauhi
+ * satu-satunya perbaikan yang benar-benar bekerja.
+ *
+ * Yang sebenarnya terjadi, terukur 100% deterministik di KEDUA arah: kerja
+ * float CPU yang panjang SETELAH `GPUDevice` hidup men-segfault proses pada
+ * titik sinkronisasi queue BERIKUTNYA (`onSubmittedWorkDone`/`mapAsync`), dan
+ * kerja float yang sama SEBELUM device diakuisisi tidak pernah men-segfault.
+ * Yang dibuktikan lewat probe terpisah, masing-masing menyingkirkan satu
+ * tersangka:
+ *
+ *   - BUKAN jumlah operasi: 9 juta `sin`/`cos` (~200 ms) dengan device hidup
+ *     lolos.
+ *   - BUKAN tekanan alokasi: mengalokasikan dan membuang 400 MB
+ *     `Float32Array` dengan device hidup lolos.
+ *   - BUKAN buffer arena: empat `GPUBuffer` berukuran arena yang sama persis
+ *     (106756/243/294912/0 float, termasuk arena 0-float) dibuat lewat
+ *     `mappedAtCreation` lalu dipakai di bind group, lolos.
+ *   - BUKAN shader dan BUKAN isi arena: satu submit TANPA compute pass sama
+ *     sekali tetap crash selama pra-hitung ini berjalan setelah device hidup.
+ *   - IYA urutannya: loop bersarang 192x192x81 yang IDENTIK crash 3/3 setelah
+ *     `acquireDevice()` dan lolos 3/3 sebelum `acquireDevice()`.
+ *
+ * Karena itu modul ini memisahkan pra-hitung dari unggahan:
+ * `precomputeArenaData()` murni CPU dan TIDAK menyentuh device, sementara
+ * `uploadArenas()` hanya membuat `GPUBuffer`. Pemanggil WAJIB menjalankan
+ * pra-hitung lebih dulu, lalu mengakuisisi device, lalu mengunggah. Tidak ada
+ * lagi fungsi gabungan `buildArenas()` -- ia sengaja DIHAPUS, bukan
+ * dideprekasi, supaya urutan yang crash tidak bisa ditulis ulang tanpa sengaja
+ * di Task 12-19.
+ *
+ * Ini juga bukan sekadar penghindaran crash: pra-hitung yang bebas-device bisa
+ * diuji tanpa GPU sama sekali, dan di browser bisa dipindah ke worker.
  */
 function makeHanatosRawResponse(
   hanatosSpectra: ArrayLike<number>,
@@ -471,7 +485,21 @@ function computeMallettRawMatrix(
   return matrix;
 }
 
-export function buildArenas(device: GPUDevice, bundle: AssetBundle, stockId: string): Arenas {
+/**
+ * Hasil pra-hitung arena: empat `ArenaBuilder` yang sudah terisi penuh tapi
+ * BELUM menyentuh GPU. Dibangun `precomputeArenaData()`, dikonsumsi
+ * `uploadArenas()`. Setiap builder hanya boleh di-`build()` sekali (dijaga
+ * `ArenaBuilder` sendiri lewat `#built`), jadi satu `ArenaPlan` juga hanya
+ * boleh diunggah sekali.
+ */
+export interface ArenaPlan {
+  static: ArenaBuilder;
+  stock: ArenaBuilder;
+  dynamic: ArenaBuilder;
+  frameState: ArenaBuilder;
+}
+
+export function precomputeArenaData(bundle: AssetBundle, stockId: string): ArenaPlan {
   const stock = bundle.stockEntry(stockId);
   const wavelengthCount = stock.wavelengthCount;
   const { width: hanatosWidth, height: hanatosHeight } = bundle.manifest.hanatos;
@@ -483,7 +511,6 @@ export function buildArenas(device: GPUDevice, bundle: AssetBundle, stockId: str
   staticBuilder.add('inputToSrgb', inputToSrgb.slice());
   staticBuilder.add('colorDecodeLuts', bundle.staticTable('colorDecodeLuts').slice());
   staticBuilder.add('colorTransferKinds', bundle.staticTable('colorTransferKinds').slice());
-  const staticArena: Arena = staticBuilder.build(device, 'static');
 
   // --- arena stock: berubah bersama stock yang dipilih ---
   const linearSensitivity = linearSensitivityFrom(bundle.stockField(stockId, 'logSensitivity')!);
@@ -503,7 +530,6 @@ export function buildArenas(device: GPUDevice, bundle: AssetBundle, stockId: str
       wavelengthCount,
     ),
   );
-  const stockArena: Arena = stockBuilder.build(device, 'stock');
 
   // --- arena dynamic: dihitung dari data stock (Task 11 Step 5) ---
   const wavelengths = bundle.stockField(stockId, 'wavelengths');
@@ -539,16 +565,29 @@ export function buildArenas(device: GPUDevice, bundle: AssetBundle, stockId: str
 
   const dynamicBuilder = new ArenaBuilder();
   dynamicBuilder.add('hanatosRawResponse', hanatosRawResponse);
-  const dynamicArena: Arena = dynamicBuilder.build(device, 'dynamic');
 
   // --- arena frameState: kosong untuk Task 11 (lih. dokumentasi modul) ---
   const frameStateBuilder = new ArenaBuilder();
-  const frameStateArena: Arena = frameStateBuilder.build(device, 'frameState');
 
   return {
-    static: staticArena,
-    stock: stockArena,
-    dynamic: dynamicArena,
-    frameState: frameStateArena,
+    static: staticBuilder,
+    stock: stockBuilder,
+    dynamic: dynamicBuilder,
+    frameState: frameStateBuilder,
+  };
+}
+
+/**
+ * Unggah rencana arena ke GPU. Satu-satunya bagian modul ini yang menyentuh
+ * `GPUDevice`, dan sengaja bebas aritmetika: semua matematika sudah selesai di
+ * `precomputeArenaData()`. Lihat CATATAN LINGKUNGAN di atas untuk kenapa
+ * pemisahan ini bukan kosmetik.
+ */
+export function uploadArenas(device: GPUDevice, plan: ArenaPlan): Arenas {
+  return {
+    static: plan.static.build(device, 'static'),
+    stock: plan.stock.build(device, 'stock'),
+    dynamic: plan.dynamic.build(device, 'dynamic'),
+    frameState: plan.frameState.build(device, 'frameState'),
   };
 }

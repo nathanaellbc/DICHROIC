@@ -76,10 +76,20 @@ export function assertGuaranteedStorageBufferLimit(
  * satunya jalur pengujian — bila itu pun tidak tersedia, error yang sebenarnya
  * dari impornya diteruskan sebagai alasan.
  */
+let dawnGpu: Promise<GPU> | undefined;
+
 export async function getNavigatorGpu(): Promise<GPU> {
   if (typeof navigator !== 'undefined' && navigator.gpu) return navigator.gpu;
-  const mod = (await import('webgpu')) as { create(flags: string[]): GPU };
-  return mod.create([]);
+  // Di-memo per proses SENGAJA. `navigator.gpu` di browser sudah singleton;
+  // `create()` milik paket `webgpu` tidak, dan memanggilnya dua kali dalam
+  // satu proses memasang state global Dawn dua kali. Itu terlihat sebagai
+  // worker vitest yang mati dengan "Worker exited unexpectedly" tanpa
+  // menyebut test mana pun -- vitest mendaur ulang proses worker antar berkas
+  // test, jadi berkas kedua yang mengakuisisi device di worker yang sama
+  // memanggil `create()` untuk kedua kalinya. Memoisasi ini membuat kedua sisi
+  // (browser dan Node) punya semantik yang sama: satu instance GPU per proses.
+  dawnGpu ??= import('webgpu').then((mod) => (mod as { create(flags: string[]): GPU }).create([]));
+  return dawnGpu;
 }
 
 /**

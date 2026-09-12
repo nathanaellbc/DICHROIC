@@ -1,8 +1,11 @@
 import { acquireDevice } from '../../src/engine/device';
 import { RenderGraph } from '../../src/engine/graph';
-import { buildArenas } from '../../src/host/spectral';
+import { precomputeArenaData, uploadArenas } from '../../src/host/spectral';
 import { loadAssets } from '../../src/profiles/load';
+import type { AssetBundle } from '../../src/profiles/load';
+import type { ArenaPlan } from '../../src/host/spectral';
 import type { Arenas } from '../../src/engine/arena';
+import type { EngineDevice } from '../../src/engine/device';
 import type { Stage } from '../../src/engine/graph';
 import type { TapName } from '../../src/engine/taps';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './compare';
@@ -20,10 +23,64 @@ export interface TapParityOptions {
   stockId?: string;
 }
 
+/**
+ * Sumber daya per-proses, di-memo SENGAJA, dan diurutkan SENGAJA.
+ *
+ * Urutannya WAJIB: muat aset, pra-hitung arena (murni CPU), BARU akuisisi
+ * device, baru unggah ke GPU. Ini bukan selera. Kerja float CPU yang panjang
+ * setelah `GPUDevice` hidup men-segfault proses Node pada titik sinkronisasi
+ * queue berikutnya, 100% deterministik: loop pra-hitung 192x192x81 yang sama
+ * crash 3/3 kalau device sudah hidup dan lolos 3/3 kalau belum. Rinciannya,
+ * termasuk lima tersangka yang tersingkir satu per satu (jumlah operasi,
+ * tekanan alokasi, buffer arena, shader, isi arena), ada di CATATAN LINGKUNGAN
+ * di `src/host/spectral.ts`.
+ *
+ * Karena itu pula `sharedArenas` di-kunci per stock: pra-hitung stock KEDUA
+ * akan berjalan setelah device hidup dan akan men-segfault. Task 12-19 yang
+ * butuh lebih dari satu stock harus mem-pra-hitung semuanya SEBELUM
+ * `acquireDevice()`, bukan menambah entri ke map ini di tengah jalan.
+ *
+ * Device dan aset juga di-memo karena `acquireDevice()` memanggil `create()`
+ * milik binding `webgpu` (Dawn), yang memasang state global di dalam proses;
+ * memanggilnya sekali per test menumpuk instance GPU tanpa alasan.
+ *
+ * Konsekuensi yang diterima: satu device dipakai bersama semua test parity,
+ * jadi device yang hilang di satu test akan meracuni sisanya. Itu jauh lebih
+ * baik daripada gerbang yang tidak pernah bisa dijalankan -- dan device yang
+ * hilang adalah kegagalan yang memang harus dilihat, bukan disembunyikan.
+ */
+let sharedEngine: Promise<EngineDevice> | undefined;
+let sharedBundle: Promise<AssetBundle> | undefined;
+const sharedArenas = new Map<string, Arenas>();
+const pendingPlans = new Map<string, ArenaPlan>();
+
+async function sharedResources(stockId: string) {
+  sharedBundle ??= loadAssets('public/data');
+  const bundle = await sharedBundle;
+
+  // Pra-hitung SEBELUM device diakuisisi -- lih. blok komentar di atas.
+  let plan = pendingPlans.get(stockId);
+  if (!plan && !sharedArenas.has(stockId)) {
+    plan = precomputeArenaData(bundle, stockId);
+    pendingPlans.set(stockId, plan);
+  }
+
+  sharedEngine ??= acquireDevice();
+  const engine = await sharedEngine;
+
+  let arenas = sharedArenas.get(stockId);
+  if (!arenas) {
+    arenas = uploadArenas(engine.device, plan!);
+    pendingPlans.delete(stockId);
+    sharedArenas.set(stockId, arenas);
+  }
+  return { engine, bundle, arenas };
+}
+
 export async function runTapParity(opts: TapParityOptions): Promise<void> {
-  const engine = await acquireDevice();
-  const bundle = await loadAssets('public/data');
-  const arenas = buildArenas(engine.device, bundle, opts.stockId ?? 'kodak_portra_400');
+  const { engine, bundle, arenas } = await sharedResources(
+    opts.stockId ?? 'kodak_portra_400',
+  );
 
   const graph = new RenderGraph(engine);
   for (const stage of opts.stages(engine.device, arenas)) graph.addStage(stage);
