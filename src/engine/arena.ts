@@ -37,30 +37,16 @@
  */
 
 /**
- * `GPUBufferUsage` adalah GLOBAL bawaan browser (dipasang mesin browser di
- * `globalThis`, sama seperti `navigator.gpu` yang `getNavigatorGpu()` di
- * `device.ts` tangani) -- tidak ada modul yang mengekspornya di sana. Di
- * Node/Vitest tidak ada browser yang memasangnya, dan satu-satunya sumber
- * yang tersedia untuk test (lihat `device.ts`) adalah paket `webgpu` (Dawn),
- * yang mengekspornya lewat `globals.GPUBufferUsage` alih-alih memasangnya
- * ke `globalThis` sendiri. Diresolusi SEKALI di sini lewat top-level await
- * saat modul dimuat -- bukan di dalam `build()` per panggilan -- karena
- * nilainya adalah namespace bitmask statis yang tidak pernah berubah antar
- * panggilan, dan `build()` sendiri harus tetap sinkron (kontrak
- * task-8-brief.md: `build(device, label): Arena`, bukan `Promise<Arena>`).
- * `typeof GPUBufferUsage` aman dipakai untuk deteksi ini walau
- * `GPUBufferUsage` tidak pernah dideklarasikan sebagai variabel JS nyata di
- * modul manapun -- itu bukan galat referensi, itu satu-satunya kegunaan
- * `typeof` pada identifier yang mungkin tidak terikat sama sekali.
+ * `GPUBufferUsage` adalah GLOBAL bawaan browser, tidak dipasang di
+ * Node/Vitest -- lihat dokumentasi lengkapnya di `webgpuGlobals.ts`, yang
+ * sejak Task 9 menjadi satu-satunya tempat resolusi ini terjadi (sebelumnya
+ * blok ini diduplikasi verbatim di sini, `graph.ts`, dan `graph.test.ts`).
+ * `build()` sendiri tetap sinkron (kontrak task-8-brief.md: `build(device,
+ * label): Arena`, bukan `Promise<Arena>`) -- resolusi di `webgpuGlobals.ts`
+ * terjadi sekali lewat top-level await saat modul itu dimuat, sebelum
+ * `build()` pernah dipanggil.
  */
-const gpuBufferUsage: typeof GPUBufferUsage =
-  typeof GPUBufferUsage !== 'undefined'
-    ? GPUBufferUsage
-    : (
-        (await import('webgpu')) as unknown as {
-          globals: { GPUBufferUsage: typeof GPUBufferUsage };
-        }
-      ).globals.GPUBufferUsage;
+import { gpuBufferUsage } from './webgpuGlobals';
 
 /** Satu entri tabel yang dipetakan ke dalam sebuah arena. */
 export interface ArenaEntry {

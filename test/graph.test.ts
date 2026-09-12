@@ -6,20 +6,7 @@ import { createMaterializeActiveRegionStage } from '../src/engine/stages/materia
 import { Tap } from '../src/engine/taps';
 import type { TapName } from '../src/engine/taps';
 import type { CoreParams } from '../src/engine/params';
-
-/**
- * `GPUBufferUsage` tidak dipasang di Node/Vitest (lih. komentar `arena.ts`
- * dan `graph.ts`) — dibutuhkan di sini untuk membangun tahap uji yang tidak
- * termasuk kode produksi (increment/probe di bawah).
- */
-const gpuBufferUsage: typeof GPUBufferUsage =
-  typeof GPUBufferUsage !== 'undefined'
-    ? GPUBufferUsage
-    : (
-        (await import('webgpu')) as unknown as {
-          globals: { GPUBufferUsage: typeof GPUBufferUsage };
-        }
-      ).globals.GPUBufferUsage;
+import { gpuBufferUsage } from '../src/engine/webgpuGlobals';
 
 function paramsFor(width: number, height: number): CoreParams {
   return paramsForRegion(width, height, 0, 0, width, height);
@@ -340,6 +327,114 @@ describe('RenderGraph', () => {
     for (let i = 0; i < input.length; i += 1) {
       expect(output[i]!, `elemen ${i}`).toBeCloseTo(input[i]!, 6);
     }
+    graph.dispose();
+  });
+
+  it('Penjaga 2 mencegah row-wrap: activeOrigin+activeWidth > width TIDAK beraliasing ke piksel baris berikutnya', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+
+    // Buffer 6x4 (24 piksel). Region aktif: origin (4,0), lebar 3, tinggi 1 —
+    // activeOriginX + activeWidth = 4+3 = 7 > width (6). Lokal x=2 menghasilkan
+    // absoluteX=6, yang TIDAK melampaui TOTAL buffer (index linear 6 = piksel
+    // (0,1), valid dalam 24 piksel) — ini BUKAN kasus out-of-bounds genuinely
+    // di luar buffer (implementation-defined, tidak dites di sini). Ini
+    // row-wrap: tanpa Penjaga 2, thread itu menghitung index = 0*6+6 = 6 dan
+    // menulis dst[6] = src[6], memberi piksel (0,1) NILAI ASLINYA SENDIRI —
+    // walau piksel itu sama sekali bukan bagian region aktif dan seharusnya
+    // tetap nol (zero-initialized, tak tersentuh). Ini deterministik dan
+    // sama di semua backend (BUKAN "menyalin-ulang nilai yang tetap benar" —
+    // piksel (0,1) tidak pernah seharusnya disalin sama sekali), berbeda
+    // dari alasan yang laporan Task 9 sebelumnya salah-generalisasi ke
+    // kasus ini juga.
+    const width = 6;
+    const height = 4;
+    const activeOriginX = 4;
+    const activeOriginY = 0;
+    const activeWidth = 3;
+    const activeHeight = 1;
+    const params = paramsForRegion(
+      width,
+      height,
+      activeOriginX,
+      activeOriginY,
+      activeWidth,
+      activeHeight,
+    );
+
+    const input = new Float32Array(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixelIndex = y * width + x;
+        for (let c = 0; c < 4; c += 1) input[pixelIndex * 4 + c] = pixelIndex + 1;
+      }
+    }
+
+    const output = await graph.run(input, params, Tap.RGB_IN);
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const pixelIndex = y * width + x;
+        // Hanya (4,0) dan (5,0) benar-benar di dalam region DAN di dalam
+        // buffer — (6,0) yang diminta local x=2 tidak ada secara fisik.
+        const insideActiveRegion =
+          x >= activeOriginX &&
+          x < Math.min(activeOriginX + activeWidth, width) &&
+          y >= activeOriginY &&
+          y < activeOriginY + activeHeight;
+        for (let c = 0; c < 4; c += 1) {
+          const value = output[pixelIndex * 4 + c]!;
+          if (insideActiveRegion) {
+            expect(value, `piksel (${x},${y}) komponen ${c}, DI DALAM region`).toBeCloseTo(
+              pixelIndex + 1,
+              6,
+            );
+          } else {
+            // Termasuk piksel (0,1) [indeks linear 6] -- target row-wrap
+            // yang Penjaga 2 harus cegah. Kalau nilainya bukan nol di sini,
+            // Penjaga 2 tidak bekerja dan test ini memerah.
+            expect(value, `piksel (${x},${y}) komponen ${c}, DI LUAR region (row-wrap)`).toBe(0);
+          }
+        }
+      }
+    }
+    graph.dispose();
+  });
+
+  it('run() setelah dispose() melempar galat yang menyebut solusinya, bukan diam-diam membangun ulang pool dari kosong', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+
+    const params = paramsFor(2, 2);
+    const input = new Float32Array(2 * 2 * 4).fill(0.25);
+
+    // Sekali sebelum dispose() harus lancar seperti biasa.
+    await expect(graph.run(input, params, Tap.RGB_IN)).resolves.toHaveLength(input.length);
+
+    graph.dispose();
+
+    // Tanpa pemeriksaan ini, run() setelah dispose() TIDAK gagal, TIDAK
+    // merusak apa pun, dan menghasilkan piksel yang benar -- sambil diam-diam
+    // membangun ulang pool scratch dari Map kosong setiap panggilan. Itu
+    // persis mode kegagalan multiplikasi VRAM yang pool itu ada untuk
+    // mencegah, dan tidak akan terlihat sama sekali karena keluarannya benar.
+    await expect(graph.run(input, params, Tap.RGB_IN)).rejects.toThrow(/dispose/);
+    await expect(graph.run(input, params, Tap.RGB_IN)).rejects.toThrow(/RenderGraph baru/);
+  });
+
+  it('melempar galat sinkron saat ukuran input tidak cocok dengan params, bukan peringatan validasi WebGPU asinkron', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+
+    // paramsFor(4, 2) mengimplikasikan 4*2*4 = 32 float = 128 byte.
+    const params = paramsFor(4, 2);
+    const wrongSizedInput = new Float32Array(16); // 64 byte, bukan 128.
+
+    await expect(graph.run(wrongSizedInput, params, Tap.RGB_IN)).rejects.toThrow(/128/);
+    await expect(graph.run(wrongSizedInput, params, Tap.RGB_IN)).rejects.toThrow(/64/);
     graph.dispose();
   });
 });

@@ -23,31 +23,7 @@ import { CORE_PARAMS_BYTES, writeCoreParams } from './params';
 import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
 import type { TapName } from './taps';
-
-/**
- * `GPUBufferUsage`/`GPUMapMode` adalah GLOBAL bawaan browser, tidak dipasang
- * di Node/Vitest. Mengikuti pola yang sudah ditetapkan `arena.ts` dan
- * `device.ts` (lih. komentar panjang `arena.ts` tentang ini): resolusi SEKALI
- * lewat top-level await saat modul dimuat, turun ke `globals.*` paket
- * `webgpu` (Dawn) bila `globalThis` tidak memilikinya.
- */
-const gpuBufferUsage: typeof GPUBufferUsage =
-  typeof GPUBufferUsage !== 'undefined'
-    ? GPUBufferUsage
-    : (
-        (await import('webgpu')) as unknown as {
-          globals: { GPUBufferUsage: typeof GPUBufferUsage };
-        }
-      ).globals.GPUBufferUsage;
-
-const gpuMapMode: typeof GPUMapMode =
-  typeof GPUMapMode !== 'undefined'
-    ? GPUMapMode
-    : (
-        (await import('webgpu')) as unknown as {
-          globals: { GPUMapMode: typeof GPUMapMode };
-        }
-      ).globals.GPUMapMode;
+import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
 
 export interface StageContext {
   device: GPUDevice;
@@ -122,6 +98,29 @@ export class RenderGraph {
     params: CoreParams,
     collect: TapName,
   ): Promise<Float32Array> {
+    if (this.#disposed) {
+      throw new Error(
+        'RenderGraph ini sudah di-dispose() -- pool scratch-nya sudah dihancurkan. ' +
+          'Memanggil run() lagi akan diam-diam membangun ulang pool dari kosong ' +
+          '(kehilangan seluruh reuse antar-tile yang pool itu ada untuk menjaga) ' +
+          'sambil tetap menghasilkan piksel yang benar, sehingga tidak akan ' +
+          'terlihat sebagai bug sama sekali. Buat RenderGraph baru alih-alih ' +
+          'memakai ulang instance yang sudah di-dispose().',
+      );
+    }
+
+    const expectedFloats = params.width * params.height * 4;
+    const expectedBytes = expectedFloats * Float32Array.BYTES_PER_ELEMENT;
+    if (input.byteLength !== expectedBytes) {
+      throw new Error(
+        `Ukuran input tidak cocok dengan params: params.width (${params.width}) x ` +
+          `params.height (${params.height}) x 4 komponen x 4 byte = ${expectedBytes} byte ` +
+          `diharapkan, tapi input.byteLength adalah ${input.byteLength} byte. Tanpa ` +
+          'pemeriksaan ini, ketidakcocokan muncul sebagai peringatan validasi WebGPU ' +
+          'asinkron yang terlepas dari panggilan run() yang menyebabkannya.',
+      );
+    }
+
     const stopAt = findLastStageIndex(this.stages, collect);
     if (stopAt === -1) {
       const registered =
