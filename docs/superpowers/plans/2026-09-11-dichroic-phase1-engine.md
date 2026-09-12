@@ -1590,6 +1590,12 @@ git commit -m "feat(spektra): pack read-only tables into arena buffers under the
 
 ## Task 9: Graf, ping-pong, dan tahap FormatConvert
 
+> **Kendala lingkungan yang terukur di Task 8, berlaku untuk Task 9 sampai 19.**
+>
+> Binding `webgpu` (Dawn) **menjatuhkan proses worker Vitest** pada alokasi buffer berukuran ratusan megabyte (`Worker exited unexpectedly`). Task 8 mereproduksinya tiga kali, termasuk dengan total yang sama dipecah menjadi 129 alokasi kecil, sehingga ini bukan batas satu-alokasi melainkan ketidakstabilan binding di bawah model forked-worker Vitest. Logika yang sama berjalan mulus lewat `vite-node` standalone, jadi bukan cacat kode kita.
+>
+> Konsekuensinya untuk tugas-tugas berikutnya: **jaga gambar uji tetap kecil.** Fixture Task 3 berukuran 32×16 sampai 64×64 dan aman. Jangan mencoba render full-frame atau gambar berukuran produksi di dalam Vitest — kalau suatu tahap perlu diuji pada ukuran besar, jalankan di luar suite lewat skrip terpisah dan laporkan hasilnya, jangan jadikan ia bagian dari `npm test`.
+
 **Files:**
 - Create: `spektra/src/engine/graph.ts`, `spektra/src/engine/stages/formatConvert.ts`, `spektra/src/shaders/formatConvert.wgsl`
 - Test: `spektra/test/graph.test.ts`
