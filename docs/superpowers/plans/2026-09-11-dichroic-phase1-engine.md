@@ -15,7 +15,8 @@
 Setiap tugas di bawah ini secara implisit tunduk pada seluruh butir berikut.
 
 - **Kualitas gambar di atas performa.** Kapan pun ada dua opsi dan salah satunya menghasilkan gambar lebih baik, ambil yang lebih baik. Ukuran unduhan, VRAM, dan waktu render boleh dikorbankan.
-- **"Lebih baik" berarti lebih setia pada referensi**, bukan lebih halus secara teori. Ketika referensi memakai aproksimasi (blur piramida di Diffusion), tiru persis. Menyimpang membatalkan verifikasi.
+- **"Lebih baik" berarti lebih setia pada REFERENSI PYTHON**, bukan lebih halus secara teori DAN BUKAN lebih mirip shader OFX. Ketika Python memakai aproksimasi, tiru aproksimasinya persis — itu yang terjadi di Halation, di mana Python sendiri memanggil `fast_exponential_filter` yang men-dispatch ekor eksponensial ke campuran Gaussian. Ketika Python TIDAK memakai aproksimasi, jangan memperkenalkan satu pun, sekalipun shader OFX memakainya.
+  > **KOREKSI (Task 15).** Butir ini dulu berbunyi "(blur piramida di Diffusion), tiru persis". Itu SALAH dan diangkat oleh implementer Task 15, benar: `apply_diffusion_filter_um` (`model/diffusion.py:585-640`) melakukan `scipy.signal.fftconvolve` EKSAK per kanal terhadap PSF multi-eksponensial analitik dari `diffusion_filter_psf`, dengan padding `reflect` dan radius `ceil(max(8*lambda_max*scale/pixel_size_um, 5))`. Tidak ada piramida di sisi Python. Klaim "piramida" digeneralisasi dari Halation tanpa diverifikasi ulang — kesalahan yang sama bentuknya dengan mengasumsikan literal C++ hulu adalah oracle (spec §6.3.1), hanya pada sumbu lain: **hulu punya DUA implementasi dan yang mengikat kita adalah Python.**
 - **f32 di seluruh rantai.** Fitur WebGPU `shader-f16` tidak dipakai — ia menciptakan dua jalur numerik berbeda tergantung perangkat. Transport f16 diperbolehkan hanya untuk LUT spektral, yang sumbernya memang f16, dan diekspansi ke f32 saat muat.
 - **WebGPU saja.** Tidak ada fallback WebGL2. Perangkat tanpa WebGPU mendapat pesan jelas, bukan jalur render kedua.
 - **Maksimum 8 storage buffer per stage.** Itu jaminan WebGPU. Jangan menegosiasikan limit adapter yang lebih tinggi; pak tabel read-only ke dalam arena.
@@ -2619,7 +2620,18 @@ cd spektra && npm test -- parity/diffusion
 
 Shader ini adalah dispatcher operasi: `kOpDownsample` (7), `kOpDownsampleBlurX` (8), `kOpDownsampleBlurY` (9), `kOpDownsampleUpsampleAccumulate` (10), dan varian grup (11–13). Tiap operasi adalah dispatch terpisah dengan nilai op berbeda di `CoreParams`.
 
-**Pertahankan jalur piramida turun-naik apa adanya.** Ini aproksimasi hulu untuk radius lebar; menaikkannya ke full-res akan mengubah look dan membatalkan verifikasi. Lihat Global Constraints.
+**JANGAN port jalur piramida turun-naik OFX.** Itu aproksimasi milik shader GPU OFX, BUKAN milik Python, dan oracle kita Python. Implementer Task 15 mengukurnya: surrogate campuran-Gaussian yang setia pada OFX meleset dari Python sebesar 7.38e-4 (hard_edge) sampai 1.273e-1 (impulse_highlight) pada `glimmerglass` di kekuatan TERLEMAH 0.125 — 70x sampai 12.700x di atas ambang, dan keluarga yang lebih berat 5x-1000x lebih buruk lagi. Rasio maxAbs/p_s konstan per keluarga, jadi tidak ada pilihan `strength` yang memisahkan "efeknya terlihat" dari "lulus gerbang".
+
+**Yang di-port adalah konvolusi hingga yang EKSAK.** `fftconvolve` dengan kernel hingga setara konvolusi spasial langsung dengan kernel yang sama, jadi ini bisa direproduksi tepat di GPU: pra-hitung PSF per-kanal di host (persis seperti `diffusion_filter_psf`), lalu konvolusi 2D langsung di shader dengan padding `reflect`. Ukurannya sama sekali tidak menakutkan pada ukuran fixture — diukur pada 35 mm / lebar 64 px (`pixel_size_um` 546,88):
+
+| Keluarga | lambda_max (um) | radius (px) | kernel |
+|---|---|---|---|
+| `glimmerglass` | 650 | 10 | 21x21 |
+| `black_pro_mist` | 950 | 14 | 29x29 |
+| `pro_mist` | 1625 | 24 | 49x49 |
+| `cinebloom` | 2500 | 31 | 63x63 |
+
+Radius dibatasi `min(image.shape[:2])//2 - 1` oleh Python sendiri, jadi ia tidak bisa meledak di luar kendali. PSF-nya terbukti simetris persis (`psf == psf[::-1,::-1]`, rtol=atol=0) untuk keempat keluarga, jadi konvolusi-versus-korelasi tidak jadi masalah — tapi verifikasi itu sendiri, jangan percaya kalimat ini. Untuk gambar full-res nanti, FFT di GPU boleh dipertimbangkan sebagai OPTIMASI yang harus diverifikasi terhadap jalur langsung ini; bukan sebagai pengganti yang tidak terverifikasi.
 
 - [ ] **Step 5: Tulis diffusion.ts dan jalankan test**
 
