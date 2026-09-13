@@ -26,6 +26,19 @@ Setiap tugas di bawah ini secara implisit tunduk pada seluruh butir berikut.
   - Gerbang **per-piksel** (Task 11, 12, 13, 17, 18) diukur terhadap keluarga **`_lut`** (`debug.lut_mode = True`): efek spasial, stokastik, auto-exposure, `boost_ev`, dan koreksi scanner semuanya mati.
   - Gerbang **spasial** (Task 14 Halation, Task 15 Diffusion) dan **stokastik** (Task 16 Grain) diukur di tapnya sendiri terhadap keluarga yang efeknya HIDUP.
   - Tidak ada yang dilewatkan: halation tetap diverifikasi, hanya tidak di gerbang yang tidak mengimplementasikannya. `lut_mode` juga bukan konsesi — ia regime yang ekspor `.cube` DICHROIC kapalkan.
+- **Peta tap → tahap di bawah `lut_mode`** (diaudit sekali, setelah Task 12 terhalang oleh hal yang sudah tertulis di spec §6.3.2 tapi tidak saya terapkan). Setiap gerbang di bawah ini HANYA boleh dipasang setelah SEMUA tahap di kolom kanannya ada:
+
+  | Tap | Tahap yang dibutuhkan | Catatan |
+  |---|---|---|
+  | `rgb_in` | Task 9 materializeActiveRegion | ✅ lulus |
+  | `log_e_film` | Task 11 FilmExposure | ✅ lulus 3.3e-7..5.7e-7. `boost_ev`, diffusion, lens blur, halation SEMUA mati di `lut_mode`, jadi satu tahap cukup |
+  | `cmy_film` | Task 12 CurveDevelop **+ Task 13 Dir** | `develop()` = normalisasi + `develop_simple` + `apply_density_correction_dir_couplers` + `apply_grain`. Grain mati di `lut_mode`; DIR **TIDAK** — `lut_mode` hanya menolkan `diffusion_size_um`, sementara `DirCouplersParams.active` tetap `True` (params_schema.py:131). Gerbangnya milik Task 13, bukan Task 12 |
+  | `log_e_print` | Task 17 PrintScan (paruh expose) | `print_exposure=1.0` dan diffusion enlarger mati di `lut_mode`, jadi satu tahap cukup |
+  | `cmy_print` | Task 17 PrintScan (paruh develop) | `develop_print_morph`, per-piksel |
+  | `rgb_out` | Task 18 ScannerPost | glare (stokastik), lens blur, unsharp SEMUA mati di `lut_mode`, jadi satu tahap cukup |
+
+  Halation (Task 14), Diffusion (Task 15) dan Grain (Task 16) TIDAK punya tap sendiri di daftar kanonis — mereka diverifikasi terhadap keluarga fixture yang efeknya HIDUP di tap tetangganya, bukan di gerbang `lut_mode`.
+- **Sumber data profil: repo PYTHON, bukan repo OFX** (ditemukan Task 12). Kedua repo hulu membundel `Resources/data/profiles/{stock}.json` masing-masing, dan `density_curves`/`density_curves_layers` di dalamnya BERBEDA pada ke-28 stok — 0.034 (kodak_ektachrome_100) sampai 0.597 (kodak_2393) max abs, tiga sampai lima orde di atas ambang 1e-5. `log_exposure` identik persis (selisih 0 di ke-28 stok), begitu pula setiap field spektral/matriks lain yang baker ini pancarkan. Fixture kita datang dari `SimulationPipeline` repo PY, jadi kurva PY yang harus dibakar; kalau tidak, setiap gerbang `cmy_film`/`cmy_print` (Task 12-18) gagal *by construction* sebaik apa pun shadernya ditransliterasi. Ini contoh kedua dari aturan spec §6.3.1 setelah `inputToReferenceXyz`/CAT02 — dan kedua kalinya pemeriksaan terhadap literal C++ hulu justru yang MENYEMBUNYIKANNYA.
 - **Kerja CPU berat WAJIB selesai sebelum `acquireDevice()`** (dikoreksi di 550e39d; catatan "racy" sebelumnya SALAH). Kerja float CPU panjang setelah `GPUDevice` hidup men-segfault proses Node di titik sinkronisasi queue berikutnya, 100% deterministik. `buildArenas()` sudah DIHAPUS dan digantikan `precomputeArenaData()` (murni CPU) + `uploadArenas()` (hanya buffer). Urutan: muat aset → pra-hitung → akuisisi device → unggah. Lih. CATATAN LINGKUNGAN di `src/host/spectral.ts`.
 - **Cakupan stock:** 28 profil — 20 film, 8 kertas/print film. `Resources/data/profiles/archive/` di luar cakupan.
 - **TypeScript strict.** `strict: true`, `noUncheckedIndexedAccess: true`. Tidak ada `any` di kode produksi.
