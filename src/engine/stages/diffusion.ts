@@ -65,18 +65,28 @@ import source from '../../shaders/diffusion.wgsl?raw';
  * `device.createShaderModule` -- bukan cabang runtime, karena WebGPU tidak
  * mengizinkan memilih offset arena secara dinamis lebih murah daripada itu.
  *
- * SITE 'print' TIDAK DIGERBANGI. `PrintingStage.expose()` Python memanggil
- * `apply_diffusion_filter_um` yang SAMA (`printing.py:56-60`), TEPAT
- * sebelum `log10`-nya sendiri -- tapi masukannya (`raw`) datang dari
- * `spectral_compute_enlarger`, mesin integrasi spektral penuh yang belum
- * ada portnya (Task 17). Tanpa itu, tidak ada cara membangun fixture
- * `log_e_print` yang BENAR untuk membandingkan tahap ini -- merangkai
- * sesuatu di depannya hanya untuk membuat sebuah test "hijau" adalah
- * PERSIS "rantai parsial" yang brief larang eksplisit. Kode di bawah untuk
- * `site: 'print'` karena itu TIDAK PERNAH DIJALANKAN test parity manapun
- * saat ini; ia ada supaya bentuknya lengkap begitu Task 17 mendarat, dan
- * dipertahankan struktural sama dengan 'camera' (bukan disederhanakan)
- * justru supaya perbedaannya nanti hanya di data arena, bukan di kode.
+ * SITE 'print' -- DIGERBANGI Task 17 (debt yang dicatat "Selesai Fase 1"
+ * pada rencana; lih. `test/parity/diffusion.test.ts`, describe kedua). Task
+ * 15 sengaja meninggalkan cabang ini TIDAK PERNAH DIJALANKAN test parity
+ * manapun karena `PrintingStage.expose()` Python memanggil
+ * `apply_diffusion_filter_um` yang SAMA (`printing.py:56-60`) atas masukan
+ * (`raw`) dari `spectral_compute_enlarger`, mesin integrasi spektral penuh
+ * yang belum ada portnya saat itu -- merangkai sesuatu di depannya hanya
+ * untuk membuat sebuah test "hijau" akan PERSIS "rantai parsial" yang
+ * brief larang eksplisit. Task 17 menambahkan port `spectral_compute_
+ * enlarger` itu (`printScan.wgsl`'s `expose` entry) DAN fixture baru
+ * (`hard_edge_diffusion_print`/`impulse_highlight_diffusion_print`,
+ * `enlarger.diffusion_filter.active=True`, `tools/gen_reference.py::
+ * _build_params_diffusion_print`), jadi cabang ini sekarang punya
+ * pembanding yang sah.
+ *
+ * SATU PERBEDAAN PERILAKU dari 'camera' (selain nama offset arena):
+ * `__DIFFUSION_FINAL_LOG__` disubstitusi `true` untuk 'print' (`camera`
+ * tetap `false`, TIDAK BERUBAH dari Task 15) -- lih. komentar
+ * `diffusion.wgsl` untuk alasan penuh (tidak ada tahap lain setelah
+ * diffusion(print) sebelum tap `log_e_print`, jadi shader ini sendiri
+ * yang menutup `log10` tunggal `PrintingStage.expose()`, PERSIS pola
+ * `slot0==1u` `filmExposure.wgsl`/`printScan.wgsl`).
  */
 export function createDiffusionStage(
   device: GPUDevice,
@@ -90,7 +100,13 @@ export function createDiffusionStage(
       '__DIFFUSION_SCATTER_FRACTION_OFFSET__',
       `ARENA_DIFFUSIONSCATTERFRACTION${siteSuffix.toUpperCase()}_OFFSET`,
     )
-    .replaceAll('__DIFFUSION_PSF_OFFSET__', `ARENA_DIFFUSIONPSF${siteSuffix.toUpperCase()}_OFFSET`);
+    .replaceAll('__DIFFUSION_PSF_OFFSET__', `ARENA_DIFFUSIONPSF${siteSuffix.toUpperCase()}_OFFSET`)
+    // Task 17 debt: 'camera' tetap `false` (halation.wgsl yang men-log10-kan,
+    // TIDAK berubah dari Task 15). 'print' menjadi `true` -- tidak ada tahap
+    // lain setelah diffusion(print) sebelum tap `log_e_print`, jadi shader
+    // ini sendiri yang harus menutup `log10` tunggal `PrintingStage.expose()`.
+    // Lih. komentar `diffusion.wgsl` untuk rasional penuh.
+    .replaceAll('__DIFFUSION_FINAL_LOG__', site === 'print' ? 'true' : 'false');
 
   const module = device.createShaderModule({
     label: `diffusion:${site}`,

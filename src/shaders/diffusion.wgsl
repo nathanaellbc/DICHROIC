@@ -75,6 +75,31 @@
 @group(0) @binding(2) var<uniform> params: CoreParams;
 @group(0) @binding(3) var<storage, read> dynamicArena: array<f32>;
 
+// Task 17 debt (gerbang enlarger diffusion): `diffusion.ts` mensubstitusi
+// `__DIFFUSION_FINAL_LOG__` menjadi `true` untuk `site: 'print'` dan
+// `false` untuk `site: 'camera'` -- SATU-SATUNYA perbedaan perilaku antar
+// situs selain nama offset arena (lih. komentar berkas di atas). Kamera
+// TETAP `false`: `halation.wgsl`-lah yang men-`log10`-kan hasil gabungan
+// scatter+diffusion sebagai dispatch TERAKHIRNYA (`kOpBounceResolveLog`),
+// PERSIS seperti sebelumnya (Task 15) -- tidak berubah sama sekali. Print
+// menjadi `true`: TIDAK ADA tahap lain setelah diffusion(print) di rantai
+// `PrintingStage.expose()` -- diffusion inilah dispatch spasial TERAKHIR
+// sebelum tap `log_e_print`, jadi ia yang harus menutup `log10` tunggal
+// yang Python jalankan di akhir `expose()`, PERSIS pola `slot0==1u`
+// `filmExposure.wgsl`/`printScan.wgsl` (raw linear disimpan justru supaya
+// SATU tahap hilir bisa menyelesaikan log10-nya sendiri) yang instruksi
+// tugas ini secara eksplisit minta dipakai ulang, bukan diciptakan
+// mekanisme kedua.
+const kApplyFinalLog: bool = __DIFFUSION_FINAL_LOG__;
+const kLog10E: f32 = 0.4342944819032518;
+
+fn resolveOutput(linear: vec3<f32>, alpha: f32) -> vec4<f32> {
+  if (kApplyFinalLog) {
+    return vec4<f32>(log(max(linear, vec3<f32>(0.0)) + vec3<f32>(1.0e-10)) * kLog10E, alpha);
+  }
+  return vec4<f32>(linear, alpha);
+}
+
 // Port of numpy's `pad(mode='reflect')` index mapping (reflect WITHOUT
 // repeating the edge sample -- index -1 maps to index 1, not index 0).
 // Verified against Python's actual padded+fftconvolve+crop output (not
@@ -127,7 +152,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // `precomputeDiffusionFilter` (`diffusionFilter.ts`), so a single guard
   // here covers all of them -- identity passthrough.
   if (radius <= 0 || scatterFraction <= 0.0) {
-    dstPixels[index] = raw;
+    dstPixels[index] = resolveOutput(raw.rgb, raw.a);
     return;
   }
 
@@ -151,5 +176,5 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   // E_out = (1 - p_s) * E_in + p_s * (K_s * E_in) -- Python's convex
   // combination, `apply_diffusion_filter_um`'s final line.
   let blended = (1.0 - scatterFraction) * raw.rgb + scatterFraction * acc;
-  dstPixels[index] = vec4<f32>(blended, raw.a);
+  dstPixels[index] = resolveOutput(blended, raw.a);
 }

@@ -188,22 +188,118 @@ def _build_params_diffusion_camera():
     return params
 
 
-def _generate_diffusion_camera_case(image: np.ndarray, case_dir: Path, name: str) -> None:
-    """Keluarga fixture KEEMPAT, terpisah dari <case>/<case>_stochastic/
-    <case>_lut yang _generate_case() bangkitkan -- `name` di sini SUDAH
-    memuat akhiran `_diffusion_camera` (mis. `hard_edge_diffusion_camera`),
-    jadi ia adalah grup kasus BARU dengan `input.f32` miliknya sendiri,
-    bukan varian dari grup `hard_edge` yang sudah ada. TIDAK menyentuh
+def _build_params_diffusion_print():
+    """Task 17 debt: keluarga fixture BARU untuk gerbang spasial `log_e_print`
+    Diffusion di sisi ENLARGER -- `enlarger.diffusion_filter.active` default
+    `False` (`params_schema.py:72`'s `DiffusionFilterParams` default_factory,
+    SAMA dataclass dengan sisi kamera baris 57) dan hanya pernah DIMATIKAN
+    oleh `params_builder.py`, baik lewat `deactivate_spatial_effects` (yang
+    `lut_mode` mempromosikan, baris 135) MAUPUN oleh `_lut` family manapun --
+    jadi tidak ada fixture yang sudah ada (termasuk `<case>` biasa) yang
+    punya diffusion enlarger hidup. Task 15 membuktikan pola yang identik
+    untuk sisi kamera (`_build_params_diffusion_camera` di atas) dan gerbang
+    ini memakai keputusan yang SAMA persis, hanya menukar `camera.` menjadi
+    `enlarger.`.
+
+    Family/strength: DEFAULT `DiffusionFilterParams` Python APA ADANYA
+    (`filter_family="black_pro_mist"`, `strength=0.5`) -- sama seperti sisi
+    kamera, dan untuk alasan yang sama (defaultnya sendiri sudah substansial,
+    tidak ada dasar memilih nilai lain hanya untuk membuktikan port ini
+    benar). `pixel_size_um` yang `apply_diffusion_filter_um` pakai untuk
+    KEDUA situs datang dari `ResizingService` yang SAMA
+    (`self._resize_service.pixel_size_um`, `resize.py:18`:
+    `film_format_mm*1000/max(image.shape)`) -- BUKAN dihitung ulang per
+    situs -- jadi untuk citra 64px/35mm yang sama (`hard_edge`/
+    `impulse_highlight`) nilainya PERSIS 546.875, identik dengan konstanta
+    kamera yang sudah dibakukan `src/host/spectral.ts`
+    (`CAMERA_DIFFUSION_PIXEL_SIZE_UM`).
+
+    DUA PENYIMPANGAN TAMBAHAN dari `_build_params_diffusion_camera`, KEDUANYA
+    DIBUTUHKAN supaya gerbang ini mengisolasi HANYA efek diffusion enlarger,
+    bukan ikut menyeret dua permukaan lain yang belum (dan tidak perlu)
+    diverifikasi Task 17:
+
+    1. `enlarger.print_exposure_compensation = False` -- default Python-nya
+       `True` (`params_schema.py:64`), TIDAK disentuh
+       `deactivate_stochastic_effects`. Kalau dibiarkan default,
+       `_compute_exposure_factor_midgray` (`printing.py:101-113`) mengambil
+       cabang `factor_midgray_comp` (butuh `density_spectral_midgray_comp`,
+       tabel yang TIDAK PERNAH dibakukan Task 17 -- `addPrintScanDynamicData`
+       di `src/host/spectral.ts` hanya mengimplementasikan cabang
+       non-`_comp`, DIBUKTIKAN BENAR hanya untuk `_lut` family, lih.
+       docstring-nya). Memaksa `False` di sini (PERSIS nilai yang
+       `lut_mode` juga paksakan, `params_builder.py:108`) menjaga cabang
+       exposure-factor yang SAMA dengan yang sudah diverifikasi ~1e-7,
+       supaya galat gerbang ini murni dari diffusion, bukan dari cabang
+       exposure-compensation kedua yang belum pernah diuji.
+    2. `film_render.dir_couplers.diffusion_size_um = 0` -- default `20.0`
+       (SPASIAL, aktif untuk keluarga manapun yang tidak mempromosikan
+       `deactivate_spatial_effects`). `dir.wgsl` (Task 13) HANYA
+       mengimplementasikan cabang NON-spasial (`dir_couplers.diffusion_size_um
+       =0`) -- residual dari cabang spasial yang diabaikan itu TERBUKTI
+       BESAR persis untuk `hard_edge`/`impulse_highlight` (task-16-report.md:
+       radial_rel 0.0097/1.3128, jauh di atas ambang statistik grain 5%,
+       apalagi ambang per-piksel 1e-5 gerbang ini). `cmy_film` adalah
+       MASUKAN `PrintingStage.expose()` -- membiarkan residual DIR-spasial
+       itu mengalir ke `cmy_film` akan mencemari pengukuran diffusion print
+       dengan galat yang sudah diketahui dan TIDAK RELEVAN dengan gerbang
+       ini. Dinolkan LANGSUNG di sini (bukan lewat `deactivate_spatial_
+       effects`, yang JUGA akan mematikan `enlarger.diffusion_filter.active`
+       yang justru ingin diuji) -- pola yang sama dengan bagaimana
+       `lut_mode` menonolkan field yang SAMA (`params_builder.py:120`),
+       hanya diterapkan berdiri sendiri di sini.
+    """
+    raw = init_params()
+    raw.debug.deactivate_stochastic_effects = True
+    raw.enlarger.diffusion_filter.active = True
+    raw.enlarger.print_exposure_compensation = False
+    raw.film_render.dir_couplers.diffusion_size_um = 0
+    params = digest_params(raw)
+    assert not params.print_render.glare.active, "glare harus mati di keluarga deterministik"
+    assert not params.film_render.grain.active, "grain harus mati di keluarga deterministik"
+    assert params.enlarger.diffusion_filter.active, "diffusion_filter enlarger harus hidup di keluarga ini"
+    assert params.enlarger.diffusion_filter.filter_family == "black_pro_mist"
+    assert params.enlarger.diffusion_filter.strength == 0.5
+    assert not params.camera.diffusion_filter.active, "diffusion_filter kamera harus TETAP mati di keluarga ini"
+    assert params.enlarger.print_exposure_compensation is False
+    assert params.enlarger.print_exposure == 1.0
+    assert not params.scanner.white_correction and not params.scanner.black_correction
+    assert params.film_render.dir_couplers.diffusion_size_um == 0
+    assert params.film_render.dir_couplers.active, "dir_couplers chemistry (non-spasial) harus TETAP hidup"
+    return params
+
+
+_DIFFUSION_SITE_PARAM_BUILDERS = {
+    "camera": _build_params_diffusion_camera,
+    "print": _build_params_diffusion_print,
+}
+
+
+def _generate_diffusion_site_case(image: np.ndarray, case_dir: Path, name: str, *, site: str) -> None:
+    """Keluarga fixture terpisah dari <case>/<case>_stochastic/<case>_lut
+    yang _generate_case() bangkitkan -- `name` di sini SUDAH memuat akhiran
+    `_diffusion_camera`/`_diffusion_print` (mis. `hard_edge_diffusion_print`),
+    jadi ia adalah grup kasus BARU dengan `input.f32` miliknya sendiri, bukan
+    varian dari grup `hard_edge` yang sudah ada. TIDAK menyentuh
     `hard_edge`/`hard_edge_stochastic`/`hard_edge_lut` sama sekali.
+
+    Diumumkan (Task 17 debt) dari `_generate_diffusion_camera_case` Task 15
+    yang sebelumnya hardcode site='camera' -- disatukan lewat parameter
+    `site` (dan `_DIFFUSION_SITE_PARAM_BUILDERS`) supaya kedua situs berbagi
+    SATU implementasi, bukan salinan kedua yang bisa menyimpang diam-diam.
+    `_generate_diffusion_camera_case` yang lama TETAP ADA sebagai alias
+    tipis di bawah supaya pemanggil existing (dan riwayat git) tidak perlu
+    berubah.
     """
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "input.f32").write_bytes(
         np.ascontiguousarray(image, dtype="<f4").tobytes()
     )
 
+    build_params = _DIFFUSION_SITE_PARAM_BUILDERS[site]
     written = []
     for tap in TAPS:
-        params = _build_params_diffusion_camera()
+        params = build_params()
         result = SimulationPipeline(params).process(image, collect=tap)
         arr = np.ascontiguousarray(result, dtype="<f4")
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
@@ -214,11 +310,16 @@ def _generate_diffusion_camera_case(image: np.ndarray, case_dir: Path, name: str
         "height": int(image.shape[0]),
         "width": int(image.shape[1]),
         "stochastic": False,
-        "diffusionSite": "camera",
+        "diffusionSite": site,
         "taps": written,
     }
     _write_json_lf(case_dir / "case.json", meta)
-    print(f"Wrote {case_dir} ({len(written)} taps, diffusion_site=camera)")
+    print(f"Wrote {case_dir} ({len(written)} taps, diffusion_site={site})")
+
+
+def _generate_diffusion_camera_case(image: np.ndarray, case_dir: Path, name: str) -> None:
+    """Alias tipis Task 15 asli -- lih. `_generate_diffusion_site_case`."""
+    _generate_diffusion_site_case(image, case_dir, name, site="camera")
 
 
 # Task 15 (resumed): keluarga fixture baru khusus gerbang Diffusion kamera.
@@ -232,6 +333,15 @@ def _generate_diffusion_camera_case(image: np.ndarray, case_dir: Path, name: str
 DIFFUSION_CAMERA_CASES = {
     "hard_edge_diffusion_camera": hard_edge,
     "impulse_highlight_diffusion_camera": impulse_highlight,
+}
+
+# Task 17 debt: keluarga fixture baru khusus gerbang Diffusion enlarger
+# (`log_e_print`) -- alasan pemilihan hard_edge/impulse_highlight SAMA
+# dengan sisi kamera di atas (operator point-spread, ramp tidak
+# menunjukkannya).
+DIFFUSION_PRINT_CASES = {
+    "hard_edge_diffusion_print": hard_edge,
+    "impulse_highlight_diffusion_print": impulse_highlight,
 }
 
 
@@ -316,6 +426,14 @@ def main() -> int:
              "--case loop above, and not regenerated by it.",
     )
     parser.add_argument(
+        "--diffusion-print-case", choices=sorted(DIFFUSION_PRINT_CASES), action="append",
+        help="Regenerate one (or more) Task 17 debt diffusion-print fixtures "
+             "(hard_edge_diffusion_print, impulse_highlight_diffusion_print). "
+             "A fifth, separate fixture family (own input.f32, "
+             "enlarger.diffusion_filter.active=True) -- NOT a variant of the "
+             "--case loop above, and not regenerated by it.",
+    )
+    parser.add_argument(
         "--manifest", action="store_true",
         help="Also (re)write <out>/manifest.json: a sha256 of every file "
              "currently under --out, checked by fixtures.test.ts. Scans "
@@ -324,7 +442,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    ran_anything_case_specific = bool(args.case or args.diffusion_case)
+    ran_anything_case_specific = bool(args.case or args.diffusion_case or args.diffusion_print_case)
 
     names = args.case or (sorted(CASES) if not ran_anything_case_specific else [])
     for name in names:
@@ -339,6 +457,13 @@ def main() -> int:
     for name in diffusion_names:
         image = DIFFUSION_CAMERA_CASES[name]()
         _generate_diffusion_camera_case(image, args.out / name, name)
+
+    diffusion_print_names = args.diffusion_print_case or (
+        sorted(DIFFUSION_PRINT_CASES) if not ran_anything_case_specific else []
+    )
+    for name in diffusion_print_names:
+        image = DIFFUSION_PRINT_CASES[name]()
+        _generate_diffusion_site_case(image, args.out / name, name, site="print")
 
     if args.manifest:
         _write_manifest(args.out)

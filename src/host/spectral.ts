@@ -1210,12 +1210,21 @@ export function precomputeArenaData(
   // host, SEBELUM baris WGSL manapun ditulis -- lih. task-15-report.md.
   //
   // Print (`enlarger.diffusion_filter`) memakai family/strength DEFAULT
-  // yang SAMA sebagai placeholder eksplisit -- tidak ada fixture Task 17
-  // untuk memverifikasinya, jadi tidak ada dasar untuk memilih nilai lain.
-  // `pixel_size_um` kebetulan identik untuk kedua situs di Python sendiri
+  // yang SAMA -- BUKAN lagi placeholder tak terverifikasi (Task 17 debt,
+  // lih. `docs/superpowers/plans/2026-09-11-dichroic-phase1-engine.md`
+  // bagian "Selesai Fase 1"): `test/parity/diffusion.test.ts`'s describe
+  // kedua menggerbangi `createDiffusionStage(device, arenas, 'print')`
+  // terhadap fixture baru `hard_edge_diffusion_print`/
+  // `impulse_highlight_diffusion_print`
+  // (`tools/gen_reference.py::_build_params_diffusion_print`,
+  // `enlarger.diffusion_filter.active=True`, family/strength default APA
+  // ADANYA), max abs error ~2.4e-7/~4.8e-7 -- angka ini SEKARANG jadi bukti
+  // langsung nilai default itu benar, bukan cuma "tidak ada dasar memilih
+  // nilai lain". `pixel_size_um` identik untuk kedua situs di Python sendiri
   // (`FilmingStage`/`PrintingStage` keduanya membaca
-  // `self._resize_service.pixel_size_um` yang sama), jadi berbagi konstanta
-  // di sini bukan penyimpangan tambahan.
+  // `self._resize_service.pixel_size_um` yang sama, DIBUKTIKAN langsung dari
+  // `resize.py:18`, bukan kebetulan), jadi berbagi konstanta di sini bukan
+  // penyimpangan tambahan.
   const CAMERA_DIFFUSION_PIXEL_SIZE_UM = 546.875; // 35mm * 1000 / 64px, fixture baru Task 15.
   const CAMERA_DIFFUSION_MIN_IMAGE_DIM = 64;
   const cameraDiffusion = precomputeDiffusionFilter(
