@@ -3219,8 +3219,51 @@ git commit -m "feat(spektra): tiled rendering with apron producing bit-identical
 
 ---
 
+## Task 16b: Suku grain yang bergantung ukuran piksel
+
+**WAJIB sebelum Fase 1 dinyatakan selesai.** Bukan polish, dan bukan optimasi.
+
+Task 16 menutup gerbang grain dengan dua suku DITUNDA karena terbukti no-op
+**pada ukuran piksel fixture** — dan implementernya menandai sendiri, dengan
+benar, bahwa itu deferral yang berbeda jenisnya dari yang sebelumnya: Task 13
+menunda `high_exposure_couplers_shift` karena ia nol SECARA STRUKTURAL di
+satu-satunya call site-nya, sedangkan ini nol hanya karena fixture kita kecil.
+
+Diukur (35 mm, `pixel_size_um = 35000 / lebar`):
+
+| Lebar gambar | `pixel_size_um` | `blur_dye_clouds_um` (1.0 um) | `micro_structure` (30 um) |
+|---|---|---|---|
+| 64 px (fixture) | 546,88 | 0,0018 px | 0,0549 px |
+| 1024 px (preview) | 34,18 | 0,0293 px | 0,8777 px |
+| 6000 px (full-res) | 5,83 | 0,1714 px | **5,1429 px** |
+
+Keduanya no-op HANYA selama jauh di bawah 1 piksel. Pada full-res
+micro-structure mencapai 5,14 piksel — clumping lognormal seukuran itu adalah
+bagian dari *look* grain, bukan detail yang bisa diabaikan. Mengapalkan tanpa
+ini berarti grain kita benar pada gambar uji dan salah pada gambar sungguhan,
+yang persis kebalikan dari yang penting, dan langsung bertabrakan dengan aturan
+kualitas-di-atas-performa.
+
+- [ ] Bangkitkan fixture pada `pixel_size_um` yang membuat kedua suku aktif
+      (gambar lebih besar, atau `film_format_mm` lebih kecil — yang mana pun
+      lebih murah; keduanya sah karena `pixel_size_um` turun dari keduanya).
+      Jaga tetap cukup kecil untuk Vitest — lih. kendala Task 9.
+- [ ] Port `blur_particle` (blur awan-dye per-layer) dan clumping lognormal
+      `micro_structure` dari `model/grain.py`.
+- [ ] Gerbangi secara statistik dengan `moments()` yang sama dari Task 16, pada
+      fixture baru ITU. Gerbang 64 px yang sudah ada harus tetap lulus.
+- [ ] Buktikan gerbang barunya menggigit: tanpa kedua suku ini, ia HARUS merah
+      pada ukuran piksel itu. Kalau tidak, fixture-nya belum cukup besar dan
+      gerbangnya tidak membuktikan apa pun.
+
 ## Selesai Fase 1
 
 Pada titik ini `npm test` di `spektra/` menjalankan: uji batas lisensi, uji aset, uji profil, uji device, uji params, uji arena, uji graf, uji harness, tujuh rangkaian parity, dan uji tiling. Seluruhnya lulus berarti engine cocok dengan implementasi referensi Python di setiap tap, dan render ter-tile identik dengan full-frame.
+
+**Fase 1 TIDAK selesai sampai Task 16b ditutup**, dan sampai site `print`
+Diffusion (diimplementasikan di Task 15, sengaja tidak digerbangi karena tap
+`log_e_print` belum ada) benar-benar digerbangi oleh Task 17. Dua jalur kode
+yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1 yang kelihatan
+selesai.
 
 Fase 2 (`io/`, UI, PWA) direncanakan setelah ini, bukan sebelumnya.
