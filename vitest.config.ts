@@ -27,6 +27,27 @@ export default defineConfig({
     // Biayanya wall-clock: berkas test berjalan berurutan, bukan paralel.
     // Untuk suite sebesar ini (~20 detik) itu harga yang murah dibanding
     // gerbang yang hasilnya tidak bisa dipercaya.
+    // Batas waktu per test: 30 detik, bukan 5 detik bawaan vitest.
+    //
+    // Gerbang parity GPU memang lambat, dan yang bawaan tidak pernah
+    // dikalibrasi untuk itu. Diukur pada grain.test.ts (tahap terberat,
+    // beberapa buffer scratch): 2.758 ms sampai 5.487 ms per kasus, dengan
+    // kasus PERTAMA di tiap berkas paling lambat karena ia yang membayar
+    // pemuatan aset, akuisisi device, dan unggah arena sekali-saja. Artinya
+    // ia duduk TEPAT di ambang 5.000 ms, dan suite penuh gagal 1 dari 3 run
+    // pada kontensi GPU.
+    //
+    // Itu bukan cuma gangguan: vitest melaporkan timeout sebagai test GAGAL,
+    // jadi jam dinding yang lewat sedikit tidak bisa dibedakan dari REGRESI
+    // PARITY oleh siapa pun yang membaca hasilnya. Seluruh nilai gerbang-gerbang
+    // ini ada pada angka yang bisa dipercaya, jadi ambang yang bisa memerah
+    // sendiri tanpa ada yang salah justru merusak hal yang paling kami jaga.
+    //
+    // 30 detik memberi kelonggaran ~5x di atas kasus terlambat yang terukur.
+    // Kalau suatu test benar-benar menggantung, pembatas sebenarnya adalah
+    // timeout proses di luar vitest, bukan angka ini.
+    testTimeout: 30000,
+
     pool: 'forks',
     fileParallelism: false,
   },
