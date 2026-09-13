@@ -201,10 +201,27 @@ export interface Counts {
   academyPrinterDensityEnabled: boolean;
 }
 
+/**
+ * Task 17 (PrintScan) -- enlarger C/M/Y "neutral" filter values RESOLVED by
+ * Python's `apply_database_neutral_print_filters()` (database-backed, keyed
+ * by film/print/illuminant) for the one (film, print, illuminant) triple
+ * every current fixture uses. NOT the raw `EnlargerParams` dataclass
+ * defaults -- see `tools/bake_web_assets.py::_default_enlarger_neutral_filters`.
+ */
+export interface PrintScanDefaults {
+  filmStock: string;
+  printStock: string;
+  illuminant: string;
+  neutralFilterC: number;
+  neutralFilterM: number;
+  neutralFilterY: number;
+}
+
 export interface Manifest {
   hanatos: HanatosDims;
   colorSpaces: ColorSpaces;
   counts: Counts;
+  printScan: PrintScanDefaults;
   stocks: StockEntry[];
   static: Record<StaticTableName, BlobRef>;
 }

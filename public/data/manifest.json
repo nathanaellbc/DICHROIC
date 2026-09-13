@@ -48,6 +48,14 @@
     "defaultPaperIndex": 4,
     "academyPrinterDensityEnabled": false
   },
+  "printScan": {
+    "filmStock": "kodak_portra_400",
+    "printStock": "kodak_portra_endura",
+    "illuminant": "TH-KG3",
+    "neutralFilterC": 0.0,
+    "neutralFilterM": 51.56801468495496,
+    "neutralFilterY": 52.53400422349596
+  },
   "stocks": [
     {
       "id": "kodak_ektar_100",

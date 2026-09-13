@@ -268,6 +268,46 @@ def _py_density_spectral_midgray(stock_id: str, *, is_film: bool) -> list | None
     return [float(v) for v in np.asarray(density_spectral_midgray).reshape(-1)]
 
 
+def _default_enlarger_neutral_filters() -> dict:
+    """Resolved enlarger C/M/Y "neutral" filter values for the default film
+    (`kodak_portra_400`) + print (`kodak_portra_endura`) + illuminant
+    (`TH-KG3`) combination -- Task 17 (PrintScan).
+
+    NOT the raw `EnlargerParams` dataclass literals (`c_filter_neutral=0`,
+    `m_filter_neutral=65`, `y_filter_neutral=55`) -- `digest_params()`
+    unconditionally calls `apply_database_neutral_print_filters()`
+    (`runtime/params_builder.py:80`), which OVERWRITES all three from a
+    database keyed by `(print_stock, illuminant, film_stock)`
+    (`settings.neutral_print_filters_from_database` defaults `True`, never
+    turned off by any fixture family this project's `gen_reference.py`
+    generates). Confirmed directly, not assumed: for the default triple,
+    `digest_params(init_params())` resolves to `c=0.0`,
+    `m=51.56801468495496`, `y=52.53400422349596` -- NOT `(0, 65, 55)`. Every
+    fixture in `test/fixtures/` (all of which come from `init_params()` with
+    no film/print override) uses this exact resolved triple, so baking it
+    here (instead of shipping the raw defaults, or re-deriving the whole
+    filter database in TypeScript) is what makes `src/host/enlarger.ts`'s
+    output match Python.
+
+    Scope-limited to the one (film, print, illuminant) combination every
+    current fixture uses, exactly like `_apply_halation_preset`'s resolved
+    per-stock halation numbers are baked rather than the general preset
+    lookup logic -- see `pack_stock`'s `halationStrength`/
+    `halationFirstSigmaUm` for the established precedent. A future task that
+    needs a different pairing must extend this, not assume it generalizes.
+    """
+    raw_params = init_params()
+    params = digest_params(raw_params)
+    return {
+        "filmStock": params.film.info.stock,
+        "printStock": params.print.info.stock,
+        "illuminant": params.enlarger.illuminant,
+        "neutralFilterC": float(params.enlarger.c_filter_neutral),
+        "neutralFilterM": float(params.enlarger.m_filter_neutral),
+        "neutralFilterY": float(params.enlarger.y_filter_neutral),
+    }
+
+
 def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
     """Write JSON with LF-only line endings, regardless of platform.
 
@@ -595,6 +635,10 @@ def main() -> int:
             "defaultPaperIndex": stocks.DEFAULT_PAPER_INDEX,
             "academyPrinterDensityEnabled": gpc.academy_printer_density_available(),
         },
+        # Task 17 (PrintScan) -- see `_default_enlarger_neutral_filters`
+        # docstring for why this is resolved (database-backed), not the raw
+        # `EnlargerParams` dataclass defaults.
+        "printScan": _default_enlarger_neutral_filters(),
         "stocks": stock_entries,
         "static": static_entries,
     }
