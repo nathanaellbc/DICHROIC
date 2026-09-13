@@ -2673,9 +2673,28 @@ Itu tidak mengubah rancangan gerbang ini. Alasan grain digerbangi secara statist
 
 `moments()` yang ditulis di sini dipakai ulang oleh Task 18 untuk menggerbangi glare, yang stokastik dengan alasan yang sama. Rancang ia agar berdiri sendiri terhadap kasus uji mana pun, bukan khusus grain.
 
-- [ ] **Step 1: Bangkitkan fixture `gray_ramp_grain` dengan seed tetap**
+- [x] **Step 1: TIDAK ADA fixture baru yang dibutuhkan** (dikoreksi sebelum eksekusi)
 
-Setel `grain_enabled=true`, `grain_model=production`, dan seed eksplisit di `gen_reference.py`. Catat seed itu di `case.json`.
+Teks lama meminta fixture `gray_ramp_grain` dengan "`grain_enabled=true`,
+`grain_model=production`, dan seed eksplisit". Ketiga nama parameter itu
+TIDAK ADA. `GrainParams` (`params_schema.py:89-100`) memakai `active: bool =
+True` sebagai saklarnya, tidak punya field `grain_model`, dan tidak punya field
+seed sama sekali — `fixed_seed` adalah argumen fungsi `model/grain.py`, bukan
+parameter runtime.
+
+**Keluarga `_stochastic` yang SUDAH ADA sudah tepat untuk gerbang ini.** Grain
+aktif di sana, dan pada default ia DETERMINISTIK: `grain.py:84-87` menyetel
+`seed = [0, 1, 2]` justru ketika `fixed_seed is None` (penamaan terbalik, tapi
+akibatnya realisasi grain stabil antar-run). Glare — satu-satunya suku yang
+benar-benar tak ter-seed — diterapkan di `ScannerStage._density_to_rgb`, jadi ia
+hanya menyentuh `rgb_out`, BUKAN `cmy_film`.
+
+Itu cocok persis dengan bukti empiris yang sudah kami punya: dari seluruh
+keluarga `_stochastic`, TEPAT lima berkas `rgb_out.f32` yang berubah antar rerun
+Python, dan tidak satu pun `cmy_film.f32`. Jadi `cmy_film` pada keluarga
+`_stochastic` adalah oracle yang reproducible, dan catatan tertunda soal fixture
+tak ter-seed menyempit: ia hanya mengikat Task 18 (`rgb_out`/glare), bukan Task
+16.
 
 - [ ] **Step 2: Tulis statistics.ts**
 
