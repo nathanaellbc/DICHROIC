@@ -88,7 +88,7 @@ export function filteredEnlargerIlluminant(
     let totalFilter = 1;
     for (let channel = 0; channel < 3; channel += 1) {
       const filterValue = customDichroicFilters[wl * 3 + channel]!;
-      totalFilter *= 1 - (1 - filterValue) * (1 - transmittance[channel]);
+      totalFilter *= 1 - (1 - filterValue) * (1 - transmittance[channel]!);
     }
     out[wl] = lightSource[wl]! * totalFilter;
   }

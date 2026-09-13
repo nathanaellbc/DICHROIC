@@ -3,7 +3,7 @@ import { RenderGraph } from '../../src/engine/graph';
 import { precomputeArenaData, uploadArenas } from '../../src/host/spectral';
 import { loadAssets } from '../../src/profiles/load';
 import type { AssetBundle } from '../../src/profiles/load';
-import type { ArenaPlan } from '../../src/host/spectral';
+import type { ArenaPlan, PrintScanArenaOptions } from '../../src/host/spectral';
 import type { Arenas } from '../../src/engine/arena';
 import type { EngineDevice } from '../../src/engine/device';
 import type { Stage } from '../../src/engine/graph';
@@ -41,6 +41,12 @@ export interface TapParityOptions {
    * dasar).
    */
   inputCase?: string;
+  /**
+   * Task 17 (PrintScan) -- diteruskan ke `sharedResources`/
+   * `precomputeArenaData` supaya arena `dynamic` `stockId` (FILM) ini juga
+   * membawa entri PRINT. Tidak diberikan untuk gerbang non-PrintScan.
+   */
+  printScan?: PrintScanArenaOptions;
 }
 
 /**
@@ -75,32 +81,55 @@ const sharedArenas = new Map<string, Arenas>();
 const pendingPlans = new Map<string, ArenaPlan>();
 
 /**
+ * Kunci cache `sharedArenas`/`pendingPlans` -- SENGAJA menyertakan
+ * `printScan.printStockId` (bukan hanya `stockId`) supaya Task 17
+ * (`printScan.test.ts`, DUA stock: FILM `stockId` + PRINT `printStockId`)
+ * TIDAK berbagi entri cache dengan test lain yang memakai `stockId` FILM
+ * yang SAMA tanpa augmentasi print (`filmExposure.test.ts`/`grain.test.ts`/
+ * dst.). Kalau kuncinya cuma `stockId`, siapa pun yang memanggil
+ * `sharedResources('kodak_portra_400')` LEBIH DULU (urutan file test tidak
+ * dijamin) akan mengunci arena `dynamic` TANPA field print untuk seluruh
+ * proses vitest -- `printScan.test.ts` yang berjalan setelahnya diam-diam
+ * memakai arena basi lewat cache-hit, bukan galat yang jelas.
+ */
+function arenaCacheKey(stockId: string, printScan?: PrintScanArenaOptions): string {
+  return printScan ? `${stockId}::print=${printScan.printStockId}` : stockId;
+}
+
+/**
  * Diekspor (Task 16) supaya `grain.test.ts` bisa memakai ulang device/bundle/
  * arena yang sama (dan urutan pra-hitung-sebelum-akuisisi-device yang sama)
  * tanpa menduplikasi CATATAN LINGKUNGAN di `host/spectral.ts` -- gerbang
  * grain STATISTIK (`test/parity/statistics.ts`), bukan per-piksel, jadi
  * tidak bisa memakai `runTapParity` apa adanya, tapi tetap butuh sumber daya
  * device/arena yang SAMA persis.
+ *
+ * `printScan` (Task 17, opsional) -- diteruskan APA ADANYA ke
+ * `precomputeArenaData` supaya arena `dynamic` yang diunggah untuk `stockId`
+ * ini juga membawa entri PRINT (`addPrintScanDynamicData`). Lih.
+ * `arenaCacheKey` di atas untuk kenapa ini butuh kunci cache sendiri.
  */
-export async function sharedResources(stockId: string) {
+export async function sharedResources(stockId: string, printScan?: PrintScanArenaOptions) {
   sharedBundle ??= loadAssets('public/data');
   const bundle = await sharedBundle;
 
+  const cacheKey = arenaCacheKey(stockId, printScan);
+
   // Pra-hitung SEBELUM device diakuisisi -- lih. blok komentar di atas.
-  let plan = pendingPlans.get(stockId);
-  if (!plan && !sharedArenas.has(stockId)) {
-    plan = precomputeArenaData(bundle, stockId);
-    pendingPlans.set(stockId, plan);
+  let plan = pendingPlans.get(cacheKey);
+  if (!plan && !sharedArenas.has(cacheKey)) {
+    plan = precomputeArenaData(bundle, stockId, printScan);
+    pendingPlans.set(cacheKey, plan);
   }
 
   sharedEngine ??= acquireDevice();
   const engine = await sharedEngine;
 
-  let arenas = sharedArenas.get(stockId);
+  let arenas = sharedArenas.get(cacheKey);
   if (!arenas) {
     arenas = uploadArenas(engine.device, plan!);
-    pendingPlans.delete(stockId);
-    sharedArenas.set(stockId, arenas);
+    pendingPlans.delete(cacheKey);
+    sharedArenas.set(cacheKey, arenas);
   }
   return { engine, bundle, arenas };
 }
@@ -139,7 +168,7 @@ function assertFamilyMatchesCase(caseName: string, family: CoreParamsFamily): vo
 
 export async function runTapParity(opts: TapParityOptions): Promise<void> {
   const stockId = opts.stockId ?? 'kodak_portra_400';
-  const { engine, bundle, arenas } = await sharedResources(stockId);
+  const { engine, bundle, arenas } = await sharedResources(stockId, opts.printScan);
 
   assertFamilyMatchesCase(opts.case, opts.family);
 

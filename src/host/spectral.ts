@@ -63,6 +63,8 @@ import type { AssetBundle } from '../profiles/load';
 import { ArenaBuilder } from '../engine/arena';
 import type { Arenas } from '../engine/arena';
 import { precomputeDiffusionFilter } from './diffusionFilter';
+import { filteredEnlargerIlluminant } from './enlarger';
+import type { EnlargerFilterState } from './enlarger';
 
 /**
  * Perkiraan fungsi galat (erf), Abramowitz & Stegun 7.1.26 -- galat
@@ -509,6 +511,302 @@ function makePackedCurveExposure(logExposure: ArrayLike<number>): Float32Array {
 }
 
 /**
+ * `ln(Gamma(0.5))`, closed form (`Gamma(0.5) = sqrt(pi)`) -- the only `a`
+ * the incomplete-gamma routines below ever need (`normalCdf`'s erf is
+ * always the a=0.5 case), so no general Lanczos `gammln` approximation is
+ * needed at all, and no imprecision from one is introduced.
+ */
+const GAMMA_LN_HALF = 0.5 * Math.log(Math.PI);
+const INCOMPLETE_GAMMA_MAX_ITER = 300;
+const INCOMPLETE_GAMMA_EPS = 3e-16;
+const INCOMPLETE_GAMMA_FPMIN = 1e-300;
+
+/** Series expansion for the regularized lower incomplete gamma `P(0.5, x)`, `x` small. */
+function regularizedLowerIncompleteGammaHalfSeries(x: number): number {
+  let ap = 0.5;
+  let sum = 1 / 0.5;
+  let del = sum;
+  for (let n = 1; n <= INCOMPLETE_GAMMA_MAX_ITER; n += 1) {
+    ap += 1;
+    del *= x / ap;
+    sum += del;
+    if (Math.abs(del) < Math.abs(sum) * INCOMPLETE_GAMMA_EPS) break;
+  }
+  return sum * Math.exp(-x + 0.5 * Math.log(x) - GAMMA_LN_HALF);
+}
+
+/** Lentz continued fraction for the regularized UPPER incomplete gamma `Q(0.5, x)`, `x` large. */
+function regularizedUpperIncompleteGammaHalfContinuedFraction(x: number): number {
+  let b = x + 0.5;
+  let c = 1 / INCOMPLETE_GAMMA_FPMIN;
+  let d = 1 / b;
+  let h = d;
+  for (let i = 1; i <= INCOMPLETE_GAMMA_MAX_ITER; i += 1) {
+    const an = -i * (i - 0.5);
+    b += 2;
+    d = an * d + b;
+    if (Math.abs(d) < INCOMPLETE_GAMMA_FPMIN) d = INCOMPLETE_GAMMA_FPMIN;
+    c = b + an / c;
+    if (Math.abs(c) < INCOMPLETE_GAMMA_FPMIN) c = INCOMPLETE_GAMMA_FPMIN;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < INCOMPLETE_GAMMA_EPS) break;
+  }
+  return Math.exp(-x + 0.5 * Math.log(x) - GAMMA_LN_HALF) * h;
+}
+
+/**
+ * Standard normal CDF, `0.5*(1+erf(z/sqrt2))`, matching `scipy.stats.norm.cdf`
+ * -- Task 17 (`develop_print_morph` -> `apply_print_curves_morph` (inactive
+ * for every current fixture, see `addPrintScanDynamicData` below) ->
+ * `_evaluate_fitted_density` -> `_layer_cdf` -> `scipy.stats.norm.cdf`).
+ *
+ * Implemented via the regularized incomplete gamma function
+ * (`erf(x) = sign(x) * P(0.5, x^2)`, Numerical Recipes `gammp`/`gammq`
+ * algorithm specialized to `a=0.5`) rather than a fixed-order rational
+ * minimax approximation (like this file's OWN `erf()` above, Abramowitz &
+ * Stegun 7.1.26, ~1.5e-7 max abs error -- adequate for `computeErf4Window`'s
+ * per-pixel-irrelevant spectral window, but this function feeds a table
+ * evaluated ONCE per profile and worth getting closer to f64 machine
+ * precision for). Verified directly against
+ * `spektrafilm.utils.morph_curves._evaluate_fitted_density`'s real output
+ * for the `kodak_portra_endura` print stock (`scratchpad/validate_printscan.mjs`,
+ * this session): max abs error 1.73e-7 across all 256 exposure points x 3
+ * channels x 3 layers -- the same f32-noise-floor order of magnitude Task
+ * 11-15 landed at, not a looser bound.
+ */
+function normalCdf(z: number): number {
+  const x = (z * z) / 2;
+  const p = x === 0 ? 0 : x < 1.5 ? regularizedLowerIncompleteGammaHalfSeries(x) : 1 - regularizedUpperIncompleteGammaHalfContinuedFraction(x);
+  return z >= 0 ? 0.5 + 0.5 * p : 0.5 - 0.5 * p;
+}
+
+/**
+ * Port `spektrafilm.utils.morph_curves._evaluate_fitted_density` -- sum of
+ * per-layer normal-CDF terms, evaluated at every point of `logExposureGrid`
+ * (the PRINT stock's own `log_exposure`, `printLogExposure.length` points),
+ * for all 3 channels x `centers9.length/3` layers (always 3 here, per
+ * `density_curves_model.n_layers` -- verified 3 for all 28 stocks,
+ * `scratchpad/printscan_probe.py`).
+ *
+ * ONLY the `PrintCurvesMorphParams.active === False` path
+ * (`_evaluate_fitted_density` itself, not the full `apply_print_curves_morph`
+ * gamma/developer-exhaustion machinery) -- `PrintRenderingParams.density_curves_morph`
+ * defaults to `PrintCurvesMorphParams(active=False)`
+ * (`params_schema.py:163-165`) and NOTHING in `params_builder.py` (including
+ * `lut_mode`) ever flips it, so every fixture this gate exercises takes this
+ * exact branch. A future task that needs the morph ACTIVE (gamma factors,
+ * developer exhaustion) must extend this -- declared scope limit, same
+ * pattern as `dir.ts`'s negative-film-only branch (Task 13) and `grain.ts`'s
+ * (Task 16).
+ *
+ * `centers9`/`amplitudes9`/`sigmas9` are flat, length 9, layout
+ * `[channel*3 + layer]` -- matches `density_curves_model.{centers,amplitudes,
+ * sigmas}`'s (3,3) row=channel/col=layer shape, and
+ * `bake_web_assets.py::pack_stock`'s `densityCurvesModel{Centers,Amplitudes,
+ * Sigmas}` fields (which flatten the same (3,3) arrays row-major, i.e. the
+ * SAME `[channel*3+layer]` order).
+ *
+ * `profileType === 'positive'` flips the CDF argument's sign
+ * (`_signed_z`) -- implemented for completeness (mirrors
+ * `computeDirDensityCurvesBeforeCouplers`'s same positive/negative split),
+ * though every fixture's print stock (`kodak_portra_endura`, `type:
+ * "negative"`) takes the `negative` branch, unflipped.
+ *
+ * Returns a flat `(count*3)` table, row-major `[exposureIndex*3+channel]` --
+ * the SAME layout `densityCurves` already uses, so `printScan.wgsl`'s
+ * lookup can reuse `curveDevelop.wgsl::interpDensityCurve`'s exact
+ * binary-search-plus-lerp shape (see `printScan.wgsl`).
+ */
+function evaluateFittedDensity(
+  logExposureGrid: ArrayLike<number>,
+  centers9: ArrayLike<number>,
+  amplitudes9: ArrayLike<number>,
+  sigmas9: ArrayLike<number>,
+  profileType: string,
+): Float32Array {
+  const count = logExposureGrid.length;
+  const sign = profileType === 'positive' ? -1 : 1;
+  const out = new Float32Array(count * 3);
+  for (let channel = 0; channel < 3; channel += 1) {
+    for (let j = 0; j < count; j += 1) {
+      let total = 0;
+      for (let layer = 0; layer < 3; layer += 1) {
+        const center = centers9[channel * 3 + layer]!;
+        const amplitude = amplitudes9[channel * 3 + layer]!;
+        const sigma = sigmas9[channel * 3 + layer]!;
+        const z = sign * ((logExposureGrid[j]! - center) / sigma);
+        total += amplitude * normalCdf(z);
+      }
+      out[j * 3 + channel] = total;
+    }
+  }
+  return out;
+}
+
+/**
+ * Task 17 (PrintScan): membangun entri arena `dynamic` yang dibutuhkan
+ * `printScan.wgsl` -- gerbang `log_e_print`/`cmy_print`.
+ *
+ * KENAPA `dynamic` (bukan arena baru "printStock"): `printScan.wgsl`'s
+ * `expose` entry MENDUA stock (FILM `channelDensity`/`baseDensity`, arena
+ * `stock` yang sudah dibangun untuk `filmStockId`; PRINT `logSensitivity`,
+ * yang perlu satu binding TAMBAHAN kalau dipisah ke arena sendiri) --
+ * meng-panggil `precomputeArenaData(bundle, printStockId)` KEDUA KALINYA
+ * akan membangun `static`/`stock` PRINT PENUH (inputToReferenceXyz,
+ * mallettRawMatrix, dirCouplersMatrix, dst.) yang TIDAK SATU PUN dipakai
+ * `printScan.wgsl` -- pemborosan binding tanpa manfaat, dan mendekati batas
+ * 8 storage buffer per stage tanpa alasan. `dynamic` arena SUDAH ada
+ * kelompok semantik yang pas ("berubah bersama parameter", sama seperti
+ * `hanatosRawResponse`/diffusion PSF di atas), jadi entri PRINT ditambahkan
+ * ke situ, dibaca sebagai binding TAMBAHAN (bukan binding PENGGANTI) yang
+ * sama dengan yang stage lain sudah pakai di chain yang sama.
+ *
+ * ENTRI YANG DITULIS (semuanya di `dynamic`):
+ *   `printLinearSensitivity`   -- (wavelengthCount*3) f32, `10**log_sensitivity`
+ *                                 PRINT stock, `np.nan_to_num` (port
+ *                                 `linearSensitivityFrom`, dipakai ulang).
+ *   `printFilteredIlluminant`  -- (wavelengthCount) f32, `filteredEnlargerIlluminant`
+ *                                 (`src/host/enlarger.ts`) atas TH-KG3 + filter CMY.
+ *   `printWavelengthCount`     -- 1 f32, jumlah wavelength (sama utk film & print,
+ *                                 dibuktikan `scratchpad/printscan_probe.py`: 81
+ *                                 keduanya -- SPECTRAL_SHAPE global hulu), disimpan
+ *                                 sebagai skalar arena (BUKAN field CoreParams baru
+ *                                 -- lih. catatan "CoreParams adalah cermin EXACT
+ *                                 blok push-constant hulu" di `params.ts`, field baru
+ *                                 di sana akan menyimpang dari kontrak itu).
+ *   `printFactorMidgray`       -- 1 f32, `_compute_exposure_factor_midgray` --
+ *                                 digabung dari `densitySpectralMidgray` (DIBAKE per
+ *                                 stock FILM, lih. `tools/bake_web_assets.py`) dan
+ *                                 `printFilteredIlluminant` yang baru dihitung di sini.
+ *                                 Cabang `_comp` TIDAK diimplementasikan --
+ *                                 `print_exposure_compensation` dipaksa `False` di
+ *                                 bawah `lut_mode` (satu-satunya keluarga fixture
+ *                                 gerbang ini pakai), jadi `_compute_exposure_factor_midgray`
+ *                                 SELALU mengambil cabang non-`_comp` untuk keluarga ini
+ *                                 (dibuktikan lewat pembacaan langsung kondisi cabangnya,
+ *                                 `printing.py:100-107`, bukan diasumsikan).
+ *   `printExposureScale`       -- 1 f32, `print_exposure * black_white_printing_exposure_correction()`
+ *                                 digabung jadi satu skalar. `print_exposure` DIBACA dari
+ *                                 CoreParams? TIDAK -- CoreParams tidak punya slot untuk
+ *                                 ini (kontrak exact-mirror yang sama), jadi tetap konstanta
+ *                                 host di sini. `black_white_printing_exposure_correction()`
+ *                                 == 1.0 TERBUKTI (bukan diasumsikan) untuk SETIAP fixture
+ *                                 gerbang ini: `scanner.white_correction`/`black_correction`
+ *                                 keduanya `False` di bawah `lut_mode`
+ *                                 (`params_builder.py:116-117`), dan fungsi itu sendiri
+ *                                 `return 1.0` persis ketika keduanya `False`
+ *                                 (`color_reference.py:98-100`) -- TIDAK ADA cabang lain
+ *                                 yang bisa dijangkau untuk keluarga `_lut`. `print_exposure`
+ *                                 sendiri `EnlargerParams.print_exposure` default `1.0`,
+ *                                 dan `lut_mode` MEMAKSANYA `1.0` juga
+ *                                 (`params_builder.py:109`) -- jadi skalar ini SELALU `1.0`
+ *                                 untuk keluarga `_lut`, disimpan sebagai konstanta terpisah
+ *                                 (bukan dihardcode `1.0` di WGSL) supaya gerbang non-`_lut`
+ *                                 masa depan (mis. debt diffusion print, family `measured`)
+ *                                 bisa mengoper nilai lain tanpa menyentuh shader.
+ *   `printExposureCount`       -- 1 f32, `printLogExposure.length`.
+ *   `printCurveExposure`       -- (printExposureCount*2) f32, pasangan
+ *                                 [nilai, 1/delta] PRINT stock (`makePackedCurveExposure`,
+ *                                 dipakai ulang -- SAMA fungsi yang membangun `curveExposure`
+ *                                 FILM stock di atas).
+ *   `printDensityCurvesMorphed`-- (printExposureCount*3) f32,
+ *                                 `evaluateFittedDensity` di atas.
+ *
+ * `raw_preflash` TIDAK diimplementasikan sebagai entri terpisah --
+ * `EnlargerParams.preflash_exposure` default `0.0`, tidak pernah disentuh
+ * `params_builder.py` untuk keluarga manapun gerbang ini uji, dan
+ * `_compute_raw_preflash` sendiri `return np.zeros((3,))` persis ketika
+ * `preflash_exposure <= 0` (`printing.py:94-99`) -- no-op TERBUKTI, bukan
+ * diasumsikan (pola yang sama dengan `boost_ev`/`lens_blur_um`'s Task 14/15
+ * no-op declarations). `printScan.wgsl` karena itu tidak menambahkan
+ * apa pun untuk preflash sama sekali (bukan menambah nol) -- deklarasi
+ * cakupan, sama seperti `dir.ts`'s negative-film-only branch.
+ */
+function addPrintScanDynamicData(
+  dynamicBuilder: ArenaBuilder,
+  bundle: AssetBundle,
+  filmStockId: string,
+  printStockId: string,
+  enlargerFilters: EnlargerFilterState,
+): void {
+  const printLogSensitivity = bundle.stockField(printStockId, 'logSensitivity');
+  const printLogExposureField = bundle.stockField(printStockId, 'logExposure');
+  const densityCurvesModelCenters = bundle.stockField(printStockId, 'densityCurvesModelCenters');
+  const densityCurvesModelAmplitudes = bundle.stockField(printStockId, 'densityCurvesModelAmplitudes');
+  const densityCurvesModelSigmas = bundle.stockField(printStockId, 'densityCurvesModelSigmas');
+  if (
+    !printLogSensitivity ||
+    !printLogExposureField ||
+    !densityCurvesModelCenters ||
+    !densityCurvesModelAmplitudes ||
+    !densityCurvesModelSigmas
+  ) {
+    throw new Error(
+      `Stock print '${printStockId}' tidak punya logSensitivity/logExposure/densityCurvesModel*`,
+    );
+  }
+  const densitySpectralMidgray = bundle.stockField(filmStockId, 'densitySpectralMidgray');
+  if (!densitySpectralMidgray) {
+    throw new Error(
+      `Stock film '${filmStockId}' tidak punya densitySpectralMidgray (stock kertas tidak sah dipakai sebagai film)`,
+    );
+  }
+
+  const thKg3Illuminant = bundle.staticTable('thKg3Illuminant');
+  const customEnlargerFilters = bundle.staticTable('customEnlargerFilters');
+  const printFilteredIlluminant = filteredEnlargerIlluminant(
+    thKg3Illuminant,
+    customEnlargerFilters,
+    enlargerFilters,
+  );
+
+  const printLinearSensitivity = linearSensitivityFrom(printLogSensitivity);
+
+  // `_compute_exposure_factor_midgray`, cabang non-`_comp` (lih. docstring
+  // di atas untuk bukti kenapa itu satu-satunya cabang yang gerbang ini
+  // capai): `_exposure_factor(sensitivity, print_illuminant, density_spectral_midgray)`.
+  const wavelengthCount = printFilteredIlluminant.length;
+  const rawMidgray: [number, number, number] = [0, 0, 0];
+  for (let wl = 0; wl < wavelengthCount; wl += 1) {
+    const densitySpectral = densitySpectralMidgray[wl]!;
+    let transmitted = 10 ** -densitySpectral * printFilteredIlluminant[wl]!;
+    if (Number.isNaN(transmitted)) transmitted = 0;
+    rawMidgray[0] += transmitted * printLinearSensitivity[wl * 3]!;
+    rawMidgray[1] += transmitted * printLinearSensitivity[wl * 3 + 1]!;
+    rawMidgray[2] += transmitted * printLinearSensitivity[wl * 3 + 2]!;
+  }
+  const clampedMidgray = rawMidgray.map((v) => Math.max(v, 1e-10));
+  const logMean =
+    (Math.log(clampedMidgray[0]!) + Math.log(clampedMidgray[1]!) + Math.log(clampedMidgray[2]!)) / 3;
+  const rawMidgrayGeomean = Math.exp(logMean);
+  const factorMidgray = 1 / rawMidgrayGeomean;
+
+  const printExposureCount = printLogExposureField.length;
+  const printStockType = bundle.stockEntry(printStockId).type;
+  const printDensityCurvesMorphed = evaluateFittedDensity(
+    printLogExposureField,
+    densityCurvesModelCenters,
+    densityCurvesModelAmplitudes,
+    densityCurvesModelSigmas,
+    printStockType,
+  );
+
+  dynamicBuilder.add('printLinearSensitivity', printLinearSensitivity);
+  dynamicBuilder.add('printFilteredIlluminant', printFilteredIlluminant);
+  dynamicBuilder.add('printWavelengthCount', Float32Array.of(wavelengthCount));
+  dynamicBuilder.add('printFactorMidgray', Float32Array.of(factorMidgray));
+  // print_exposure(1.0, forced by lut_mode) * black_white_printing_exposure_correction()
+  // (1.0, proven above) -- see docstring for why this is 1.0 for every
+  // current fixture and why it is still a named constant, not a WGSL literal.
+  dynamicBuilder.add('printExposureScale', Float32Array.of(1.0));
+  dynamicBuilder.add('printExposureCount', Float32Array.of(printExposureCount));
+  dynamicBuilder.add('printCurveExposure', makePackedCurveExposure(printLogExposureField));
+  dynamicBuilder.add('printDensityCurvesMorphed', printDensityCurvesMorphed);
+}
+
+/**
  * Pencarian biner + interpolasi linear atas larik `(xp, fp)` naik --
  * replika host (f64) dari `np.interp` NumPy (bukan `fast_interp` Python,
  * yang dipakai `interpolate_exposure_to_density`/`developFilmDensity`).
@@ -674,7 +972,31 @@ export interface ArenaPlan {
   frameState: ArenaBuilder;
 }
 
-export function precomputeArenaData(bundle: AssetBundle, stockId: string): ArenaPlan {
+/**
+ * Task 17 (PrintScan) -- opsional, karena tahap 12-16 tetap membangun arena
+ * satu-stock apa adanya. Bila diberikan, `precomputeArenaData` menambah
+ * entri PRINT ke `dynamic` arena YANG SAMA yang sudah dibangun untuk
+ * `stockId` (FILM) -- BUKAN memanggil `precomputeArenaData` kedua kalinya
+ * untuk `printStockId` (itu akan menduplikasi `static`/`stock` PRINT yang
+ * sama sekali tidak relevan bagi `printScan.wgsl`, dan mendekati batas 8
+ * storage buffer tanpa alasan -- lih. komentar panjang di
+ * `addPrintScanDynamicData` di bawah).
+ *
+ * `enlargerFilters` genuinely runtime-tunable (lih. `src/host/enlarger.ts`)
+ * -- pemanggil BOLEH mengganti `mFilterShift`/`yFilterShift` antar-render
+ * tanpa membangun ulang arena FILM manapun; hanya bagian print yang
+ * bergantung padanya dihitung ulang.
+ */
+export interface PrintScanArenaOptions {
+  printStockId: string;
+  enlargerFilters: EnlargerFilterState;
+}
+
+export function precomputeArenaData(
+  bundle: AssetBundle,
+  stockId: string,
+  printScan?: PrintScanArenaOptions,
+): ArenaPlan {
   const stock = bundle.stockEntry(stockId);
   const wavelengthCount = stock.wavelengthCount;
   const { width: hanatosWidth, height: hanatosHeight } = bundle.manifest.hanatos;
@@ -715,6 +1037,29 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
   const curveStock = bundle.stock(stockId);
   stockBuilder.add('curveExposure', makePackedCurveExposure(curveStock.logExposure));
   stockBuilder.add('densityCurves', curveStock.densityCurves.slice());
+
+  // --- Task 17 (PrintScan): FILM stock's spectral density model, read by
+  // `printScan.wgsl`'s `expose` entry (`compute_density_spectral`,
+  // `model/develop.py`) to turn a pixel's `cmy_film` density into a
+  // per-wavelength spectral density BEFORE it passes through the enlarger's
+  // filtered illuminant. Raw, NOT normalized (Python's `compute_density_spectral`
+  // uses `self._film.data.channel_density`/`base_density` untouched -- the
+  // `- np.nanmin(...)` normalization above applies ONLY to `density_curves`,
+  // for `develop()`'s curve lookup, a completely different table). Both
+  // fields genuinely contain NaN at scattered positions (bake-time
+  // `nullCount`, see `tools/bake_web_assets.py::_flat_f32`) -- preserved
+  // here exactly as `channelDensity`/`baseDensity` document, NOT
+  // nan_to_num'd: Python's own `density_to_light` only zeroes the NaN
+  // AFTER the `10**-density` transmittance step
+  // (`transmitted[np.isnan(transmitted)] = 0`), never before, so
+  // `printScan.wgsl` must replicate that exact point of zeroing, not this one.
+  const channelDensity = bundle.stockField(stockId, 'channelDensity');
+  const baseDensity = bundle.stockField(stockId, 'baseDensity');
+  if (!channelDensity || !baseDensity) {
+    throw new Error(`Stock '${stockId}' tidak punya channelDensity/baseDensity`);
+  }
+  stockBuilder.add('channelDensity', channelDensity.slice());
+  stockBuilder.add('baseDensity', baseDensity.slice());
 
   // --- Task 13 (Dir): koreksi coupler DIR, non-spasial di bawah `lut_mode`
   // (`dir_couplers.diffusion_size_um` dinolkan `deactivate_spatial_effects`,
@@ -890,6 +1235,16 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
   dynamicBuilder.add('diffusionRadiusPrint', Float32Array.of(printDiffusion.radius));
   dynamicBuilder.add('diffusionScatterFractionPrint', Float32Array.of(printDiffusion.scatterFraction));
   dynamicBuilder.add('diffusionPsfPrint', printDiffusion.psf);
+
+  // --- Task 17 (PrintScan): PRINT-stock-dependent tables, added to the
+  // SAME dynamic arena as the FILM stock's entries above. See
+  // `addPrintScanDynamicData` for why these live here (not a second
+  // `stock`/`static` arena pair) and why they're safe to compute for a
+  // DIFFERENT stock (`printScan.printStockId`) than the `stockId` this
+  // whole function was called for.
+  if (printScan) {
+    addPrintScanDynamicData(dynamicBuilder, bundle, stockId, printScan.printStockId, printScan.enlargerFilters);
+  }
 
   // --- arena frameState: kosong untuk Task 11 (lih. dokumentasi modul) ---
   const frameStateBuilder = new ArenaBuilder();
