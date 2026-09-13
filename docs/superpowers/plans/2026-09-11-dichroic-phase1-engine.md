@@ -2538,6 +2538,30 @@ git commit -m "feat(spektra): halation closes log_e_film on the spatial family"
 
 ## Task 15: Tahap Diffusion
 
+> **DIKOREKSI sebelum dieksekusi**, kesalahan sekelas Task 14. Teks lama
+> menetapkan `writesTaps = [Tap.CMY_FILM]` untuk `site: 'camera'` dan
+> `[Tap.CMY_PRINT]` untuk `site: 'print'`, serta merantai diffusion kamera
+> SETELAH Halation. Ketiganya salah:
+>
+> - Diffusion kamera dipakai di dalam `FilmingStage.expose()`
+>   (`runtime/stages/filming.py:62`) — SEBELUM `apply_gaussian_blur_um` (:67)
+>   dan SEBELUM `apply_halation_um` (:68). Jadi tapnya **`log_e_film`**, bukan
+>   `cmy_film`, dan posisinya **sebelum** Halation, bukan sesudah.
+> - Diffusion enlarger dipakai di dalam `PrintingStage.expose()` sebelum
+>   `log10`-nya. Jadi tapnya **`log_e_print`**, bukan `cmy_print`.
+>
+> **Ini satu-satunya tugas yang BENAR-BENAR butuh keluarga fixture baru.**
+> `DiffusionFilterParams.active` default `False` untuk kamera MAUPUN enlarger
+> (`params_schema.py:16`), dan tidak ada preset stok yang menyalakannya
+> (diperiksa: satu-satunya penyebutan `diffusion_filter.active` di
+> `params_builder.py` adalah baris 135-136, yang MEMATIKANNYA). Jadi tidak ada
+> keluarga yang sudah ada — `<case>`, `_stochastic`, maupun `_lut` — yang punya
+> diffusion hidup, dan tidak ada angka target yang sudah terukur seperti 3.415e-5
+> milik Task 14. Bangkitkan keluarga baru dengan `camera.diffusion_filter.active
+> = True` (dan varian enlarger untuk `log_e_print`), ikuti disiplin
+> `_write_json_lf()` + manifes sha256, dan PASTIKAN setiap fixture lama keluar
+> byte-identik — lih. cara Task 11 melakukannya di `gen_reference.py`.
+
 **Files:**
 - Create: `spektra/src/shaders/diffusion.wgsl`, `spektra/src/engine/stages/diffusion.ts`
 - Test: `spektra/test/parity/diffusion.test.ts`
