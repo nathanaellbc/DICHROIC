@@ -74,7 +74,15 @@ let sharedBundle: Promise<AssetBundle> | undefined;
 const sharedArenas = new Map<string, Arenas>();
 const pendingPlans = new Map<string, ArenaPlan>();
 
-async function sharedResources(stockId: string) {
+/**
+ * Diekspor (Task 16) supaya `grain.test.ts` bisa memakai ulang device/bundle/
+ * arena yang sama (dan urutan pra-hitung-sebelum-akuisisi-device yang sama)
+ * tanpa menduplikasi CATATAN LINGKUNGAN di `host/spectral.ts` -- gerbang
+ * grain STATISTIK (`test/parity/statistics.ts`), bukan per-piksel, jadi
+ * tidak bisa memakai `runTapParity` apa adanya, tapi tetap butuh sumber daya
+ * device/arena yang SAMA persis.
+ */
+export async function sharedResources(stockId: string) {
   sharedBundle ??= loadAssets('public/data');
   const bundle = await sharedBundle;
 

@@ -779,6 +779,33 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
   stockBuilder.add('halationStrength', halationStrength.slice());
   stockBuilder.add('halationFirstSigmaUm', halationFirstSigmaUm.slice());
 
+  // --- Task 16 (Grain): per-layer density curves + their per-sublayer
+  // maxima. `apply_grain` (`model/grain.py:166-213`) is called with
+  // `grain.sublayers_active` default `True` (`params_schema.py:91`) --
+  // TRUE REGARDLESS of `n_sub_layers` (default 1u, but that field is only
+  // read inside `apply_grain_to_density`, the NON-layers branch, which
+  // `sublayers_active=True` never reaches). So the ACTUAL default grain
+  // model for every fixture this gate uses is `apply_grain_to_density_layers`
+  // (`model/grain.py:112-163`, the "experimental" multi-layer model, despite
+  // its comment) -- established empirically, not assumed, by reading
+  // `apply_grain`'s branch condition directly (task-16-report.md).
+  //
+  // `densityCurveLayers` is baked RAW (`bake_web_assets.py::pack_stock` ->
+  // `gpc._numeric_layers(profile, "density_curves_layers")`), NOT
+  // normalized like `densityCurves` -- matches Python exactly:
+  // `develop()` passes `density_curves_layers` (raw `self._film.data.
+  // density_curves_layers`) straight through to `apply_grain` untouched,
+  // while `density_curves` gets `- np.nanmin(..., axis=0)` first. Only the
+  // SEARCH AXIS (`densityCurves`, already normalized, already baked) needs
+  // that shift; the per-layer table being interpolated does not.
+  const densityCurveLayers = bundle.stockField(stockId, 'densityCurveLayers');
+  const densityCurveLayerMaxima = bundle.stockField(stockId, 'densityCurveLayerMaxima');
+  if (!densityCurveLayers || !densityCurveLayerMaxima) {
+    throw new Error(`Stock '${stockId}' tidak punya densityCurveLayers/densityCurveLayerMaxima`);
+  }
+  stockBuilder.add('densityCurveLayers', densityCurveLayers.slice());
+  stockBuilder.add('densityCurveLayerMaxima', densityCurveLayerMaxima.slice());
+
   // --- arena dynamic: dihitung dari data stock (Task 11 Step 5) ---
   const wavelengths = bundle.stockField(stockId, 'wavelengths');
   const referenceIlluminantSpectrum = bundle.stockField(stockId, 'referenceIlluminantSpectrum');
