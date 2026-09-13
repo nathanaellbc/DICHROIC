@@ -2418,7 +2418,7 @@ Tambahkan varian kasus ke `gen_reference.py` yang menyetel `dir_amount=1.0` sebe
 ~/.venvs/spektra-ref/Scripts/python spektra/tools/gen_reference.py --out spektra/test/fixtures --case hard_edge
 ```
 
-Nama fixture: `hard_edge_dir`. Ini kasus yang tepat karena DIR adalah operator spasial — tepi keras memperlihatkan efeknya, ramp tidak.
+~~Nama fixture: `hard_edge_dir`.~~ **USANG — tidak pernah dibuat dan tidak dibutuhkan.** Di bawah `lut_mode` suku spasial DIR hilang (`diffusion_size_um = 0`, dan `couplers.py:142` sendiri yang men-short-circuit-nya), jadi koreksi DIR yang perlu diport adalah per-piksel dan keluarga `_lut` yang sudah ada sudah cukup. Task 13 ditutup di situ pada 2.980e-7/3.576e-7/8.047e-7. Suku difusi spasial DIR ditunda untuk diverifikasi terhadap keluarga yang efeknya hidup.
 
 - [ ] **Step 2: Tulis test parity yang gagal**
 
@@ -2479,74 +2479,59 @@ git commit -m "feat(spektra): DIR coupler stage with 9-gamma crosstalk and two-s
 
 ## Task 14: Tahap Halation
 
+> **DIKOREKSI sebelum dieksekusi.** Teks Task 14 yang lama menempatkan Halation
+> SETELAH Dir dan menulis tap `cmy_film`, dengan sumber hulu `model/glare.py`.
+> Ketiganya salah. Python menerapkan halation di dalam `FilmingStage.expose()`
+> (`runtime/stages/filming.py:68`), SEBELUM `log10` yang menghasilkan
+> `log_e_film` — jadi ia berada sebelum CurveDevelop, bukan setelah Dir, dan
+> tap yang ia pengaruhi adalah `log_e_film`. Sumbernya
+> `model/diffusion.py::apply_halation_um`, bukan `glare.py` (itu `add_glare`,
+> milik Task 16/18). Lih. Global Constraints, peta tap→tahap.
+>
+> **Tidak ada fixture baru yang perlu dibangkitkan.** Keluarga `<case>` biasa
+> SUDAH merupakan "spasial hidup, stokastik mati" — itulah yang
+> `deactivate_stochastic_effects` hasilkan, dan itulah kenapa Task 11 mengukur
+> 3.415e-5 terhadapnya. Ketiga suku spasial lain di `expose()` adalah no-op pada
+> default: `camera.lens_blur_um = 0.0`, `camera.diffusion_filter.active = False`,
+> `halation.boost_ev = 0.0` (params_schema.py:53, :16, :118). Dibuktikan bukan
+> diasumsikan: A/B Python dengan HANYA halation yang di-toggle memberi 3.397e-5,
+> praktis seluruh celahnya — kalau diffusion atau lens blur juga hidup, angka itu
+> tidak akan cocok.
+
 **Files:**
 - Create: `spektra/src/shaders/halation.wgsl`, `spektra/src/engine/stages/halation.ts`
-- Test: `spektra/test/parity/halation.test.ts`
+- Test: gerbang ditambahkan ke `spektra/test/parity/filmExposure.test.ts` (tap yang sama, keluarga berbeda) — bukan berkas baru yang menegaskan tap yang sama
 
 **Interfaces:**
-- Produces: `function createHalationStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.CMY_FILM]`
+- Produces: `function createHalationStage(device: GPUDevice, arenas: Arenas): Stage`, `writesTaps = [Tap.LOG_E_FILM]`
 
-**Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/glare.py`; `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraHalation.comp` (322 baris).
+**Sumber hulu:** `$SPEKTRAFILM_PY/src/spektrafilm/model/diffusion.py` (`apply_halation_um`, plus `fast_exponential_filter` untuk campuran Gaussian+ekor eksponensial); `$SPEKTRAFILM_OFX/shaders/vulkan/SpektraHalation.comp` (322 baris).
 
-- [ ] **Step 1: Bangkitkan fixture `impulse_highlight_halation`**
+- [ ] **Step 1: Tulis gerbang yang gagal**
 
-Varian dengan halation aktif. Impuls terang adalah kasus yang tepat: halation adalah hamburan, dan fungsi sebar titik paling jelas terlihat dari satu titik.
+Rantai: `materializeActiveRegion → filmExposure → halation`, tap `Tap.LOG_E_FILM`, `family: 'measured'`, kasus `gray_ramp` / `log_gray_ramp` / `color_patches` (keluarga biasa, BUKAN `_lut`), ambang `1e-5`.
 
-- [ ] **Step 2: Tulis test parity yang gagal**
+Angka yang harus dikalahkan sudah diketahui: **3.415e-5** — itu lubang berbentuk-halation yang Task 11 ukur di keluarga ini. Gerbang `_lut` yang sudah hijau TIDAK boleh berubah.
 
-Buat `spektra/test/parity/halation.test.ts`:
+- [ ] **Step 2: Transliterasi halation.wgsl**
 
-```typescript
-import { describe, it } from 'vitest';
-import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
-import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
-import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
-import { createDirStage } from '../../src/engine/stages/dir';
-import { createHalationStage } from '../../src/engine/stages/halation';
-import { Tap } from '../../src/engine/taps';
-import { runTapParity } from './run';
-
-describe('parity: halation', () => {
-  it('cocok dengan referensi Python', async () => {
-    await runTapParity({
-      case: 'impulse_highlight_halation',
-      tap: Tap.CMY_FILM,
-      tolerance: 1e-5,
-      stages: (device, arenas) => [
-          createMaterializeActiveRegionStage(device),
-          createFilmExposureStage(device, arenas),
-          createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
-          createHalationStage(device, arenas),
-      ],
-    });
-  });
-});
-```
-
-- [ ] **Step 3: Jalankan untuk memastikan gagal**
-
-```bash
-cd spektra && npm test -- parity/halation
-```
-
-- [ ] **Step 4: Transliterasi halation.wgsl**
+Dua bagian yang benar-benar terpisah di `apply_halation_um`, keduanya spasial:
+1. **Hamburan dalam emulsi** — campuran hemat-energi: inti Gaussian (`scatter_core_um`) plus ekor eksponensial (`scatter_tail_um`, `scatter_tail_weight`), di mana ekornya di-dispatch ke campuran Gaussian oleh `fast_exponential_filter`. Tiru pendekatan yang SAMA; jangan ganti dengan satu Gaussian "yang lebih benar secara teori".
+2. **Halation refleksi-balik** — jumlah aditif N Gaussian dengan lebar `sqrt(k)` (`halation_strength`, `halation_first_sigma_um`).
 
 Tahap ini berjalan sebagai dua pass (scatter lalu resolve) dengan pasangan buffer `binding = 0,1` dan `2,3`. `FrameFloats` di `binding = 27` menjadi arena `dynamic`.
 
-- [ ] **Step 5: Tulis halation.ts dan jalankan test**
+Semua sigma dalam mikron dan harus dikonversi ke piksel lewat `pixel_size_um`, yang bergantung pada `film_format_mm` dan lebar gambar — salah di sini memberi blur dengan bentuk benar tapi skala salah, dan itu terlihat sebagai meleset yang halus bukan kasar. Periksa `pixel_size_um` sebelum menyalahkan kernelnya.
+
+- [ ] **Step 3: Tulis halation.ts dan jalankan gerbang**
+
+Laporkan max abs error PER KASUS. Harapan: ~1e-7.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-cd spektra && npm test -- parity/halation
-```
-
-Harapan: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add spektra/src/shaders/halation.wgsl spektra/src/engine/stages/halation.ts spektra/test/parity/halation.test.ts spektra/test/fixtures/impulse_highlight_halation
-git commit -m "feat(spektra): halation scatter stage"
+git add spektra/src/shaders/halation.wgsl spektra/src/engine/stages/halation.ts spektra/test/parity/filmExposure.test.ts
+git commit -m "feat(spektra): halation closes log_e_film on the spatial family"
 ```
 
 ---
