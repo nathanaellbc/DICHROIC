@@ -757,6 +757,27 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
   stockBuilder.add('dirIsPositive', Float32Array.of(dirIsPositive ? 1 : 0));
   stockBuilder.add('dirDensityCurvesBeforeCouplers', dirDensityCurvesBeforeCouplers);
 
+  // --- Task 14 (Halation): back-reflection strength/sigma presets. Baked
+  // per-stock by `tools/bake_web_assets.py::pack_stock` from
+  // `generate_profile_curves.py::_halation_preset(info)` -- verified
+  // byte-identical to Python runtime's own `_apply_halation_preset`
+  // (`params_builder.py:218-241`, table `_HALATION_PRESETS`) for every
+  // (use, antihalation) combination, so no `compare_cpp.py` deviation is
+  // needed here (unlike density_curves, spec §6.3.1). Everything ELSE
+  // `HalationParams` carries (scatter_core_um, scatter_tail_um,
+  // scatter_tail_weight, scatter/halation amount+scale, n_bounces, decay,
+  // renormalize) is a schema-level constant `_apply_halation_preset` never
+  // touches for any of the 28 stocks -- those live as WGSL constants in
+  // `halation.wgsl`, not here, mirroring `SpektraHalation.comp` which
+  // hardcodes the identical numbers itself.
+  const halationStrength = bundle.stockField(stockId, 'halationStrength');
+  const halationFirstSigmaUm = bundle.stockField(stockId, 'halationFirstSigmaUm');
+  if (!halationStrength || !halationFirstSigmaUm) {
+    throw new Error(`Stock '${stockId}' tidak punya halationStrength/halationFirstSigmaUm`);
+  }
+  stockBuilder.add('halationStrength', halationStrength.slice());
+  stockBuilder.add('halationFirstSigmaUm', halationFirstSigmaUm.slice());
+
   // --- arena dynamic: dihitung dari data stock (Task 11 Step 5) ---
   const wavelengths = bundle.stockField(stockId, 'wavelengths');
   const referenceIlluminantSpectrum = bundle.stockField(stockId, 'referenceIlluminantSpectrum');

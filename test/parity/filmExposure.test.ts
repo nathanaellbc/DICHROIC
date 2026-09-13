@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest';
 import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
+import { createHalationStage } from '../../src/engine/stages/halation';
 import { Tap } from '../../src/engine/taps';
 import { runTapParity } from './run';
 
@@ -41,6 +42,45 @@ describe('parity: log_e_film', () => {
         stages: (device, arenas) => [
           createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
+        ],
+      });
+    });
+  }
+});
+
+// Gerbang SPASIAL (Task 14): tap yang SAMA (`log_e_film`), keluarga fixture
+// BERBEDA -- `<case>` biasa (`family: 'measured'`), bukan `_lut`. Ditambahkan
+// di sini (bukan berkas baru) karena arahan Task 14 eksplisit: satu tap, dua
+// gerbang, tidak dua berkas yang menegaskan tap yang sama. Lih. spec
+// §6.3.2/§6.3.3 dan Global Constraints (peta tap→tahap) untuk kenapa
+// `log_e_film` keluarga `<case>` biasa BUTUH `createHalationStage` --
+// `FilmingStage.expose()` Python menjalankan `apply_halation_um` SEBELUM
+// `log10`, dan `deactivate_stochastic_effects` (yang membedakan keluarga
+// `<case>` dari `<case>_stochastic`) TIDAK mematikan halation -- hanya
+// `grain.active`/`glare.active`. Task 11 mengukur residual 3.415e-5 di
+// keluarga ini dengan `filmExposure` sendirian, dan membuktikan lewat A/B
+// Python (halation ON vs OFF, HANYA itu yang di-toggle) bahwa halation
+// menutup 3.397e-5 dari gap itu -- praktis seluruhnya. Task 14 (`halation.ts`)
+// menutup sisanya: `filmExposure.wgsl` dijalankan `slot0=1` (raw LINEAR,
+// bukan log -- lih. `defaultCoreParams`, dipaksa untuk `family: 'measured'`),
+// `createHalationStage` menjalankan scatter + back-reflection ATAS raw itu
+// lalu `log10` sendiri sebagai dispatch terakhirnya.
+//
+// Ketiga gerbang `_lut` di atas TIDAK berubah dan TETAP harus lulus --
+// `filmExposure` SENDIRIAN sudah benar untuk `lut_mode` (halation mati di
+// sana), jadi halation TIDAK boleh masuk rantai itu.
+describe('parity: log_e_film (spasial, halation hidup)', () => {
+  for (const name of ['gray_ramp', 'log_gray_ramp', 'color_patches']) {
+    it(`cocok dengan referensi Python untuk ${name}`, async () => {
+      await runTapParity({
+        case: name,
+        family: 'measured',
+        tap: Tap.LOG_E_FILM,
+        tolerance: 1e-5,
+        stages: (device, arenas) => [
+          createMaterializeActiveRegionStage(device),
+          createFilmExposureStage(device, arenas),
+          createHalationStage(device, arenas),
         ],
       });
     });

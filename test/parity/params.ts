@@ -175,7 +175,16 @@ export function measureAutoExposureEv(
  *                `filmExposureEv` = exposureCompensationEv +
  *                `measureAutoExposureEv(...)`, karena EV bergantung isi
  *                gambar (dibuktikan di task-11-report.md, bagian
- *                `defaultCoreParams`).
+ *                `defaultCoreParams`). Keluarga ini JUGA satu-satunya yang
+ *                efek spasialnya (halation) HIDUP (spec §6.3.2/§6.3.3) --
+ *                karena itu `slot0` di bawah dipaksa 1 (`filmExposure.wgsl`
+ *                menyimpan raw LINEAR, bukan log) untuk keluarga ini: Task
+ *                14 (Halation) butuh raw linear sebelum `log10`-nya
+ *                SENDIRI, persis seperti `FilmingStage.expose()` Python
+ *                yang menjalankan `apply_halation_um` SEBELUM `log10`. Bila
+ *                chain tidak menyertakan `createHalationStage`, tap
+ *                `log_e_film` tidak akan pernah tertutup untuk family ini
+ *                (`filmExposure.wgsl` sendiri tidak pernah men-log raw-nya).
  *   'lut'      — `debug.lut_mode = True` (keluarga `<case>_lut`).
  *                `params_builder.py:105-107` memaksa `camera.auto_exposure
  *                = False` DAN `camera.exposure_compensation_ev = 0.0` di
@@ -245,7 +254,13 @@ export function defaultCoreParams(
     colorDecodeMax: colorSpaces.decodeLutMax,
     hanatosWidth: bundle.manifest.hanatos.width,
     hanatosHeight: bundle.manifest.hanatos.height,
-    slot0: 0, // simpan cabang LOG
+    // 'lut': simpan cabang LOG langsung -- `filmExposure.wgsl` sendirian
+    // memproduksi `log_e_film` (halation mati di bawah lut_mode). 'measured':
+    // simpan cabang LINEAR -- Task 14 (`createHalationStage`) menjalankan
+    // scatter + back-reflection ATAS raw linear ini, lalu men-`log10`-kannya
+    // sendiri sebagai dispatch terakhirnya. Lih. dokumentasi `CoreParamsFamily`
+    // di atas.
+    slot0: family === 'lut' ? 0 : 1,
     slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION,
     slot2: 0, // indeks lokal, bukan buffer tetangga resolusi-penuh
     // 0 -- push/pull mode 0 (tidak aktif). filmExposure.wgsl tidak membaca
