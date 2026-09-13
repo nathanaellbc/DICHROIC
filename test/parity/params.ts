@@ -200,6 +200,7 @@ export function defaultCoreParams(
   bundle: AssetBundle,
   inputRgba: Float32Array,
   family: CoreParamsFamily,
+  stockId: string = 'kodak_portra_400',
 ): CoreParams {
   const { colorSpaces } = bundle.manifest;
   const inputColorSpace = colorSpaces.labels.indexOf('ProPhoto RGB');
@@ -230,8 +231,12 @@ export function defaultCoreParams(
     width,
     height,
     filmExposureEv,
-    filmGamma: 1, // tidak dibaca filmExposure.wgsl
-    exposureCount: 0, // tidak dibaca filmExposure.wgsl
+    filmGamma: 1, // density_curve_gamma default Python (FilmRenderingParams) -- tidak menyisipkan skala gamma
+    // Task 12 (curveDevelop.wgsl): jumlah titik kurva H&D stock ini. Task 11
+    // membiarkan ini 0 karena filmExposure.wgsl tidak membacanya --
+    // curveDevelop.wgsl MEMBACANYA (batas pencarian biner), jadi WAJIB
+    // diisi dari stock yang benar-benar dipakai (lih. brief Task 12).
+    exposureCount: bundle.stock(stockId).entry.exposureCount,
     inputColorSpace,
     rgbToRawMethod: 0, // hanatos2025
     colorSpaceCount: colorSpaces.count,
@@ -243,8 +248,14 @@ export function defaultCoreParams(
     slot0: 0, // simpan cabang LOG
     slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION,
     slot2: 0, // indeks lokal, bukan buffer tetangga resolusi-penuh
-    filmPushPullMode: 0, // tidak dibaca filmExposure.wgsl
-    filmPushPullStops: 0, // tidak dibaca filmExposure.wgsl
+    // 0 -- push/pull mode 0 (tidak aktif). filmExposure.wgsl tidak membaca
+    // ini, tapi curveDevelop.wgsl (Task 12) membaca `filmPushPullMode` untuk
+    // memilih cabang `experimentalPushPullLogRaw`/`Gain` -- Python
+    // (`gen_reference.py`/`digest_params(init_params())`) tidak pernah
+    // menyalakan push/pull untuk fixture manapun yang gerbang ini uji, jadi
+    // 0 benar untuk KEDUA tahap, bukan hanya "diabaikan" oleh filmExposure.
+    filmPushPullMode: 0,
+    filmPushPullStops: 0,
     fullWidth: width,
     fullHeight: height,
     tileOriginX: 0,

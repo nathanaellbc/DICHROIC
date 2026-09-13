@@ -486,6 +486,28 @@ function computeMallettRawMatrix(
 }
 
 /**
+ * Pasangan berselang-seling [nilai, 1/deltaKeTitikBerikutnya] dari
+ * `logExposure` satu stock -- port `makePackedCurveExposure`
+ * (`SpektraVulkanRenderer.cpp:576-584`), dikonsumsi `curveDevelop.wgsl`
+ * (Task 12) lewat `interpDensityCurve`. Elemen `.y` pada titik TERAKHIR
+ * dibiarkan nol (tidak pernah dibaca -- pencarian biner shader berhenti
+ * sebelum mencapai titik terakhir sebagai `lo`, dan cabang `>= lastX`
+ * mengembalikan baris terakhir langsung tanpa interpolasi).
+ */
+function makePackedCurveExposure(logExposure: ArrayLike<number>): Float32Array {
+  const count = logExposure.length;
+  const packed = new Float32Array(count * 2);
+  for (let i = 0; i < count; i += 1) {
+    packed[i * 2] = logExposure[i]!;
+    if (i + 1 < count) {
+      const delta = logExposure[i + 1]! - logExposure[i]!;
+      packed[i * 2 + 1] = 1 / Math.max(delta, 1e-9);
+    }
+  }
+  return packed;
+}
+
+/**
  * Hasil pra-hitung arena: empat `ArenaBuilder` yang sudah terisi penuh tapi
  * BELUM menyentuh GPU. Dibangun `precomputeArenaData()`, dikonsumsi
  * `uploadArenas()`. Setiap builder hanya boleh di-`build()` sekali (dijaga
@@ -530,6 +552,16 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
       wavelengthCount,
     ),
   );
+
+  // --- Task 12 (CurveDevelop): kurva H&D siap pakai satu stock ---
+  // `densityCurves` sudah TERNORMALISASI di sumbernya (`bake_web_assets.py`
+  // Task 4 memakai `_normalized_density_curves` untuk stock film, meniru
+  // `density_curves - np.nanmin(density_curves, axis=0)` Python di
+  // `model/develop.py::develop`) -- disalin apa adanya, TANPA normalisasi
+  // ulang di sini.
+  const curveStock = bundle.stock(stockId);
+  stockBuilder.add('curveExposure', makePackedCurveExposure(curveStock.logExposure));
+  stockBuilder.add('densityCurves', curveStock.densityCurves.slice());
 
   // --- arena dynamic: dihitung dari data stock (Task 11 Step 5) ---
   const wavelengths = bundle.stockField(stockId, 'wavelengths');

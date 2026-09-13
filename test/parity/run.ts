@@ -130,9 +130,8 @@ function assertFamilyMatchesCase(caseName: string, family: CoreParamsFamily): vo
 }
 
 export async function runTapParity(opts: TapParityOptions): Promise<void> {
-  const { engine, bundle, arenas } = await sharedResources(
-    opts.stockId ?? 'kodak_portra_400',
-  );
+  const stockId = opts.stockId ?? 'kodak_portra_400';
+  const { engine, bundle, arenas } = await sharedResources(stockId);
 
   assertFamilyMatchesCase(opts.case, opts.family);
 
@@ -145,7 +144,10 @@ export async function runTapParity(opts: TapParityOptions): Promise<void> {
   // Python (bergantung isi gambar) -- lih. test/parity/params.ts untuk bukti
   // kenapa ini bukan sekadar (width, height, bundle) seperti sketsa brief.
   // `family` menentukan apakah EV itu benar-benar dipakai (lih. params.ts).
-  const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, opts.family);
+  // `stockId` (Task 12+) menentukan `exposureCount` -- HARUS stock yang sama
+  // dengan yang arena-nya dibangun di `sharedResources` di atas, atau
+  // `curveDevelop.wgsl` akan mencari batas kurva stock yang salah.
+  const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, opts.family, stockId);
 
   const actual = await graph.run(inputRgba, params, opts.tap);
 

@@ -114,6 +114,51 @@ def _input_to_reference_xyz_matrices_cat16(reference_illuminant: str) -> list[li
     return matrices
 
 
+def _py_density_curve_data(stock_id: str) -> tuple[list, list]:
+    """`density_curves` and `density_curves_layers` from the PYTHON repo's own
+    profile JSON, not the OFX repo's copy `gpc._load_profile` reads.
+
+    Task 12 (cmy_film gate): spec Sec.6.3.1, same rule Task 11 already
+    established for inputToReferenceXyz (see
+    `_input_to_reference_xyz_matrices_cat16` above) -- where upstream's C++
+    bake and upstream's Python runtime disagree, Python wins, because Python
+    produced the parity fixtures.
+
+    Proven by direct comparison, not assumed: `$SPEKTRAFILM_OFX/Resources/data/
+    profiles/{stock}.json` and `$SPEKTRAFILM_PY/src/spektrafilm/data/profiles/
+    {stock}.json` share an identical `log_exposure` axis and every spectral/
+    matrix field this baker already emits (log_sensitivity, hanatos window
+    params, illuminant spectra -- confirmed byte-identical across all 28
+    stocks), but their `density_curves` arrays diverge on ALL 28 stocks,
+    from 0.033 (kodak_ektachrome_100) to 0.687 (kodak_2393) max abs
+    difference -- three to five orders of magnitude above the 1e-5 parity
+    tolerance, and `density_curves_layers` diverges similarly. This is a
+    genuine data drift between the two upstream repos' bundled profile
+    JSON (the two repos' commit metadata for the same stock even differ:
+    OFX's `metadata.created` is one Python `git log` commit older than PY's
+    for kodak_portra_400), not a bug in either repo's own code -- but our
+    fixtures come from the PY repo's `SimulationPipeline`, so PY's density
+    curves are the ones that must be baked, or every downstream `cmy_film`/
+    `cmy_print` gate (Task 12-18) fails by construction, no matter how
+    faithfully the shader itself is transliterated. Confirmed directly:
+    `curveDevelop.wgsl`'s `interpDensityCurve`, run host-side in JS against
+    the OFX-sourced (uncorrected) `densityCurves` field, missed Python's
+    develop_simple() oracle (DIR-coupler-free) by 1.4e-2 to 1.6e-2 across
+    all three lut-family fixtures -- switching only this data source (no
+    shader/host-math change) is expected to close that gap to the same
+    ~1e-7 f32-noise floor Task 11 reached, since every other stock field
+    was already proven to agree.
+
+    Declared here, not silenced -- see also `compare_cpp.py`'s
+    `INTENTIONAL_DEVIATIONS`, where the resulting divergence from the OFX
+    C++ literal is recorded with this same reasoning for every stock.
+    """
+    py_root = Path(os.environ["SPEKTRAFILM_PY"])
+    path = py_root / "src" / "spektrafilm" / "data" / "profiles" / f"{stock_id}.json"
+    py_profile = json.loads(path.read_text(encoding="utf-8"))
+    return py_profile["data"]["density_curves"], py_profile["data"]["density_curves_layers"]
+
+
 def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
     """Write JSON with LF-only line endings, regardless of platform.
 
@@ -184,6 +229,14 @@ class _BlobWriter:
 # for the precise upstream call it mirrors.
 def pack_stock(writer: _BlobWriter, stock_id: str, *, is_film: bool, shared_input_to_srgb: dict) -> dict:
     profile = gpc._load_profile(stock_id)
+    # Python wins over the OFX C++ bake for density_curves/density_curves_layers
+    # -- see _py_density_curve_data docstring above for the full proof. This
+    # mutates only these two keys of the OFX profile dict in place; every
+    # other field below (spectral response, matrices, illuminants) still
+    # comes from `profile` as loaded, since those were verified to agree.
+    py_density_curves, py_density_curves_layers = _py_density_curve_data(stock_id)
+    profile["data"]["density_curves"] = py_density_curves
+    profile["data"]["density_curves_layers"] = py_density_curves_layers
     info = profile["info"]
     reference_illuminant = info["reference_illuminant"]
     viewing_illuminant = info["viewing_illuminant"]

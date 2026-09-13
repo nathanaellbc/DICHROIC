@@ -96,6 +96,31 @@ INTENTIONAL_DEVIATIONS: dict[str, str] = {
         "1.57e-7 (neutral) to 5.18e-3 (saturated blue), max matrix entry "
         "8.27e-3 -- see task-11-report.md."
     ),
+    "densityCurves": (
+        "$SPEKTRAFILM_OFX/Resources/data/profiles/{stock}.json (C++ bake "
+        "source) vs $SPEKTRAFILM_PY/src/spektrafilm/data/profiles/{stock}.json "
+        "(Python runtime that produced our fixtures) density_curves -- two "
+        "upstream repos' bundled profile JSON have drifted apart on this "
+        "field for all 28 stocks (log_exposure and every other stock field "
+        "this baker emits stay byte-identical between the two repos). "
+        "Max abs difference ranges 0.034 (kodak_ektachrome_100) to 0.687 "
+        "(kodak_2393) -- see task-12-report.md."
+    ),
+    "densityCurveMinimum": (
+        "Derived from density_curves (np.nanmin per channel) -- same PY-vs-OFX "
+        "source divergence as densityCurves above; see task-12-report.md."
+    ),
+    "densityCurveLayers": (
+        "$SPEKTRAFILM_OFX vs $SPEKTRAFILM_PY profile JSON density_curves_layers "
+        "-- same PY-vs-OFX source divergence as densityCurves above, "
+        "independently confirmed to diverge on its own (not merely inherited "
+        "from density_curves); see task-12-report.md."
+    ),
+    "densityCurveLayerMaxima": (
+        "Derived from density_curves_layers (np.nanmax per channel/layer) -- "
+        "same PY-vs-OFX source divergence as densityCurveLayers above; see "
+        "task-12-report.md."
+    ),
 }
 
 # Tabel di manifest["static"] yang sengaja TIDAK dibandingkan di sini,
