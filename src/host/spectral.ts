@@ -62,6 +62,7 @@
 import type { AssetBundle } from '../profiles/load';
 import { ArenaBuilder } from '../engine/arena';
 import type { Arenas } from '../engine/arena';
+import { precomputeDiffusionFilter } from './diffusionFilter';
 
 /**
  * Perkiraan fungsi galat (erf), Abramowitz & Stegun 7.1.26 -- galat
@@ -812,6 +813,56 @@ export function precomputeArenaData(bundle: AssetBundle, stockId: string): Arena
 
   const dynamicBuilder = new ArenaBuilder();
   dynamicBuilder.add('hanatosRawResponse', hanatosRawResponse);
+
+  // --- Task 15 (Diffusion, resumed after BLOCKED -- lih. task-15-report.md
+  // untuk kenapa jalur pyramid OFX mati dan jalur konvolusi-eksak yang
+  // menggantikannya): PSF per-kanal untuk gerbang kamera `log_e_film`
+  // BARU (`hard_edge_diffusion_camera`/`impulse_highlight_diffusion_camera`,
+  // `tools/gen_reference.py`), dan untuk sisi print (`log_e_print`) yang
+  // TIDAK digerbangi -- lih. peringatan panjang di `diffusionFilter.ts`
+  // dan di `stages/diffusion.ts` untuk kenapa PSF ini TIDAK per-stock
+  // (independen dari stock sepenuhnya -- `apply_diffusion_filter_um`
+  // Python beroperasi murni di ruang RGB) TAPI TERIKAT pada
+  // `CAMERA_DIFFUSION_PIXEL_SIZE_UM` di bawah, yang HANYA benar untuk
+  // fixture 64px/35mm baru itu -- BUKAN kontrak umum "arena stock aman
+  // dipakai ulang lintas ukuran gambar apa pun" yang berlaku untuk
+  // entri Task 12-14 di atas.
+  //
+  // Family/strength: DEFAULT `DiffusionFilterParams` Python persis
+  // (`filter_family="black_pro_mist"`, `strength=0.5`, sisanya default) --
+  // satu-satunya perubahan yang `gen_reference.py` buat untuk fixture baru
+  // ini adalah `active=True`. Menghasilkan p_s=0.2625, radius=14 (kernel
+  // 29x29) pada pixel_size_um=546.875 -- diverifikasi cocok dengan
+  // `diffusion_filter_psf`/`apply_diffusion_filter_um` Python asli (bukan
+  // ditranskripsi ulang dari tabel) sampai ~1e-8 (batas presisi f32) di
+  // host, SEBELUM baris WGSL manapun ditulis -- lih. task-15-report.md.
+  //
+  // Print (`enlarger.diffusion_filter`) memakai family/strength DEFAULT
+  // yang SAMA sebagai placeholder eksplisit -- tidak ada fixture Task 17
+  // untuk memverifikasinya, jadi tidak ada dasar untuk memilih nilai lain.
+  // `pixel_size_um` kebetulan identik untuk kedua situs di Python sendiri
+  // (`FilmingStage`/`PrintingStage` keduanya membaca
+  // `self._resize_service.pixel_size_um` yang sama), jadi berbagi konstanta
+  // di sini bukan penyimpangan tambahan.
+  const CAMERA_DIFFUSION_PIXEL_SIZE_UM = 546.875; // 35mm * 1000 / 64px, fixture baru Task 15.
+  const CAMERA_DIFFUSION_MIN_IMAGE_DIM = 64;
+  const cameraDiffusion = precomputeDiffusionFilter(
+    { family: 'black_pro_mist', strength: 0.5 },
+    CAMERA_DIFFUSION_PIXEL_SIZE_UM,
+    CAMERA_DIFFUSION_MIN_IMAGE_DIM,
+  );
+  dynamicBuilder.add('diffusionRadiusCamera', Float32Array.of(cameraDiffusion.radius));
+  dynamicBuilder.add('diffusionScatterFractionCamera', Float32Array.of(cameraDiffusion.scatterFraction));
+  dynamicBuilder.add('diffusionPsfCamera', cameraDiffusion.psf);
+
+  const printDiffusion = precomputeDiffusionFilter(
+    { family: 'black_pro_mist', strength: 0.5 },
+    CAMERA_DIFFUSION_PIXEL_SIZE_UM,
+    CAMERA_DIFFUSION_MIN_IMAGE_DIM,
+  );
+  dynamicBuilder.add('diffusionRadiusPrint', Float32Array.of(printDiffusion.radius));
+  dynamicBuilder.add('diffusionScatterFractionPrint', Float32Array.of(printDiffusion.scatterFraction));
+  dynamicBuilder.add('diffusionPsfPrint', printDiffusion.psf);
 
   // --- arena frameState: kosong untuk Task 11 (lih. dokumentasi modul) ---
   const frameStateBuilder = new ArenaBuilder();

@@ -1,0 +1,3 @@
+
+# Bytecode Python dari tools/ (bake_web_assets, gen_reference, compare_cpp).
+__pycache__/
