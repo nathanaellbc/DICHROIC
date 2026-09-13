@@ -104,7 +104,7 @@ describe('loadAssets', () => {
     expect(copy[0]).toBe(before + 1000);
   });
 
-  describe('stockField: setiap slice cocok tepat dengan offset/panjang manifest, di seluruh 28 stock x 23 field', () => {
+  describe('stockField: setiap slice cocok tepat dengan offset/panjang manifest, di seluruh 28 stock x 27 field', () => {
     const rawStocks = readRawBlob('stocks.f32');
 
     it('nilai identik dengan slice blob mentah dihitung langsung dari offsetFloats/lengthFloats; null hanya untuk bandpassHanatos2025 pada kertas', () => {

@@ -71,11 +71,16 @@ export interface BlobRef {
 }
 
 /**
- * 23 field larik per-stock, persis field `ProfileCurveSet` dari
- * `$SPEKTRAFILM_OFX/src/SpektraProfileCurves.h`, dalam urutan emit
- * `tools/bake_web_assets.py::pack_stock`. Field lain milik stock (id, name,
- * type, wavelengthCount, dst.) adalah skalar/string dan hidup langsung di
- * `StockEntry`, bukan di sini.
+ * 27 field larik per-stock: 23 field pertama persis field `ProfileCurveSet`
+ * dari `$SPEKTRAFILM_OFX/src/SpektraProfileCurves.h`, empat TERAKHIR
+ * (`densityCurvesModel{Centers,Amplitudes,Sigmas}`, `densitySpectralMidgray`)
+ * ditambahkan Task 17 (PrintScan) dari runtime PYTHON, tidak punya padanan
+ * `ProfileCurveSet` sama sekali -- lihat docstring
+ * `tools/bake_web_assets.py::_py_density_curves_model`/
+ * `_py_density_spectral_midgray`. Ditambahkan di AKHIR urutan emit
+ * `pack_stock` supaya offset ke-23 field lama tidak berubah. Field lain
+ * milik stock (id, name, type, wavelengthCount, dst.) adalah skalar/string
+ * dan hidup langsung di `StockEntry`, bukan di sini.
  */
 export const STOCK_FIELD_NAMES = [
   'wavelengths',
@@ -101,6 +106,11 @@ export const STOCK_FIELD_NAMES = [
   'dirGammaBToRg',
   'scanIlluminant',
   'scanToOutputRgb',
+  // Task 17 (PrintScan) -- Python-only, no ProfileCurveSet counterpart.
+  'densityCurvesModelCenters',
+  'densityCurvesModelAmplitudes',
+  'densityCurvesModelSigmas',
+  'densitySpectralMidgray',
 ] as const satisfies readonly string[];
 
 export type StockFieldName = (typeof STOCK_FIELD_NAMES)[number];
@@ -144,9 +154,17 @@ export interface StockEntry {
   citation: string;
   datasource: string;
   /**
-   * null hanya berlaku sah untuk `bandpassHanatos2025` pada stock kertas
-   * (bandpass Hanatos 2025 tidak berlaku untuk kertas cetak) -- setiap field
-   * lain selalu berupa `BlobRef` nyata untuk semua 28 stock.
+   * null berlaku sah untuk: `bandpassHanatos2025` pada stock kertas
+   * (bandpass Hanatos 2025 tidak berlaku untuk kertas cetak); dan
+   * `densitySpectralMidgray` pada stock kertas (Task 17 -- nilai itu hanya
+   * berarti untuk stock yang dipakai sebagai `self._film`, kertas tidak
+   * pernah dipakai begitu). `densityCurvesModel{Centers,Amplitudes,Sigmas}`
+   * (Task 17) SECARA TEORI bisa null bila JSON profil Python tidak punya
+   * kunci `density_curves_model` -- diperiksa untuk seluruh 28 stock
+   * (`tools/bake_web_assets.py::_py_density_curves_model`), tidak ada yang
+   * hilang, tapi kontrak tipe tetap mengizinkannya karena tidak ada jaminan
+   * upstream Python akan terus begitu. Setiap field lain selalu berupa
+   * `BlobRef` nyata untuk semua 28 stock.
    */
   fields: Record<StockFieldName, BlobRef | null>;
 }

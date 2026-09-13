@@ -78,6 +78,13 @@ function expectedLength(s: StockEntry, field: string): number {
     case 'dirGammaBToRg': return 2;
     case 'scanIlluminant': return wl;
     case 'scanToOutputRgb': return cs9;
+    // Task 17 (PrintScan) -- 4 new fields, Python-only (no ProfileCurveSet
+    // counterpart). Flat (3 channels x 3 layers) for the density-curve-model
+    // trio; per-wavelength for the midgray reference spectrum.
+    case 'densityCurvesModelCenters': return 9;
+    case 'densityCurvesModelAmplitudes': return 9;
+    case 'densityCurvesModelSigmas': return 9;
+    case 'densitySpectralMidgray': return wl;
     default: throw new Error(`unknown field ${field}`);
   }
 }
@@ -89,6 +96,9 @@ const ALL_PER_STOCK_FIELDS = [
   'densityCurveLayers', 'densityCurveLayerMaxima', 'halationStrength', 'halationFirstSigmaUm',
   'dirGammaSameLayerRgb', 'dirGammaRToGb', 'dirGammaGToRb', 'dirGammaBToRg',
   'scanIlluminant', 'scanToOutputRgb',
+  // Task 17 (PrintScan) -- Python-only, no ProfileCurveSet counterpart.
+  'densityCurvesModelCenters', 'densityCurvesModelAmplitudes', 'densityCurvesModelSigmas',
+  'densitySpectralMidgray',
 ];
 
 // Fields short enough (<=4 floats) that a legitimate upstream default can be
@@ -177,11 +187,13 @@ describe('aset ter-bake: cakupan stock', () => {
   });
 });
 
-describe('aset ter-bake: 27 field ProfileCurveSet per stock (SpektraProfileCurves.h)', () => {
-  it('tiap stock membawa seluruh 22 field larik (dari 27 total; 5 sisanya adalah skalar/string)', () => {
+describe('aset ter-bake: 31 field per stock (27 ProfileCurveSet + 4 Task 17 Python-only)', () => {
+  it('tiap stock membawa seluruh 26 field larik (dari 31 total; 5 sisanya adalah skalar/string)', () => {
     // stock, name, type, referenceIlluminant + wavelengthCount/exposureCount
-    // (5 skalar/string) hidup langsung di manifest, bukan di blob -- 22 field
-    // sisanya adalah larik float dan harus muncul di s.fields.
+    // (5 skalar/string) hidup langsung di manifest, bukan di blob -- 26 field
+    // sisanya adalah larik float dan harus muncul di s.fields (22 dari
+    // ProfileCurveSet + 4 Task 17: densityCurvesModel{Centers,Amplitudes,
+    // Sigmas}, densitySpectralMidgray).
     for (const s of manifest.stocks as StockEntry[]) {
       for (const field of ALL_PER_STOCK_FIELDS) {
         expect(field in s.fields, `${s.id} hilang field ${field}`).toBe(true);
@@ -195,6 +207,27 @@ describe('aset ter-bake: 27 field ProfileCurveSet per stock (SpektraProfileCurve
     }
     for (const id of PAPER) {
       expect(stocksById.get(id)!.fields.bandpassHanatos2025, id).toBeNull();
+    }
+  });
+
+  it('densitySpectralMidgray (Task 17) hadir untuk semua film, null untuk semua kertas', () => {
+    for (const id of FILM) {
+      expect(stocksById.get(id)!.fields.densitySpectralMidgray, id).not.toBeNull();
+    }
+    for (const id of PAPER) {
+      expect(stocksById.get(id)!.fields.densitySpectralMidgray, id).toBeNull();
+    }
+  });
+
+  it('densityCurvesModel{Centers,Amplitudes,Sigmas} (Task 17) hadir untuk seluruh 28 stock', () => {
+    // Diperiksa langsung terhadap JSON profil Python untuk seluruh 28 stock
+    // (scratchpad probe, task-17-report.md) -- tidak ada yang hilang, tapi
+    // gerbang ini membuktikannya ulang di sini, terhadap manifest nyata,
+    // bukan cuma dipercaya dari catatan sesi lalu.
+    for (const s of manifest.stocks as StockEntry[]) {
+      expect(s.fields.densityCurvesModelCenters, s.id).not.toBeNull();
+      expect(s.fields.densityCurvesModelAmplitudes, s.id).not.toBeNull();
+      expect(s.fields.densityCurvesModelSigmas, s.id).not.toBeNull();
     }
   });
 

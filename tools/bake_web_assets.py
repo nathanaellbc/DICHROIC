@@ -40,6 +40,26 @@ sys.path.insert(0, str(OFX_ROOT / "tools"))
 import generate_profile_curves as gpc  # noqa: E402
 import ofx_stock_lists as stocks  # noqa: E402
 
+# Task 17 (PrintScan, log_e_print/cmy_print gates): `density_curves_model`
+# and `densitySpectralMidgray` both need the REAL Python runtime, not just
+# OFX's `generate_profile_curves` module -- see `_py_density_curves_model`
+# and `_py_density_spectral_midgray` docstrings below for why each needs it.
+# Imported lazily (module scope, but after OFX's sys.path insert above) so
+# `--out`-only invocations that never call these two functions still work
+# even if a caller's PYTHONPATH doesn't have `spektrafilm` installed --
+# but every stock this script bakes DOES need it now, so import eagerly and
+# fail fast with a clear message rather than a deep traceback later.
+try:
+    from spektrafilm.runtime.params_builder import digest_params, init_params
+    from spektrafilm.runtime.pipeline import SimulationPipeline
+except ImportError as exc:  # pragma: no cover - environment guard
+    raise SystemExit(
+        "bake_web_assets.py butuh paket 'spektrafilm' terpasang (Task 17 "
+        "menambah field yang sumbernya runtime Python, bukan cuma bake OFX) "
+        "-- jalankan dengan venv yang punya 'spektrafilm' (mis. .venv-ref), "
+        f"bukan .venv-bake. ImportError asli: {exc}"
+    ) from exc
+
 
 def _input_to_reference_xyz_matrices_cat16(reference_illuminant: str) -> list[list[float]]:
     """CAT16 counterpart of gpc._input_to_reference_xyz_matrices.
@@ -157,6 +177,95 @@ def _py_density_curve_data(stock_id: str) -> tuple[list, list]:
     path = py_root / "src" / "spektrafilm" / "data" / "profiles" / f"{stock_id}.json"
     py_profile = json.loads(path.read_text(encoding="utf-8"))
     return py_profile["data"]["density_curves"], py_profile["data"]["density_curves_layers"]
+
+
+def _py_density_curves_model(stock_id: str) -> tuple[list, list, list] | None:
+    """`density_curves_model.{centers,amplitudes,sigmas}` from the PYTHON
+    repo's own profile JSON.
+
+    Task 17 (log_e_print/cmy_print gates): `PrintingStage.develop()` calls
+    `develop_print_morph`, which evaluates this PARAMETRIC model (sum of
+    per-layer normal-CDF terms, `morph_curves.py::_evaluate_fitted_density`)
+    at the print stock's own `log_exposure` grid -- NOT the raw tabulated
+    `density_curves` field `develop_simple` (film's `develop()`) uses. This
+    project is the FIRST task to consume this field, so per the hard
+    constraint (profile data comes from Python, not OFX, and this field
+    specifically needs checking): confirmed directly
+    (`scratchpad/probe_static_divergence.py`, this session) that
+    `$SPEKTRAFILM_OFX/Resources/data/profiles/{stock}.json` has NO
+    `density_curves_model` key AT ALL for `kodak_portra_endura` (or, by
+    inspection, any stock) -- unlike `density_curves` (Task 12), which
+    exists on BOTH sides and merely disagrees numerically, this field only
+    exists on the Python side. There is nothing to compare against on the
+    OFX side; Python is the only source, not merely the winning one.
+
+    Returns None for stocks whose JSON lacks the key entirely (none observed
+    among the 28 current stocks, but checked rather than assumed -- see
+    `pack_stock` for how a None here is surfaced as manifest `null`,
+    mirroring `bandpassHanatos2025`'s existing null-for-paper convention).
+    """
+    py_root = Path(os.environ["SPEKTRAFILM_PY"])
+    path = py_root / "src" / "spektrafilm" / "data" / "profiles" / f"{stock_id}.json"
+    py_profile = json.loads(path.read_text(encoding="utf-8"))
+    model = py_profile["data"].get("density_curves_model")
+    if model is None:
+        return None
+    return model["centers"], model["amplitudes"], model["sigmas"]
+
+
+# Cache: building a full `SimulationPipeline` per film stock (needed for
+# `_py_density_spectral_midgray` below) recomputes the Hanatos spectral
+# upsampling LUT for that stock's sensitivity -- not free, but a one-time
+# bake cost, and "quality over performance" (project rule) makes reusing the
+# REAL runtime object preferable to reimplementing
+# `_simple_rgb_to_density_spectral`'s dependency chain (band-pass filter,
+# `get_filming_tc_lut`, `rgb_to_raw_hanatos2025`) a second time here just to
+# save a few seconds of bake time.
+_PIPELINE_CACHE: dict[str, object] = {}
+
+
+def _py_density_spectral_midgray(stock_id: str, *, is_film: bool) -> list | None:
+    """Bake `density_spectral_midgray` -- the FILM-stock-only, mid-gray
+    spectral-density reference `PrintingStage._compute_exposure_factor_midgray`
+    combines (at TS runtime, with the runtime-tunable enlarger-filtered
+    illuminant) to normalize print exposure.
+
+    WHY BAKE THIS INSTEAD OF PORTING IT TO TypeScript: unlike
+    `enlarger_filtered_illuminant` (genuinely runtime-tunable -- the enlarger
+    C/M/Y filter shifts are live UI controls, ported to
+    `src/host/enlarger.ts`), `density_spectral_midgray`
+    (`runtime/stages/filming.py::_compute_density_spectral_midgray_to_balance_print`,
+    the non-`_comp` branch this project's `lut_mode`/`family: 'measured'`
+    fixtures always take -- `print_exposure_compensation` is forced `False`
+    under `lut_mode` and `exposure_compensation_ev` is forced `0.0`, so the
+    `_comp` variant is provably never read, see task-17-report.md) is a pure
+    function of ONLY the film stock and camera/settings defaults this project
+    never varies (`rgb_to_raw_method="hanatos2025"`, `filter_uv`/`filter_ir`
+    band-pass off, sRGB midgray `[0.184]*3` with no CCTF decode -- all fixed
+    inside `_simple_rgb_to_density_spectral` itself, not read from any
+    per-run `CoreParams`). Reproducing it in TS would mean porting Hanatos
+    raw sampling AND `develop_simple`'s curve lookup a second time solely to
+    recompute a per-stock constant Python itself only computes once (cached
+    on `FilmingStage.__init__`) -- baking it here is the same "static since
+    load" classification `mallettRawMidgrayGreen` (an existing per-stock
+    baked scalar) already uses for an analogous midgray-reference value.
+
+    Film stocks only (mirrors `bandpassHanatos2025`'s null-for-paper
+    convention) -- print/paper stocks are never used as `self._film` in
+    `PrintingStage`, so this value is meaningless for them.
+    """
+    if not is_film:
+        return None
+    pipeline = _PIPELINE_CACHE.get(stock_id)
+    if pipeline is None:
+        raw_params = init_params(film_profile=stock_id)
+        pipeline = SimulationPipeline(digest_params(raw_params))
+        _PIPELINE_CACHE[stock_id] = pipeline
+    density_spectral_midgray = pipeline._filming_stage._simple_rgb_to_density_spectral(  # noqa: SLF001
+        np.array([[[0.184, 0.184, 0.184]]])
+    )
+    # Shape (1, 1, wavelengthCount) -- squeeze to a flat per-wavelength vector.
+    return [float(v) for v in np.asarray(density_spectral_midgray).reshape(-1)]
 
 
 def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
@@ -306,6 +415,30 @@ def pack_stock(writer: _BlobWriter, stock_id: str, *, is_film: bool, shared_inpu
     fields["scanIlluminant"] = writer.write(scan_illuminant)
     # _scan_to_output_rgb_matrices(viewing_illuminant) -- :1057
     fields["scanToOutputRgb"] = writer.write(gpc._scan_to_output_rgb_matrices(viewing_illuminant))
+
+    # --- Task 17 (PrintScan): four NEW fields, appended here (after every
+    # field the SpektraProfileCurves.h contract above already emits) so
+    # every existing field keeps its exact byte offset -- see
+    # `_py_density_curves_model`/`_py_density_spectral_midgray` docstrings
+    # for why each needs the Python runtime specifically, not OFX's bake.
+    # Flat layout [channel*3 + layer], channel/layer order exactly as
+    # `density_curves_model.{centers,amplitudes,sigmas}` (both (3,3)
+    # row=channel, col=layer arrays) -- read back the same way in
+    # `src/host/spectral.ts`.
+    density_curves_model = _py_density_curves_model(stock_id)
+    if density_curves_model is None:
+        fields["densityCurvesModelCenters"] = None
+        fields["densityCurvesModelAmplitudes"] = None
+        fields["densityCurvesModelSigmas"] = None
+    else:
+        centers, amplitudes, sigmas = density_curves_model
+        fields["densityCurvesModelCenters"] = writer.write(centers)
+        fields["densityCurvesModelAmplitudes"] = writer.write(amplitudes)
+        fields["densityCurvesModelSigmas"] = writer.write(sigmas)
+    density_spectral_midgray = _py_density_spectral_midgray(stock_id, is_film=is_film)
+    fields["densitySpectralMidgray"] = (
+        writer.write(density_spectral_midgray) if density_spectral_midgray is not None else None
+    )
 
     return {
         "id": stock_id,

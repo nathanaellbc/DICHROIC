@@ -155,6 +155,23 @@
         "scanToOutputRgb": {
           "offsetFloats": 5123,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 5357,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 5366,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 5375,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 5384,
+          "lengthFloats": 81,
+          "nullCount": 25
         }
       }
     },
@@ -172,27 +189,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 5357,
+          "offsetFloats": 5465,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 5438,
+          "offsetFloats": 5546,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 5681,
+          "offsetFloats": 5789,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 5924,
+          "offsetFloats": 6032,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 5928,
+          "offsetFloats": 6036,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 6009,
+          "offsetFloats": 6117,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -200,70 +217,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 6243,
+          "offsetFloats": 6351,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 6486,
+          "offsetFloats": 6594,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 6742,
+          "offsetFloats": 6850,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 7510,
+          "offsetFloats": 7618,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 7753,
+          "offsetFloats": 7861,
           "lengthFloats": 81,
           "nullCount": 22
         },
         "densityCurveMinimum": {
-          "offsetFloats": 7834,
+          "offsetFloats": 7942,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 7837,
+          "offsetFloats": 7945,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 10141,
+          "offsetFloats": 10249,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 10150,
+          "offsetFloats": 10258,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 10153,
+          "offsetFloats": 10261,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 10156,
+          "offsetFloats": 10264,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 10159,
+          "offsetFloats": 10267,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 10161,
+          "offsetFloats": 10269,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 10163,
+          "offsetFloats": 10271,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 10165,
+          "offsetFloats": 10273,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 10246,
+          "offsetFloats": 10354,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 10588,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 10597,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 10606,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 10615,
+          "lengthFloats": 81,
+          "nullCount": 22
         }
       }
     },
@@ -281,27 +315,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 10480,
+          "offsetFloats": 10696,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 10561,
+          "offsetFloats": 10777,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 10804,
+          "offsetFloats": 11020,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 11047,
+          "offsetFloats": 11263,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 11051,
+          "offsetFloats": 11267,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 11132,
+          "offsetFloats": 11348,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -309,70 +343,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 11366,
+          "offsetFloats": 11582,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 11609,
+          "offsetFloats": 11825,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 11865,
+          "offsetFloats": 12081,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 12633,
+          "offsetFloats": 12849,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 12876,
+          "offsetFloats": 13092,
           "lengthFloats": 81,
           "nullCount": 20
         },
         "densityCurveMinimum": {
-          "offsetFloats": 12957,
+          "offsetFloats": 13173,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 12960,
+          "offsetFloats": 13176,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 15264,
+          "offsetFloats": 15480,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 15273,
+          "offsetFloats": 15489,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 15276,
+          "offsetFloats": 15492,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 15279,
+          "offsetFloats": 15495,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 15282,
+          "offsetFloats": 15498,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 15284,
+          "offsetFloats": 15500,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 15286,
+          "offsetFloats": 15502,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 15288,
+          "offsetFloats": 15504,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 15369,
+          "offsetFloats": 15585,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 15819,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 15828,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 15837,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 15846,
+          "lengthFloats": 81,
+          "nullCount": 20
         }
       }
     },
@@ -390,27 +441,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 15603,
+          "offsetFloats": 15927,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 15684,
+          "offsetFloats": 16008,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 15927,
+          "offsetFloats": 16251,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 16170,
+          "offsetFloats": 16494,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 16174,
+          "offsetFloats": 16498,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 16255,
+          "offsetFloats": 16579,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -418,70 +469,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 16489,
+          "offsetFloats": 16813,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 16732,
+          "offsetFloats": 17056,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 16988,
+          "offsetFloats": 17312,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 17756,
+          "offsetFloats": 18080,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 17999,
+          "offsetFloats": 18323,
           "lengthFloats": 81,
           "nullCount": 22
         },
         "densityCurveMinimum": {
-          "offsetFloats": 18080,
+          "offsetFloats": 18404,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 18083,
+          "offsetFloats": 18407,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 20387,
+          "offsetFloats": 20711,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 20396,
+          "offsetFloats": 20720,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 20399,
+          "offsetFloats": 20723,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 20402,
+          "offsetFloats": 20726,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 20405,
+          "offsetFloats": 20729,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 20407,
+          "offsetFloats": 20731,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 20409,
+          "offsetFloats": 20733,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 20411,
+          "offsetFloats": 20735,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 20492,
+          "offsetFloats": 20816,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 21050,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 21059,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 21068,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 21077,
+          "lengthFloats": 81,
+          "nullCount": 22
         }
       }
     },
@@ -499,27 +567,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 20726,
+          "offsetFloats": 21158,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 20807,
+          "offsetFloats": 21239,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 21050,
+          "offsetFloats": 21482,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 21293,
+          "offsetFloats": 21725,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 21297,
+          "offsetFloats": 21729,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 21378,
+          "offsetFloats": 21810,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -527,70 +595,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 21612,
+          "offsetFloats": 22044,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 21855,
+          "offsetFloats": 22287,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 22111,
+          "offsetFloats": 22543,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 22879,
+          "offsetFloats": 23311,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 23122,
+          "offsetFloats": 23554,
           "lengthFloats": 81,
           "nullCount": 22
         },
         "densityCurveMinimum": {
-          "offsetFloats": 23203,
+          "offsetFloats": 23635,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 23206,
+          "offsetFloats": 23638,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 25510,
+          "offsetFloats": 25942,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 25519,
+          "offsetFloats": 25951,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 25522,
+          "offsetFloats": 25954,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 25525,
+          "offsetFloats": 25957,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 25528,
+          "offsetFloats": 25960,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 25530,
+          "offsetFloats": 25962,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 25532,
+          "offsetFloats": 25964,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 25534,
+          "offsetFloats": 25966,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 25615,
+          "offsetFloats": 26047,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 26281,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 26290,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 26299,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 26308,
+          "lengthFloats": 81,
+          "nullCount": 22
         }
       }
     },
@@ -608,27 +693,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 25849,
+          "offsetFloats": 26389,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 25930,
+          "offsetFloats": 26470,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 26173,
+          "offsetFloats": 26713,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 26416,
+          "offsetFloats": 26956,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 26420,
+          "offsetFloats": 26960,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 26501,
+          "offsetFloats": 27041,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -636,70 +721,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 26735,
+          "offsetFloats": 27275,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 26978,
+          "offsetFloats": 27518,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 27234,
+          "offsetFloats": 27774,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 28002,
+          "offsetFloats": 28542,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 28245,
+          "offsetFloats": 28785,
           "lengthFloats": 81,
           "nullCount": 22
         },
         "densityCurveMinimum": {
-          "offsetFloats": 28326,
+          "offsetFloats": 28866,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 28329,
+          "offsetFloats": 28869,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 30633,
+          "offsetFloats": 31173,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 30642,
+          "offsetFloats": 31182,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 30645,
+          "offsetFloats": 31185,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 30648,
+          "offsetFloats": 31188,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 30651,
+          "offsetFloats": 31191,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 30653,
+          "offsetFloats": 31193,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 30655,
+          "offsetFloats": 31195,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 30657,
+          "offsetFloats": 31197,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 30738,
+          "offsetFloats": 31278,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 31512,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 31521,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 31530,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 31539,
+          "lengthFloats": 81,
+          "nullCount": 22
         }
       }
     },
@@ -717,27 +819,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 30972,
+          "offsetFloats": 31620,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 31053,
+          "offsetFloats": 31701,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 31296,
+          "offsetFloats": 31944,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 31539,
+          "offsetFloats": 32187,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 31543,
+          "offsetFloats": 32191,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 31624,
+          "offsetFloats": 32272,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -745,70 +847,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 31858,
+          "offsetFloats": 32506,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 32101,
+          "offsetFloats": 32749,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 32357,
+          "offsetFloats": 33005,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 33125,
+          "offsetFloats": 33773,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 33368,
+          "offsetFloats": 34016,
           "lengthFloats": 81,
           "nullCount": 20
         },
         "densityCurveMinimum": {
-          "offsetFloats": 33449,
+          "offsetFloats": 34097,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 33452,
+          "offsetFloats": 34100,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 35756,
+          "offsetFloats": 36404,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 35765,
+          "offsetFloats": 36413,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 35768,
+          "offsetFloats": 36416,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 35771,
+          "offsetFloats": 36419,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 35774,
+          "offsetFloats": 36422,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 35776,
+          "offsetFloats": 36424,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 35778,
+          "offsetFloats": 36426,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 35780,
+          "offsetFloats": 36428,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 35861,
+          "offsetFloats": 36509,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 36743,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 36752,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 36761,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 36770,
+          "lengthFloats": 81,
+          "nullCount": 20
         }
       }
     },
@@ -826,27 +945,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 36095,
+          "offsetFloats": 36851,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 36176,
+          "offsetFloats": 36932,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 36419,
+          "offsetFloats": 37175,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 36662,
+          "offsetFloats": 37418,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 36666,
+          "offsetFloats": 37422,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 36747,
+          "offsetFloats": 37503,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -854,70 +973,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 36981,
+          "offsetFloats": 37737,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 37224,
+          "offsetFloats": 37980,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 37480,
+          "offsetFloats": 38236,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 38248,
+          "offsetFloats": 39004,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 38491,
+          "offsetFloats": 39247,
           "lengthFloats": 81,
           "nullCount": 21
         },
         "densityCurveMinimum": {
-          "offsetFloats": 38572,
+          "offsetFloats": 39328,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 38575,
+          "offsetFloats": 39331,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 40879,
+          "offsetFloats": 41635,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 40888,
+          "offsetFloats": 41644,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 40891,
+          "offsetFloats": 41647,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 40894,
+          "offsetFloats": 41650,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 40897,
+          "offsetFloats": 41653,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 40899,
+          "offsetFloats": 41655,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 40901,
+          "offsetFloats": 41657,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 40903,
+          "offsetFloats": 41659,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 40984,
+          "offsetFloats": 41740,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 41974,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 41983,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 41992,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 42001,
+          "lengthFloats": 81,
+          "nullCount": 21
         }
       }
     },
@@ -935,27 +1071,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 41218,
+          "offsetFloats": 42082,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 41299,
+          "offsetFloats": 42163,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 41542,
+          "offsetFloats": 42406,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 41785,
+          "offsetFloats": 42649,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 41789,
+          "offsetFloats": 42653,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 41870,
+          "offsetFloats": 42734,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -963,70 +1099,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 42104,
+          "offsetFloats": 42968,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 42347,
+          "offsetFloats": 43211,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 42603,
+          "offsetFloats": 43467,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 43371,
+          "offsetFloats": 44235,
           "lengthFloats": 243,
           "nullCount": 23
         },
         "baseDensity": {
-          "offsetFloats": 43614,
+          "offsetFloats": 44478,
           "lengthFloats": 81,
           "nullCount": 9
         },
         "densityCurveMinimum": {
-          "offsetFloats": 43695,
+          "offsetFloats": 44559,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 43698,
+          "offsetFloats": 44562,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 46002,
+          "offsetFloats": 46866,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 46011,
+          "offsetFloats": 46875,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 46014,
+          "offsetFloats": 46878,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 46017,
+          "offsetFloats": 46881,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 46020,
+          "offsetFloats": 46884,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 46022,
+          "offsetFloats": 46886,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 46024,
+          "offsetFloats": 46888,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 46026,
+          "offsetFloats": 46890,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 46107,
+          "offsetFloats": 46971,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 47205,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 47214,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 47223,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 47232,
+          "lengthFloats": 81,
+          "nullCount": 10
         }
       }
     },
@@ -1044,27 +1197,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 46341,
+          "offsetFloats": 47313,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 46422,
+          "offsetFloats": 47394,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 46665,
+          "offsetFloats": 47637,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 46908,
+          "offsetFloats": 47880,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 46912,
+          "offsetFloats": 47884,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 46993,
+          "offsetFloats": 47965,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1072,70 +1225,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 47227,
+          "offsetFloats": 48199,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 47470,
+          "offsetFloats": 48442,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 47726,
+          "offsetFloats": 48698,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 48494,
+          "offsetFloats": 49466,
           "lengthFloats": 243,
           "nullCount": 15
         },
         "baseDensity": {
-          "offsetFloats": 48737,
+          "offsetFloats": 49709,
           "lengthFloats": 81,
           "nullCount": 4
         },
         "densityCurveMinimum": {
-          "offsetFloats": 48818,
+          "offsetFloats": 49790,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 48821,
+          "offsetFloats": 49793,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 51125,
+          "offsetFloats": 52097,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 51134,
+          "offsetFloats": 52106,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 51137,
+          "offsetFloats": 52109,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 51140,
+          "offsetFloats": 52112,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 51143,
+          "offsetFloats": 52115,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 51145,
+          "offsetFloats": 52117,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 51147,
+          "offsetFloats": 52119,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 51149,
+          "offsetFloats": 52121,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 51230,
+          "offsetFloats": 52202,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 52436,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 52445,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 52454,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 52463,
+          "lengthFloats": 81,
+          "nullCount": 5
         }
       }
     },
@@ -1153,27 +1323,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 51464,
+          "offsetFloats": 52544,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 51545,
+          "offsetFloats": 52625,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 51788,
+          "offsetFloats": 52868,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 52031,
+          "offsetFloats": 53111,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 52035,
+          "offsetFloats": 53115,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 52116,
+          "offsetFloats": 53196,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1181,70 +1351,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 52350,
+          "offsetFloats": 53430,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 52593,
+          "offsetFloats": 53673,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 52849,
+          "offsetFloats": 53929,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 53617,
+          "offsetFloats": 54697,
           "lengthFloats": 243,
           "nullCount": 23
         },
         "baseDensity": {
-          "offsetFloats": 53860,
+          "offsetFloats": 54940,
           "lengthFloats": 81,
           "nullCount": 22
         },
         "densityCurveMinimum": {
-          "offsetFloats": 53941,
+          "offsetFloats": 55021,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 53944,
+          "offsetFloats": 55024,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 56248,
+          "offsetFloats": 57328,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 56257,
+          "offsetFloats": 57337,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 56260,
+          "offsetFloats": 57340,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 56263,
+          "offsetFloats": 57343,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 56266,
+          "offsetFloats": 57346,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 56268,
+          "offsetFloats": 57348,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 56270,
+          "offsetFloats": 57350,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 56272,
+          "offsetFloats": 57352,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 56353,
+          "offsetFloats": 57433,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 57667,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 57676,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 57685,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 57694,
+          "lengthFloats": 81,
+          "nullCount": 22
         }
       }
     },
@@ -1262,27 +1449,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 56587,
+          "offsetFloats": 57775,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 56668,
+          "offsetFloats": 57856,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 56911,
+          "offsetFloats": 58099,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 57154,
+          "offsetFloats": 58342,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 57158,
+          "offsetFloats": 58346,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 57239,
+          "offsetFloats": 58427,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1290,70 +1477,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 57473,
+          "offsetFloats": 58661,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 57716,
+          "offsetFloats": 58904,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 57972,
+          "offsetFloats": 59160,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 58740,
+          "offsetFloats": 59928,
           "lengthFloats": 243,
           "nullCount": 15
         },
         "baseDensity": {
-          "offsetFloats": 58983,
+          "offsetFloats": 60171,
           "lengthFloats": 81,
           "nullCount": 4
         },
         "densityCurveMinimum": {
-          "offsetFloats": 59064,
+          "offsetFloats": 60252,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 59067,
+          "offsetFloats": 60255,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 61371,
+          "offsetFloats": 62559,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 61380,
+          "offsetFloats": 62568,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 61383,
+          "offsetFloats": 62571,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 61386,
+          "offsetFloats": 62574,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 61389,
+          "offsetFloats": 62577,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 61391,
+          "offsetFloats": 62579,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 61393,
+          "offsetFloats": 62581,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 61395,
+          "offsetFloats": 62583,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 61476,
+          "offsetFloats": 62664,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 62898,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 62907,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 62916,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 62925,
+          "lengthFloats": 81,
+          "nullCount": 5
         }
       }
     },
@@ -1371,27 +1575,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 61710,
+          "offsetFloats": 63006,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 61791,
+          "offsetFloats": 63087,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 62034,
+          "offsetFloats": 63330,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 62277,
+          "offsetFloats": 63573,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 62281,
+          "offsetFloats": 63577,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 62362,
+          "offsetFloats": 63658,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1399,70 +1603,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 62596,
+          "offsetFloats": 63892,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 62839,
+          "offsetFloats": 64135,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 63095,
+          "offsetFloats": 64391,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 63863,
+          "offsetFloats": 65159,
           "lengthFloats": 243,
           "nullCount": 15
         },
         "baseDensity": {
-          "offsetFloats": 64106,
+          "offsetFloats": 65402,
           "lengthFloats": 81,
           "nullCount": 4
         },
         "densityCurveMinimum": {
-          "offsetFloats": 64187,
+          "offsetFloats": 65483,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 64190,
+          "offsetFloats": 65486,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 66494,
+          "offsetFloats": 67790,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 66503,
+          "offsetFloats": 67799,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 66506,
+          "offsetFloats": 67802,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 66509,
+          "offsetFloats": 67805,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 66512,
+          "offsetFloats": 67808,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 66514,
+          "offsetFloats": 67810,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 66516,
+          "offsetFloats": 67812,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 66518,
+          "offsetFloats": 67814,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 66599,
+          "offsetFloats": 67895,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 68129,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 68138,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 68147,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 68156,
+          "lengthFloats": 81,
+          "nullCount": 5
         }
       }
     },
@@ -1480,27 +1701,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 66833,
+          "offsetFloats": 68237,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 66914,
+          "offsetFloats": 68318,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 67157,
+          "offsetFloats": 68561,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 67400,
+          "offsetFloats": 68804,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 67404,
+          "offsetFloats": 68808,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 67485,
+          "offsetFloats": 68889,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1508,70 +1729,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 67719,
+          "offsetFloats": 69123,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 67962,
+          "offsetFloats": 69366,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 68218,
+          "offsetFloats": 69622,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 68986,
+          "offsetFloats": 70390,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 69229,
+          "offsetFloats": 70633,
           "lengthFloats": 81,
           "nullCount": 17
         },
         "densityCurveMinimum": {
-          "offsetFloats": 69310,
+          "offsetFloats": 70714,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 69313,
+          "offsetFloats": 70717,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 71617,
+          "offsetFloats": 73021,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 71626,
+          "offsetFloats": 73030,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 71629,
+          "offsetFloats": 73033,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 71632,
+          "offsetFloats": 73036,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 71635,
+          "offsetFloats": 73039,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 71637,
+          "offsetFloats": 73041,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 71639,
+          "offsetFloats": 73043,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 71641,
+          "offsetFloats": 73045,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 71722,
+          "offsetFloats": 73126,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 73360,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 73369,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 73378,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 73387,
+          "lengthFloats": 81,
+          "nullCount": 17
         }
       }
     },
@@ -1589,27 +1827,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 71956,
+          "offsetFloats": 73468,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 72037,
+          "offsetFloats": 73549,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 72280,
+          "offsetFloats": 73792,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 72523,
+          "offsetFloats": 74035,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 72527,
+          "offsetFloats": 74039,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 72608,
+          "offsetFloats": 74120,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1617,70 +1855,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 72842,
+          "offsetFloats": 74354,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 73085,
+          "offsetFloats": 74597,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 73341,
+          "offsetFloats": 74853,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 74109,
+          "offsetFloats": 75621,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 74352,
+          "offsetFloats": 75864,
           "lengthFloats": 81,
           "nullCount": 17
         },
         "densityCurveMinimum": {
-          "offsetFloats": 74433,
+          "offsetFloats": 75945,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 74436,
+          "offsetFloats": 75948,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 76740,
+          "offsetFloats": 78252,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 76749,
+          "offsetFloats": 78261,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 76752,
+          "offsetFloats": 78264,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 76755,
+          "offsetFloats": 78267,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 76758,
+          "offsetFloats": 78270,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 76760,
+          "offsetFloats": 78272,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 76762,
+          "offsetFloats": 78274,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 76764,
+          "offsetFloats": 78276,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 76845,
+          "offsetFloats": 78357,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 78591,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 78600,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 78609,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 78618,
+          "lengthFloats": 81,
+          "nullCount": 17
         }
       }
     },
@@ -1698,27 +1953,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 77079,
+          "offsetFloats": 78699,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 77160,
+          "offsetFloats": 78780,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 77403,
+          "offsetFloats": 79023,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 77646,
+          "offsetFloats": 79266,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 77650,
+          "offsetFloats": 79270,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 77731,
+          "offsetFloats": 79351,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1726,70 +1981,87 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 77965,
+          "offsetFloats": 79585,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 78208,
+          "offsetFloats": 79828,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 78464,
+          "offsetFloats": 80084,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 79232,
+          "offsetFloats": 80852,
           "lengthFloats": 243,
           "nullCount": 22
         },
         "baseDensity": {
-          "offsetFloats": 79475,
+          "offsetFloats": 81095,
           "lengthFloats": 81,
           "nullCount": 17
         },
         "densityCurveMinimum": {
-          "offsetFloats": 79556,
+          "offsetFloats": 81176,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 79559,
+          "offsetFloats": 81179,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 81863,
+          "offsetFloats": 83483,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 81872,
+          "offsetFloats": 83492,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 81875,
+          "offsetFloats": 83495,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 81878,
+          "offsetFloats": 83498,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 81881,
+          "offsetFloats": 83501,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 81883,
+          "offsetFloats": 83503,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 81885,
+          "offsetFloats": 83505,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 81887,
+          "offsetFloats": 83507,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 81968,
+          "offsetFloats": 83588,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 83822,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 83831,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 83840,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 83849,
+          "lengthFloats": 81,
+          "nullCount": 17
         }
       }
     },
@@ -1807,27 +2079,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 82202,
+          "offsetFloats": 83930,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 82283,
+          "offsetFloats": 84011,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 82526,
+          "offsetFloats": 84254,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 82769,
+          "offsetFloats": 84497,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 82773,
+          "offsetFloats": 84501,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 82854,
+          "offsetFloats": 84582,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1835,69 +2107,86 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 83088,
+          "offsetFloats": 84816,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 83331,
+          "offsetFloats": 85059,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 83587,
+          "offsetFloats": 85315,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 84355,
+          "offsetFloats": 86083,
           "lengthFloats": 243,
           "nullCount": 63
         },
         "baseDensity": {
-          "offsetFloats": 84598,
+          "offsetFloats": 86326,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 84679,
+          "offsetFloats": 86407,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 84682,
+          "offsetFloats": 86410,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 86986,
+          "offsetFloats": 88714,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 86995,
+          "offsetFloats": 88723,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 86998,
+          "offsetFloats": 88726,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 87001,
+          "offsetFloats": 88729,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 87004,
+          "offsetFloats": 88732,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 87006,
+          "offsetFloats": 88734,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 87008,
+          "offsetFloats": 88736,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 87010,
+          "offsetFloats": 88738,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 87091,
+          "offsetFloats": 88819,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 89053,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 89062,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 89071,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 89080,
+          "lengthFloats": 81,
+          "nullCount": 21
         }
       }
     },
@@ -1915,27 +2204,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 87325,
+          "offsetFloats": 89161,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 87406,
+          "offsetFloats": 89242,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 87649,
+          "offsetFloats": 89485,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 87892,
+          "offsetFloats": 89728,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 87896,
+          "offsetFloats": 89732,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 87977,
+          "offsetFloats": 89813,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -1943,69 +2232,86 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 88211,
+          "offsetFloats": 90047,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 88454,
+          "offsetFloats": 90290,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 88710,
+          "offsetFloats": 90546,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 89478,
+          "offsetFloats": 91314,
           "lengthFloats": 243,
           "nullCount": 78
         },
         "baseDensity": {
-          "offsetFloats": 89721,
+          "offsetFloats": 91557,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 89802,
+          "offsetFloats": 91638,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 89805,
+          "offsetFloats": 91641,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 92109,
+          "offsetFloats": 93945,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 92118,
+          "offsetFloats": 93954,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 92121,
+          "offsetFloats": 93957,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 92124,
+          "offsetFloats": 93960,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 92127,
+          "offsetFloats": 93963,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 92129,
+          "offsetFloats": 93965,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 92131,
+          "offsetFloats": 93967,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 92133,
+          "offsetFloats": 93969,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 92214,
+          "offsetFloats": 94050,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 94284,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 94293,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 94302,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 94311,
+          "lengthFloats": 81,
+          "nullCount": 26
         }
       }
     },
@@ -2023,27 +2329,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 92448,
+          "offsetFloats": 94392,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 92529,
+          "offsetFloats": 94473,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 92772,
+          "offsetFloats": 94716,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 93015,
+          "offsetFloats": 94959,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 93019,
+          "offsetFloats": 94963,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 93100,
+          "offsetFloats": 95044,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2051,69 +2357,86 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 93334,
+          "offsetFloats": 95278,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 93577,
+          "offsetFloats": 95521,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 93833,
+          "offsetFloats": 95777,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 94601,
+          "offsetFloats": 96545,
           "lengthFloats": 243,
           "nullCount": 56
         },
         "baseDensity": {
-          "offsetFloats": 94844,
+          "offsetFloats": 96788,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 94925,
+          "offsetFloats": 96869,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 94928,
+          "offsetFloats": 96872,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 97232,
+          "offsetFloats": 99176,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 97241,
+          "offsetFloats": 99185,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 97244,
+          "offsetFloats": 99188,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 97247,
+          "offsetFloats": 99191,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 97250,
+          "offsetFloats": 99194,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 97252,
+          "offsetFloats": 99196,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 97254,
+          "offsetFloats": 99198,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 97256,
+          "offsetFloats": 99200,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 97337,
+          "offsetFloats": 99281,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 99515,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 99524,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 99533,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 99542,
+          "lengthFloats": 81,
+          "nullCount": 19
         }
       }
     },
@@ -2131,27 +2454,27 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 97571,
+          "offsetFloats": 99623,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 97652,
+          "offsetFloats": 99704,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": {
-          "offsetFloats": 97895,
+          "offsetFloats": 99947,
           "lengthFloats": 243
         },
         "hanatos2026WindowParams": {
-          "offsetFloats": 98138,
+          "offsetFloats": 100190,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 98142,
+          "offsetFloats": 100194,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 98223,
+          "offsetFloats": 100275,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2159,69 +2482,86 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 98457,
+          "offsetFloats": 100509,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 98700,
+          "offsetFloats": 100752,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 98956,
+          "offsetFloats": 101008,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 99724,
+          "offsetFloats": 101776,
           "lengthFloats": 243,
           "nullCount": 42
         },
         "baseDensity": {
-          "offsetFloats": 99967,
+          "offsetFloats": 102019,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 100048,
+          "offsetFloats": 102100,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 100051,
+          "offsetFloats": 102103,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 102355,
+          "offsetFloats": 104407,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 102364,
+          "offsetFloats": 104416,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 102367,
+          "offsetFloats": 104419,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 102370,
+          "offsetFloats": 104422,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 102373,
+          "offsetFloats": 104425,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 102375,
+          "offsetFloats": 104427,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 102377,
+          "offsetFloats": 104429,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 102379,
+          "offsetFloats": 104431,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 102460,
+          "offsetFloats": 104512,
           "lengthFloats": 234
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 104746,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 104755,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 104764,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": {
+          "offsetFloats": 104773,
+          "lengthFloats": 81,
+          "nullCount": 14
         }
       }
     },
@@ -2239,24 +2579,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 102694,
+          "offsetFloats": 104854,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 102775,
+          "offsetFloats": 104935,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 103018,
+          "offsetFloats": 105178,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 103022,
+          "offsetFloats": 105182,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 103103,
+          "offsetFloats": 105263,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2264,70 +2604,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 103337,
+          "offsetFloats": 105497,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 103580,
+          "offsetFloats": 105740,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 103836,
+          "offsetFloats": 105996,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 104604,
+          "offsetFloats": 106764,
           "lengthFloats": 243,
           "nullCount": 66
         },
         "baseDensity": {
-          "offsetFloats": 104847,
+          "offsetFloats": 107007,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 104928,
+          "offsetFloats": 107088,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 104931,
+          "offsetFloats": 107091,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 107235,
+          "offsetFloats": 109395,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 107244,
+          "offsetFloats": 109404,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 107247,
+          "offsetFloats": 109407,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 107250,
+          "offsetFloats": 109410,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 107253,
+          "offsetFloats": 109413,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 107255,
+          "offsetFloats": 109415,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 107257,
+          "offsetFloats": 109417,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 107259,
+          "offsetFloats": 109419,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 107340,
+          "offsetFloats": 109500,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 109734,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 109743,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 109752,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2344,24 +2697,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 107574,
+          "offsetFloats": 109761,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 107655,
+          "offsetFloats": 109842,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 107898,
+          "offsetFloats": 110085,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 107902,
+          "offsetFloats": 110089,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 107983,
+          "offsetFloats": 110170,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2369,70 +2722,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 108217,
+          "offsetFloats": 110404,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 108460,
+          "offsetFloats": 110647,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 108716,
+          "offsetFloats": 110903,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 109484,
+          "offsetFloats": 111671,
           "lengthFloats": 243,
           "nullCount": 65
         },
         "baseDensity": {
-          "offsetFloats": 109727,
+          "offsetFloats": 111914,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 109808,
+          "offsetFloats": 111995,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 109811,
+          "offsetFloats": 111998,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 112115,
+          "offsetFloats": 114302,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 112124,
+          "offsetFloats": 114311,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 112127,
+          "offsetFloats": 114314,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 112130,
+          "offsetFloats": 114317,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 112133,
+          "offsetFloats": 114320,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 112135,
+          "offsetFloats": 114322,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 112137,
+          "offsetFloats": 114324,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 112139,
+          "offsetFloats": 114326,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 112220,
+          "offsetFloats": 114407,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 114641,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 114650,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 114659,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2449,24 +2815,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 112454,
+          "offsetFloats": 114668,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 112535,
+          "offsetFloats": 114749,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 112778,
+          "offsetFloats": 114992,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 112782,
+          "offsetFloats": 114996,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 112863,
+          "offsetFloats": 115077,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2474,70 +2840,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 113097,
+          "offsetFloats": 115311,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 113340,
+          "offsetFloats": 115554,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 113596,
+          "offsetFloats": 115810,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 114364,
+          "offsetFloats": 116578,
           "lengthFloats": 243,
           "nullCount": 64
         },
         "baseDensity": {
-          "offsetFloats": 114607,
+          "offsetFloats": 116821,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 114688,
+          "offsetFloats": 116902,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 114691,
+          "offsetFloats": 116905,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 116995,
+          "offsetFloats": 119209,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 117004,
+          "offsetFloats": 119218,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 117007,
+          "offsetFloats": 119221,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 117010,
+          "offsetFloats": 119224,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 117013,
+          "offsetFloats": 119227,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 117015,
+          "offsetFloats": 119229,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 117017,
+          "offsetFloats": 119231,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 117019,
+          "offsetFloats": 119233,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 117100,
+          "offsetFloats": 119314,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 119548,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 119557,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 119566,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2554,24 +2933,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 117334,
+          "offsetFloats": 119575,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 117415,
+          "offsetFloats": 119656,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 117658,
+          "offsetFloats": 119899,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 117662,
+          "offsetFloats": 119903,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 117743,
+          "offsetFloats": 119984,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2579,70 +2958,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 117977,
+          "offsetFloats": 120218,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 118220,
+          "offsetFloats": 120461,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 118476,
+          "offsetFloats": 120717,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 119244,
+          "offsetFloats": 121485,
           "lengthFloats": 243,
           "nullCount": 64
         },
         "baseDensity": {
-          "offsetFloats": 119487,
+          "offsetFloats": 121728,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 119568,
+          "offsetFloats": 121809,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 119571,
+          "offsetFloats": 121812,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 121875,
+          "offsetFloats": 124116,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 121884,
+          "offsetFloats": 124125,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 121887,
+          "offsetFloats": 124128,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 121890,
+          "offsetFloats": 124131,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 121893,
+          "offsetFloats": 124134,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 121895,
+          "offsetFloats": 124136,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 121897,
+          "offsetFloats": 124138,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 121899,
+          "offsetFloats": 124140,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 121980,
+          "offsetFloats": 124221,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 124455,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 124464,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 124473,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2659,24 +3051,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 122214,
+          "offsetFloats": 124482,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 122295,
+          "offsetFloats": 124563,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 122538,
+          "offsetFloats": 124806,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 122542,
+          "offsetFloats": 124810,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 122623,
+          "offsetFloats": 124891,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2684,70 +3076,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 122857,
+          "offsetFloats": 125125,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 123100,
+          "offsetFloats": 125368,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 123356,
+          "offsetFloats": 125624,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 124124,
+          "offsetFloats": 126392,
           "lengthFloats": 243,
           "nullCount": 64
         },
         "baseDensity": {
-          "offsetFloats": 124367,
+          "offsetFloats": 126635,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 124448,
+          "offsetFloats": 126716,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 124451,
+          "offsetFloats": 126719,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 126755,
+          "offsetFloats": 129023,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 126764,
+          "offsetFloats": 129032,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 126767,
+          "offsetFloats": 129035,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 126770,
+          "offsetFloats": 129038,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 126773,
+          "offsetFloats": 129041,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 126775,
+          "offsetFloats": 129043,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 126777,
+          "offsetFloats": 129045,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 126779,
+          "offsetFloats": 129047,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 126860,
+          "offsetFloats": 129128,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 129362,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 129371,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 129380,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2764,24 +3169,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 127094,
+          "offsetFloats": 129389,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 127175,
+          "offsetFloats": 129470,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 127418,
+          "offsetFloats": 129713,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 127422,
+          "offsetFloats": 129717,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 127503,
+          "offsetFloats": 129798,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2789,70 +3194,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 127737,
+          "offsetFloats": 130032,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 127980,
+          "offsetFloats": 130275,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 128236,
+          "offsetFloats": 130531,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 129004,
+          "offsetFloats": 131299,
           "lengthFloats": 243,
           "nullCount": 37
         },
         "baseDensity": {
-          "offsetFloats": 129247,
+          "offsetFloats": 131542,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 129328,
+          "offsetFloats": 131623,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 129331,
+          "offsetFloats": 131626,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 131635,
+          "offsetFloats": 133930,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 131644,
+          "offsetFloats": 133939,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 131647,
+          "offsetFloats": 133942,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 131650,
+          "offsetFloats": 133945,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 131653,
+          "offsetFloats": 133948,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 131655,
+          "offsetFloats": 133950,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 131657,
+          "offsetFloats": 133952,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 131659,
+          "offsetFloats": 133954,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 131740,
+          "offsetFloats": 134035,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 134269,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 134278,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 134287,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2869,24 +3287,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 131974,
+          "offsetFloats": 134296,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 132055,
+          "offsetFloats": 134377,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 132298,
+          "offsetFloats": 134620,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 132302,
+          "offsetFloats": 134624,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 132383,
+          "offsetFloats": 134705,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2894,70 +3312,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 132617,
+          "offsetFloats": 134939,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 132860,
+          "offsetFloats": 135182,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 133116,
+          "offsetFloats": 135438,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 133884,
+          "offsetFloats": 136206,
           "lengthFloats": 243,
           "nullCount": 19
         },
         "baseDensity": {
-          "offsetFloats": 134127,
+          "offsetFloats": 136449,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 134208,
-          "lengthFloats": 3
-        },
-        "densityCurveLayers": {
-          "offsetFloats": 134211,
-          "lengthFloats": 2304
-        },
-        "densityCurveLayerMaxima": {
-          "offsetFloats": 136515,
-          "lengthFloats": 9
-        },
-        "halationStrength": {
-          "offsetFloats": 136524,
-          "lengthFloats": 3
-        },
-        "halationFirstSigmaUm": {
-          "offsetFloats": 136527,
-          "lengthFloats": 3
-        },
-        "dirGammaSameLayerRgb": {
           "offsetFloats": 136530,
           "lengthFloats": 3
         },
-        "dirGammaRToGb": {
+        "densityCurveLayers": {
           "offsetFloats": 136533,
+          "lengthFloats": 2304
+        },
+        "densityCurveLayerMaxima": {
+          "offsetFloats": 138837,
+          "lengthFloats": 9
+        },
+        "halationStrength": {
+          "offsetFloats": 138846,
+          "lengthFloats": 3
+        },
+        "halationFirstSigmaUm": {
+          "offsetFloats": 138849,
+          "lengthFloats": 3
+        },
+        "dirGammaSameLayerRgb": {
+          "offsetFloats": 138852,
+          "lengthFloats": 3
+        },
+        "dirGammaRToGb": {
+          "offsetFloats": 138855,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 136535,
+          "offsetFloats": 138857,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 136537,
+          "offsetFloats": 138859,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 136539,
+          "offsetFloats": 138861,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 136620,
+          "offsetFloats": 138942,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 139176,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 139185,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 139194,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     },
     {
@@ -2974,24 +3405,24 @@
       "datasource": "This profile was created by processing raw measurement data from data-sheets and/or scientific papers. Original data are property of the respective holders.\n    Film/photo-paper: Kodak and Fujifilm data-sheets, scientific publications, and technical material.\n    Reflectance: Otsu (https://github.com/enneract/otsu2018), Munsell (https://zenodo.org/records/3269912), human skin (https://www.nist.gov/programs-projects/reflectance-measurements-human-skin), forest colors (https://zenodo.org/records/3269920), Japan colors (https://zenodo.org/records/5217752).\n    All data publicly available.",
       "fields": {
         "wavelengths": {
-          "offsetFloats": 136854,
+          "offsetFloats": 139203,
           "lengthFloats": 81
         },
         "logSensitivity": {
-          "offsetFloats": 136935,
+          "offsetFloats": 139284,
           "lengthFloats": 243
         },
         "bandpassHanatos2025": null,
         "hanatos2026WindowParams": {
-          "offsetFloats": 137178,
+          "offsetFloats": 139527,
           "lengthFloats": 4
         },
         "referenceIlluminantSpectrum": {
-          "offsetFloats": 137182,
+          "offsetFloats": 139531,
           "lengthFloats": 81
         },
         "inputToReferenceXyz": {
-          "offsetFloats": 137263,
+          "offsetFloats": 139612,
           "lengthFloats": 234
         },
         "inputToSrgb": {
@@ -2999,70 +3430,83 @@
           "lengthFloats": 234
         },
         "mallettBasisIlluminant": {
-          "offsetFloats": 137497,
+          "offsetFloats": 139846,
           "lengthFloats": 243
         },
         "logExposure": {
-          "offsetFloats": 137740,
+          "offsetFloats": 140089,
           "lengthFloats": 256
         },
         "densityCurves": {
-          "offsetFloats": 137996,
+          "offsetFloats": 140345,
           "lengthFloats": 768
         },
         "channelDensity": {
-          "offsetFloats": 138764,
+          "offsetFloats": 141113,
           "lengthFloats": 243,
           "nullCount": 21
         },
         "baseDensity": {
-          "offsetFloats": 139007,
+          "offsetFloats": 141356,
           "lengthFloats": 81
         },
         "densityCurveMinimum": {
-          "offsetFloats": 139088,
+          "offsetFloats": 141437,
           "lengthFloats": 3
         },
         "densityCurveLayers": {
-          "offsetFloats": 139091,
+          "offsetFloats": 141440,
           "lengthFloats": 2304
         },
         "densityCurveLayerMaxima": {
-          "offsetFloats": 141395,
+          "offsetFloats": 143744,
           "lengthFloats": 9
         },
         "halationStrength": {
-          "offsetFloats": 141404,
+          "offsetFloats": 143753,
           "lengthFloats": 3
         },
         "halationFirstSigmaUm": {
-          "offsetFloats": 141407,
+          "offsetFloats": 143756,
           "lengthFloats": 3
         },
         "dirGammaSameLayerRgb": {
-          "offsetFloats": 141410,
+          "offsetFloats": 143759,
           "lengthFloats": 3
         },
         "dirGammaRToGb": {
-          "offsetFloats": 141413,
+          "offsetFloats": 143762,
           "lengthFloats": 2
         },
         "dirGammaGToRb": {
-          "offsetFloats": 141415,
+          "offsetFloats": 143764,
           "lengthFloats": 2
         },
         "dirGammaBToRg": {
-          "offsetFloats": 141417,
+          "offsetFloats": 143766,
           "lengthFloats": 2
         },
         "scanIlluminant": {
-          "offsetFloats": 141419,
+          "offsetFloats": 143768,
           "lengthFloats": 81
         },
         "scanToOutputRgb": {
-          "offsetFloats": 141500,
+          "offsetFloats": 143849,
           "lengthFloats": 234
-        }
+        },
+        "densityCurvesModelCenters": {
+          "offsetFloats": 144083,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelAmplitudes": {
+          "offsetFloats": 144092,
+          "lengthFloats": 9
+        },
+        "densityCurvesModelSigmas": {
+          "offsetFloats": 144101,
+          "lengthFloats": 9
+        },
+        "densitySpectralMidgray": null
       }
     }
   ],
