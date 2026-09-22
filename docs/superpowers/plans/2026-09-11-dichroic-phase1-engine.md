@@ -3104,6 +3104,34 @@ git commit -m "feat(spektra): ScannerPost stage completes end-to-end parity at r
 
 ## Task 19: Tiling dengan apron
 
+> **Catatan yang diverifikasi sebelum eksekusi.**
+>
+> **1. Aturan "Python yang menang" TIDAK berlaku di sini.** Python bekerja
+> full-frame dan tidak punya konsep tiling sama sekali, jadi
+> `estimateVulkanTileOverlap` di OFX adalah SATU-SATUNYA sumber hulu dan
+> memakainya bukan pelanggaran spec §6.3.1. Tidak ada dua implementasi yang bisa
+> berselisih di sini — yang ada cuma satu.
+>
+> **2. Grain SUDAH aman-tiling secara konstruksi, dan itu bukan kebetulan.**
+> `grain.wgsl:285` memanggil `randNormal(absoluteGid.x, absoluteGid.y, ch, sl)`,
+> di mana `absoluteGid = gid.xy + activeOrigin` (:239). RNG-nya di-seed dari
+> koordinat ABSOLUT gambar, bukan koordinat lokal tile, jadi piksel yang sama
+> menerima butir yang sama di tile mana pun ia jatuh. Test nol-selisih Step 5
+> karena itu memang bisa lulus bit-per-bit dengan grain aktif. Kalau ia GAGAL,
+> periksa dulu apakah suatu tahap memakai koordinat lokal di tempat yang
+> seharusnya absolut — itu jauh lebih mungkin daripada apron yang kurang.
+>
+> **3. Pass blur grain memakai koordinat buffer PENUH.** `blurX`/`blurY`
+> (`grain.wgsl:311,329`) membatasi diri pada `params.width/height`, bukan pada
+> region aktif, dan membaca tetangga. Jadi apron harus menutupi radius blur itu,
+> bukan hanya radius halation/diffusion. Sama berlaku untuk setiap tahap spasial
+> lain yang ditambahkan setelah ini.
+>
+> **4. Bit-identik adalah gerbang yang benar dan tidak boleh dilonggarkan
+> menjadi "mendekati".** Apron yang benar menghasilkan NOL selisih. Selisih
+> kecil berarti apronnya kurang besar atau suatu tahap membaca di luar
+> wilayah yang dijaminnya — keduanya bug, bukan derau numerik.
+
 **Files:**
 - Create: `spektra/src/engine/tiling.ts`
 - Modify: `spektra/src/engine/graph.ts` — tambahkan jalur render ter-tile
