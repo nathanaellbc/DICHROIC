@@ -3219,6 +3219,49 @@ git commit -m "feat(spektra): tiled rendering with apron producing bit-identical
 
 ---
 
+## Task 18b: Varians builtin transendental lintas perangkat
+
+**WAJIB sebelum Fase 1 dinyatakan selesai.** Ditemukan saat menutup Gate A Task 18.
+
+Gerbang `rgb_out` meleset di 1.627e-5 dan penyebabnya BUKAN algoritma kami:
+`atan2()` bawaan WGSL diukur menyimpang **20-96 ULP** dari `Math.atan2` f64
+pada backend ini. Itu bukan bug driver — spesifikasi WGSL §15.9 hanya menjamin
+`atan2` akurat sampai **4096 ULP**. Dengan gain propagasi ~0,81 ke `rgb_out`,
+93 ULP di sana menjelaskan seluruh residual secara kuantitatif. Diganti
+polinomial minimax derajat-7 (max error 2,86e-7 rad, >40x lebih akurat dari
+atan2 native terukur, hanya perkalian-tambah) dan gerbang langsung tertutup.
+
+**Implikasi yang jauh lebih besar dari satu gerbang.** DICHROIC WebGPU-saja dan
+dikapalkan ke GPU siapa pun. Setiap builtin transendental di jalur panas adalah
+sumber varians lintas-perangkat yang SAH menurut spesifikasi: dua GPU yang
+sama-sama patuh boleh memberi hasil berbeda, dan seluruh parity kami hanya
+membuktikan satu backend. Yang dipakai hari ini:
+
+| Shader | Builtin |
+|---|---|
+| `scannerPost.wgsl` | `pow` x13, `cos` x5, `exp` x5, `sqrt` x5, `sin` x3, `log` x1 (`atan2` SUDAH diganti) |
+| `halation.wgsl` | `exp` x9, `log` x2, `sqrt` x2, `pow` x1 |
+| `grain.wgsl` | `sqrt` x6, `log` x2, `exp` x1, `cos` x1 |
+| `printScan.wgsl` | `pow` x2, `log` x1 |
+| `curveDevelop.wgsl`, `dir.wgsl`, `filmExposure.wgsl`, `diffusion.wgsl` | `exp`/`log`/`exp2` tunggal |
+
+Semuanya lulus gerbangnya di ~1e-7 **pada backend ini**, yang berarti akurasinya
+memadai di sini — bukan bahwa ia memadai di mana pun.
+
+- [ ] Pakai ulang probe compute-shader Task 18 untuk mengukur galat ULP SETIAP
+      builtin di tabel itu terhadap padanan f64, pada rentang masukan yang
+      benar-benar dipakai tiap situs panggil (bukan rentang generik).
+- [ ] Ukur gain propagasi tiap situs panggil ke tap keluarannya, seperti yang
+      dilakukan untuk `hp = atan2(...)`. Galat besar pada suku bergain rendah
+      tidak penting; galat kecil pada suku bergain tinggi penting.
+- [ ] Ganti HANYA yang hasil kali galat-x-gain-nya mendekati 1e-5, dengan
+      polinomial perkalian-tambah seperti `atan2Accurate`. Jangan ganti yang
+      lain — kode yang ditulis tangan tanpa alasan terukur adalah utang, bukan
+      kualitas.
+- [ ] Catat di spec: gerbang parity memverifikasi ALGORITMA, dan pada backend
+      pengujian juga memverifikasi aritmetikanya; portabilitas aritmetika adalah
+      klaim TERPISAH yang hanya berlaku untuk builtin yang sudah diganti.
+
 ## Task 16b: Suku grain yang bergantung ukuran piksel
 
 **WAJIB sebelum Fase 1 dinyatakan selesai.** Bukan polish, dan bukan optimasi.
@@ -3260,7 +3303,7 @@ kualitas-di-atas-performa.
 
 Pada titik ini `npm test` di `spektra/` menjalankan: uji batas lisensi, uji aset, uji profil, uji device, uji params, uji arena, uji graf, uji harness, tujuh rangkaian parity, dan uji tiling. Seluruhnya lulus berarti engine cocok dengan implementasi referensi Python di setiap tap, dan render ter-tile identik dengan full-frame.
 
-**Fase 1 TIDAK selesai sampai Task 16b ditutup**, dan sampai site `print`
+**Fase 1 TIDAK selesai sampai Task 16b DAN Task 18b ditutup**, dan sampai site `print`
 Diffusion (diimplementasikan di Task 15, sengaja tidak digerbangi karena tap
 `log_e_print` belum ada) benar-benar digerbangi oleh Task 17. Dua jalur kode
 yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1 yang kelihatan
