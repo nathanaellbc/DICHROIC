@@ -65,6 +65,7 @@ import type { Arenas } from '../engine/arena';
 import { precomputeDiffusionFilter } from './diffusionFilter';
 import { filteredEnlargerIlluminant } from './enlarger';
 import type { EnlargerFilterState } from './enlarger';
+import { buildScannerCam16Static } from './cam16';
 
 /**
  * Perkiraan fungsi galat (erf), Abramowitz & Stegun 7.1.26 -- galat
@@ -804,6 +805,107 @@ function addPrintScanDynamicData(
   dynamicBuilder.add('printExposureCount', Float32Array.of(printExposureCount));
   dynamicBuilder.add('printCurveExposure', makePackedCurveExposure(printLogExposureField));
   dynamicBuilder.add('printDensityCurvesMorphed', printDensityCurvesMorphed);
+
+  addScannerPostDynamicData(dynamicBuilder, bundle, printStockId);
+}
+
+/**
+ * Task 18 (ScannerPost): entri arena `dynamic` untuk `ScanningStage.scan()`
+ * Python (`runtime/stages/scanning.py`) -- `_density_to_rgb` (cabang
+ * `io.scan_film=False`, mencetak PRINT) + `compress_rgb` (`output_gamut_
+ * compress.algorithm="cam16ucs"`, DEFAULT Python, TIDAK di-override
+ * `tools/gen_reference.py` untuk fixture manapun -- diverifikasi lewat
+ * probe host langsung, matikan langkah ini mengubah `rgb_out` sampai maks
+ * abs 1.06 pada `color_patches_lut`, lih. task-18-report.md).
+ *
+ * `_apply_blur_and_unsharp` (`scanner.lens_blur`, `scanner.unsharp_mask`)
+ * dan `black_white_xyz_correction` TIDAK diimplementasikan di sini --
+ * TERBUKTI no-op untuk keluarga `_lut` (`params_builder.py:116-118`,
+ * `ScannerParams.unsharp_mask` default `(0.7,0.7)` TAPI `lut_mode`
+ * memaksanya `(0,0)`; `lens_blur` default `0.0` sudah nol; `white_correction`/
+ * `black_correction` default `False` dan `lut_mode` MEMAKSANYA `False` juga
+ * -- keduanya `False` membuat `black_white_xyz_correction` `return xyz`
+ * identitas, `color_reference.py:116-119`). `add_glare` (stokastik) TIDAK
+ * diimplementasikan di sini -- gerbang statistik Task 18 (family
+ * `_stochastic`), bukan gerbang `_lut` ini.
+ *
+ * SEMUA field di bawah PRINT-stock-dependent KECUALI konstanta CAM16
+ * (`scannerCam16*`, tetap untuk `output_color_space="sRGB"` -- lih.
+ * `src/host/cam16.ts` untuk derivasinya lengkap dengan bukti numerik).
+ *
+ * `scanIlluminant`/`scanToOutputRgb` SUDAH DIBAKE (bake_web_assets.py,
+ * dari sebelum Task 18 -- `scan_illuminant`/`_scan_to_output_rgb_matrices`
+ * di `generate_profile_curves.py`, TIDAK perlu bake baru sama sekali):
+ * `scanIlluminant` = `standard_illuminant(viewing_illuminant)` PRINT,
+ * `scanToOutputRgb` = 26 matriks `XYZ_to_RGB(..., illuminant=scan_
+ * illuminant_xy, chromatic_adaptation_transform="CAT02")` per ruang warna
+ * -- `colour.XYZ_to_RGB`'s DEFAULT CAT (diverifikasi lewat introspeksi
+ * `inspect.signature`) adalah `'CAT02'` juga, jadi bake OFX ini cocok
+ * runtime Python tanpa divergensi (lih. task-18-report.md).
+ *
+ * `channelDensity`/`baseDensity` PRINT dibaca di sini APA ADANYA (field
+ * per-stock yang SAMA yang Task 17 sudah tambahkan ke arena `stock` FILM
+ * -- `bake_web_assets.py` membakunya untuk KEDUA kelompok stock, film
+ * MAUPUN kertas, jadi tidak ada bake baru untuk field ini juga).
+ */
+function addScannerPostDynamicData(
+  dynamicBuilder: ArenaBuilder,
+  bundle: AssetBundle,
+  printStockId: string,
+): void {
+  const channelDensity = bundle.stockField(printStockId, 'channelDensity');
+  const baseDensity = bundle.stockField(printStockId, 'baseDensity');
+  const scanIlluminant = bundle.stockField(printStockId, 'scanIlluminant');
+  const scanToOutputRgb = bundle.stockField(printStockId, 'scanToOutputRgb');
+  if (!channelDensity || !baseDensity || !scanIlluminant || !scanToOutputRgb) {
+    throw new Error(
+      `Stock print '${printStockId}' tidak punya channelDensity/baseDensity/scanIlluminant/scanToOutputRgb`,
+    );
+  }
+  const wavelengthCount = bundle.stockEntry(printStockId).wavelengthCount;
+
+  const srgbIndex = bundle.manifest.colorSpaces.labels.indexOf('sRGB');
+  if (srgbIndex < 0) throw new Error("colorSpaces.labels tidak punya 'sRGB'");
+  const scanToOutputRgbSrgb = scanToOutputRgb.slice(srgbIndex * 9, srgbIndex * 9 + 9);
+
+  const cmfs = bundle.staticTable('standardObserverCmfs');
+  // `normalization = sum(scan_illuminant * STANDARD_OBSERVER_CMFS[:,1])`
+  // (`scanning.py:69`) -- konstan per render (tidak bergantung piksel),
+  // dihitung SEKALI di sini alih-alih setiap dispatch piksel menjumlahkan
+  // ulang `wavelengthCount` suku yang sama di `scannerPost.wgsl`.
+  let normalization = 0;
+  for (let wl = 0; wl < wavelengthCount; wl += 1) {
+    normalization += scanIlluminant[wl]! * cmfs[wl * 3 + 1]!;
+  }
+
+  dynamicBuilder.add('scannerChannelDensity', channelDensity.slice());
+  dynamicBuilder.add('scannerBaseDensity', baseDensity.slice());
+  dynamicBuilder.add('scannerIlluminant', scanIlluminant.slice());
+  dynamicBuilder.add('scannerWavelengthCount', Float32Array.of(wavelengthCount));
+  dynamicBuilder.add('scannerNormalization', Float32Array.of(normalization));
+  dynamicBuilder.add('scannerToOutputRgb', Float32Array.from(scanToOutputRgbSrgb));
+
+  // Konstanta CAM16 (`compress_rgb`, `output_color_space="sRGB"`) -- lih.
+  // `src/host/cam16.ts` untuk turunan lengkap. `buildScannerCam16Static`
+  // menjalankan bisection 64x720x18 (~830rb evaluasi CAM16 inverse) --
+  // beban CPU host yang SAMA jenisnya dengan `hanatosRawResponse` di atas,
+  // WAJIB selesai di sini (sebelum `acquireDevice()`), bukan disebar ke
+  // WGSL per piksel (lih. CATATAN LINGKUNGAN modul ini).
+  const cam16 = buildScannerCam16Static();
+  dynamicBuilder.add(
+    'scannerCam16Viewing',
+    Float32Array.of(
+      cam16.viewing.D_RGB[0],
+      cam16.viewing.D_RGB[1],
+      cam16.viewing.D_RGB[2],
+      cam16.viewing.F_L,
+      cam16.viewing.N_bb,
+      cam16.viewing.z,
+      cam16.viewing.A_w,
+      cam16.viewing.n,
+    ),
+  );
+  dynamicBuilder.add('scannerCam16CmaxTable', cam16.cmaxTable);
 }
 
 /**
@@ -1008,6 +1110,15 @@ export function precomputeArenaData(
   staticBuilder.add('inputToSrgb', inputToSrgb.slice());
   staticBuilder.add('colorDecodeLuts', bundle.staticTable('colorDecodeLuts').slice());
   staticBuilder.add('colorTransferKinds', bundle.staticTable('colorTransferKinds').slice());
+  // Task 18 (ScannerPost): `standardObserverCmfs` diunggah ke GPU di sini
+  // (sebelumnya hanya dibaca host-side, mis. di `addPrintScanDynamicData`
+  // untuk `printFactorMidgray`) -- `scannerPost.wgsl` mengintegrasikan
+  // `density_to_light(...)` terhadap CMF per piksel (`cmy_to_log_xyz`
+  // Python, `runtime/stages/scanning.py`), jadi butuh salinan yang bisa
+  // dibaca shader, bukan cuma nilai turunan host. Sama untuk SEMUA stock,
+  // ditambah TANPA SYARAT (bukan hanya ketika `printScan` diberikan) --
+  // entri baru murni aditif, tidak menggeser offset entri lain di atas.
+  staticBuilder.add('standardObserverCmfs', bundle.staticTable('standardObserverCmfs').slice());
 
   // --- arena stock: berubah bersama stock yang dipilih ---
   const linearSensitivity = linearSensitivityFrom(bundle.stockField(stockId, 'logSensitivity')!);
