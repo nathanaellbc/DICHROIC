@@ -122,6 +122,56 @@ fn spow(x: f32, p: f32) -> f32 {
   return sign(x) * pow(abs(x), p);
 }
 
+// `atan2()` GPU (Dawn/Tint, backend native) DIUKUR menyimpang 20-96 ULP dari
+// nilai bulat-benar (~1e-6 sampai ~1.1e-5 RADIAN absolut) pada masukan biasa
+// (bukan kasus tepi) -- probe langsung terhadap device SUNGGUHAN, dibandingkan
+// `Math.atan2` f64 yang di-downcast f32, lih. task-18-report.md. WGSL HANYA
+// menjamin `atan2` akurat sampai 4096 ULP (spesifikasi §15.9), jadi ini bukan
+// bug driver, ia MEMANG dalam kontrak -- tapi `hp = atan2(jab.z, jab.y)`
+// (`compressRgbCam16Ucs`) punya penguatan HAMPIR SATU (diukur ~0.81 lewat
+// analisis sensitivitas host f64: menyuntik satu galat di `hp` propagasi
+// ~81%-nya langsung ke `rgb_out`) ke arah CpMax (tabel gamut, sangat
+// nonlinier dekat siku knee) DAN rekonstruksi `ap`/`bp` -- SATU-SATUNYA
+// sumber yang teridentifikasi cukup besar untuk menjelaskan residual 1.6e-5
+// `color_patches_lut` (Gate A). Polinomial minimax (least-squares, derajat
+// 7 dalam x^2, `fit_atan.mjs`) di bawah terverifikasi <2.9e-7 rad di SELURUH
+// domain (2 juta sampel acak + kasus tepi sumbu/kuadran) -- >40x lebih akurat
+// dari `atan2()` native yang diukur, dan HANYA memakai perkalian-tambah
+// (tanpa transcendental GPU tambahan selain SATU pemanggilan di dalam
+// `atanPoly`, yang derajat rendahnya sendiri tidak mewarisi galat approksimasi
+// hardware manapun karena TIDAK memanggil `atan`/`atan2` bawaan sama sekali).
+fn atanPoly(x: f32) -> f32 {
+  let t = x * x;
+  var p = -0.005021098775;
+  p = p * t + 0.02533179913;
+  p = p * t - 0.06087458420;
+  p = p * t + 0.1000220994;
+  p = p * t - 0.1404782205;
+  p = p * t + 0.1997402856;
+  p = p * t - 0.3333223261;
+  p = p * t + 0.9999999228;
+  return x * p;
+}
+
+fn atan2Accurate(y: f32, x: f32) -> f32 {
+  let ax = abs(x);
+  let ay = abs(y);
+  let mn = min(ax, ay);
+  let mx = max(ax, ay);
+  let r = select(mn / mx, 0.0, mx == 0.0);
+  var angle = atanPoly(r);
+  if (ay > ax) {
+    angle = 1.5707963267948966 - angle;
+  }
+  if (x < 0.0) {
+    angle = 3.14159265358979 - angle;
+  }
+  if (y < 0.0) {
+    angle = -angle;
+  }
+  return angle;
+}
+
 const kMatrix16 = mat3x3<f32>(
   0.401288, -0.250268, -0.002079,
   0.650173, 1.204414, 0.048952,
@@ -198,7 +248,7 @@ fn cam16Forward(xyzUnitY: vec3<f32>, vc: Cam16Viewing) -> Cam16Fwd {
   let RGB_a = postAdaptForward(RGB_c, vc.F_L);
   let a = RGB_a.x - (12.0 * RGB_a.y) / 11.0 + RGB_a.z / 11.0;
   let b = (RGB_a.x + RGB_a.y - 2.0 * RGB_a.z) / 9.0;
-  let hRad = atan2(b, a);
+  let hRad = atan2Accurate(b, a);
   var hDeg = (hRad * 180.0 / 3.14159265358979) ;
   hDeg = hDeg - 360.0 * floor(hDeg / 360.0);
   let e_t = 0.25 * (cos(2.0 + hRad) + 3.8);
@@ -275,7 +325,7 @@ fn expm1Stable(x: f32) -> f32 {
 
 fn cam16UcsToXyz(Jp: f32, ap: f32, bp: f32, vc: Cam16Viewing) -> vec3<f32> {
   let Mp = sqrt(ap * ap + bp * bp);
-  let hRad = atan2(bp, ap);
+  let hRad = atan2Accurate(bp, ap);
   var hDeg = hRad * 180.0 / 3.14159265358979;
   hDeg = hDeg - 360.0 * floor(hDeg / 360.0);
   let M = expm1Stable(kUcsC2 * Mp) / kUcsC2;
@@ -335,7 +385,7 @@ fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
   jab.x = 100.0 * reinhardKnee(jab.x / 100.0, 0.7, 1.0, 2.2);
 
   let Cp = sqrt(jab.y * jab.y + jab.z * jab.z);
-  let hp = atan2(jab.z, jab.y);
+  let hp = atan2Accurate(jab.z, jab.y);
   let CpMax = max(cmaxLookup(jab.x, hp), 1.0e-9);
   let d = reinhardKnee(Cp / CpMax, 0.0, 1.0, 6.0);
   let CpNew = d * CpMax;
