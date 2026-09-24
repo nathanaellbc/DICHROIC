@@ -3112,7 +3112,20 @@ git commit -m "feat(spektra): ScannerPost stage completes end-to-end parity at r
 > memakainya bukan pelanggaran spec §6.3.1. Tidak ada dua implementasi yang bisa
 > berselisih di sini — yang ada cuma satu.
 >
-> **2. Grain SUDAH aman-tiling secara konstruksi, dan itu bukan kebetulan.**
+> **2. ~~Grain SUDAH aman-tiling secara konstruksi~~ — SAYA SALAH, dikoreksi
+> setelah Task 19b.** Klaim ini benar soal `activeOrigin` tapi melewatkan bahwa
+> `activeOrigin` BUKAN `tileOrigin`: `activeOrigin` adalah offset rect aktif di
+> dalam buffer TILE, sementara `tileOrigin` adalah posisi tile itu di dalam
+> GAMBAR. `grain.wgsl::generate` dan `scannerPost.wgsl::glareGenerate` men-seed
+> RNG-nya dari posisi lokal-buffer-tile, kehilangan `+ tileOrigin` (pola
+> `tileGid` yang sudah benar di `filmExposure.wgsl`). Tak terlihat di SETIAP
+> gerbang sebelumnya karena `tileOriginX/Y = 0` untuk render full-frame.
+> Diperbaiki satu baris per shader di Task 19b. Pelajarannya: "aman secara
+> konstruksi" yang saya nyatakan tanpa menjalankan render ter-tile sungguhan
+> adalah klaim yang belum diverifikasi, persis jenis yang berulang kali
+> menyesatkan proyek ini. Teks lama disimpan di bawah sebagai catatan.
+>
+> **2-lama (untuk konteks).**
 > `grain.wgsl:285` memanggil `randNormal(absoluteGid.x, absoluteGid.y, ch, sl)`,
 > di mana `absoluteGid = gid.xy + activeOrigin` (:239). RNG-nya di-seed dari
 > koordinat ABSOLUT gambar, bukan koordinat lokal tile, jadi piksel yang sama
