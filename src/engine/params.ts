@@ -110,6 +110,23 @@ export const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
 export const FLAG_GLARE_ACTIVE = 1 << 2;
 
 /**
+ * Bit 3 dari slot1 (Task 18c). Dipakai HANYA oleh ScannerPost untuk
+ * mencerminkan `scanner.unsharp_mask != (0,0)` Python
+ * (`_apply_blur_and_unsharp`, `scanning.py:123-128`): menyala untuk
+ * `family: 'measured'` (default hulu `unsharp_mask=(0.7,0.7)`, TIDAK
+ * disentuh `deactivate_stochastic_effects` -- BEDA dari `FLAG_GLARE_
+ * ACTIVE` di atas, bit ini TIDAK bergantung grain/glare, hanya pada
+ * `lut_mode`/`deactivate_spatial_effects`), padam untuk `'lut'`
+ * (`lut_mode` memaksa `scanner.unsharp_mask=(0,0)`,
+ * `params_builder.py::digest_params`). Jadi berbeda dari `FLAG_GLARE_
+ * ACTIVE`: menyala untuk `family: 'measured'` REGARDLESS keluarga
+ * `_stochastic` atau `<case>` biasa -- keduanya sama-sama TIDAK
+ * mempromosikan `deactivate_spatial_effects`. TIDAK berlaku di shader
+ * lain mana pun.
+ */
+export const FLAG_UNSHARP_ACTIVE = 1 << 3;
+
+/**
  * TIGA RUANG KOORDINAT BERBEDA hidup berdampingan di `CoreParams`, dan
  * kedelapan tahap Task 11-18 (plus tahap `materializeActiveRegion` yang
  * membangun `rgb_in`, Task 9) membaca ketiganya lewat konstanta ini —

@@ -96,7 +96,9 @@ describe('parity: grain (statistik, cmy_film, keluarga _stochastic)', () => {
       const caseName = `${name}_stochastic`;
       const meta = loadCase(caseName);
       const inputRgba = loadInputAsRgba(name);
-      const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', STOCK_ID);
+      // `_stochastic`: Python TIDAK menyalakan deactivate_stochastic_effects (grain
+      // aktif, lih. blok komentar modul) -- Task 18c, defaultCoreParams butuh ini eksplisit.
+      const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', true, STOCK_ID);
 
       const actual = await graph.run(inputRgba, params, Tap.CMY_FILM);
 

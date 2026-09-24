@@ -43,13 +43,16 @@ describe('parity: cmy_film', () => {
         case: `${name}_lut`,
         inputCase: name,
         family: 'lut',
+        stochasticEffectsActive: false, // lut_mode selalu mematikan grain/glare -- lih. defaultCoreParams.
         tap: Tap.CMY_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [
           createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
+          // lut_mode menolkan dir_couplers.diffusion_size_um (deactivate_spatial_effects)
+          // -- lih. DirStageOptions.
+          createDirStage(device, arenas, { spatialDiffusionActive: false }),
         ],
       });
     });

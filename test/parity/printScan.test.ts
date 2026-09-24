@@ -42,6 +42,7 @@ describe('parity: printScan (log_e_print / cmy_print, keluarga _lut)', () => {
         case: caseName,
         inputCase: name,
         family: 'lut',
+        stochasticEffectsActive: false, // lut_mode selalu mematikan grain/glare.
         tap: Tap.LOG_E_PRINT,
         tolerance: 1e-5,
         printScan: {
@@ -58,7 +59,9 @@ describe('parity: printScan (log_e_print / cmy_print, keluarga _lut)', () => {
           createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
+          // lut_mode menolkan dir_couplers.diffusion_size_um (deactivate_spatial_effects)
+          // -- lih. DirStageOptions.
+          createDirStage(device, arenas, { spatialDiffusionActive: false }),
           createPrintExposureStage(device, arenas),
           createPrintDevelopStage(device, arenas),
         ],
@@ -70,6 +73,7 @@ describe('parity: printScan (log_e_print / cmy_print, keluarga _lut)', () => {
         case: caseName,
         inputCase: name,
         family: 'lut',
+        stochasticEffectsActive: false, // lut_mode selalu mematikan grain/glare.
         tap: Tap.CMY_PRINT,
         tolerance: 1e-5,
         printScan: {
@@ -86,7 +90,9 @@ describe('parity: printScan (log_e_print / cmy_print, keluarga _lut)', () => {
           createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
+          // lut_mode menolkan dir_couplers.diffusion_size_um (deactivate_spatial_effects)
+          // -- lih. DirStageOptions.
+          createDirStage(device, arenas, { spatialDiffusionActive: false }),
           createPrintExposureStage(device, arenas),
           createPrintDevelopStage(device, arenas),
         ],

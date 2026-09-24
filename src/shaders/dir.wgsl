@@ -1,81 +1,183 @@
-// Transliterasi PARSIAL $SPEKTRAFILM_OFX/shaders/vulkan/SpektraDir.comp
-// (329 baris, 7 operasi lewat `params.slot0`/`kOp*`) ke WGSL, menutup
-// gerbang `cmy_film` (Task 13) yang Task 12 sengaja tinggalkan gagal.
+// Transliterasi `SpektraDir.comp` (Task 13) + difusi spasial dua-skala DIR
+// couplers (Task 18c). Menutup gerbang `cmy_film` (Task 13) DAN lubang
+// cakupan §6.5.2 (task-18c-report.md): keluarga `<case>` BIASA (family
+// `'measured'`, BUKAN `_lut`, BUKAN `*_diffusion_print`) TIDAK menolkan
+// `dir_couplers.diffusion_size_um` (default Python `20.0`, spasial) --
+// hanya `lut_mode` dan fixture `*_diffusion_print` (Task 17, sengaja,
+// lih. `tools/gen_reference.py::_build_params_diffusion_print`)
+// menolkannya. Task 13 (lih. draf lama berkas ini) HANYA mengimplementasikan
+// cabang non-spasial dan mendokumentasikan spasial sebagai "ditunda,
+// diverifikasi kelak terhadap keluarga yang efeknya hidup" -- gerbang
+// deterministik baru `measuredChain.test.ts` (Task 18c) di `cmy_film` untuk
+// keluarga `measured` BIASA adalah keluarga fixture pertama itu, dan ia
+// memerahkan tepat di sini (`log_gray_ramp`, 1.227e-4 vs ambang 1e-5) --
+// dibuktikan LANGSUNG dari `tools/gen_reference.py::_build_params` (TIDAK
+// menolkan `diffusion_size_um`), `model/couplers.py::
+// apply_density_correction_dir_couplers` (short-circuit `if
+// diffusion_size_pixel>0`), dan pengukuran host f64 langsung terhadap
+// `.venv-ref` (task-18c-report.md): untuk fixture 32x16/8x8 ini
+// `diffusion_size_pixel` (~0.018-0.005) MEMANG membuat komponen Gaussian
+// DASAR identik radius-0 (identitas, TIDAK berubah dari draf lama), tapi
+// EKOR eksponensial `fast_exponential_filter` (dipakai `diffusion_tail_um`
+// via `diffusion_tail_size_pixel`, tiga komponen campuran-Gaussian) punya
+// DUA dari tiga komponen dengan radius bukan-nol (1 dan 2 piksel) untuk
+// gray_ramp/log_gray_ramp -- bobot campurannya kecil (`diffusion_tail_
+// weight=0.06`) tapi TIDAK NOL, dan cukup untuk memerahkan gerbang 1e-5
+// pada gambar dengan gradien lokal tajam (log ramp).
 //
-// CAKUPAN, DIBUKTIKAN BUKAN DITEBAK (lih. task-13-report.md untuk skrip
-// host-math f64 yang membuktikan pilihan di bawah cocok dengan fixture
-// Python sampai ~1e-7 SEBELUM baris WGSL manapun ditulis):
+// PERBAIKAN (Task 18c): kedua suku spasial `compute_exposure_correction_
+// dir_couplers` sekarang diport PENUH --
+//   log_raw_correction = (1-diffusion_tail_weight) * fast_gaussian_filter(raw_correction, diffusion_size_pixel)
+//                       +    diffusion_tail_weight  * fast_exponential_filter(raw_correction, diffusion_tail_size_pixel)
+// -- lewat arsitektur multi-dispatch (kOp* di bawah), PERSIS pola
+// `halation.wgsl` (Task 14): korelasi/kernel dihitung SEKALI per-run di
+// host (`dir.ts`, JS/f64, PERSIS `_gaussian_kernel_1d` Python: radius =
+// int(truncate*sigma+0.5), truncate=3.0 default `fast_gaussian_filter`/
+// `fast_exponential_filter`, bobot exp(-0.5*(x/sigma)^2) dinormalisasi ke
+// total=1) dan diunggah sebagai tabel bobot KONKRET (bukan dihitung ulang
+// via `exp()` WGSL per piksel) -- SENGAJA, bukan demi performa: Gate A
+// (task-18-report.md) mengukur `atan2()` WGSL 20-96 ULP dari correctly-
+// rounded pada backend ini, jauh di dalam kontrak spec tapi jauh dari
+// "f32 hanya bising di 1e-7". Menghindari transcendental WGSL untuk bobot
+// kernel yang GLOBAL KONSTAN per-render (tidak bergantung piksel) meniadakan
+// risiko yang sama sepenuhnya, bukan cuma menguranginya -- kernelnya sendiri
+// PERSIS bit yang akan dihasilkan `_gaussian_kernel_1d` Python (f64, lalu
+// diturunkan ke f32 saat diunggah), bukan aproksimasi baru.
 //
-//   Diimplementasikan (kOpCorrectionFromDensity + kOpRedevelop, digabung
-//   jadi SATU dispatch di sini karena keduanya per-piksel murni saat
-//   difusi mati):
-//     - `silverDensity`: `density_cmy` apa adanya untuk film negatif,
-//       `densityMax - density_cmy` untuk film positif (dibaca dari arena,
-//       BUKAN diasumsikan dari nama stock).
-//     - `correctionFromDensity`: perkalian matriks 1x3 * 3x3 (matriks
-//       crosstalk donor->penerima, `dirCouplersMatrix`).
-//     - `developFilmDensity`/`interpDensityCurve` atas tabel
-//       `dirDensityCurvesBeforeCouplers` (BUKAN `densityCurves` biasa --
-//       ini tabel HASIL `compute_density_curves_before_dir_couplers`
-//       Python, dihitung SEKALI per stock di host, lih.
-//       `src/host/spectral.ts`), dengan grid-x `curveExposure` yang SAMA
-//       dipakai `curveDevelop.wgsl`.
+// KONSTANTA HARDCODE, DIBUKTIKAN BUKAN DITEBAK (lih. task-18c-report.md):
+// `diffusion_size_um=20.0`/`diffusion_tail_um=200.0`/`diffusion_tail_
+// weight=0.06` (`DirCouplersParams`, params_schema.py) TIDAK PERNAH
+// disentuh preset stock manapun di `params_builder.py` (hanya
+// `gamma_samelayer_rgb`/`gamma_interlayer_*`, yang SUDAH dibakukan ke
+// `dirCouplersMatrix` arena sejak Task 13, berubah per stock) -- SAMA
+// polanya dengan konstanta `halation.wgsl` (lih. blok komentar di sana).
+// `film_format_mm=35.0` (`pixel_size_um = film_format_mm*1000/max(width,
+// height)`, `ResizingService.pixel_size_um`) juga sudah dibakukan identik
+// oleh `halation.ts`/`diffusion.ts` (Task 14/15/17) -- dipakai ulang di sini
+// (`dir.ts`), bukan diketik ulang tanpa verifikasi.
 //
-//   TIDAK diimplementasikan, SENGAJA, dan AMAN diabaikan untuk gerbang ini:
-//     - `high_exposure_couplers_shift` (`density_silver +=
-//       shift*density_silver^2` di `compute_exposure_correction_dir_couplers`
-//       Python): `apply_density_correction_dir_couplers` memanggil fungsi
-//       itu TANPA meneruskan argumen ini sama sekali, jadi ia selalu
-//       memakai default `0.0` -- suku ini SELALU nol untuk seluruh
-//       pipeline Python saat ini, bukan hanya untuk keluarga `_lut`. Tidak
-//       ada jalur kode manapun yang bisa menyalakannya hari ini.
-//     - Difusi spasial dua-skala (`kOpBlurX/Y`, `kOpTailClear`,
-//       `kOpTailBlurX/YAccumulate`, param `dirBaseSigma`/`dirTailSigma`/
-//       `dirTailWeight`): `diffusion_size_um` dinolkan
-//       `deactivate_spatial_effects`, yang DIPROMOSIKAN `lut_mode`
-//       (params_builder.py:129) -- `apply_density_correction_dir_couplers`
-//       Python sendiri MENG-SHORT-CIRCUIT filter ini
-//       (`if diffusion_size_pixel>0`) saat itu terjadi, jadi
-//       `log_raw_correction` sama dengan sebelum difilter. TIDAK diport di
-//       sini; harus diverifikasi TERPISAH kelak terhadap keluarga fixture
-//       yang efeknya HIDUP (`hard_edge_dir` di rencana awal Task 13),
-//       BUKAN gerbang `lut_mode` ini -- sama seperti Halation/Diffusion/
-//       Grain (Task 14-16) digerbangi di tap tetangganya sendiri, bukan di
-//       sini.
+// LINGKUP YANG SENGAJA TIDAK DIPORT: dispatch Gaussian sigma>=3px Python
+// (`fast_gaussian_filter`'s `SMALL_SIGMA_MAX=3.0`) beralih ke pendekatan IIR
+// Young-van Vliet (aproksimasi TERPISAH, error ~1e-3 vs Gaussian analitik
+// per docstring hulu) -- TIDAK diport di sini. Tidak ada fixture yang
+// gerbang ini uji (`gray_ramp`/`log_gray_ramp`/`color_patches`, plus
+// `_stochastic` Gate B) pernah mendekati sigma itu (radius terbesar terukur
+// 2 piksel, jauh di bawah ambang IIR) -- FIR terpotong (kMaxKernelRadius
+// di bawah) benar untuk SELURUH rentang yang gerbang mana pun di repo ini
+// uji hari ini. Gambar produksi resolusi tinggi (pixel_size_um kecil) bisa
+// mendorong `diffusion_size_pixel` ke rezim IIR itu -- kalau/ketika ada
+// gerbang yang menguji itu, dispatch IIR terpisah dibutuhkan, PERSIS
+// alasan `fast_gaussian_filter_large`-nya Python sendiri ada.
 //
-// KONVENSI MATRIKS: `dirCouplersMatrix` disimpan baris-mayor
-// donor*3+penerima (SAMA dengan `contract('jk,km->jm', ...)` Python, `k`
-// donor `m` penerima) -- dibuktikan cocok dengan indeks `M[0],M[3],M[6]`
-// yang OFX pakai untuk kanal keluaran 0 di `correctionFromDensity`
-// (`SpektraDir.comp:257-262`).
+// KONVENSI BATAS: reflect scipy (`mode='reflect'`, "d c b a | a b c d | d c
+// b a", TIDAK menduplikasi piksel tepi) -- BUKAN `clamp`/`edge` yang dipakai
+// `halation.wgsl`'s `sampleRaw`/`safeIndex` (aman DI SANA karena sigma
+// halation selalu radius-0 pada fixture yang ada, jadi batas tidak pernah
+// benar-benar tersentuh -- TIDAK aman di sini, karena EKOR DIR memang
+// menyentuh piksel tetangga). `reflectIndex` di bawah adalah port literal
+// `fast_gaussian_filter.py::_reflect`.
 //
-// `interpDensityCurve` di sini TIDAK punya cabang Hermite
-// (`kColorAdaptationCurveSmoothing`) -- `SpektraDir.comp`'s
-// `interpDensityCurve` (baris 133-153 hulu) murni linear, TIDAK seperti
-// `SpektraCurveDevelop.comp`/`curveDevelop.wgsl`. Ini perbedaan struktural
-// ANTARA KEDUA SHADER HULU, bukan penyimpangan port ini.
+// PENGIKATAN BUFFER: SAMA seperti draf lama berkas ini (lih. `dir.ts`) --
+// `pairASrc`/`pairBSrc` (read) dan `pairADst`/`pairBDst` (read_write) di-
+// rebind ke buffer host berbeda per dispatch (pola `halation.wgsl`), bukan
+// empat peran tetap. `kOpResolve` mengikat `pairBDst` ke `ctx.dest`
+// (invarian ping-pong yang SAMA didokumentasikan draf lama: `ctx.dest`
+// tahap ini masih berisi `log_e_film`, keluaran `filmExposure`/`halation`,
+// TIDAK disentuh `curveDevelop` yang hanya membacanya) -- dibaca sebagai
+// `logRaw` SEBELUM ditimpa keluaran `cmy_film` akhir, dalam dispatch yang
+// SAMA (baca-lalu-tulis indeks-sama, seperti sebelumnya).
 //
-// Konstanta arena (ARENA_<NAMA>_OFFSET) disambung DI DEPAN berkas ini oleh
-// dir.ts, lewat `arena.wgslConstants()` -- arena `stock` yang SAMA dipakai
-// curveDevelop.ts (Task 12), diperluas Task 13 dengan `dirCouplersMatrix`,
-// `dirDensityMax`, `dirIsPositive`, `dirDensityCurvesBeforeCouplers`.
+// `kernelBuf` (binding 6, "read"): 4 kernel x (1 radius + 33 bobot
+// terpad-nol, kMaxKernelRadius=16) = 136 float, ditulis `dir.ts` SEKALI per
+// `encode()` (bergantung width/height run ini, PERSIS alasan `frameFloats`
+// `halation.wgsl` tidak boleh hidup di arena `stock`/`dynamic` yang di-cache
+// lintas kasus uji ukuran berbeda).
 //
-// PENGIKATAN BUFFER, TIDAK LAZIM DAN DIDOKUMENTASIKAN DI SINI SECARA
-// EKSPLISIT: tahap ini HARUS berjalan tepat setelah CurveDevelop pada
-// RenderGraph yang sama (persis peta tap plan: `cmy_film` = CurveDevelop +
-// Dir berurutan). `binding 0` (`cmyIn`, read) adalah `ctx.source` --
-// keadaan `cmy_film` SAAT INI, keluaran CurveDevelop. `binding 1` (`dst`,
-// read_write) adalah `ctx.dest` -- lewat invarian ping-pong `graph.ts`
-// (`ctx.dest` tahap ke-i SELALU sama dengan `ctx.source` tahap ke-(i-1)),
-// buffer ini masih berisi `log_e_film` (masukan CurveDevelop, TIDAK
-// disentuh CurveDevelop yang hanya membacanya) pada saat dispatch ini
-// mulai -- dibaca sebagai `logRaw` SEBELUM overwrite pertama, persis pola
-// baca-lalu-tulis indeks-sama yang sudah dipakai `curveDevelop.wgsl`
-// sendiri (`filmRaw: read` + `dst: read_write`, sekarang perannya ditukar).
-@group(0) @binding(0) var<storage, read> cmyIn: array<vec4<f32>>;
-@group(0) @binding(1) var<storage, read_write> dst: array<vec4<f32>>;
-@group(0) @binding(2) var<uniform> params: CoreParams;
-@group(0) @binding(3) var<storage, read> stockArena: array<f32>;
+// Tujuh storage buffer (0-6) -- di bawah batas 8 (lih. catatan
+// `halation.wgsl`).
+
+@group(0) @binding(0) var<storage, read> pairASrc: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> pairADst: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read> pairBSrc: array<vec4<f32>>;
+@group(0) @binding(3) var<storage, read_write> pairBDst: array<vec4<f32>>;
+@group(0) @binding(4) var<uniform> params: CoreParams;
+@group(0) @binding(5) var<storage, read> stockArena: array<f32>;
+@group(0) @binding(6) var<storage, read> kernelBuf: array<f32>;
+
+const kOpComputeCorrection: u32 = 0u;
+const kOpClear: u32 = 1u;
+const kOpBlurX: u32 = 2u;
+const kOpBlurYStore: u32 = 3u;
+const kOpBlurYAccumulate: u32 = 4u;
+const kOpResolve: u32 = 5u;
+
+// `_EXPONENTIAL_GAUSSIAN_FITS[3]` Python (fast_gaussian_filter.py) --
+// amplitudo campuran 3-Gaussian yang mensurogasi PSF eksponensial. SAMA
+// tabel yang `halation.wgsl::scatterTailWeight` sudah pakai (scatter tail
+// halation memakai surogasi yang SAMA) -- diduplikasi di sini, bukan
+// diimpor, karena tiap shader WGSL di repo ini berdiri sendiri (lih.
+// duplikasi serupa `experimentalPushPullLogRaw` di bawah).
+fn tailAmplitude(kernelIndex: u32) -> f32 {
+  if (kernelIndex == 1u) { return 0.1633; }
+  if (kernelIndex == 2u) { return 0.6496; }
+  return 0.1870; // kernelIndex == 3u
+}
+
+// `dir_couplers.diffusion_tail_weight` -- konstanta skema, lih. blok
+// komentar berkas.
+const kDiffusionTailWeight: f32 = 0.06;
+
+const kMaxKernelRadius: i32 = 16;
+const kKernelStride: u32 = 34u; // 1 (radius, disimpan sebagai f32) + 2*16+1 bobot
+
+fn kernelRadius(kernelIndex: u32) -> i32 {
+  return i32(kernelBuf[kernelIndex * kKernelStride]);
+}
+
+fn kernelWeight(kernelIndex: u32, offset: i32) -> f32 {
+  return kernelBuf[kernelIndex * kKernelStride + 1u + u32(offset + kMaxKernelRadius)];
+}
+
+// Port literal `fast_gaussian_filter.py::_reflect` -- scipy `mode='reflect'`
+// ("d c b a | a b c d | d c b a", TIDAK menduplikasi piksel tepi). Cabang
+// modulo (i di luar [-n, 2n)) TIDAK PERNAH tereksekusi untuk kernel yang
+// gerbang ini uji (radius maksimum terukur 2, jauh di bawah n manapun),
+// tapi diport UTUH (bukan dipangkas ke tiga cabang pertama) supaya benar
+// untuk radius lebih besar yang mungkin dipakai kelak.
+fn reflectIndex(i: i32, n: i32) -> i32 {
+  if (i >= 0 && i < n) { return i; }
+  if (i >= -n && i < 0) { return -i - 1; }
+  if (i >= n && i < 2 * n) { return 2 * n - 1 - i; }
+  let period = 2 * n;
+  var m = i % period;
+  if (m < 0) { m = m + period; }
+  if (m >= n) { m = period - 1 - m; }
+  return m;
+}
+
+fn sampleA(x: i32, y: i32) -> vec4<f32> {
+  let sx = reflectIndex(x, i32(params.width));
+  let sy = reflectIndex(y, i32(params.height));
+  return pairASrc[u32(sy) * params.width + u32(sx)];
+}
+
+fn blurAX(kernelIndex: u32, x: i32, y: i32) -> vec4<f32> {
+  let radius = kernelRadius(kernelIndex);
+  var acc = vec4<f32>(0.0);
+  for (var o: i32 = -radius; o <= radius; o = o + 1) {
+    acc += sampleA(x + o, y) * kernelWeight(kernelIndex, o);
+  }
+  return acc;
+}
+
+fn blurAY(kernelIndex: u32, x: i32, y: i32) -> vec4<f32> {
+  let radius = kernelRadius(kernelIndex);
+  var acc = vec4<f32>(0.0);
+  for (var o: i32 = -radius; o <= radius; o = o + 1) {
+    acc += sampleA(x, y + o) * kernelWeight(kernelIndex, o);
+  }
+  return acc;
+}
 
 fn curveExposureValue(i: u32) -> f32 {
   return stockArena[ARENA_CURVEEXPOSURE_OFFSET + i * 2u];
@@ -86,9 +188,8 @@ fn dirDensityCurveAt(i: u32, channel: u32) -> f32 {
 }
 
 // Port `interpDensityCurve` `SpektraDir.comp:133-153` -- LINEAR SAJA, tanpa
-// cabang Hermite (lih. catatan berkas di atas). Sama seperti
-// `curveDevelop.wgsl`, penanganan batas `<= firstX`/`>= lastX` mengembalikan
-// baris PERTAMA/TERAKHIR langsung, bukan ekstrapolasi.
+// cabang Hermite (`SpektraCurveDevelop.comp`/`curveDevelop.wgsl` beda dari
+// shader hulu ini secara struktural, lih. draf lama berkas ini).
 fn interpDensityCurve(logRaw: f32, channel: u32) -> f32 {
   let count = params.exposureCount;
   if (count == 0u) {
@@ -124,14 +225,9 @@ fn interpDensityCurve(logRaw: f32, channel: u32) -> f32 {
   return mix(y0, y1, t);
 }
 
-// Mesin push/pull eksperimental, PERSIS `SpektraDir.comp:159-234` --
-// TIDAK aktif untuk gerbang ini (`filmPushPullMode` selalu 0 di setiap
-// fixture Task 13), diport untuk kelengkapan struktural sama seperti
-// `curveDevelop.wgsl` (Task 12) melakukannya untuk `SpektraCurveDevelop.comp`.
-// TIDAK diverifikasi gerbang manapun (lih. peringatan yang sama di
-// curveDevelop.wgsl) -- transkripsi literal dari GLSL hulu, bukan dari
-// salinan `curveDevelop.wgsl`, karena kedua shader hulu punya salinan
-// fungsi ini masing-masing dan tidak dijamin identik bit-demi-bit.
+// Mesin push/pull eksperimental, TIDAK aktif untuk gerbang manapun di repo
+// ini (`filmPushPullMode` selalu 0) -- diport untuk kelengkapan struktural,
+// TIDAK diverifikasi. Lih. catatan sama di draf lama berkas ini.
 fn developmentActivity(stops: f32) -> f32 {
   let clampedStops = clamp(stops, -2.0, 2.0);
   var developmentSeconds: f32 = 180.0;
@@ -179,10 +275,6 @@ fn experimentalPushPullLogRaw(logRaw: vec3<f32>, stops: f32) -> vec3<f32> {
   let shifted0 = logRaw - vec3<f32>((stops - pushPullSpeedGain(stops)) * 0.3010299956639812);
   let activity = developmentActivity(stops);
   let meanLogRaw = (shifted0.r + shifted0.g + shifted0.b) / 3.0;
-  // Kolom-demi-kolom, PERSIS urutan argumen `mat3(...)` GLSL hulu
-  // (`SpektraDir.comp:180-184`) -- CATATAN: tanda berlawanan dengan
-  // salinan `curveDevelop.wgsl` (kedua shader hulu punya konstanta
-  // berbeda di sini; lih. komentar berkas di atas).
   let coupling = mat3x3<f32>(
     vec3<f32>(0.0, -0.015, 0.015),
     vec3<f32>(0.015, 0.0, -0.015),
@@ -230,13 +322,9 @@ fn developFilmDensity(logRaw: vec3<f32>) -> vec3<f32> {
   );
 }
 
-// Port `silverDensity` `SpektraDir.comp:236-244` -- TANPA `max(...,0.0)`
-// tambahan yang OFX pakai di cabang negatif: `compute_exposure_correction_
-// dir_couplers` Python (`density_silver = np.copy(density_cmy)`) TIDAK
-// mengklem, dan spec §6.3.1 memerintahkan Python menang saat kedua repo
-// hulu berbeda. Tidak berdampak numerik untuk gerbang ini (density_cmy
-// CurveDevelop sudah >=0 lewat klemnya sendiri), tapi diikuti dengan
-// sengaja, bukan diam-diam disalin dari OFX.
+// Port `silverDensity` `SpektraDir.comp:236-244` -- lih. draf lama berkas
+// ini untuk kenapa TANPA klem tambahan yang OFX pakai (spec §6.3.1, Python
+// menang).
 fn silverDensity(densityCmy: vec3<f32>) -> vec3<f32> {
   if (stockArena[ARENA_DIRISPOSITIVE_OFFSET] > 0.5) {
     let densityMax = vec3<f32>(
@@ -255,6 +343,9 @@ fn dirMatrixAt(donor: u32, receiver: u32) -> f32 {
 
 // Port `correctionFromDensity` `SpektraDir.comp:246-253` --
 // `output[m] = sum_k silver[k] * M[k,m]` (baris donor, kolom penerima).
+// Ini SATU-SATUNYA suku yang draf lama sudah benar -- Task 18c hanya
+// menambahkan difusi spasial ATAS medan `correction` mentah ini, bukan
+// mengubah rumusnya.
 fn correctionFromDensity(densityCmy: vec3<f32>) -> vec3<f32> {
   let silver = silverDensity(densityCmy);
   return vec3<f32>(
@@ -266,31 +357,78 @@ fn correctionFromDensity(densityCmy: vec3<f32>) -> vec3<f32> {
 
 @compute @workgroup_size(32, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let activeGid = gid.xy;
   let activeWidth = select(params.width, params.activeWidth, params.activeWidth != 0u);
   let activeHeight = select(params.height, params.activeHeight, params.activeHeight != 0u);
-  if (activeGid.x >= activeWidth || activeGid.y >= activeHeight) {
+  if (gid.x >= activeWidth || gid.y >= activeHeight) {
     return;
   }
 
-  let absoluteGid = activeGid + vec2<u32>(params.activeOriginX, params.activeOriginY);
+  let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
   if (absoluteGid.x >= params.width || absoluteGid.y >= params.height) {
     return;
   }
   let index = absoluteGid.y * params.width + absoluteGid.x;
+  let x = i32(absoluteGid.x);
+  let y = i32(absoluteGid.y);
 
-  // `dst` MASIH berisi `log_e_film` pada titik ini -- lih. catatan
-  // pengikatan buffer di atas berkas. Dibaca ke variabel lokal SEBELUM
-  // ditulis ulang di baris terakhir fungsi ini.
-  let logRawPixel = dst[index];
-  let logRaw = logRawPixel.rgb;
-  let densityCmy = cmyIn[index].rgb;
+  if (params.slot0 == kOpComputeCorrection) {
+    // `pairASrc` diikat ke `cmyIn` (density `cmy_film` SEBELUM koreksi DIR)
+    // untuk dispatch ini -- lih. `dir.ts`.
+    let densityCmy = pairASrc[index].rgb;
+    pairADst[index] = vec4<f32>(correctionFromDensity(densityCmy), 1.0);
+    return;
+  }
+  if (params.slot0 == kOpClear) {
+    pairADst[index] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+  if (params.slot0 == kOpBlurX) {
+    pairADst[index] = blurAX(params.slot2, x, y);
+    return;
+  }
+  if (params.slot0 == kOpBlurYStore) {
+    pairADst[index] = blurAY(params.slot2, x, y);
+    return;
+  }
+  if (params.slot0 == kOpBlurYAccumulate) {
+    let blurred = blurAY(params.slot2, x, y);
+    let amplitude = tailAmplitude(params.slot2);
+    pairBDst[index] = vec4<f32>(pairBDst[index].rgb + amplitude * blurred.rgb, 1.0);
+    return;
+  }
+  if (params.slot0 == kOpResolve) {
+    // `pairASrc` = medan koreksi Gaussian-dasar terblur penuh (corrBase);
+    // `pairBSrc` = medan koreksi campuran-eksponensial terblur (corrTail,
+    // SUDAH dijumlah-bobot amplitudo, BELUM dikali `kDiffusionTailWeight`
+    // luar); `pairBDst` diikat ke `ctx.dest`, yang MASIH berisi `log_e_film`
+    // pada titik ini -- lih. blok komentar berkas untuk invarian ping-pong.
+    let corrBase = pairASrc[index].rgb;
+    // `params.slot1` (`DirStageOptions.spatialDiffusionActive`, `dir.ts`):
+    // TIDAK cukup menolkan sigma keempat kernel (radius-0 -> identitas)
+    // untuk mereproduksi `diffusion_size_pixel<=0` Python BIT-EXACT --
+    // `TAIL_MIXTURE`'s amplitudo (`0.1633+0.6496+0.1870=0.9999`, BUKAN
+    // 1.0 persis, `_EXPONENTIAL_GAUSSIAN_FITS` Python adalah surogasi
+    // fit, bukan partisi-kesatuan eksak) membuat `corrTail` sedikit BEDA
+    // dari `corrRaw` bahkan pada sigma=0, jadi `(1-w)*corrBase+w*corrTail`
+    // TIDAK PERSIS `corrBase` -- residual ~1e-5 ditemukan LANGSUNG lewat
+    // regresi Gate A/`curveDevelop.test.ts`/`printScan.test.ts` (yang
+    // semula ~1e-7) setelah Task 18c pertama kali menambahkan istilah
+    // spasial. Saat `spatialDiffusionActive=false`, `corrBase` SENDIRI
+    // BIT-EXACT `corrRaw` (kernel radius-0 tunggal, kali bobot 1.0,
+    // TIDAK bersinggungan dengan masalah normalisasi tail) -- jadi cabang
+    // ini melewati blend TAIL sepenuhnya, bukan mengandalkan sigma=0 saja.
+    let spatialActive = params.slot1 != 0u;
+    let corrTail = pairBSrc[index].rgb;
+    let correction = select(
+      corrBase,
+      (1.0 - kDiffusionTailWeight) * corrBase + kDiffusionTailWeight * corrTail,
+      spatialActive,
+    );
 
-  // Difusi spasial dilewati (lih. catatan berkas): `log_raw_correction`
-  // dipakai langsung tanpa filter Gaussian/ekor eksponensial, PERSIS
-  // cabang `diffusion_size_pixel<=0` Python.
-  let correction = correctionFromDensity(densityCmy);
-  let correctedLogRaw = logRaw - correction;
-  let density = developFilmDensity(correctedLogRaw);
-  dst[index] = vec4<f32>(max(density, vec3<f32>(0.0)), logRawPixel.a);
+    let logRawPixel = pairBDst[index];
+    let correctedLogRaw = logRawPixel.rgb - correction;
+    let density = developFilmDensity(correctedLogRaw);
+    pairBDst[index] = vec4<f32>(max(density, vec3<f32>(0.0)), logRawPixel.a);
+    return;
+  }
 }

@@ -37,6 +37,7 @@ describe('parity: log_e_film', () => {
         // tidak punya salinannya sendiri.
         inputCase: name,
         family: 'lut',
+        stochasticEffectsActive: false, // lut_mode selalu mematikan grain/glare.
         tap: Tap.LOG_E_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [
@@ -75,6 +76,7 @@ describe('parity: log_e_film (spasial, halation hidup)', () => {
       await runTapParity({
         case: name,
         family: 'measured',
+        stochasticEffectsActive: false, // keluarga <case> dasar: deactivate_stochastic_effects=True.
         tap: Tap.LOG_E_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [

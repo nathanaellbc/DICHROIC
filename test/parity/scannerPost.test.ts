@@ -44,6 +44,7 @@ describe('parity: rgb_out (Gate A, deterministik, keluarga _lut)', () => {
         case: caseName,
         inputCase: name,
         family: 'lut',
+        stochasticEffectsActive: false, // lut_mode selalu mematikan grain/glare.
         tap: Tap.RGB_OUT,
         tolerance: 1e-5,
         printScan: {
@@ -60,7 +61,9 @@ describe('parity: rgb_out (Gate A, deterministik, keluarga _lut)', () => {
           createMaterializeActiveRegionStage(device),
           createFilmExposureStage(device, arenas),
           createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
+          // lut_mode menolkan dir_couplers.diffusion_size_um (deactivate_spatial_effects)
+          // -- lih. DirStageOptions.
+          createDirStage(device, arenas, { spatialDiffusionActive: false }),
           createPrintExposureStage(device, arenas),
           createPrintDevelopStage(device, arenas),
           createScannerPostStage(device, arenas),

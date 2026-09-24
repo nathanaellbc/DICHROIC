@@ -118,7 +118,9 @@ describe('parity: rgb_out (Gate B, glare stokastik, keluarga _stochastic)', () =
 
       const meta = loadCase(caseName);
       const inputRgba = loadInputAsRgba(name);
-      const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', STOCK_ID);
+      // `_stochastic`: Python TIDAK menyalakan deactivate_stochastic_effects (glare
+      // aktif, lih. blok komentar modul) -- Task 18c, defaultCoreParams butuh ini eksplisit.
+      const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', true, STOCK_ID);
 
       const actual = await graph.run(inputRgba, params, Tap.RGB_OUT);
 

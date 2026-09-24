@@ -46,6 +46,9 @@ describe('parity: diffusion kamera (log_e_film, spasial, diffusion hidup)', () =
       await runTapParity({
         case: name,
         family: 'measured',
+        // `_build_params_diffusion_camera` menyalakan `deactivate_stochastic_effects`
+        // (lih. tools/gen_reference.py) -- grain/glare Python mati di fixture ini.
+        stochasticEffectsActive: false,
         tap: Tap.LOG_E_FILM,
         tolerance: 1e-5,
         stages: (device, arenas) => [
@@ -107,6 +110,9 @@ describe('parity: diffusion enlarger (log_e_print, spasial, diffusion hidup)', (
       await runTapParity({
         case: name,
         family: 'measured',
+        // `_build_params_diffusion_print` menyalakan `deactivate_stochastic_effects`
+        // juga (lih. tools/gen_reference.py) -- grain/glare Python mati di fixture ini.
+        stochasticEffectsActive: false,
         tap: Tap.LOG_E_PRINT,
         tolerance: 1e-5,
         printScan: {
@@ -124,7 +130,9 @@ describe('parity: diffusion enlarger (log_e_print, spasial, diffusion hidup)', (
           createFilmExposureStage(device, arenas),
           createHalationStage(device, arenas),
           createCurveDevelopStage(device, arenas),
-          createDirStage(device, arenas),
+          // `_build_params_diffusion_print` menolkan `dir_couplers.diffusion_size_um`
+          // eksplisit (lih. tools/gen_reference.py) -- lih. `DirStageOptions`.
+          createDirStage(device, arenas, { spatialDiffusionActive: false }),
           createPrintExposureStage(device, arenas),
           createDiffusionStage(device, arenas, 'print'),
         ],

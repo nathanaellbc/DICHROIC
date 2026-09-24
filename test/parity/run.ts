@@ -31,6 +31,18 @@ export interface TapParityOptions {
    */
   family: CoreParamsFamily;
   /**
+   * Task 18c -- WAJIB, tidak ada default (lih. dokumentasi parameter yang
+   * sama persis di `params.ts::defaultCoreParams`, yang meneruskan nilai
+   * ini apa adanya): apakah `debug.deactivate_stochastic_effects` MATI
+   * (grain/glare Python hidup, keluarga fixture `<case>_stochastic`) atau
+   * HIDUP (grain/glare Python mati, keluarga fixture dasar `<case>`).
+   * `family: 'measured'` SENDIRIAN tidak cukup membedakan keduanya --
+   * lih. `defaultCoreParams` untuk bug nyata yang ini perbaiki (Gate B
+   * `rgb_out` keluarga `<case>` biasa memerahkan 1.8 max abs error karena
+   * glare stokastik ikut jalan padahal Python mematikannya).
+   */
+  stochasticEffectsActive: boolean;
+  /**
    * Direktori fixture yang menyimpan `input.f32`, jika BUKAN `case` itu
    * sendiri. `gen_reference.py` hanya menulis `input.f32` sekali, di
    * direktori kasus dasar -- `<case>_stochastic` dan `<case>_lut` berbagi
@@ -184,7 +196,15 @@ export async function runTapParity(opts: TapParityOptions): Promise<void> {
   // `stockId` (Task 12+) menentukan `exposureCount` -- HARUS stock yang sama
   // dengan yang arena-nya dibangun di `sharedResources` di atas, atau
   // `curveDevelop.wgsl` akan mencari batas kurva stock yang salah.
-  const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, opts.family, stockId);
+  const params = defaultCoreParams(
+    meta.width,
+    meta.height,
+    bundle,
+    inputRgba,
+    opts.family,
+    opts.stochasticEffectsActive,
+    stockId,
+  );
 
   const actual = await graph.run(inputRgba, params, opts.tap);
 

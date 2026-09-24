@@ -2,9 +2,55 @@ import { CORE_PARAMS_WGSL } from '../params';
 import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
+import { gpuBufferUsage } from '../webgpuGlobals';
 import source from '../../shaders/scannerPost.wgsl?raw';
 
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
+
+/**
+ * Task 18c -- `scanner.unsharp_mask` Python: `sigma=amount=0.7`, KONSTANTA
+ * (lih. blok komentar `scannerPost.wgsl` dekat binding 8-11 untuk bukti
+ * lengkap tidak pernah disentuh preset stock manapun). `sigma` dipakai
+ * LANGSUNG sebagai piksel (BEDA dari DIR/Halation/Diffusion -- `scanning.py`
+ * tidak mengonversi lewat `pixel_size_um` di titik ini sama sekali).
+ */
+const UNSHARP_SIGMA_PX = 0.7;
+const GAUSSIAN_TRUNCATE = 3.0; // default `fast_gaussian_filter` truncate.
+const MAX_KERNEL_RADIUS = 16; // lih. dir.ts -- headroom jauh di atas radius terpakai (2).
+const KERNEL_STRIDE = 1 + 2 * MAX_KERNEL_RADIUS + 1; // 1 (radius) + 33 bobot terpad-nol.
+
+/**
+ * Port literal `fast_gaussian_filter.py::_gaussian_kernel_1d` (f64 JS) --
+ * DUPLIKAT SENGAJA dari `dir.ts::gaussianKernel1D`/`packKernel` (bukan
+ * diimpor): setiap shader/tahap di repo ini berdiri sendiri, pola yang
+ * sama dipakai `halation.wgsl`/`dir.wgsl` untuk tabel `_EXPONENTIAL_
+ * GAUSSIAN_FITS`. Lih. `dir.ts` untuk penjelasan lengkap kenapa kernel
+ * dihitung host (f64) alih-alih `exp()` WGSL (risiko ULP transcendental,
+ * Gate A mengukur `atan2()` 20-96 ULP di backend ini).
+ */
+function buildUnsharpKernelBuffer(sigma: number): Float32Array {
+  const out = new Float32Array(KERNEL_STRIDE);
+  const radius = Math.trunc(GAUSSIAN_TRUNCATE * sigma + 0.5);
+  if (radius > MAX_KERNEL_RADIUS) {
+    throw new Error(
+      `scannerPost.ts: kernel radius unsharp ${radius} melebihi MAX_KERNEL_RADIUS=${MAX_KERNEL_RADIUS}.`,
+    );
+  }
+  const size = 2 * radius + 1;
+  const weights = new Array<number>(size);
+  let total = 0;
+  for (let i = 0; i < size; i += 1) {
+    const x = i - radius;
+    const value = Math.exp(-0.5 * (x / sigma) ** 2);
+    weights[i] = value;
+    total += value;
+  }
+  out[0] = radius;
+  for (let o = -radius; o <= radius; o += 1) {
+    out[1 + o + MAX_KERNEL_RADIUS] = weights[o + radius]! / total;
+  }
+  return out;
+}
 
 /**
  * Tahap ScannerPost (Task 18): EMPAT entry point WGSL dari SATU modul --
@@ -51,6 +97,21 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
     code: `${CORE_PARAMS_WGSL}\n\n${arenaConstants}\n\n${source}`,
   });
 
+  const scanPreUnsharpPipeline = device.createComputePipeline({
+    label: 'scannerPost:scanPreUnsharp',
+    layout: 'auto',
+    compute: { module, entryPoint: 'scanPreUnsharp' },
+  });
+  const unsharpBlurXPipeline = device.createComputePipeline({
+    label: 'scannerPost:unsharpBlurX',
+    layout: 'auto',
+    compute: { module, entryPoint: 'unsharpBlurX' },
+  });
+  const unsharpBlurYPipeline = device.createComputePipeline({
+    label: 'scannerPost:unsharpBlurY',
+    layout: 'auto',
+    compute: { module, entryPoint: 'unsharpBlurY' },
+  });
   const scanPipeline = device.createComputePipeline({
     label: 'scannerPost:scan',
     layout: 'auto',
@@ -131,15 +192,81 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
       glareBlurYPass.dispatchWorkgroups(fullGroupsX, fullGroupsY, 1);
       glareBlurYPass.end();
 
-      const scanBindGroup = ctx.device.createBindGroup({
-        layout: scanPipeline.getBindGroupLayout(0),
+      // Task 18c: `preUnsharp`/`unsharpBlurXOut`/`unsharpBlurred` -- vec4
+      // penuh (BUKAN skalar seperti scratch glare di atas), PERSIS pola
+      // `rawA`/`rawB`/dst `dir.ts`/`halation.ts`.
+      const pixelBytes = width * height * 4 * FLOAT_BYTES;
+      const preUnsharp = ctx.scratch('scannerPost:preUnsharp', pixelBytes);
+      const unsharpBlurXOut = ctx.scratch('scannerPost:unsharpBlurXOut', pixelBytes);
+      const unsharpBlurred = ctx.scratch('scannerPost:unsharpBlurred', pixelBytes);
+
+      const kernelData = buildUnsharpKernelBuffer(UNSHARP_SIGMA_PX);
+      const unsharpKernelBuffer = ctx.device.createBuffer({
+        label: 'scannerPost:unsharpKernel',
+        size: kernelData.byteLength,
+        usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST,
+        mappedAtCreation: true,
+      });
+      new Float32Array(unsharpKernelBuffer.getMappedRange()).set(kernelData);
+      unsharpKernelBuffer.unmap();
+
+      const scanPreUnsharpBindGroup = ctx.device.createBindGroup({
+        layout: scanPreUnsharpPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: { buffer: ctx.source } },
-          { binding: 1, resource: { buffer: ctx.dest } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
           { binding: 3, resource: { buffer: arenas.static.buffer } },
           { binding: 4, resource: { buffer: arenas.dynamic.buffer } },
           { binding: 7, resource: { buffer: glareBlurred } },
+          { binding: 8, resource: { buffer: preUnsharp } },
+        ],
+      });
+      const scanPreUnsharpPass = encoder.beginComputePass({ label: 'scannerPost:scanPreUnsharp' });
+      scanPreUnsharpPass.setPipeline(scanPreUnsharpPipeline);
+      scanPreUnsharpPass.setBindGroup(0, scanPreUnsharpBindGroup);
+      scanPreUnsharpPass.dispatchWorkgroups(activeGroupsX, activeGroupsY, 1);
+      scanPreUnsharpPass.end();
+
+      const unsharpBlurXBindGroup = ctx.device.createBindGroup({
+        layout: unsharpBlurXPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 8, resource: { buffer: preUnsharp } },
+          { binding: 9, resource: { buffer: unsharpBlurXOut } },
+          { binding: 11, resource: { buffer: unsharpKernelBuffer } },
+        ],
+      });
+      // Kelompok dispatch PENUH (bukan aktif), PERSIS `glareBlurX`/`glareBlurY`
+      // di atas -- pass blur butuh tetangga di luar wilayah aktif (lih.
+      // catatan pola itu).
+      const unsharpBlurXPass = encoder.beginComputePass({ label: 'scannerPost:unsharpBlurX' });
+      unsharpBlurXPass.setPipeline(unsharpBlurXPipeline);
+      unsharpBlurXPass.setBindGroup(0, unsharpBlurXBindGroup);
+      unsharpBlurXPass.dispatchWorkgroups(fullGroupsX, fullGroupsY, 1);
+      unsharpBlurXPass.end();
+
+      const unsharpBlurYBindGroup = ctx.device.createBindGroup({
+        layout: unsharpBlurYPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 9, resource: { buffer: unsharpBlurXOut } },
+          { binding: 10, resource: { buffer: unsharpBlurred } },
+          { binding: 11, resource: { buffer: unsharpKernelBuffer } },
+        ],
+      });
+      const unsharpBlurYPass = encoder.beginComputePass({ label: 'scannerPost:unsharpBlurY' });
+      unsharpBlurYPass.setPipeline(unsharpBlurYPipeline);
+      unsharpBlurYPass.setBindGroup(0, unsharpBlurYBindGroup);
+      unsharpBlurYPass.dispatchWorkgroups(fullGroupsX, fullGroupsY, 1);
+      unsharpBlurYPass.end();
+
+      const scanBindGroup = ctx.device.createBindGroup({
+        layout: scanPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 1, resource: { buffer: ctx.dest } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 8, resource: { buffer: preUnsharp } },
+          { binding: 10, resource: { buffer: unsharpBlurred } },
         ],
       });
       const scanPass = encoder.beginComputePass({ label: 'scannerPost:scan' });

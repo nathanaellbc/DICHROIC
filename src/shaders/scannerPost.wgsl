@@ -7,22 +7,35 @@
 // `src/host/spectral.ts`, untuk bukti penuh per istilah): di bawah
 // `lut_mode`, glare (stokastik) mati, `scanner.lens_blur=0` (sudah nol
 // bahkan di default), `scanner.unsharp_mask=(0,0)`, dan `white_correction`/
-// `black_correction` KEDUANYA `False` -- jadi satu dispatch (`scan`) cukup:
+// `black_correction` KEDUANYA `False` -- jadi rangkaian
 // `density -> XYZ (spektral) -> RGB linear (scanToOutputRgb) ->
-// compress_rgb (CAM16-UCS) -> CCTF encode (analitik sRGB)`.
+// compress_rgb (CAM16-UCS) -> CCTF encode (analitik sRGB)` cukup, TANPA
+// unsharp (`scanPreUnsharp`/`unsharpBlurX`/`unsharpBlurY` tetap berjalan
+// tapi bertindak sebagai identitas -- gerbang eksplisit lewat `FLAG_
+// UNSHARP_ACTIVE` (bit 3 slot1, `src/engine/params.ts`), PERSIS pola
+// `FLAG_GLARE_ACTIVE` di atas: dispatch blur TETAP jalan (murah, gambar
+// uji kecil), tapi `scan()` membuang kontribusinya lewat `select()` saat
+// bit itu padam -- Python `if sigma>0 and amount>0` benar-benar TIDAK
+// memanggil `apply_unsharp_mask` untuk `lut_mode`, jadi port ini HARUS
+// dicabang juga, bukan cuma "kebetulan identitas").
 //
 // GATE B (Task 18, keluarga `_stochastic`, gerbang STATISTIK via
 // `moments()`) menambahkan `add_glare` -- TIGA dispatch tambahan
 // (`glareGenerate`->`glareBlurX`->`glareBlurY`) yang berjalan SEBELUM
-// `scan`, menulis medan derau lognormal-terblur ke `glareBlurred`, yang
-// `scan` baca dan tambahkan ke `xyz` SEBELUM `scanToOutputRgb` -- lih.
-// blok komentar "Task 18 Gate B" di bawah untuk derivasi lengkap.
-// `_apply_blur_and_unsharp`/`black_white_xyz_correction` TETAP no-op
-// TERBUKTI untuk SEMUA fixture gerbang ini (`unsharp_mask`/`lens_blur`
-// default nol, `white_correction`/`black_correction` default `False`,
-// tidak satu pun disentuh `gen_reference.py` untuk keluarga `_stochastic`
-// -- SAMA bukti yang berlaku untuk `_lut`, `params_builder.py` tidak
-// membedakan keduanya untuk field-field ini).
+// `scanPreUnsharp`, menulis medan derau lognormal-terblur ke
+// `glareBlurred`, yang `scanPreUnsharp` baca dan tambahkan ke `xyz`
+// SEBELUM `scanToOutputRgb` -- lih. blok komentar "Task 18 Gate B" di
+// bawah untuk derivasi lengkap. `black_white_xyz_correction` TETAP no-op
+// TERBUKTI untuk SEMUA fixture gerbang ini (`white_correction`/
+// `black_correction` default `False`, tidak satu pun disentuh
+// `gen_reference.py`).
+//
+// TASK 18c: `_apply_blur_and_unsharp` (`scanner.unsharp_mask`) TERNYATA
+// BUKAN no-op untuk keluarga fixture `measured` BIASA (draf lama komentar
+// ini SALAH mengklaim "no-op untuk SEMUA fixture gerbang ini") -- HANYA
+// benar untuk `_lut`/`_stochastic` (nihil untuk keduanya, lih. paragraf di
+// atas). Lih. blok komentar Task 18c di dekat binding 8-11 (`preUnsharp`/
+// `unsharpBlurXOut`/`unsharpBlurred`/`unsharpKernel`) untuk audit penuh.
 //
 // `compress_rgb` (`utils/gamut_compression.py`, `output_gamut_compress.
 // algorithm="cam16ucs"` DEFAULT Python, TIDAK PERNAH di-override
@@ -85,6 +98,84 @@
 @group(0) @binding(5) var<storage, read_write> glarePreBlur: array<f32>;
 @group(0) @binding(6) var<storage, read_write> glareBlurXOut: array<f32>;
 @group(0) @binding(7) var<storage, read_write> glareBlurred: array<f32>;
+
+// Task 18c: `_apply_blur_and_unsharp` (`scanning.py:123-128`) TERNYATA
+// BUKAN no-op untuk keluarga fixture `measured` BIASA (draf lama komentar
+// berkas ini, dan `scannerPost.ts`, SALAH mengklaim "TERBUKTI no-op untuk
+// KEDUA keluarga") -- dibuktikan lewat gerbang deterministik baru
+// `measuredChain.test.ts` (`rgb_out` memerahkan max abs error 1.8 untuk
+// `color_patches`, TIDAK berubah oleh perbaikan DIR/glare terpisah) dan
+// dikonfirmasi LANGSUNG dari `params_builder.py::digest_params`:
+// `scanner.unsharp_mask` (default `(0.7, 0.7)`, `params_schema.py:85`)
+// HANYA dinolkan oleh `debug.lut_mode`/`deactivate_spatial_effects`
+// (baris 92/118/138) -- BUKAN oleh `deactivate_stochastic_effects` (yang
+// hanya mematikan grain/glare, `params_builder.py:140-142`). Gate A
+// (`_lut`) dan Gate B (`_stochastic`) TIDAK PERNAH menyalakannya
+// (`lut_mode` untuk Gate A; `_stochastic` TIDAK mempromosikan
+// `deactivate_spatial_effects`, TAPI Gate B hanya menguji STATISTIK
+// `rgb_out`, yang menyerap unsharp-nya ke dalam varians/spektrum-daya
+// tanpa memerahkan gerbang mean/variance-nya sendiri) -- gerbang
+// deterministik `measuredChain.test.ts` adalah yang PERTAMA menguji
+// `rgb_out` per-piksel pada keluarga di mana istilah ini benar-benar hidup.
+//
+// `scanner.lens_blur` (default `0.0`, `params_schema.py:80`) TETAP no-op
+// TERBUKTI (`apply_gaussian_blur`, `model/diffusion.py:81-88`, `if sigma>0`
+// -- tidak pernah `True` untuk fixture manapun di repo ini) -- HANYA
+// `unsharp_mask` yang diport di bawah.
+//
+// `apply_unsharp_mask` (`model/diffusion.py:6-19`) Python: `blurred =
+// fast_gaussian_filter(rgb, sigma)`; `sharp = rgb + amount*(rgb-blurred)`
+// -- `sigma=amount=0.7`, KONSTANTA (tidak pernah disentuh preset stock
+// manapun, SAMA pola pembuktian `halation.wgsl`/`dir.wgsl`). PENTING:
+// `sigma` di sini dipakai LANGSUNG sebagai piksel (Python TIDAK membagi
+// dengan `pixel_size_um` di titik ini -- beda dari DIR/Halation/Diffusion,
+// `scanning.py` tidak punya akses `pixel_size_um` sama sekali), jadi
+// `radius = int(3.0*0.7+0.5) = 2` -- SELALU 5-tap, TIDAK PERNAH identitas,
+// tidak seperti Gaussian dasar DIR (lih. `dir.wgsl`) yang sering identik
+// untuk fixture kecil ini.
+//
+// Kernel dihitung host (JS/f64, PERSIS `_gaussian_kernel_1d` Python) dan
+// diunggah sebagai bobot konkret -- SAMA alasan `dir.wgsl` (hindari risiko
+// ULP transcendental WGSL, lih. blok komentar di sana) -- `reflectIndex`
+// di sini juga port literal `fast_gaussian_filter.py::_reflect` yang SAMA.
+//
+// Diterapkan pada `rgbCompressed` (KELUARAN `compress_rgb`, SEBELUM
+// `_apply_cctf_encoding`) -- PERSIS urutan `ScanningStage.scan()` Python
+// (`_density_to_rgb` -> `_apply_blur_and_unsharp` -> `_apply_cctf_
+// encoding`). Butuh SATU dispatch tambahan sebelum unsharp (`scanPreUnsharp`,
+// menghitung `rgbCompressed` per-piksel dan menyimpannya ke `preUnsharp`)
+// karena unsharp butuh TETANGGA, sedangkan sisa `scan()` murni per-piksel --
+// pola SAMA `halation.wgsl`/`dir.wgsl` (hitung medan mentah, blur X lalu Y,
+// resolve).
+@group(0) @binding(8) var<storage, read_write> preUnsharp: array<vec4<f32>>;
+@group(0) @binding(9) var<storage, read_write> unsharpBlurXOut: array<vec4<f32>>;
+@group(0) @binding(10) var<storage, read_write> unsharpBlurred: array<vec4<f32>>;
+@group(0) @binding(11) var<storage, read> unsharpKernel: array<f32>;
+
+const kUnsharpAmount: f32 = 0.7; // `scanner.unsharp_mask[1]` default, konstanta skema.
+const kUnsharpMaxRadius: i32 = 16; // lih. dir.wgsl::kMaxKernelRadius -- headroom jauh di atas radius terpakai (2).
+
+fn unsharpKernelRadius() -> i32 {
+  return i32(unsharpKernel[0]);
+}
+
+fn unsharpKernelWeight(offset: i32) -> f32 {
+  return unsharpKernel[1 + offset + kUnsharpMaxRadius];
+}
+
+// Port literal `fast_gaussian_filter.py::_reflect` -- lih. dokumentasi
+// identik `dir.wgsl::reflectIndex` (duplikasi disengaja, tiap shader di
+// repo ini berdiri sendiri).
+fn unsharpReflectIndex(i: i32, n: i32) -> i32 {
+  if (i >= 0 && i < n) { return i; }
+  if (i >= -n && i < 0) { return -i - 1; }
+  if (i >= n && i < 2 * n) { return 2 * n - 1 - i; }
+  let period = 2 * n;
+  var m = i % period;
+  if (m < 0) { m = m + period; }
+  if (m >= n) { m = period - 1 - m; }
+  return m;
+}
 
 const kLog10E: f32 = 0.4342944819032518;
 
@@ -614,18 +705,38 @@ fn applyCctfEncoding(rgbCompressed: vec3<f32>) -> vec3<f32> {
   return vec3<f32>(srgbEncode(rgb2.x), srgbEncode(rgb2.y), srgbEncode(rgb2.z));
 }
 
-@compute @workgroup_size(32, 8, 1)
-fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
+// Batas aktif SAMA di keempat entry point di bawah (`scanPreUnsharp`,
+// `unsharpBlurX`, `unsharpBlurY`, `scan`) -- diduplikasi (bukan fungsi
+// bersama) PERSIS pola `halation.wgsl`/`dir.wgsl`'s `main()`, karena WGSL
+// tidak punya cara murah membagi guard ini lintas entry point berbeda.
+fn withinActiveBounds(gid: vec3<u32>) -> bool {
   let activeWidth = select(params.width, params.activeWidth, params.activeWidth != 0u);
   let activeHeight = select(params.height, params.activeHeight, params.activeHeight != 0u);
-  if (gid.x >= activeWidth || gid.y >= activeHeight) {
-    return;
-  }
+  return gid.x < activeWidth && gid.y < activeHeight;
+}
+
+fn absoluteIndex(gid: vec3<u32>) -> u32 {
   let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
-  if (absoluteGid.x >= params.width || absoluteGid.y >= params.height) {
+  return absoluteGid.y * params.width + absoluteGid.x;
+}
+
+fn inFullBounds(gid: vec3<u32>) -> bool {
+  let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
+  return absoluteGid.x < params.width && absoluteGid.y < params.height;
+}
+
+// Paruh PERTAMA `ScanningStage.scan()`/`_density_to_rgb` Python (Task 18c:
+// dipecah dari `scan()` lama supaya `unsharpBlurX`/`unsharpBlurY` di bawah
+// punya medan `rgbCompressed` PENUH -- BUKAN log_e/density -- untuk
+// dikonvolusi, PERSIS `_apply_blur_and_unsharp` Python yang menerima
+// `rgb` linear KELUARAN `compress_rgb`, bukan `density_channels` mentah).
+// Menulis `preUnsharp[index]` (murni per-piksel, TIDAK butuh tetangga).
+@compute @workgroup_size(32, 8, 1)
+fn scanPreUnsharp(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (!withinActiveBounds(gid) || !inFullBounds(gid)) {
     return;
   }
-  let index = absoluteGid.y * params.width + absoluteGid.x;
+  let index = absoluteIndex(gid);
   let cmyPrint = src[index];
   let xyz = densityToXyz(cmyPrint.rgb);
   // `black_white_xyz_correction`: identitas (`white_correction`/
@@ -649,9 +760,71 @@ fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
   let vc = loadCam16Viewing();
   let rgbCompressed = compressRgbCam16Ucs(rgbLinear, vc);
 
-  // `_apply_blur_and_unsharp`: TIDAK diimplementasikan -- TERBUKTI no-op
-  // untuk gerbang ini (lih. blok komentar berkas).
-  let rgbEncoded = applyCctfEncoding(rgbCompressed);
+  preUnsharp[index] = vec4<f32>(rgbCompressed, cmyPrint.a);
+}
 
-  dst[index] = vec4<f32>(rgbEncoded, cmyPrint.a);
+fn sampleUnsharpSourceX(x: i32, y: i32) -> vec4<f32> {
+  let sx = unsharpReflectIndex(x, i32(params.width));
+  let sy = unsharpReflectIndex(y, i32(params.height));
+  return preUnsharp[u32(sy) * params.width + u32(sx)];
+}
+
+// Pass X (Task 18c): `fast_gaussian_filter` separable -- lih. blok komentar
+// binding 8-11 untuk kenapa kernelnya dihitung host, bukan `exp()` WGSL.
+@compute @workgroup_size(32, 8, 1)
+fn unsharpBlurX(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (!withinActiveBounds(gid) || !inFullBounds(gid)) {
+    return;
+  }
+  let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
+  let index = absoluteGid.y * params.width + absoluteGid.x;
+  let x = i32(absoluteGid.x);
+  let y = i32(absoluteGid.y);
+  let radius = unsharpKernelRadius();
+  var acc = vec4<f32>(0.0);
+  for (var o: i32 = -radius; o <= radius; o = o + 1) {
+    acc += sampleUnsharpSourceX(x + o, y) * unsharpKernelWeight(o);
+  }
+  unsharpBlurXOut[index] = acc;
+}
+
+fn sampleUnsharpSourceY(x: i32, y: i32) -> vec4<f32> {
+  let sx = unsharpReflectIndex(x, i32(params.width));
+  let sy = unsharpReflectIndex(y, i32(params.height));
+  return unsharpBlurXOut[u32(sy) * params.width + u32(sx)];
+}
+
+@compute @workgroup_size(32, 8, 1)
+fn unsharpBlurY(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (!withinActiveBounds(gid) || !inFullBounds(gid)) {
+    return;
+  }
+  let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
+  let index = absoluteGid.y * params.width + absoluteGid.x;
+  let x = i32(absoluteGid.x);
+  let y = i32(absoluteGid.y);
+  let radius = unsharpKernelRadius();
+  var acc = vec4<f32>(0.0);
+  for (var o: i32 = -radius; o <= radius; o = o + 1) {
+    acc += sampleUnsharpSourceY(x, y + o) * unsharpKernelWeight(o);
+  }
+  unsharpBlurred[index] = acc;
+}
+
+// Paruh KEDUA `ScanningStage.scan()` Python -- `_apply_blur_and_unsharp`
+// (`image + amount*(image-blurred)`, gerbang lewat `FLAG_UNSHARP_ACTIVE`,
+// lih. blok komentar binding 8-11) lalu `_apply_cctf_encoding`.
+@compute @workgroup_size(32, 8, 1)
+fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (!withinActiveBounds(gid) || !inFullBounds(gid)) {
+    return;
+  }
+  let index = absoluteIndex(gid);
+  let pre = preUnsharp[index];
+  let unsharpOn = (params.slot1 & 8u) != 0u;
+  let sharpened = select(pre.rgb, pre.rgb + kUnsharpAmount * (pre.rgb - unsharpBlurred[index].rgb), unsharpOn);
+
+  let rgbEncoded = applyCctfEncoding(sharpened);
+
+  dst[index] = vec4<f32>(rgbEncoded, pre.a);
 }

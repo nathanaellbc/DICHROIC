@@ -31,7 +31,7 @@
  * `rgb_pre/input` sungguhan.
  */
 
-import { FLAG_GLARE_ACTIVE } from '../../src/engine/params';
+import { FLAG_GLARE_ACTIVE, FLAG_UNSHARP_ACTIVE } from '../../src/engine/params';
 import type { AssetBundle } from '../../src/profiles/load';
 import type { CoreParams } from '../../src/engine/params';
 
@@ -213,6 +213,22 @@ export function defaultCoreParams(
   bundle: AssetBundle,
   inputRgba: Float32Array,
   family: CoreParamsFamily,
+  /**
+   * Task 18c: SEBELUM parameter ini ada, `glareActiveFlag` di bawah
+   * disamakan dengan `family === 'measured'` SAJA -- SALAH, dibuktikan oleh
+   * gerbang deterministik baru `measuredChain.test.ts` (rgb_out keluarga
+   * `<case>` BIASA memerahkan 1.8 max abs error, TIDAK berubah setelah
+   * perbaikan DIR terpisah). `CoreParamsFamily` cuma membedakan `lut_mode`
+   * dari yang bukan -- ia TIDAK membedakan keluarga fixture dasar `<case>`
+   * (`deactivate_stochastic_effects=True`, `tools/gen_reference.py::
+   * _build_params(stochastic=False)`, glare DAN grain MATI) dari `<case>_
+   * stochastic` (`stochastic=True`, TIDAK memodifikasi `raw`, default hulu
+   * `GlareParams.active=True` tetap berlaku) -- KEDUANYA memakai `family:
+   * 'measured'` yang SAMA. Pemanggil HARUS menyatakan yang mana secara
+   * eksplisit (PERSIS filosofi `family` di atas: tidak ada tebakan diam-diam
+   * dari nama), bukan diasumsikan dari `family` saja.
+   */
+  stochasticEffectsActive: boolean,
   stockId: string = 'kodak_portra_400',
 ): CoreParams {
   const { colorSpaces } = bundle.manifest;
@@ -239,15 +255,24 @@ export function defaultCoreParams(
   }
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
-  // Task 18 Gate B (`FLAG_GLARE_ACTIVE`, `src/engine/params.ts`): SAMA
-  // pembedaan family yang sudah menentukan `slot0` di atas --
-  // `lut_mode` (family 'lut') memaksa `print_render.glare.active=False`
-  // (`params_builder.py::digest_params`, `deactivate_stochastic_effects`);
-  // `measured` (family dasar/`_stochastic`) TIDAK menyentuhnya, jadi
-  // default hulu `True` tetap berlaku. Hanya `scannerPost.wgsl` yang
+  // Task 18c (diperbaiki dari Task 18 Gate B, lih. dokumentasi parameter
+  // `stochasticEffectsActive` di atas): glare hanya menyala saat KEDUANYA
+  // benar -- `family === 'measured'` (`lut_mode` selalu memaksa
+  // `glare.active=False`, `params_builder.py::digest_params`) DAN
+  // `stochasticEffectsActive` (`deactivate_stochastic_effects` mematikan
+  // `print_render.glare.active` untuk keluarga fixture dasar `<case>`,
+  // TIDAK untuk `<case>_stochastic`). Hanya `scannerPost.wgsl` yang
   // memeriksa bit ini (lih. `FLAG_GLARE_ACTIVE` untuk kenapa aman berbagi
   // slot1 dengan FilmExposure/CurveDevelop).
-  const glareActiveFlag = family === 'measured' ? FLAG_GLARE_ACTIVE : 0;
+  const glareActiveFlag = family === 'measured' && stochasticEffectsActive ? FLAG_GLARE_ACTIVE : 0;
+  // Task 18c (`FLAG_UNSHARP_ACTIVE`, `src/engine/params.ts`): BEDA dari
+  // glare di atas -- `scanner.unsharp_mask` hanya dinolkan oleh `lut_mode`
+  // (`deactivate_spatial_effects`), BUKAN oleh `deactivate_stochastic_
+  // effects`. Menyala untuk `family: 'measured'` TERLEPAS dari
+  // `stochasticEffectsActive` (keluarga `<case>` biasa MAUPUN
+  // `<case>_stochastic` sama-sama TIDAK mempromosikan
+  // `deactivate_spatial_effects`).
+  const unsharpActiveFlag = family === 'measured' ? FLAG_UNSHARP_ACTIVE : 0;
 
   return {
     width,
@@ -274,7 +299,7 @@ export function defaultCoreParams(
     // sendiri sebagai dispatch terakhirnya. Lih. dokumentasi `CoreParamsFamily`
     // di atas.
     slot0: family === 'lut' ? 0 : 1,
-    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag,
+    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag,
     slot2: 0, // indeks lokal, bukan buffer tetangga resolusi-penuh
     // 0 -- push/pull mode 0 (tidak aktif). filmExposure.wgsl tidak membaca
     // ini, tapi curveDevelop.wgsl (Task 12) membaca `filmPushPullMode` untuk
