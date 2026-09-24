@@ -106,6 +106,18 @@ describe('perencanaan tile', () => {
  * eksplisit di bawah membuktikan ia >= `TEST_OVERLAP_PX` untuk flag yang
  * sama, jadi nilai produksi TETAP konservatif relatif terhadap apa yang
  * geometri test ini butuhkan.
+ *
+ * Task 19b -- `TEST_OVERLAP_PX=16` MASIH masuk akal setelah perbaikan ini,
+ * TIDAK perlu dinaikkan: `RenderGraph.runSingleBuffer` mengklip active rect
+ * yang dibesarkan ke batas BUFFER tile yang sebenarnya (`inflateActiveRect`),
+ * jadi tahap paling awal (yang `remainingSpatialRadius`-nya, 832px, jauh
+ * melebihi buffer 48x48 tile ini) otomatis memproses SELURUH buffer tile --
+ * PERSIS yang `activeRectShrinkEnabled=false`/hulu lakukan pada kondisi
+ * serupa (lih. `SpektraVulkanRenderer.cpp:6232-6236`, `setActiveRect`
+ * dipanggil dengan rect PENUH saat inflasi tidak muat). 16px (8x radius
+ * kernel TERUKUR 0-2px) tetap cukup -- gerbang ini lulus bit-exact
+ * dengannya, tidak ada indikasi perlu apron lebih besar untuk fixture
+ * seukuran ini.
  */
 describe('Task 19 -- gerbang bit-identik (full-frame vs ter-tile)', () => {
   it(
@@ -168,46 +180,36 @@ describe('Task 19 -- gerbang bit-identik (full-frame vs ter-tile)', () => {
       });
       tiledGraph.dispose();
 
-      // BLOCKED (lih. task-19-report.md untuk analisis lengkap) -- gerbang
-      // ini SENGAJA dibiarkan merah, persis pola `gray_ramp_stochastic` di
-      // `scannerPostGlare.test.ts` (Gate B): residual nyata, bukan derau,
-      // dilaporkan alih-alih ditala/dilonggarkan.
+      // Task 19b (lih. task-19-report.md): gerbang ini SEKARANG hijau, DUA
+      // perbaikan, keduanya diperlukan:
       //
-      // Diukur: 10155/16384 komponen berbeda (62%), maxAbsDiff=0.87 (nyaris
-      // skala penuh), TERSEBAR di seluruh 64x64 (minX/maxX/minY/maxY =
-      // 0/63/0/63) -- BUKAN pita tipis di sekitar batas region aktif.
-      // Per rubrik tugas ini ("selisih di seam berarti apron kurang,
-      // selisih tersebar berarti koordinat"): pola ini adalah kategori
-      // KEDUA, tapi akar masalahnya BUKAN salah pakai koordinat lokal vs
-      // absolut -- `estimateTileOverlap`/`planTiles` sendiri lulus
-      // (test di atas) dan apron 16px jauh di atas radius kernel terukur
-      // (0-2px, lih. dir.wgsl/halation.wgsl). Akarnya: SETIAP tahap
-      // per-piksel dari Task 9-18 (`materializeActiveRegion.wgsl`,
-      // `filmExposure.wgsl`, `diffusion.wgsl`, `curveDevelop.wgsl`,
-      // `dir.wgsl`, dan pass "generate"/"pre" `grain.wgsl`/
-      // `scannerPost.wgsl`) mem-batasi grid dispatch DAN penjaga WGSL-nya
-      // ke `activeWidth/activeHeight` SAJA -- benar untuk render penuh
-      // (activeWidth=0 berarti "seluruh buffer", jadi tidak pernah
-      // termanifestasi di 349 test lain), tapi untuk tile SUNGGUHAN
-      // (activeWidth < width) berarti apron buffer TIDAK PERNAH ditulis
-      // oleh tahap manapun sepanjang rantai -- bukan hanya `grain.ts` yang
-      // sudah mencatat ini sebagai "KETERBATASAN TILING YANG DIKETAHUI,
-      // TIDAK DISELESAIKAN DI SINI". `halation.wgsl` (SEMUA 8 dispatch
-      // internalnya, bukan cuma resolve akhir) dan `scannerPost.wgsl`
-      // (glareGenerate/scanPreUnsharp) punya pola identik. Karena gambar
-      // uji 64x64 memaksa tile menjadi hampir seluruh buffer (aktif hanya
-      // 1/4-nya), kekosongan itu memanifest di HAMPIR SELURUH gambar,
-      // bukan pita tipis -- pada gambar produksi, radius apron OFX (256px)
-      // relatif terhadap gambar besar membuat manifestasinya jauh lebih
-      // sempit (mendekati seam), tapi bug-nya sama.
+      // 1. `graph.ts` (`RenderGraph.runSingleBuffer`) -- `activeWidth/Height`
+      //    MEMANG dimaksudkan sebagai rektangel aktif per-TAHAP yang
+      //    MENYUSUT seiring radius spasial dikonsumsi (`remainingSpatialRadius`,
+      //    port `setActiveForRemainingRadius`/`consumeSpatialRadius` hulu,
+      //    `SpektraVulkanRenderer.cpp:6231-6604`), BUKAN rektangel keluaran
+      //    tile yang TETAP untuk seluruh graf seperti yang Task 19 (sebelum
+      //    ini) berikan ke SETIAP tahap. Begitu tiap tahap punya
+      //    `spatialRadiusPx` (`tiling.ts::SPATIAL_EFFECT_RADIUS_PX`/
+      //    `GRAIN_SPATIAL_RADIUS_PX`, sumber SAMA yang `estimateTileOverlap`
+      //    jumlahkan) dan `graph.ts` membesarkan active rect per-tahap
+      //    dengannya, tahap paling awal memproses (dan MENULIS) seluruh
+      //    apron yang tersisa, dan setiap tahap spasial sesudahnya membaca
+      //    tetangga yang SUDAH benar -- "restricts both dispatch grid and
+      //    WGSL guard to activeWidth/Height" (diagnosis Task 19) memang
+      //    PERSIS mekanisme yang menulis apron, bukan penyebab kekosongannya.
       //
-      // Memperbaikinya berarti melebarkan grid dispatch + penjaga WGSL ke
-      // `params.width/height` (bukan `activeWidth/Height`) di SEMBILAN
-      // berkas tahap di atas (masing-masing perubahan TS+WGSL kecil dan
-      // mekanis), lalu memverifikasi ULANG ke-17 berkas gerbang lain yang
-      // memakai berkas yang sama tetap hijau -- di luar cakupan file Task
-      // 19 (`tiling.ts` + `graph.ts` saja) dan anggaran sesi ini. Rencana
-      // tindak lanjut lengkap ada di task-19-report.md.
+      // 2. `grain.wgsl::generate`/`scannerPost.wgsl::glareGenerate` -- BUG
+      //    TERPISAH, ditemukan lewat isolasi (tap `cmy_film` pra-grain
+      //    bit-identik, residual muncul PERSIS di tahap grain): kedua shader
+      //    men-seed noise spasialnya (`randNormal`/`glareRandNormal`) dari
+      //    `absoluteGid`, yang HANYA lokal ke buffer TILE (lih. `params.ts`),
+      //    bukan posisi piksel pada gambar PENUH -- untuk render full-frame
+      //    `tileOriginX/Y=0` selalu, jadi kebetulan sama, tapi untuk tile
+      //    sungguhan piksel yang SAMA mendapat seed BERBEDA tergantung tile
+      //    mana yang memuatnya. Diperbaiki dengan `tileGid = absoluteGid +
+      //    tileOrigin` (PERSIS pola `filmExposure.wgsl:243`) sebagai seed,
+      //    bukan mengubah guard dispatch/aktif manapun.
       expect(tiled).toEqual(fullFrame);
     },
     30_000,

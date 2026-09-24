@@ -55,11 +55,19 @@ export interface SpatialEffectFlags {
  * sungguhan pada gambar uji kecil (0-2px, lih. dir.wgsl/halation.wgsl) --
  * disengaja hulu, bukan longgar tanpa alasan: OFX dirancang untuk gambar
  * produksi berresolusi penuh, bukan fixture 32-64px port ini.
+ *
+ * Task 19b: diekspor (bukan hanya modul-lokal) supaya stage factory
+ * (`engine/stages/*.ts`) bisa mendeklarasikan `Stage.spatialRadiusPx`
+ * masing-masing dari SUMBER YANG SAMA -- lih. `graph.ts::runSingleBuffer`,
+ * yang menjumlahkan `spatialRadiusPx` tiap tahap untuk `remainingSpatialRadius`
+ * dan HARUS menjumlahkan persis nilai yang `estimateTileOverlap` di bawah
+ * pakai, atau apron buffer (dari `planTiles`) akan lebih sempit dari radius
+ * yang diminta tahap-tahap yang sebenarnya berjalan.
  */
-const SPATIAL_EFFECT_RADIUS_PX = 256;
+export const SPATIAL_EFFECT_RADIUS_PX = 256;
 
 /** `kVulkanGrainSpatialRadiusPx` hulu -- radius apron grain, lebih kecil dari efek spasial lain. */
-const GRAIN_SPATIAL_RADIUS_PX = 64;
+export const GRAIN_SPATIAL_RADIUS_PX = 64;
 
 /**
  * Port `estimateVulkanTileOverlap` (`SpektraVulkanRenderer.cpp:1190-1235`).

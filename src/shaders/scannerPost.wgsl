@@ -362,7 +362,14 @@ fn glareGenerate(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   let index = absoluteGid.y * params.width + absoluteGid.x;
-  let z = glareRandNormal(absoluteGid.x, absoluteGid.y);
+  // Task 19b: `tileGid` -- posisi piksel SEBENARNYA pada gambar PENUH,
+  // PERSIS fix `grain.wgsl::generate` (lih. komentar panjang di sana) dan
+  // pola `filmExposure.wgsl:243`. `glareRandNormal` di bawah adalah SEED
+  // spasial deterministik (hash posisi) -- memakai `absoluteGid` (LOKAL ke
+  // buffer tile ini, lih. `params.ts`) akan memberi seed berbeda untuk
+  // piksel yang sama tergantung tile yang memuatnya.
+  let tileGid = absoluteGid + vec2<u32>(params.tileOriginX, params.tileOriginY);
+  let z = glareRandNormal(tileGid.x, tileGid.y);
   glarePreBlur[index] = exp(kGlareLogMu + kGlareLogSigma * z);
 }
 

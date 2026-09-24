@@ -3,6 +3,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
 import source from '../../shaders/scannerPost.wgsl?raw';
 
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
@@ -136,6 +137,12 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
   return {
     name: 'scannerPost:scan',
     writesTaps: [Tap.RGB_OUT],
+    // Task 19b: port `scannerPostRadius` hulu (`SpektraVulkanRenderer.cpp:5005-5006`,
+    // `printGlareBlurPath || scannerBlurPath || scannerUnsharpPath ?
+    // kVulkanSpatialEffectRadiusPx : 0u`) -- ketiga dispatch glare DAN
+    // kedua dispatch unsharp blur di tahap ini "SELALU berjalan" (lih.
+    // blok komentar modul di atas), jadi guard hulu itu SELALU true di sini.
+    spatialRadiusPx: SPATIAL_EFFECT_RADIUS_PX,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const floatBytes = width * height * FLOAT_BYTES;

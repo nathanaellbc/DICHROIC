@@ -4,6 +4,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
 import source from '../../shaders/halation.wgsl?raw';
 
 /**
@@ -157,6 +158,12 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
   return {
     name: 'halation',
     writesTaps: [Tap.LOG_E_FILM],
+    // Task 19b: port `halationRadius` hulu (`SpektraVulkanRenderer.cpp:5001-5002`,
+    // `kVulkanSpatialEffectRadiusPx` -- guard hulu `halationScatterEnabled ||
+    // halationBounceEnabled` SELALU true di sini, lih. blok komentar modul
+    // di atas: "kedua langkah SELALU berjalan, tahap ini tidak membutuhkan
+    // percabangan host untuk melewatinya").
+    spatialRadiusPx: SPATIAL_EFFECT_RADIUS_PX,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;

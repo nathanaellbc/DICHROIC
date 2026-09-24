@@ -48,6 +48,21 @@ export interface Stage {
   name: string;
   /** Setiap tap kanonis yang ditulis tahap ini. Kosong untuk tahap murni internal. */
   writesTaps: readonly TapName[];
+  /**
+   * Task 19b: radius (px) apron spasial yang tahap ini "konsumsi" setelah
+   * berjalan -- port `xRadius`/`consumeSpatialRadius(xRadius)` hulu
+   * (`SpektraVulkanRenderer.cpp:4999-5006`/`:6238-6244`, konstanta sama
+   * `SPATIAL_EFFECT_RADIUS_PX`/`GRAIN_SPATIAL_RADIUS_PX` yang
+   * `tiling.ts::estimateTileOverlap` jumlahkan untuk merencanakan apron
+   * buffer). Dipakai HANYA oleh `RenderGraph.runSingleBuffer` saat
+   * `shrinkApron` benar (render ter-tile sungguhan, lih. `runTiled` di
+   * bawah) -- untuk render full-frame biasa field ini tidak pernah dibaca,
+   * `params.activeWidth/Height` pemanggil dipakai apa adanya untuk SETIAP
+   * tahap sama seperti sebelum Task 19b. `undefined`/`0` (baku) untuk
+   * tahap tanpa kernel spasial (materializeActiveRegion, filmExposure,
+   * curveDevelop, printExpose/printDevelop).
+   */
+  spatialRadiusPx?: number;
   encode(encoder: GPUCommandEncoder, ctx: StageContext): void;
 }
 
@@ -63,6 +78,54 @@ function findLastStageIndex(stages: readonly Stage[], tap: TapName): number {
     if (stages[i]!.writesTaps.includes(tap)) return i;
   }
   return -1;
+}
+
+/** Sub-rektangel `{x, y, width, height}` sederhana -- dipakai `inflateActiveRect` di bawah. */
+interface ActiveRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Task 19b: port `inflatedCenterRect` + `setActiveRect` hulu
+ * (`SpektraVulkanRenderer.cpp:6195-6217`) -- membesarkan `center` (rektangel
+ * AKTIF tile, TANPA apron) sebesar `radius` di setiap sisi, diklip ke
+ * `[0,bufWidth) x [0,bufHeight)`. Ini persis mekanisme yang MENULISKAN apron:
+ * dipanggil sebelum setiap tahap dengan `radius = remainingSpatialRadius`
+ * ("radius efek spasial yang BELUM dikonsumsi tahap manapun sejauh ini",
+ * lih. `runSingleBuffer`), jadi tahap paling awal memproses AKTIF+SELURUH
+ * apron yang tersisa, dan tiap tahap spasial mengonsumsi radiusnya sendiri
+ * sampai tahap TERAKHIR memproses persis `center` -- rektangel keluaran tile
+ * yang sebenarnya, TANPA apron.
+ *
+ * Fallback "seluruh buffer" saat hasil kempis ke lebar/tinggi nol mengikuti
+ * `setActiveRect` hulu persis (baris 6213-6216) -- tidak akan terpicu untuk
+ * `radius>=0` dan `center` yang valid (lebar/tinggi aktif tile SELALU >0,
+ * dijamin `planTiles`), tapi diport apa adanya demi kesetiaan, bukan
+ * dihilangkan sebagai "tidak mungkin terjadi".
+ */
+function inflateActiveRect(
+  center: ActiveRect,
+  radius: number,
+  bufWidth: number,
+  bufHeight: number,
+): ActiveRect {
+  const x0 = center.x > radius ? center.x - radius : 0;
+  const y0 = center.y > radius ? center.y - radius : 0;
+  const x1 = Math.min(bufWidth, center.x + center.width + radius);
+  const y1 = Math.min(bufHeight, center.y + center.height + radius);
+
+  const originX = Math.min(x0, bufWidth);
+  const originY = Math.min(y0, bufHeight);
+  const width = Math.min(x1 > x0 ? x1 - x0 : 0, bufWidth - originX);
+  const height = Math.min(y1 > y0 ? y1 - y0 : 0, bufHeight - originY);
+
+  if (width === 0 || height === 0) {
+    return { x: 0, y: 0, width: bufWidth, height: bufHeight };
+  }
+  return { x: originX, y: originY, width, height };
 }
 
 /**
@@ -215,17 +278,39 @@ export class RenderGraph {
         activeWidth: tile.activeWidth,
         activeHeight: tile.activeHeight,
       };
-      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect);
+      // Task 19b: `shrinkApron=true` -- SATU-satunya pemanggil yang minta
+      // `RenderGraph` menyusutkan active rect per-tahap (lih. dokumentasi
+      // parameter itu di `runSingleBuffer`). `tileParams.activeOriginX/Y/
+      // activeWidth/Height` di atas SUDAH benar sebagai rektangel AKTIF
+      // (pusat, TANPA apron) tile ini -- `runSingleBuffer` memakainya
+      // sebagai `centerRect` awal yang dibesarkan per-tahap, BUKAN sebagai
+      // active rect tetap untuk seluruh tahap (beda dari sebelum Task 19b).
+      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true);
       stitchTileOutput(output, width, tileResult, tile);
     }
 
     return output;
   }
 
+  /**
+   * @param shrinkApron Task 19b -- bila benar, `params.activeOriginX/Y/
+   *   activeWidth/Height` diperlakukan sebagai `centerRect` (rektangel
+   *   AKTIF tile, TANPA apron) yang dibesarkan ULANG sebelum SETIAP tahap
+   *   sebesar `remainingSpatialRadius` ("jumlah `Stage.spatialRadiusPx`
+   *   tahap ini dan semua tahap SETELAHnya yang akan berjalan" -- port
+   *   `setActiveForRemainingRadius`/`consumeSpatialRadius` hulu,
+   *   `SpektraVulkanRenderer.cpp:6231-6245` + tujuh call-site
+   *   `consumeSpatialRadius` di :6444-6604), bukan dipakai APA ADANYA untuk
+   *   seluruh graf seperti sebelumnya. Baku `false` (perilaku pra-Task
+   *   19b, dipakai ke-349 gerbang lain yang TIDAK PERNAH lewat
+   *   `runTiled` di bawah): setiap tahap memakai `paramsBuffer`/`params`
+   *   yang SAMA, ditulis SEKALI di luar loop, persis kode sebelum Task 19b.
+   */
   private async runSingleBuffer(
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
+    shrinkApron = false,
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -288,12 +373,80 @@ export class RenderGraph {
     writeCoreParams(params, staging);
     device.queue.writeBuffer(paramsBuffer, 0, staging);
 
+    // Task 19b: `remainingSpatialRadius` -- SATU-SATUNYA state baru loop ini
+    // butuh. Dimulai dari jumlah `spatialRadiusPx` SEMUA tahap yang akan
+    // benar-benar berjalan (0..stopAt, BUKAN seluruh `this.stages` -- tahap
+    // setelah titik `collect` tidak pernah dieksekusi, jadi radiusnya tidak
+    // pernah "dikonsumsi" apa pun dan tidak boleh ikut dijumlahkan, persis
+    // upstream yang HANYA menjumlahkan `xRadius` efek yang `xPath` true).
+    // Tetap 0 (dan karena itu `inflateActiveRect` di bawah selalu no-op,
+    // mengembalikan `centerRect` yang SAMA setiap tahap) ketika
+    // `!shrinkApron` -- lih. dokumentasi parameter itu.
+    let remainingSpatialRadius = 0;
+    if (shrinkApron) {
+      for (let i = 0; i <= stopAt; i += 1) {
+        remainingSpatialRadius += this.stages[i]!.spatialRadiusPx ?? 0;
+      }
+    }
+    const centerRect: ActiveRect = {
+      x: params.activeOriginX,
+      y: params.activeOriginY,
+      width: params.activeWidth,
+      height: params.activeHeight,
+    };
+
+    // Task 19b: uniform buffer CoreParams KECIL per tahap, dipakai HANYA
+    // saat `shrinkApron` (satu per tahap 0..stopAt, active rect BERBEDA
+    // tiap tahap) -- lih. dokumentasi `Stage.spatialRadiusPx` untuk kenapa
+    // ini HARUS buffer terpisah (bukan menulis ulang `paramsBuffer` yang
+    // sama berkali-kali): `queue.writeBuffer` berkali-kali ke SATU buffer
+    // sebelum SATU `submit()` di akhir fungsi ini akan membuat hanya
+    // penulisan TERAKHIR yang terlihat GPU untuk SELURUH command buffer
+    // (semua penulisan itu terjadi sebelum submit manapun dieksekusi) --
+    // menulis ke buffer BARU per tahap sepenuhnya aman terlepas urutan itu,
+    // karena tiap buffer hanya ditulis SEKALI, sebelum `submit()` mana pun.
+    // Dikumpulkan di sini untuk di-`destroy()` setelah `submit()`, bukan
+    // sebelumnya (destroy sebelum GPU selesai memakainya adalah use-after-
+    // destroy).
+    const perStageParamsBuffers: GPUBuffer[] = [];
+
     const encoder = device.createCommandEncoder({ label: 'graph' });
     for (let i = 0; i <= stopAt; i += 1) {
-      this.stages[i]!.encode(encoder, {
+      const stage = this.stages[i]!;
+      let stageParams = params;
+      let stageParamsBuffer = paramsBuffer;
+
+      if (shrinkApron) {
+        const rect = inflateActiveRect(centerRect, remainingSpatialRadius, params.width, params.height);
+        stageParams = {
+          ...params,
+          activeOriginX: rect.x,
+          activeOriginY: rect.y,
+          activeWidth: rect.width,
+          activeHeight: rect.height,
+        };
+
+        const stageParamsStaging = new ArrayBuffer(CORE_PARAMS_BYTES);
+        writeCoreParams(stageParams, stageParamsStaging);
+        stageParamsBuffer = device.createBuffer({
+          label: `coreParams:${stage.name}`,
+          size: CORE_PARAMS_BYTES,
+          usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
+        });
+        device.queue.writeBuffer(stageParamsBuffer, 0, stageParamsStaging);
+        perStageParamsBuffers.push(stageParamsBuffer);
+
+        // Port `consumeSpatialRadius(xRadius)` hulu -- dipanggil SETELAH
+        // tahap ini (yaitu berlaku mulai tahap BERIKUTNYA), persis
+        // `SpektraVulkanRenderer.cpp`'s tujuh call-site (:6444-6604), yang
+        // semuanya muncul SETELAH dispatch efek terkait, bukan sebelumnya.
+        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - (stage.spatialRadiusPx ?? 0));
+      }
+
+      stage.encode(encoder, {
         device,
-        params,
-        paramsBuffer,
+        params: stageParams,
+        paramsBuffer: stageParamsBuffer,
         source: front,
         dest: back,
         scratch: (label, scratchBytes) => this.scratch(label, scratchBytes),
@@ -321,6 +474,7 @@ export class RenderGraph {
 
     readback.destroy();
     paramsBuffer.destroy();
+    for (const buffer of perStageParamsBuffers) buffer.destroy();
     front.destroy();
     back.destroy();
 

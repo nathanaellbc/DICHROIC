@@ -2,6 +2,7 @@ import { CORE_PARAMS_WGSL } from '../params';
 import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
+import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
 import source from '../../shaders/diffusion.wgsl?raw';
 
 /**
@@ -134,6 +135,16 @@ export function createDiffusionStage(
   return {
     name: `diffusion:${site}`,
     writesTaps: site === 'camera' ? [Tap.LOG_E_FILM] : [Tap.LOG_E_PRINT],
+    // Task 19b: port `cameraDiffusionRadius`/`printDiffusionRadius` hulu
+    // (`SpektraVulkanRenderer.cpp:4999`/`:5004`, keduanya
+    // `kVulkanSpatialEffectRadiusPx` yang sama) -- TAPI hanya ketika PSF
+    // benar-benar konvolusi (bukan identitas): `bypassConvolution=true`
+    // (lih. blok komentar modul di atas + `chain.ts`, satu-satunya
+    // pemanggil produksi, SELALU memakainya untuk KEDUA situs) berarti
+    // kernel radius-0 -- tidak ada piksel tetangga yang dibaca, jadi tidak
+    // perlu apron sama sekali, persis `cameraDiffusionPath`/kondisi
+    // `printDiffusionPath` hulu yang HANYA true saat PSF aktif.
+    spatialRadiusPx: bypassConvolution ? 0 : SPATIAL_EFFECT_RADIUS_PX,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const bindGroup = ctx.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),

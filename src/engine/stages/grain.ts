@@ -3,6 +3,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { GRAIN_SPATIAL_RADIUS_PX } from '../tiling';
 import source from '../../shaders/grain.wgsl?raw';
 
 /**
@@ -99,6 +100,12 @@ export function createGrainStage(device: GPUDevice, arenas: Arenas): Stage {
   return {
     name: 'grain',
     writesTaps: [Tap.CMY_FILM],
+    // Task 19b: port `grainRadius` hulu (`SpektraVulkanRenderer.cpp:5003-5004`,
+    // `kVulkanGrainSpatialRadiusPx` -- guard hulu `productionGrainPath ||
+    // grainSynthesisPath`; tahap ini HANYA mengimplementasikan varian itu,
+    // lih. blok komentar modul: `blurX`/`blurY` SELALU jalan, tidak ada
+    // varian "preview" tanpa blur di port ini).
+    spatialRadiusPx: GRAIN_SPATIAL_RADIUS_PX,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;

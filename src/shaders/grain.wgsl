@@ -244,6 +244,25 @@ fn generate(@builtin(global_invocation_id) gid: vec3<u32>) {
   let src = densityCmySrc[index];
   let densityCmy = src.rgb;
 
+  // Task 19b: `tileGid` -- posisi PIKSEL SEBENARNYA pada gambar PENUH,
+  // PERSIS pola `filmExposure.wgsl:243` (`tileGid = absoluteGid +
+  // tileOrigin`). `absoluteGid` di atas (di SEMUA shader tahap ini, lih.
+  // `params.ts`) hanya LOKAL ke buffer tile ini -- benar untuk indexing
+  // `densityCmySrc`/`preBlur` (yang memang berlayout tile-lokal), TAPI
+  // `randNormal` di bawah memakai (x,y) sebagai SEED spasial deterministik
+  // (hash posisi, lih. blok komentar `randNormal`), yang HARUS sama untuk
+  // piksel yang sama pada gambar PENUH terlepas tile mana yang memuatnya --
+  // persis semantik `apply_grain_to_density_layers` Python, yang mengindeks
+  // array gambar UTUH (tidak ada konsep tile sama sekali). Memakai
+  // `absoluteGid` (buffer-lokal) di sini akan memberi SEED YANG BERBEDA
+  // untuk piksel yang sama tergantung `tileOriginX/Y` tile yang memuatnya --
+  // dibuktikan langsung lewat gerbang bit-identik Task 19b (tiled vs
+  // full-frame, keduanya WGSL yang SAMA): residual kecil (~1e-3..1e-2)
+  // tersebar di SELURUH frame, persis pola noise spasial yang seed-nya
+  // bergeser, BUKAN pita tipis di seam (yang berarti apron kurang) --
+  // hilang total setelah `tileGid` dipakai di sini.
+  let tileGid = absoluteGid + vec2<u32>(params.tileOriginX, params.tileOriginY);
+
   // --- konstanta per-(sublapisan,kanal), BERGANTUNG pixel_size_um (per-run,
   // bukan per-stock) -- lih. `grain.ts` untuk kenapa ini dihitung per-pixel
   // di sini alih-alih di-bake ke arena (sembilan nilai skalar, biaya ALU
@@ -282,7 +301,7 @@ fn generate(@builtin(global_invocation_id) gid: vec3<u32>) {
       // eksak + aproksimasi Normal pada lambda besar.
       let mu = probabilityOfDevelopment * densityMaxShifted;
       let variance = max(probabilityOfDevelopment * densityMaxShifted * odParticle * saturation, 0.0);
-      let sample = mu + sqrt(variance) * randNormal(absoluteGid.x, absoluteGid.y, ch, sl);
+      let sample = mu + sqrt(variance) * randNormal(tileGid.x, tileGid.y, ch, sl);
       sum += sample;
     }
     out[ch] = sum - kDensityMin[ch];

@@ -4,6 +4,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
 import source from '../../shaders/dir.wgsl?raw';
 
 /**
@@ -187,6 +188,12 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
   return {
     name: 'dir',
     writesTaps: [Tap.CMY_FILM],
+    // Task 19b: port `dirRadius` hulu (`SpektraVulkanRenderer.cpp:5001`,
+    // `dirBlurPath ? kVulkanSpatialEffectRadiusPx : 0u`) -- `dirBlurPath`
+    // hulu artinya "kernel DIR benar-benar spasial", PERSIS
+    // `spatialDiffusionActive` di sini (`false` => keempat kernel
+    // radius-0/identitas, lih. `DirStageOptions` di atas).
+    spatialRadiusPx: spatialDiffusionActive ? SPATIAL_EFFECT_RADIUS_PX : 0,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;
