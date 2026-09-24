@@ -53,24 +53,54 @@ import type { Stage } from '../../src/engine/graph';
  * `_lut` (Task 11-13, 17, dan Gate A Task 18 di `scannerPost.test.ts`) TIDAK
  * memakai `fullChain` ini, melainkan daftar tahap eksplisit yang lebih
  * pendek (persis pola `printScan.test.ts`). `fullChain` ini dipakai untuk
- * keluarga di mana `slot0` global adalah 1 -- `measured`/`_stochastic` --
- * di mana diffusion/halation/diffusion(print) betul-betul dibutuhkan untuk
- * menutup log10, dan di mana diffusion yang TIDAK aktif (baked PSF delta,
- * `DiffusionFilterParams.active=False` default Python) berlaku sebagai
- * no-op spasial murni (tidak menyentuh log10 -- itu urusan
- * `__DIFFUSION_FINAL_LOG__`, independen dari aktif/tidaknya PSF).
+ * keluarga di mana `slot0` global adalah 1 -- `measured`/`_stochastic`.
+ *
+ * KOREKSI (follow-on session, Gate B): draf SEBELUMNYA paragraf ini
+ * mengklaim diffusion yang tidak aktif "berlaku sebagai no-op spasial
+ * murni" karena PSF-nya baked delta -- SALAH, dibuktikan langsung dari
+ * `src/host/spectral.ts` (`precomputeDiffusionFilter({family:
+ * 'black_pro_mist', strength: 0.5}, ...)` dipanggil TANPA SYARAT untuk
+ * KEDUA situs, radius=14/scatterFraction~0.2625, BUKAN delta) dan dari
+ * Python (`DiffusionFilterParams.active` default `False` UNTUK KEDUA
+ * situs, `params_builder.py` tidak pernah menyalakannya untuk keluarga
+ * `measured`/`_stochastic` -- hanya `hard_edge_diffusion_{camera,print}`/
+ * `impulse_highlight_diffusion_{camera,print}`, `diffusion.test.ts`'s
+ * fixture sendiri yang MEMAKAI PSF nonzero itu, lewat daftar tahap
+ * eksplisitnya sendiri di luar `fullChain`). Baked PSF di sini dipakai
+ * BERSAMA oleh kedua jenis render (tidak dibedakan per-fixture), jadi
+ * `radius<=0||scatterFraction<=0`-nya `diffusion.wgsl` TIDAK PERNAH
+ * menyala untuk stock apa pun -- membiarkan `fullChain` menjalankan
+ * konvolusi PSF asli (bukan identitas) pada keluarga di mana Python
+ * TIDAK PERNAH melakukannya. `color_patches_stochastic`'s gate variance
+ * (73.7% relative error terukur SEBELUM perbaikan ini) membuktikan
+ * dampaknya konkret: PSF 29x29 men-smear tepi tajam antar-patch 8x8
+ * yang Python sendiri tidak pernah sentuh.
+ *
+ * PERBAIKAN: kedua dispatch diffusion di bawah memakai
+ * `{ bypassConvolution: true }` (lih. `createDiffusionStage`,
+ * `diffusion.wgsl`'s `kBypassConvolution`) -- identitas spasial murni,
+ * TIDAK menyentuh `kApplyFinalLog`/`__DIFFUSION_FINAL_LOG__` (independen,
+ * situs print MASIH menutup `log10` `PrintingStage.expose()` sebagai
+ * dispatch terakhirnya, SATU-SATUNYA tugas yang tidak bisa dilewati
+ * bahkan saat PSF-nya identitas). Task 16's `grain.test.ts` sudah
+ * membuktikan EMPIRIS sisi kamera: cmy_film mean/var error TIDAK berubah
+ * (~1e-6/~1e-3, dalam ambang) baik tahap ini disertakan sebagai identitas
+ * ATAU dihilangkan total dari rantai -- `fullChain` menyertakannya
+ * (bukan menghilangkannya) supaya urutan 11-tahap yang didokumentasikan
+ * di atas tetap utuh secara harfiah, bukan demi hasil numerik yang
+ * berbeda (keduanya identik).
  */
 export function fullChain(device: GPUDevice, arenas: Arenas): Stage[] {
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'camera'),
+    createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true }),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),
     createDirStage(device, arenas),
     createGrainStage(device, arenas),
     createPrintExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'print'),
+    createDiffusionStage(device, arenas, 'print', { bypassConvolution: true }),
     createPrintDevelopStage(device, arenas),
     createScannerPostStage(device, arenas),
   ];

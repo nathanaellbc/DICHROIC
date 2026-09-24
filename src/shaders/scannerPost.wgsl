@@ -3,13 +3,26 @@
 // tap `rgb_out` -- `_density_to_rgb` (cabang `io.scan_film=False`, mencetak
 // PRINT) -> `_apply_blur_and_unsharp` -> `_apply_cctf_encoding`.
 //
-// CAKUPAN gerbang `_lut` (satu-satunya yang berkas ini tutup langsung; lih.
-// `addScannerPostDynamicData`, `src/host/spectral.ts`, untuk bukti penuh
-// per istilah): di bawah `lut_mode`, glare (stokastik) mati, `scanner.
-// lens_blur=0` (sudah nol bahkan di default), `scanner.unsharp_mask=(0,0)`,
-// dan `white_correction`/`black_correction` KEDUANYA `False` -- jadi satu
-// dispatch cukup: `density -> XYZ (spektral) -> RGB linear (scanToOutputRgb)
-// -> compress_rgb (CAM16-UCS) -> CCTF encode (analitik sRGB)`.
+// CAKUPAN gerbang `_lut` (Gate A; lih. `addScannerPostDynamicData`,
+// `src/host/spectral.ts`, untuk bukti penuh per istilah): di bawah
+// `lut_mode`, glare (stokastik) mati, `scanner.lens_blur=0` (sudah nol
+// bahkan di default), `scanner.unsharp_mask=(0,0)`, dan `white_correction`/
+// `black_correction` KEDUANYA `False` -- jadi satu dispatch (`scan`) cukup:
+// `density -> XYZ (spektral) -> RGB linear (scanToOutputRgb) ->
+// compress_rgb (CAM16-UCS) -> CCTF encode (analitik sRGB)`.
+//
+// GATE B (Task 18, keluarga `_stochastic`, gerbang STATISTIK via
+// `moments()`) menambahkan `add_glare` -- TIGA dispatch tambahan
+// (`glareGenerate`->`glareBlurX`->`glareBlurY`) yang berjalan SEBELUM
+// `scan`, menulis medan derau lognormal-terblur ke `glareBlurred`, yang
+// `scan` baca dan tambahkan ke `xyz` SEBELUM `scanToOutputRgb` -- lih.
+// blok komentar "Task 18 Gate B" di bawah untuk derivasi lengkap.
+// `_apply_blur_and_unsharp`/`black_white_xyz_correction` TETAP no-op
+// TERBUKTI untuk SEMUA fixture gerbang ini (`unsharp_mask`/`lens_blur`
+// default nol, `white_correction`/`black_correction` default `False`,
+// tidak satu pun disentuh `gen_reference.py` untuk keluarga `_stochastic`
+// -- SAMA bukti yang berlaku untuk `_lut`, `params_builder.py` tidak
+// membedakan keduanya untuk field-field ini).
 //
 // `compress_rgb` (`utils/gamut_compression.py`, `output_gamut_compress.
 // algorithm="cam16ucs"` DEFAULT Python, TIDAK PERNAH di-override
@@ -45,14 +58,33 @@
 //   `dynamic` -- `scannerChannelDensity`/`scannerBaseDensity` (PRINT,
 //   wavelengthCount x {3,1}), `scannerIlluminant` (wavelengthCount),
 //   `scannerWavelengthCount`/`scannerNormalization` (skalar),
-//   `scannerToOutputRgb` (3x3, `sRGB`), `scannerCam16Viewing` (8 skalar:
-//   D_RGB.xyz, F_L, N_bb, z, A_w, n), `scannerCam16CmaxTable` (64x720,
-//   `C_max(Jp,h)`, dibangun host `buildCam16UcsGamutTable`).
+//   `scannerToOutputRgb` (3x3, `sRGB`), `scannerIlluminantXyz` (Task 18
+//   Gate B, 3 skalar -- `contract("k,kl->l", scan_illuminant,
+//   STANDARD_OBSERVER_CMFS[:]) / normalization`, `add_glare`'s
+//   `illuminant_xyz`), `scannerCam16Viewing` (8 skalar: D_RGB.xyz, F_L,
+//   N_bb, z, A_w, n), `scannerCam16CmaxTable` (64x720, `C_max(Jp,h)`,
+//   dibangun host `buildCam16UcsGamutTable`).
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> dst: array<vec4<f32>>;
 @group(0) @binding(2) var<uniform> params: CoreParams;
 @group(0) @binding(3) var<storage, read> staticArena: array<f32>;
 @group(0) @binding(4) var<storage, read> dynamicArena: array<f32>;
+// Task 18 Gate B (glare, `add_glare` / `compute_random_glare_amount`,
+// `model/glare.py`) -- tiga scratch skalar (satu float per piksel, BUKAN
+// vec4 seperti `src`/`dst`: `compute_random_glare_amount` menghasilkan
+// SATU medan derau lognormal per gambar, dibagi rata ke tiga kanal XYZ
+// lewat perkalian `illuminant_xyz`, bukan derau per-kanal) untuk pola
+// generate->blurX->blurY TIGA-pipeline yang SAMA dengan `grain.wgsl`
+// (lih. blok komentar di sana): setiap entry point di bawah hanya
+// merujuk binding yang benar-benar ia pakai, jadi `layout: 'auto'`
+// menghasilkan bind group layout PER-PIPELINE yang genuinely disjoint --
+// TIDAK ADA buffer read_write yang di-alias dua kali dalam satu dispatch
+// (persis peringatan Hard Constraints soal validasi Dawn), dan setiap
+// pipeline individual jauh di bawah batas 8 storage buffer per shader
+// stage (`scan` sendiri: 0,1,3,4,7 = 5 storage + 1 uniform).
+@group(0) @binding(5) var<storage, read_write> glarePreBlur: array<f32>;
+@group(0) @binding(6) var<storage, read_write> glareBlurXOut: array<f32>;
+@group(0) @binding(7) var<storage, read_write> glareBlurred: array<f32>;
 
 const kLog10E: f32 = 0.4342944819032518;
 
@@ -107,6 +139,175 @@ fn scanToOutputRgb(xyz: vec3<f32>) -> vec3<f32> {
     dynamicArena[o + 2u], dynamicArena[o + 5u], dynamicArena[o + 8u],
   );
   return m * xyz;
+}
+
+// ============================================================================
+// Task 18 Gate B -- `add_glare` / `compute_random_glare_amount`
+// (`model/glare.py`), tap `rgb_out`, keluarga fixture `_stochastic`. Gerbang
+// STATISTIK (`moments()`, `test/parity/statistics.ts`, ambang 1e-4, spec
+// §6.5), BUKAN per-piksel -- alasan IDENTIK dengan Task 16 (grain.wgsl):
+// kernel numba `@njit(parallel=True)` Python memanggil `np.random.randn()`
+// di dalam `prange`, RNG paralel yang state-nya tidak bisa di-seed lewat
+// field params manapun, jadi RNG WGSL di sini SELALU algoritma berbeda --
+// dua implementasi yang sama-sama benar menghasilkan realisasi derau
+// berbeda pada piksel yang sama dengan statistik yang sama.
+//
+// `GlareParams` default (`params_schema.py:116-121`) -- TIDAK PERNAH
+// disentuh `gen_reference.py` untuk fixture manapun (dibuktikan lewat
+// `params_builder.py::digest_params`: `deactivate_stochastic_effects`
+// mematikan `active`, `lut_mode`/`deactivate_spatial_effects` menekan
+// `blur` ke 0 -- TIDAK SATU PUN diaktifkan untuk keluarga `_stochastic`),
+// jadi konstanta WGSL, persis pola `kDensityMin`/`kUniformity` di
+// `grain.wgsl`:
+//   active=True, percent=0.03, roughness=0.7, blur=0.5
+//
+// `compute_random_glare_amount(amount, roughness, blur, shape)`:
+//   1. `fast_lognormal_from_mean_std(mean=amount, std=roughness*amount)` --
+//      SATU derau lognormal SKALAR per piksel (bukan per-kanal: dipakai
+//      lewat `glare_amount[:,:,None] * illuminant_xyz[None,None,:]`,
+//      dibagi rata ke tiga kanal XYZ oleh whitepoint illuminant, BUKAN
+//      digambar ulang per kanal seperti grain). `s/m = roughness` (m
+//      membatalkan), jadi `sigma2 = ln(1+roughness^2)` TIDAK bergantung
+//      `percent` -- dihitung sekali sebagai konstanta di bawah.
+//   2. `fast_gaussian_filter(random_glare, blur)` -- Gaussian terpisah
+//      (X lalu Y), `truncate=3.0` DEFAULT (Python TIDAK pernah mengoper
+//      truncate lain di sini), radius = `int(3.0*0.5+0.5) = 2`. Padding
+//      REFLECT (`scipy.ndimage` mode='reflect'), SAMA `reflectIndex`
+//      `grain.wgsl` -- diduplikasi di sini (bukan diimpor) karena setiap
+//      berkas WGSL proyek ini berdiri sendiri (lih. `grain.wgsl`,
+//      `halation.wgsl`: tidak ada modul util bersama yang di-concat).
+//   3. `/= 100` -- diterapkan SETELAH blur (linear, komutatif dengan blur
+//      terboboti-rata secara aljabar; diterapkan di titik yang SAMA
+//      Python, `glareBlurY`, bukan lebih awal, supaya urutan operasi tetap
+//      terbaca 1:1 terhadap `glare.py`).
+// ============================================================================
+
+const kGlarePercent: f32 = 0.03;
+const kGlareRoughness: f32 = 0.7;
+const kGlareBlurSigma: f32 = 0.5;
+// int(3.0*0.5 + 0.5) = 2 (`_gaussian_kernel_1d`, fast_gaussian_filter.py).
+const kGlareBlurRadius: i32 = 2;
+// sigma2 = ln(1 + roughness^2) = ln(1.49); sigma = sqrt(sigma2);
+// mu = ln(percent) - sigma2/2. Dihitung host-side (node) dari formula
+// `fast_lognormal_from_mean_std` di atas, bukan ditebak -- lih. blok
+// komentar modul untuk derivasi lengkap.
+const kGlareLogSigma: f32 = 0.6314872286573718;
+const kGlareLogMu: f32 = -3.7059459572986655;
+
+fn illuminantXyz() -> vec3<f32> {
+  let o = ARENA_SCANNERILLUMINANTXYZ_OFFSET;
+  return vec3<f32>(dynamicArena[o], dynamicArena[o + 1u], dynamicArena[o + 2u]);
+}
+
+fn glareHash32(seed: u32) -> u32 {
+  var x = seed;
+  x = (x ^ 61u) ^ (x >> 16u);
+  x = x + (x << 3u);
+  x = x ^ (x >> 4u);
+  x = x * 0x27d4eb2du;
+  x = x ^ (x >> 15u);
+  return x;
+}
+
+// Box-Muller, SATU sampel Normal(0,1) per piksel (bukan per-kanal/
+// sublapisan seperti `grain.wgsl::randNormal` -- lih. blok komentar
+// modul). Salt (`0xB5297A4Du`) sengaja BERBEDA dari `grain.wgsl` supaya
+// dua medan stokastik ini tidak berbagi state RNG kalau file ini dan
+// grain suatu hari disatukan -- tidak dibutuhkan untuk kebenaran statistik
+// (dua stream independen mana pun cukup), murni kebersihan.
+fn glareRandNormal(x: u32, y: u32) -> f32 {
+  let a = glareHash32((x * 73856093u) ^ (y * 19349663u) ^ 0xB5297A4Du);
+  let b = glareHash32(a ^ 0x9e3779b9u);
+  let u1 = max(f32(a >> 8u) / 16777216.0, 1.0e-9);
+  let u2 = f32(b >> 8u) / 16777216.0;
+  return sqrt(-2.0 * log(u1)) * cos(6.283185307179586 * u2);
+}
+
+fn glareReflectIndex(i: i32, n: i32) -> u32 {
+  if (i >= 0 && i < n) {
+    return u32(i);
+  }
+  if (i >= -n && i < 0) {
+    return u32(-i - 1);
+  }
+  if (i >= n && i < 2 * n) {
+    return u32(2 * n - 1 - i);
+  }
+  let period = 2 * n;
+  var m = i % period;
+  if (m < 0) {
+    m += period;
+  }
+  if (m >= n) {
+    m = period - 1 - m;
+  }
+  return u32(m);
+}
+
+fn glareGaussianWeight(offset: i32) -> f32 {
+  let x = f32(offset) / kGlareBlurSigma;
+  return exp(-0.5 * x * x);
+}
+
+fn glareActiveBounds(gid: vec2<u32>) -> bool {
+  let activeWidth = select(params.width, params.activeWidth, params.activeWidth != 0u);
+  let activeHeight = select(params.height, params.activeHeight, params.activeHeight != 0u);
+  return gid.x < activeWidth && gid.y < activeHeight;
+}
+
+// `random_glare = fast_lognormal_from_mean_std(...)`, PRA-blur. Sama
+// keterbatasan tiling yang `grain.wgsl::generate` catat: hanya menulis
+// sub-rektangel aktif; `glareBlurX`/`glareBlurY` membaca lewat SELURUH
+// buffer untuk refleksi tepi yang benar -- fixture gerbang ini selalu
+// `activeWidth=activeHeight=0` ("seluruh buffer"), jadi tidak
+// termanifestasi di sini.
+@compute @workgroup_size(32, 8, 1)
+fn glareGenerate(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (!glareActiveBounds(gid.xy)) {
+    return;
+  }
+  let absoluteGid = gid.xy + vec2<u32>(params.activeOriginX, params.activeOriginY);
+  if (absoluteGid.x >= params.width || absoluteGid.y >= params.height) {
+    return;
+  }
+  let index = absoluteGid.y * params.width + absoluteGid.x;
+  let z = glareRandNormal(absoluteGid.x, absoluteGid.y);
+  glarePreBlur[index] = exp(kGlareLogMu + kGlareLogSigma * z);
+}
+
+@compute @workgroup_size(32, 8, 1)
+fn glareBlurX(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x >= params.width || gid.y >= params.height) {
+    return;
+  }
+  let x = i32(gid.x);
+  var acc: f32 = 0.0;
+  var weightSum: f32 = 0.0;
+  for (var k: i32 = -kGlareBlurRadius; k <= kGlareBlurRadius; k = k + 1) {
+    let sx = glareReflectIndex(x + k, i32(params.width));
+    let w = glareGaussianWeight(k);
+    acc += glarePreBlur[gid.y * params.width + sx] * w;
+    weightSum += w;
+  }
+  glareBlurXOut[gid.y * params.width + gid.x] = acc / max(weightSum, 1.0e-8);
+}
+
+@compute @workgroup_size(32, 8, 1)
+fn glareBlurY(@builtin(global_invocation_id) gid: vec3<u32>) {
+  if (gid.x >= params.width || gid.y >= params.height) {
+    return;
+  }
+  let y = i32(gid.y);
+  var acc: f32 = 0.0;
+  var weightSum: f32 = 0.0;
+  for (var k: i32 = -kGlareBlurRadius; k <= kGlareBlurRadius; k = k + 1) {
+    let sy = glareReflectIndex(y + k, i32(params.height));
+    let w = glareGaussianWeight(k);
+    acc += glareBlurXOut[sy * params.width + gid.x] * w;
+    weightSum += w;
+  }
+  let index = gid.y * params.width + gid.x;
+  glareBlurred[index] = (acc / max(weightSum, 1.0e-8)) / 100.0;
 }
 
 // ============================================================================
@@ -425,14 +626,25 @@ fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   let index = absoluteGid.y * params.width + absoluteGid.x;
-
   let cmyPrint = src[index];
   let xyz = densityToXyz(cmyPrint.rgb);
   // `black_white_xyz_correction`: identitas (`white_correction`/
   // `black_correction` KEDUANYA `False`, lih. blok komentar berkas).
-  let rgbLinear = scanToOutputRgb(xyz);
-  // `add_glare`: TIDAK diimplementasikan (stokastik, mati di bawah
-  // `lut_mode`/gerbang ini -- lih. blok komentar berkas).
+  // `add_glare` (Task 18 Gate B): `xyz + glare_amount * illuminant_xyz`,
+  // TEPAT sebelum `XYZ_to_RGB` -- `glareBlurred[index]` sudah di-blur DAN
+  // dibagi 100 oleh `glareGenerate`->`glareBlurX`->`glareBlurY` (tiga
+  // dispatch terpisah, dijalankan SEBELUM pass ini oleh `scannerPost.ts`).
+  // Bit 2 slot1 (`FLAG_GLARE_ACTIVE`, `src/engine/params.ts`) mencerminkan
+  // `print_render.glare.active` Python: PADAM untuk keluarga `_lut`
+  // (`lut_mode` memaksa `deactivate_stochastic_effects=True`), MENYALA
+  // untuk `_stochastic` -- `add_glare` Python sendiri `return xyz` identik
+  // (tidak menambah apa pun) ketika `glare.active` `False`, jadi cabang
+  // ini WAJIB, bukan opsional: TANPA-nya tiga dispatch glare akan
+  // mengotori Gate A (`_lut`, per-piksel, 1e-6) dengan derau yang Python
+  // tidak pernah terapkan untuk fixture itu.
+  let glareOn = (params.slot1 & 4u) != 0u;
+  let xyzGlared = select(xyz, xyz + glareBlurred[index] * illuminantXyz(), glareOn);
+  let rgbLinear = scanToOutputRgb(xyzGlared);
 
   let vc = loadCam16Viewing();
   let rgbCompressed = compressRgbCam16Ucs(rgbLinear, vc);

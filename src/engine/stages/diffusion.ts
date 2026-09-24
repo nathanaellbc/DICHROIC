@@ -92,8 +92,19 @@ export function createDiffusionStage(
   device: GPUDevice,
   arenas: Arenas,
   site: 'camera' | 'print',
+  options?: { bypassConvolution?: boolean },
 ): Stage {
   const siteSuffix = site === 'camera' ? 'Camera' : 'Print';
+  // Task 18 Gate B: `bypassConvolution` (default `false`, PRESERVES every
+  // existing caller's behaviour -- `diffusion.test.ts`'s two describe
+  // blocks never pass it) substitutes `kBypassConvolution` in
+  // `diffusion.wgsl`. Lih. komentar konstanta itu untuk alasan penuh kenapa
+  // ini TIDAK bisa jadi cabang runtime `CoreParams` (satu arena PSF baked
+  // dipakai bersama oleh render yang butuh konvolusi AKTIF dan render yang
+  // butuh identitas -- `defaultCoreParams`'s `family` tidak membedakan
+  // keduanya, keduanya sama-sama `'measured'`) -- harus jadi konstanta
+  // compile-time per pipeline, PERSIS pola `__DIFFUSION_FINAL_LOG__`.
+  const bypassConvolution = options?.bypassConvolution ?? false;
   const code = source
     .replaceAll('__DIFFUSION_RADIUS_OFFSET__', `ARENA_DIFFUSIONRADIUS${siteSuffix.toUpperCase()}_OFFSET`)
     .replaceAll(
@@ -106,7 +117,8 @@ export function createDiffusionStage(
     // lain setelah diffusion(print) sebelum tap `log_e_print`, jadi shader
     // ini sendiri yang harus menutup `log10` tunggal `PrintingStage.expose()`.
     // Lih. komentar `diffusion.wgsl` untuk rasional penuh.
-    .replaceAll('__DIFFUSION_FINAL_LOG__', site === 'print' ? 'true' : 'false');
+    .replaceAll('__DIFFUSION_FINAL_LOG__', site === 'print' ? 'true' : 'false')
+    .replaceAll('__DIFFUSION_BYPASS_CONVOLUTION__', bypassConvolution ? 'true' : 'false');
 
   const module = device.createShaderModule({
     label: `diffusion:${site}`,

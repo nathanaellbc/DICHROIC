@@ -50,9 +50,13 @@
  *   - Halation: dinamai lokal `sigmaMode` — memilih varian radius/bobot
  *     blur (`kSigmaScatterCore`/`kSigmaScatterTail`/`kSigmaBounce`), atau
  *     jumlah chunk pada varian dispatch 1D-nya.
- *   - Grain, PrintScan, ScannerPost: tetap `_pad1`; PrintScan memakainya
- *     sebagai flag boolean "defer output encode", Grain dan ScannerPost
- *     tidak membacanya.
+ *   - Grain, PrintScan: tetap `_pad1`; PrintScan memakainya sebagai flag
+ *     boolean "defer output encode", Grain tidak membacanya.
+ *   - ScannerPost (Task 18 Gate B, ditambahkan setelah paragraf di atas
+ *     ditulis): bit 2 (`FLAG_GLARE_ACTIVE` di bawah) menandai
+ *     `print_render.glare.active` Python -- bit 0/1 TIDAK dibaca shader
+ *     ini (aman berbagi field dengan CurveDevelop/FilmExposure di atas:
+ *     `(slot1 & 4u)` tidak terpengaruh bit 0/1 manapun).
  *
  *   PERBAIKAN dari draf tugas ini sebelumnya: draf menyatakan slot1 dipakai
  *   sebagai `sigmaMode` pada Diffusion. Itu keliru — `sigmaMode` adalah
@@ -92,6 +96,18 @@ export const FLAG_COLOR_ADAPTATION_CURVE_SMOOTHING = 1 << 1;
  * catatan per-slot di atas.
  */
 export const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
+
+/**
+ * Bit 2 dari slot1. Dipakai HANYA oleh ScannerPost (Task 18 Gate B,
+ * `add_glare` / `model/glare.py`) untuk mencerminkan `print_render.glare.
+ * active` Python: menyala untuk keluarga fixture `_stochastic`
+ * (default hulu, glare aktif), padam untuk `_lut` (`lut_mode` memaksa
+ * `deactivate_stochastic_effects=True` -> `glare.active=False`,
+ * `params_builder.py::digest_params`). TIDAK berlaku di shader lain mana
+ * pun (bit 0/1 dipakai FilmExposure/CurveDevelop, lih. catatan per-slot di
+ * atas) -- `scannerPost.wgsl` HANYA memeriksa bit ini, tidak pernah bit 0/1.
+ */
+export const FLAG_GLARE_ACTIVE = 1 << 2;
 
 /**
  * TIGA RUANG KOORDINAT BERBEDA hidup berdampingan di `CoreParams`, dan

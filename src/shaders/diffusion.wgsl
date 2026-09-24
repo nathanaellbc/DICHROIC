@@ -91,6 +91,34 @@
 // tugas ini secara eksplisit minta dipakai ulang, bukan diciptakan
 // mekanisme kedua.
 const kApplyFinalLog: bool = __DIFFUSION_FINAL_LOG__;
+// Task 18 Gate B: `createDiffusionStage(..., { bypassConvolution: true })`
+// substitutes `true` here for the generic `family: 'measured'`/`_stochastic`
+// chain (`test/parity/chain.ts::fullChain`), where BOTH
+// `camera.diffusion_filter.active` and `enlarger.diffusion_filter.active`
+// default to `False` in Python (`params_schema.py`, `DiffusionFilterParams.
+// active: bool = False`) and are untouched by `params_builder.py` for this
+// family (only `lut_mode`'s `deactivate_spatial_effects` branch forces them
+// False explicitly, redundantly). `apply_diffusion_filter_um` itself
+// early-returns `image` UNCHANGED when `not diffusion_filter.active`
+// (`model/diffusion.py:594`) -- a TRUE identity, before it ever looks at
+// `strength`/`p_s`. The runtime `radius<=0||scatterFraction<=0` guard below
+// does NOT catch this: `precomputeDiffusionFilter` (`src/host/spectral.ts`)
+// bakes ONE PSF per stock (radius=14, scatterFraction~0.2625,
+// `family:'black_pro_mist', strength:0.5`) shared by EVERY render of that
+// stock regardless of which fixture family is rendering -- it is not
+// re-baked per test the way `FLAG_GLARE_ACTIVE` gates glare at the
+// CoreParams level, because `diffusion.test.ts`'s own two fixtures
+// (`hard_edge_diffusion_{camera,print}`/`impulse_highlight_diffusion_
+// {camera,print}`) NEED that exact non-zero PSF and construct their OWN
+// short stage lists directly (never touching `fullChain`/this flag,
+// default `false`, unaffected). Task 16's `grain.test.ts` already proved
+// camera-side omission correct empirically (cmy_film mean/var error
+// unchanged at the ~1e-6/1e-3 floor with or without the stage present);
+// this flag makes `fullChain`'s print-site dispatch behave identically
+// (identity passthrough) while STILL closing `log10` via `kApplyFinalLog`
+// -- the one duty this stage cannot skip even when inactive, since no
+// other stage does it for the print site (see comment block above).
+const kBypassConvolution: bool = __DIFFUSION_BYPASS_CONVOLUTION__;
 const kLog10E: f32 = 0.4342944819032518;
 
 fn resolveOutput(linear: vec3<f32>, alpha: f32) -> vec4<f32> {
@@ -147,11 +175,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let scatterFraction = dynamicArena[__DIFFUSION_SCATTER_FRACTION_OFFSET__];
 
   // Port of the early-returns in `apply_diffusion_filter_um`
-  // (`not diffusion_filter.active`, `strength<=0`, `p_s<=0`): all three
+  // (`not diffusion_filter.active`, `strength<=0`, `p_s<=0`): the first two
   // collapse to "radius/scatterFraction baked as 0" by
-  // `precomputeDiffusionFilter` (`diffusionFilter.ts`), so a single guard
-  // here covers all of them -- identity passthrough.
-  if (radius <= 0 || scatterFraction <= 0.0) {
+  // `precomputeDiffusionFilter` (`diffusionFilter.ts`) for the fixtures that
+  // actually bake a zero PSF; `kBypassConvolution` (see const above) covers
+  // `not diffusion_filter.active` for stocks where the SAME shared arena
+  // bakes a non-zero PSF regardless of active-state -- identity passthrough
+  // either way.
+  if (radius <= 0 || scatterFraction <= 0.0 || kBypassConvolution) {
     dstPixels[index] = resolveOutput(raw.rgb, raw.a);
     return;
   }

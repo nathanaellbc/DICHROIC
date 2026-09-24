@@ -878,12 +878,29 @@ function addScannerPostDynamicData(
     normalization += scanIlluminant[wl]! * cmfs[wl * 3 + 1]!;
   }
 
+  // Task 18 Gate B (`add_glare`, `scanning.py:77`): `illuminant_xyz =
+  // contract("k,kl->l", scan_illuminant, STANDARD_OBSERVER_CMFS[:]) /
+  // normalization` -- konstan per render (tidak bergantung piksel),
+  // dihitung SEKALI di sini persis seperti `normalization` di atas, bukan
+  // dijumlahkan ulang di `scannerPost.wgsl` tiap dispatch piksel.
+  const illuminantXyz: [number, number, number] = [0, 0, 0];
+  for (let wl = 0; wl < wavelengthCount; wl += 1) {
+    const w = scanIlluminant[wl]!;
+    illuminantXyz[0] += w * cmfs[wl * 3]!;
+    illuminantXyz[1] += w * cmfs[wl * 3 + 1]!;
+    illuminantXyz[2] += w * cmfs[wl * 3 + 2]!;
+  }
+  illuminantXyz[0] /= normalization;
+  illuminantXyz[1] /= normalization;
+  illuminantXyz[2] /= normalization;
+
   dynamicBuilder.add('scannerChannelDensity', channelDensity.slice());
   dynamicBuilder.add('scannerBaseDensity', baseDensity.slice());
   dynamicBuilder.add('scannerIlluminant', scanIlluminant.slice());
   dynamicBuilder.add('scannerWavelengthCount', Float32Array.of(wavelengthCount));
   dynamicBuilder.add('scannerNormalization', Float32Array.of(normalization));
   dynamicBuilder.add('scannerToOutputRgb', Float32Array.from(scanToOutputRgbSrgb));
+  dynamicBuilder.add('scannerIlluminantXyz', Float32Array.from(illuminantXyz));
 
   // Konstanta CAM16 (`compress_rgb`, `output_color_space="sRGB"`) -- lih.
   // `src/host/cam16.ts` untuk turunan lengkap. `buildScannerCam16Static`

@@ -31,6 +31,7 @@
  * `rgb_pre/input` sungguhan.
  */
 
+import { FLAG_GLARE_ACTIVE } from '../../src/engine/params';
 import type { AssetBundle } from '../../src/profiles/load';
 import type { CoreParams } from '../../src/engine/params';
 
@@ -159,7 +160,10 @@ export function measureAutoExposureEv(
  *     `InputGamutCompressSpec.active` default `True`
  *     (`gamut_compression.py:69`), TIDAK dimatikan `digest_params` untuk
  *     konfigurasi ini -- shader harus membaca separuh TERKOMPRESI
- *     `HanatosRawResponse`.
+ *     `HanatosRawResponse`. Task 18 Gate B menambahkan bit 2
+ *     (`FLAG_GLARE_ACTIVE`, `scannerPost.wgsl`-only): menyala untuk
+ *     `family: 'measured'`, padam untuk `'lut'` -- lih. `FLAG_GLARE_ACTIVE`
+ *     (`src/engine/params.ts`) untuk alasan lengkap.
  *   - `slot2` — 0: sampel dari indeks lokal (bukan buffer tetangga
  *     resolusi-penuh) -- tidak ada tiling di gerbang Task 11.
  *   - `activeOrigin*`/`tileOrigin*` — 0; `activeWidth/Height` — 0 (berarti
@@ -235,6 +239,15 @@ export function defaultCoreParams(
   }
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
+  // Task 18 Gate B (`FLAG_GLARE_ACTIVE`, `src/engine/params.ts`): SAMA
+  // pembedaan family yang sudah menentukan `slot0` di atas --
+  // `lut_mode` (family 'lut') memaksa `print_render.glare.active=False`
+  // (`params_builder.py::digest_params`, `deactivate_stochastic_effects`);
+  // `measured` (family dasar/`_stochastic`) TIDAK menyentuhnya, jadi
+  // default hulu `True` tetap berlaku. Hanya `scannerPost.wgsl` yang
+  // memeriksa bit ini (lih. `FLAG_GLARE_ACTIVE` untuk kenapa aman berbagi
+  // slot1 dengan FilmExposure/CurveDevelop).
+  const glareActiveFlag = family === 'measured' ? FLAG_GLARE_ACTIVE : 0;
 
   return {
     width,
@@ -261,7 +274,7 @@ export function defaultCoreParams(
     // sendiri sebagai dispatch terakhirnya. Lih. dokumentasi `CoreParamsFamily`
     // di atas.
     slot0: family === 'lut' ? 0 : 1,
-    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION,
+    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag,
     slot2: 0, // indeks lokal, bukan buffer tetangga resolusi-penuh
     // 0 -- push/pull mode 0 (tidak aktif). filmExposure.wgsl tidak membaca
     // ini, tapi curveDevelop.wgsl (Task 12) membaca `filmPushPullMode` untuk
