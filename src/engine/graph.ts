@@ -24,6 +24,8 @@ import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
 import type { TapName } from './taps';
 import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
+import { planTiles } from './tiling';
+import type { TileSpec } from './tiling';
 
 export interface StageContext {
   device: GPUDevice;
@@ -63,6 +65,52 @@ function findLastStageIndex(stages: readonly Stage[], tap: TapName): number {
   return -1;
 }
 
+/**
+ * Task 19: ekstrak buffer satu tile (`tile.tileWidth x tile.tileHeight`,
+ * termasuk apron) dari `source` bertata-letak gambar PENUH
+ * (`fullWidth x fullHeight`, tersirat dari `fullWidth` di sini karena
+ * `planTiles` menjamin `tile.tileOriginX/Y + tile.tileWidth/Height <=
+ * fullWidth/Height` -- lih. `tiling.ts`). Baris-demi-baris (bukan satu
+ * `subarray`) dengan alasan yang SAMA seperti
+ * `materializeActiveRegion.wgsl`: sub-rektangel dari tata-letak 2D bukan
+ * rentang byte kontigu.
+ */
+function extractTileInput(source: Float32Array, fullWidth: number, tile: TileSpec): Float32Array {
+  const out = new Float32Array(tile.tileWidth * tile.tileHeight * 4);
+  for (let row = 0; row < tile.tileHeight; row += 1) {
+    const srcRowStart = ((tile.tileOriginY + row) * fullWidth + tile.tileOriginX) * 4;
+    const dstRowStart = row * tile.tileWidth * 4;
+    out.set(source.subarray(srcRowStart, srcRowStart + tile.tileWidth * 4), dstRowStart);
+  }
+  return out;
+}
+
+/**
+ * Task 19: jahit HANYA sub-rektangel AKTIF (`tile.activeWidth x
+ * tile.activeHeight`, TANPA apron) dari hasil satu tile ke posisi
+ * globalnya pada `output` bertata-letak gambar PENUH. Posisi lokal
+ * sub-rektangel aktif di dalam buffer hasil tile adalah
+ * `tile.activeOriginX/Y - tile.tileOriginX/Y` -- SAMA persis konversi
+ * yang `runTiled` pakai untuk mengisi `CoreParams.activeOriginX/Y` saat
+ * mendispatch tile ini (lih. `runTiled`), jadi baris yang dijahit di sini
+ * SELALU baris yang benar-benar ditulis tahap terakhir graf untuk tile
+ * ini.
+ */
+function stitchTileOutput(
+  output: Float32Array,
+  fullWidth: number,
+  tileResult: Float32Array,
+  tile: TileSpec,
+): void {
+  const localOriginX = tile.activeOriginX - tile.tileOriginX;
+  const localOriginY = tile.activeOriginY - tile.tileOriginY;
+  for (let row = 0; row < tile.activeHeight; row += 1) {
+    const srcRowStart = ((localOriginY + row) * tile.tileWidth + localOriginX) * 4;
+    const dstRowStart = ((tile.activeOriginY + row) * fullWidth + tile.activeOriginX) * 4;
+    output.set(tileResult.subarray(srcRowStart, srcRowStart + tile.activeWidth * 4), dstRowStart);
+  }
+}
+
 export class RenderGraph {
   private readonly stages: Stage[] = [];
   /**
@@ -93,7 +141,88 @@ export class RenderGraph {
     return buffer;
   }
 
+  /**
+   * Task 19: titik masuk publik. `options.maxBufferBytes`, bila diberikan,
+   * diteruskan ke `planTiles` (lih. `tiling.ts`) untuk merencanakan grid
+   * tile; "tiling jika perlu" (rencana Task 19) diputuskan dari HASIL
+   * perencanaan itu sendiri (`tiles.length > 1`), bukan dari perbandingan
+   * ukuran terpisah -- untuk gambar kecil dengan apron produksi (256px
+   * OFX vs gambar 32-64px), `params.width*height` sudah lebih kecil dari
+   * budget apa pun yang masuk akal SEKALIGUS apron sendirian sudah
+   * melebihi gambar; satu perbandingan ukuran tunggal tidak bisa
+   * menangkap kedua kasus itu sekaligus, sementara "berapa tile yang
+   * `planTiles` hasilkan" selalu benar oleh konstruksi.
+   *
+   * `options.overlap` — BUKAN bagian tanda tangan yang dituliskan rencana
+   * (`{ maxBufferBytes?: number }` saja) tapi tanpanya pemanggil tidak
+   * punya cara memberi tahu `RenderGraph` seberapa besar apron dibutuhkan
+   * — `RenderGraph` sendiri buta terhadap tahap spasial mana yang aktif
+   * (`Stage` adalah tipe opak, lih. dokumentasi modul di atas);
+   * `estimateTileOverlap` (`tiling.ts`) ada justru untuk pemanggil hitung
+   * nilai ini dari `SpatialEffectFlags` sebelum memanggil `run()`. Baku ke
+   * 0 (tanpa apron) bila tidak diberikan — SALAH untuk render dengan efek
+   * spasial aktif, jadi pemanggil yang memaksa tiling WAJIB
+   * menyertakannya.
+   */
   async run(
+    input: Float32Array,
+    params: CoreParams,
+    collect: TapName,
+    options?: { maxBufferBytes?: number; overlap?: number },
+  ): Promise<Float32Array> {
+    const maxBufferBytes = options?.maxBufferBytes;
+    if (maxBufferBytes !== undefined) {
+      const overlap = options?.overlap ?? 0;
+      const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap);
+      if (tiles.length > 1) {
+        return this.runTiled(input, params, collect, tiles);
+      }
+    }
+    return this.runSingleBuffer(input, params, collect);
+  }
+
+  /**
+   * Task 19: render satu tile per panggilan `runSingleBuffer` (graf/pool
+   * yang SAMA, lih. dokumentasi `StageContext.scratch` di atas), menjahit
+   * hanya sub-rektangel AKTIF tiap tile (bukan buffernya yang termasuk
+   * apron) ke posisi globalnya pada `output`. `planTiles` menjamin
+   * sub-rektangel aktif itu menutupi `params.width x params.height` PENUH
+   * tanpa celah/tumpang-tindih (`tiling.test.ts`) — perulangan di bawah
+   * karena itu boleh menimpa `output` tanpa penjaga tambahan.
+   */
+  private async runTiled(
+    input: Float32Array,
+    params: CoreParams,
+    collect: TapName,
+    tiles: readonly TileSpec[],
+  ): Promise<Float32Array> {
+    const { width, height } = params;
+    const output = new Float32Array(width * height * 4);
+
+    for (const tile of tiles) {
+      const tileInput = extractTileInput(input, width, tile);
+      const tileParams: CoreParams = {
+        ...params,
+        width: tile.tileWidth,
+        height: tile.tileHeight,
+        tileOriginX: tile.tileOriginX,
+        tileOriginY: tile.tileOriginY,
+        // TileSpec.activeOriginX/Y ada di ruang koordinat gambar PENUH
+        // (lih. dokumentasi `TileSpec`) -- CoreParams.activeOriginX/Y
+        // LOKAL ke buffer tile, jadi tileOriginX/Y dikurangkan di sini.
+        activeOriginX: tile.activeOriginX - tile.tileOriginX,
+        activeOriginY: tile.activeOriginY - tile.tileOriginY,
+        activeWidth: tile.activeWidth,
+        activeHeight: tile.activeHeight,
+      };
+      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect);
+      stitchTileOutput(output, width, tileResult, tile);
+    }
+
+    return output;
+  }
+
+  private async runSingleBuffer(
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
