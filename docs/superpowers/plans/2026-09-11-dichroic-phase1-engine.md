@@ -3127,6 +3127,30 @@ git commit -m "feat(spektra): ScannerPost stage completes end-to-end parity at r
 > bukan hanya radius halation/diffusion. Sama berlaku untuk setiap tahap spasial
 > lain yang ditambahkan setelah ini.
 >
+> **5. `activeWidth` adalah rect yang MENYUSUT per tahap, bukan rect keluaran tile.**
+> Ini yang membuat apron benar-benar ditulis, dan tanpanya tiling memang mustahil.
+> Hulu (`SpektraVulkanRenderer.cpp:6195-6246`) menghitung radius per efek sekali
+> (`cameraDiffusionRadius`, `halationRadius`, `dirRadius`, `grainRadius`,
+> `printDiffusionRadius`, `scannerPostRadius`, baris 4999-5006), menjumlahkannya
+> menjadi `remainingSpatialRadius`, lalu SEBELUM tiap tahap menyetel active rect
+> = rect tengah yang DIKEMBANGKAN sebesar sisa radius itu
+> (`setActiveForRemainingRadius`), dan SESUDAH tiap tahap spasial memanggil
+> `consumeSpatialRadius(radiusTahapItu)` (:6444, :6471, :6498, :6516, :6528,
+> :6557, :6604) sehingga rect-nya menyusut.
+>
+> Akibatnya tahap pertama memproses tile PLUS apron penuh, dan setiap tahap
+> spasial "memakan" apron sebesar radiusnya sendiri sampai tahap terakhir
+> mengerjakan tepat region keluaran tile.
+>
+> Jadi shader kita SUDAH benar — `activeWidth`/`activeHeight` diport persis. Yang
+> kurang adalah DRIVER-nya: `graph.ts` menyetel SATU rect untuk seluruh graf,
+> bukan rect per tahap. Memperbaikinya ada di `graph.ts`/`tiling.ts` (cakupan
+> Task 19), BUKAN perubahan sembilan berkas stage plus verifikasi ulang 17 berkas
+> test seperti yang sempat disimpulkan.
+>
+> Catat juga `activeRectShrinkEnabled` (:6232, :6239): hulu punya saklar yang,
+> saat mati, menyetel active rect ke seluruh buffer. Itu jalur full-frame kita.
+
 > **4. Bit-identik adalah gerbang yang benar dan tidak boleh dilonggarkan
 > menjadi "mendekati".** Apron yang benar menghasilkan NOL selisih. Selisih
 > kecil berarti apronnya kurang besar atau suatu tahap membaca di luar
