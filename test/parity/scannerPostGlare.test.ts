@@ -86,23 +86,98 @@ const ENLARGER_FILTERS = {
   yFilterShift: 0,
 };
 
-// `checkMean: false` untuk `color_patches` -- lih. blok komentar modul,
-// bagian "PENGUKURAN SPREAD": oracle Python sendiri (3.11e-4) melebihi
-// ambang mean 1e-4 untuk kasus 8x8 ini, jadi gerbang mean di sana tidak
-// membuktikan apa pun. TIDAK dihapus dari daftar kasus -- variance dan
-// radialPower KEDUANYA tetap diperiksa dan KEDUANYA berarti (margin >=3.4x).
-const CASES: Array<{ name: string; checkMean: boolean }> = [
-  { name: 'gray_ramp', checkMean: true },
-  { name: 'log_gray_ramp', checkMean: true },
-  { name: 'color_patches', checkMean: false },
-];
 
 const MEAN_TOLERANCE = 1e-4;
 const VARIANCE_RELATIVE_TOLERANCE = 0.02;
 const RADIAL_POWER_RELATIVE_TOLERANCE = 0.05;
 
+/**
+ * ==========================================================================
+ * task-18d: STRADDLE TEST -- systematic bias or valid noisy realization?
+ * (§6.5.1's own rule: a statistical threshold must be a measured multiple
+ * of the oracle's OWN spread, never a constant picked to make a number
+ * pass. Task 18c closed three real bugs upstream of this gate -- DIR's
+ * spatial branch, `FLAG_GLARE_ACTIVE`/`FLAG_UNSHARP_ACTIVE` conflating
+ * `<case>` with `<case>_stochastic`, and the missing unsharp port -- and
+ * task-18d additionally closed a `sin()`/`cos()` native-GPU-builtin floor
+ * in `compressRgbCam16Ucs` (see task-18c-report.md addendum). Neither
+ * session moved these two numbers by more than noise: re-measuring after
+ * both was mandatory before deciding anything here.)
+ *
+ * Method (identical to the one Task 18's predecessor used ONCE, pre-18c,
+ * when it found a genuine systematic bug this same way -- task-18-report.md,
+ * "gray_ramp/log_gray_ramp: a small, real, systematic bias"): patch ONLY
+ * the glare RNG hash salt (`0xB5297A4Du` in `glareRandNormal`,
+ * `scannerPost.wgsl`) in a scratch copy of the shader source, run the real
+ * `fullChain()` pipeline (unchanged otherwise) through 12 independent
+ * salts, and see whether `got.mean - want.mean` crosses zero (straddles
+ * the oracle mean -> a valid realization of an unbiased implementation)
+ * or lands on the same side every time (systematic -> a real bug, not
+ * tuned away).
+ *
+ * Result, 12 salts each (full transcript: task-18c-report.md addendum,
+ * task-18d session):
+ *
+ *   gray_ramp_stochastic:      12 positive, 0 negative. min=1.05e-6,
+ *                              max=1.524e-4. NEVER straddles, even though
+ *                              one salt lands within 1e-6 of zero.
+ *   log_gray_ramp_stochastic:  10 positive, 2 negative. min=-4.38e-5,
+ *                              max=1.780e-4. DOES straddle.
+ *
+ * Verdict:
+ *   - `log_gray_ramp_stochastic`: valid realization. Threshold below set
+ *     to a multiple of the measured oracle spread (§6.5.1), chosen BEFORE
+ *     checking whether our number passes it (see derivation below) --
+ *     not reverse-fit to the 3.35-sigma residual it happens to measure.
+ *   - `gray_ramp_stochastic`: NOT a valid realization by this test --
+ *     12/12 same-sign across independent RNG salts is a >1-in-2000 event
+ *     under "our implementation is unbiased" (2*0.5^12). Left at the
+ *     original 1e-4 constant, UNMODIFIED, and still failing: this is a
+ *     real residual, reported BLOCKED, not tuned. The same 4*sigma
+ *     multiple used for `log_gray_ramp_stochastic` below would give
+ *     `gray_ramp_stochastic` a threshold of 1.351e-4 -- which its own
+ *     measured error (1.524e-4) would STILL exceed, an independent
+ *     confirmation from the same formula rather than a coincidence
+ *     manufactured by picking different multiples per case.
+ *
+ * `SIX_SAMPLE_RANGE_TO_SIGMA` (2.534): Shewhart/Western-Electric control-
+ * chart d2 constant for subgroup size n=6 -- converts the §6.5.1
+ * max-minus-min spread (six fresh Python reruns) to an estimated standard
+ * deviation, the same textbook conversion the brief itself uses to state
+ * "for six samples the range is roughly 2.5 standard deviations".
+ * ==========================================================================
+ */
+const SIX_SAMPLE_RANGE_TO_SIGMA = 2.534;
+// §6.5.1: max-minus-min across six fresh Python reruns, `log_gray_ramp`.
+const LOG_GRAY_RAMP_ORACLE_RANGE = 1.16e-4;
+const LOG_GRAY_RAMP_ORACLE_SIGMA = LOG_GRAY_RAMP_ORACLE_RANGE / SIX_SAMPLE_RANGE_TO_SIGMA;
+// 4*sigma: a conventional "very strict" statistical multiple (not 3.35,
+// which is what our specific residual happens to measure -- see comment
+// above for why 4 was chosen independent of that number).
+const LOG_GRAY_RAMP_MEAN_TOLERANCE = 4 * LOG_GRAY_RAMP_ORACLE_SIGMA;
+
+// `checkMean: false` untuk `color_patches` -- lih. blok komentar modul,
+// bagian "PENGUKURAN SPREAD": oracle Python sendiri (3.11e-4) melebihi
+// ambang mean 1e-4 untuk kasus 8x8 ini, jadi gerbang mean di sana tidak
+// membuktikan apa pun. TIDAK dihapus dari daftar kasus -- variance dan
+// radialPower KEDUANYA tetap diperiksa dan KEDUANYA berarti (margin >=3.4x).
+const CASES: Array<{ name: string; checkMean: boolean; meanTolerance: number }> = [
+  // `gray_ramp`: ambang DIBIARKAN di konstanta 1e-4 yang asli dan test ini
+  // MASIH MERAH. Uji straddle memberi 12 positif / 0 negatif lintas 12 salt
+  // RNG independen -- di bawah hipotesis "implementasi kami tak bias" itu
+  // peristiwa 2*0.5^12, di bawah 1 banding 2000. Jadi residualnya SISTEMATIS,
+  // dan melonggarkan ambang di sini akan menyembunyikan bug, bukan mengakui
+  // derau. Dilaporkan BLOCKED.
+  { name: 'gray_ramp', checkMean: true, meanTolerance: MEAN_TOLERANCE },
+  // `log_gray_ramp`: 10 positif / 2 negatif -- MENYEBERANGI mean oracle, jadi
+  // ia realisasi yang sah dari implementasi tak bias. Ambangnya diikat ke
+  // sebaran oracle terukur sesuai spec 6.5.1.
+  { name: 'log_gray_ramp', checkMean: true, meanTolerance: LOG_GRAY_RAMP_MEAN_TOLERANCE },
+  { name: 'color_patches', checkMean: false, meanTolerance: MEAN_TOLERANCE },
+];
+
 describe('parity: rgb_out (Gate B, glare stokastik, keluarga _stochastic)', () => {
-  for (const { name, checkMean } of CASES) {
+  for (const { name, checkMean, meanTolerance } of CASES) {
     const caseName = `${name}_stochastic`;
 
     it(`momen cocok dengan referensi Python untuk ${caseName}`, async () => {
@@ -140,7 +215,7 @@ describe('parity: rgb_out (Gate B, glare stokastik, keluarga _stochastic)', () =
 
       if (checkMean) {
         expect(Math.abs(got.mean - want.mean), `${caseName}: mean abs error`).toBeLessThan(
-          MEAN_TOLERANCE,
+          meanTolerance,
         );
       }
 
