@@ -505,6 +505,61 @@ dalam f64 dan kita dalam f32, jadi selisih di orde 1e-7 wajar. Meleset di orde
 versus kolom, atau interpolasi yang keliru. Itu harus ditemukan, bukan
 ditoleransi.
 
+#### 6.5.1 Ambang statistik harus diikat ke derau oracle-nya sendiri
+
+Angka `1e-4` di atas ditulis sebelum ada yang mengukur seberapa berisik oracle
+statistiknya. Task 18 Gate B mengukurnya — enam rerun Python segar, `rgb_out`
+keluarga `_stochastic`:
+
+| Kasus | sebaran mean | sebaran var-rel | sebaran radial |
+|---|---|---|---|
+| `gray_ramp` | 8,56e-5 | 1,51e-3 | 2,25e-2 |
+| `log_gray_ramp` | **1,16e-4** | 5,56e-4 | 1,34e-2 |
+| `color_patches` | 2,30e-4 | 4,38e-3 | 1,24e-2 |
+
+Dua dari tiga kasus punya sebaran mean **di atas 1e-4**. Artinya oracle itu
+sendiri tidak bisa lulus ambangnya sendiri: jalankan Python dua kali, bandingkan
+satu realisasi dengan yang lain, dan gerbang itu merah. `add_glare` memakai RNG
+paralel numba yang tak bisa di-seed, jadi ini sifat oracle, bukan sesuatu yang
+bisa diperbaiki di sisi kami.
+
+Karena itu **ambang statistik diikat ke sebaran antar-realisasi yang TERUKUR**,
+bukan ke konstanta yang ditebak. Aturannya:
+
+1. Ukur sebaran oracle dulu (beberapa rerun), laporkan angkanya.
+2. Tetapkan ambang sebagai kelipatan kecil dari sebaran itu, dan TULIS
+   kelipatannya beserta pengukurannya di test.
+3. Kalau implementasi meleset jauh di atas sebaran itu — Gate B meleset 5,6x
+   sampai 168x — itu BUKAN masalah ambang, itu bug. Melonggarkan ambang tidak
+   sah dalam kasus itu, dan Task 18 Gate B dilaporkan BLOCKED, bukan dilewatkan.
+
+Yang TIDAK berubah: ambang per-piksel 1e-5 untuk tap deterministik. Itu terukur
+dapat dicapai — tujuh gerbang mendarat di ~1e-7 dan satu di ~1e-6 dengan alasan
+yang terdokumentasi (§6.5.2).
+
+#### 6.5.2 Lubang cakupan: keluarga `measured` tak tergerbangi setelah `cmy_film`
+
+Diaudit setelah Gate B gagal. Gerbang deterministik yang ada per keluarga:
+
+| Tap | `_lut` | `measured` (keluarga `<case>` biasa) |
+|---|---|---|
+| `log_e_film` | ✅ | ✅ |
+| `cmy_film` | ✅ | hanya statistik (grain) |
+| `log_e_print` | ✅ | hanya fixture `*_diffusion_print` |
+| `cmy_print` | ✅ | **tidak ada** |
+| `rgb_out` | ✅ | **tidak ada** (Gate B, gagal) |
+
+Jadi tidak ada satu pun gerbang deterministik antara `cmy_film` dan `rgb_out`
+pada keluarga `measured`, dan Gate B adalah hal PERTAMA yang menjalankan jalur
+itu. Kegagalannya kemungkinan besar GEJALA dari divergensi di rentang tak
+tergerbangi itu, bukan bug glare — dan memang A/B glare-mati milik Gate B
+menunjukkan kegagalan `color_patches` tidak berubah.
+
+Penutupnya sudah tersedia tanpa fixture baru: keluarga `<case>` BIASA
+(stokastik mati, spasial hidup) punya fixture deterministik di SETIAP tap.
+Menggerbangi `cmy_film`, `log_e_print`, `cmy_print`, dan `rgb_out` di situ akan
+memaku divergensinya ke satu tahap sekaligus menutup lubangnya secara permanen.
+
 ### 6.6 Harness
 
 Pembangkitan referensi: skrip Python yang memanggil `SimulationPipeline` dengan
