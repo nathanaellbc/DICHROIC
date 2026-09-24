@@ -464,6 +464,77 @@ fn atan2Accurate(y: f32, x: f32) -> f32 {
   return angle;
 }
 
+// `sin()`/`cos()` GPU (Dawn/Tint, backend native) DIUKUR jauh lebih tidak
+// akurat daripada lantai f32 biasa pada argumen yang benar-benar muncul di
+// rantai CAM16-UCS ini -- probe langsung (task-18d, pointwise DAN scan
+// rentang penuh) terhadap device SUNGGUHAN, dibandingkan `Math.sin`/
+// `Math.cos` f64: `sin(hp)` pada argumen piksel gagal SUNGGUHAN
+// (`color_patches`, piksel 3) menyimpang **4.14e-6** absolut (`cos` pada
+// argumen sama: 3.27e-8, jauh lebih kecil -- TIDAK simetris, jadi bukan
+// artefak pembulatan generik); scan rentang [-pi,pi] menemukan galat
+// absolut sampai **~3.1-3.2e-5** dekat siku kuadran (`sin` dekat x=pi/2,
+// `cos` dekat x=pi), 30-260x lantai f32 `pow`/`sqrt`/`log` yang diukur di
+// probe SAMA (~1e-7-1e-8, TIDAK diindikasikan -- lih. `zzdiag-obj1-
+// logprobe.test.ts` di riwayat commit sesi ini, dihapus sebelum commit).
+// Mekanisme: `xyzToCam16Ucs` membentuk `ap=Mp*cos(hRad)`, `bp=Mp*sin(hRad)`
+// dari SATU sudut lalu memulihkan `Cp=sqrt(ap^2+bp^2)` -- identitas
+// Pythagoras HANYA berlaku sampai presisi `cos^2+sin^2`, dan errornya TIDAK
+// saling meniadakan karena `sin`/`cos` native diukur TIDAK simetris. Ini
+// PERSIS menjelaskan galat relatif Cp ~4e-6 yang diukur pada piksel gagal
+// gerbang `rgb_out`/`color_patches` (task-18d) -- >>lantai `atan2Accurate`
+// (~1e-7 rad) yang SUDAH menutup Gate A, jadi bukan regresi dari perbaikan
+// itu, sumber BARU yang gerbang `measured`/`rgb_out` (Task 18c) yang
+// pertama kali mengekspos (Gate A/`_lut` tidak pernah punya kombinasi
+// argumen yang sama).
+//
+// Polinomial minimax (least-squares titik-Chebyshev, derajat 13 untuk
+// `sin` / derajat 12 untuk `cos`, dalam `x^2`, `fit_sincos.mjs`, dihapus
+// sebelum commit) TERVERIFIKASI di JS terhadap `Math.sin`/`Math.cos` di
+// SELURUH `[-pi,pi]` (500rb titik uji, BUKAN cuma titik fit): `sin` maks
+// abs `3.17e-8`, `cos` maks abs `4.19e-8` -- >100x lebih akurat dari
+// `sin`/`cos` native yang diukur, mendarat di lantai f32 yang SAMA seperti
+// `pow`/`sqrt`/`log` (yang TIDAK diganti -- tidak diindikasikan). Reduksi
+// rentang standar (`x - 2*pi*round(x/(2*pi))`, `round()` WGSL EKSAK --
+// bukan transcendental berpendekatan) karena argumen di sini bisa melebihi
+// `[-pi,pi]` (`cos(2.0+hRad)`).
+const kSincosTwoPi: f32 = 6.283185307179586;
+
+fn reduceAngle(x: f32) -> f32 {
+  return x - kSincosTwoPi * round(x / kSincosTwoPi);
+}
+
+fn sinPoly(xReduced: f32) -> f32 {
+  let t = xReduced * xReduced;
+  var p = 1.3641326881872822e-10;
+  p = p * t - 2.4737625785798427e-8;
+  p = p * t + 0.0000027536898774867102;
+  p = p * t - 0.00019840593095742174;
+  p = p * t + 0.008333322864236287;
+  p = p * t - 0.16666666095169105;
+  p = p * t + 0.9999999996796889;
+  return xReduced * p;
+}
+
+fn cosPoly(xReduced: f32) -> f32 {
+  let t = xReduced * xReduced;
+  var p = 1.7293474033268572e-9;
+  p = p * t - 2.7094024444600663e-7;
+  p = p * t + 0.000024771650680491882;
+  p = p * t - 0.0013887901766899415;
+  p = p * t + 0.041666514874552245;
+  p = p * t - 0.49999991779253355;
+  p = p * t + 0.9999999954468125;
+  return p;
+}
+
+fn sinAccurate(x: f32) -> f32 {
+  return sinPoly(reduceAngle(x));
+}
+
+fn cosAccurate(x: f32) -> f32 {
+  return cosPoly(reduceAngle(x));
+}
+
 const kMatrix16 = mat3x3<f32>(
   0.401288, -0.250268, -0.002079,
   0.650173, 1.204414, 0.048952,
@@ -543,7 +614,7 @@ fn cam16Forward(xyzUnitY: vec3<f32>, vc: Cam16Viewing) -> Cam16Fwd {
   let hRad = atan2Accurate(b, a);
   var hDeg = (hRad * 180.0 / 3.14159265358979) ;
   hDeg = hDeg - 360.0 * floor(hDeg / 360.0);
-  let e_t = 0.25 * (cos(2.0 + hRad) + 3.8);
+  let e_t = 0.25 * (cosAccurate(2.0 + hRad) + 3.8);
   let A = achromatic(RGB_a, vc.N_bb);
   let J = 100.0 * spow(A / vc.A_w, kSurroundC * vc.z);
   let t = ((50000.0 / 13.0) * kSurroundNc * vc.N_bb * e_t * sqrt(a * a + b * b))
@@ -558,7 +629,7 @@ fn cam16Forward(xyzUnitY: vec3<f32>, vc: Cam16Viewing) -> Cam16Fwd {
 fn cam16Inverse(J: f32, M: f32, hDeg: f32, vc: Cam16Viewing) -> vec3<f32> {
   let C = M / pow(vc.F_L, 0.25);
   let hRad = hDeg * 3.14159265358979 / 180.0;
-  let e_t = 0.25 * (cos(2.0 + hRad) + 3.8);
+  let e_t = 0.25 * (cosAccurate(2.0 + hRad) + 3.8);
   let Jsafe = max(J, 1.0e-9);
   let t = spow(C / (sqrt(Jsafe / 100.0) * pow(1.64 - pow(0.29, vc.n), 0.73)), 1.0 / 0.9);
   let A = vc.A_w * spow(J / 100.0, 1.0 / (kSurroundC * vc.z));
@@ -569,8 +640,8 @@ fn cam16Inverse(J: f32, M: f32, hDeg: f32, vc: Cam16Viewing) -> vec3<f32> {
   if (t != 0.0) {
     let P1 = ((50000.0 / 13.0) * kSurroundNc * vc.N_bb * e_t) / t;
     let P3 = 21.0 / 20.0;
-    let sinH = sin(hRad);
-    let cosH = cos(hRad);
+    let sinH = sinAccurate(hRad);
+    let cosH = cosAccurate(hRad);
     let n_ = P2 * (2.0 + P3) * (460.0 / 1403.0);
     if (abs(sinH) >= abs(cosH)) {
       b = n_ / (P1 / sinH + (2.0 + P3) * (220.0 / 1403.0) * (cosH / sinH) - 27.0 / 1403.0 + P3 * (6300.0 / 1403.0));
@@ -597,7 +668,7 @@ fn xyzToCam16Ucs(xyzUnitY: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
   let Jp = ((1.0 + 100.0 * kUcsC1) * fwd.J) / (1.0 + kUcsC1 * fwd.J);
   let Mp = (1.0 / kUcsC2) * log(1.0 + kUcsC2 * fwd.M);
   let hRad = fwd.hDeg * 3.14159265358979 / 180.0;
-  return vec3<f32>(Jp, Mp * cos(hRad), Mp * sin(hRad));
+  return vec3<f32>(Jp, Mp * cosAccurate(hRad), Mp * sinAccurate(hRad));
 }
 
 // `np.expm1(x) = exp(x)-1` tapi TANPA pembatalan katastrofik untuk `x`
@@ -681,8 +752,8 @@ fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
   let CpMax = max(cmaxLookup(jab.x, hp), 1.0e-9);
   let d = reinhardKnee(Cp / CpMax, 0.0, 1.0, 6.0);
   let CpNew = d * CpMax;
-  let apNew = CpNew * cos(hp);
-  let bpNew = CpNew * sin(hp);
+  let apNew = CpNew * cosAccurate(hp);
+  let bpNew = CpNew * sinAccurate(hp);
 
   let xyzNew = cam16UcsToXyz(jab.x, apNew, bpNew, vc);
   return kSrgbXyzToRgb * xyzNew;
