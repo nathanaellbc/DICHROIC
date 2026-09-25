@@ -3329,6 +3329,45 @@ memadai di sini — bukan bahwa ia memadai di mana pun.
 
 ## Task 16b: Suku grain yang bergantung ukuran piksel
 
+> **TABEL DI BAWAH SALAH — dikoreksi setelah Task 16b dieksekusi.** Angka
+> aktivasinya saya turunkan dari rasio naif `parameter / pixel_size_um`, bukan
+> dari rumus Python yang sebenarnya, dan satu kesalahan satuan membuat
+> justifikasi saya melebih-lebihkan urgensinya seribu kali lipat.
+>
+> **`micro_structure`.** `GrainParams.micro_structure = (0.2, 30)`, dan elemen
+> KEDUA adalah **nanometer**, dinyatakan komentar `grain.py:55`. Saya
+> memperlakukannya sebagai mikrometer. Kondisi hulu yang sebenarnya
+> (`add_micro_structure`, `grain.py:53-62`) adalah
+> `sigma = ms[1]*0.001/pixel_size_um > 0.05` dan
+> `blur_pixel = ms[0]/pixel_size_um > 0.4`, jadi ia baru hidup di bawah
+> `pixel_size_um` 0,6 dan 0,5 — pada 35 mm itu lebih dari **58.000 piksel
+> lebar**. Nilai sebenarnya pada 6000 px adalah 0,0051, BUKAN 5,14 yang saya
+> tulis. Untuk pemakaian fotografis nyata suku ini praktis selalu no-op.
+>
+> **`blur_dye_clouds_um`.** Justru kebalikannya. `grain.py:48` hanya menguji
+> `if blur_particle > 0`, dan sigmanya `blur_particle*sqrt(od_particle)` TIDAK
+> dibagi `pixel_size_um` sama sekali — jadi ia tidak bergantung ukuran piksel
+> dan **aktif pada default di ukuran fixture mana pun**. Penundaan Task 16
+> ("terbukti no-op pada ukuran piksel gerbang") karena itu salah untuk suku
+> ini; ia hidup di 64 px selama ini, dan angka gerbang grain 64 px memang
+> bergeser saat Task 16b mengimplementasikannya.
+>
+> **Yang tetap berlaku:** tugas ini benar dikerjakan, hanya bukan karena alasan
+> yang saya berikan. `blur_dye_clouds_um` adalah suku yang HILANG pada skala
+> mana pun, dan itu alasan yang cukup sendiri. Yang tidak berlaku: klaim saya
+> bahwa grain kita "benar di gambar uji dan salah di gambar sungguhan" karena
+> micro-structure — pada resolusi fotografis, micro-structure diam di kedua
+> sisi.
+>
+> Pelajarannya sama seperti yang berulang di proyek ini: saya menurunkan angka
+> dari nama parameter alih-alih dari rumus yang memakainya, lalu
+> mempresentasikannya sebagai terukur. Implementer Task 16b menangkapnya dengan
+> membaca `grain.py`, bukan tabel saya.
+
+### Tabel lama (dipertahankan sebagai catatan kesalahan)
+
+#### Task 16b — teks asli
+
 **WAJIB sebelum Fase 1 dinyatakan selesai.** Bukan polish, dan bukan optimasi.
 
 Task 16 menutup gerbang grain dengan dua suku DITUNDA karena terbukti no-op
