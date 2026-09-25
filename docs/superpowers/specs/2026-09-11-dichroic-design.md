@@ -537,6 +537,52 @@ Yang TIDAK berubah: ambang per-piksel 1e-5 untuk tap deterministik. Itu terukur
 dapat dicapai — tujuh gerbang mendarat di ~1e-7 dan satu di ~1e-6 dengan alasan
 yang terdokumentasi (§6.5.2).
 
+#### 6.5.1a Cacat diketahui: bias glare 2,55e-5 pada `rgb_out`
+
+Dicatat sebagai cacat yang DIUKUR dan DIBATASI, bukan ditutup-tutupi, dan bukan
+dihapus dengan melonggarkan ambang.
+
+**Besarnya.** Membandingkan pusat distribusi, bukan satu undian lawan satu
+undian: Python n=26 pusat 0,4093622 (sd 2,704e-5), kami n=40 pusat 0,4093877
+(sd 3,293e-5). Selisih **2,55e-5 = 3,4x sebaran gabungan**, Welch t≈3,43,
+p≈0,001. Nyata, dan direproduksi dua kali lewat jalur berbeda.
+
+**Kenapa angka gerbang (1,524e-4) jauh lebih besar dari cacatnya.** Sebagian
+besar selisih itu derau undian biasa ditambah salt yang dikapalkan kebetulan
+mendarat ~3 sigma tinggi di distribusi KAMI SENDIRI. Keduanya sudah dikuantifikasi.
+
+**Dua belas mekanisme disingkirkan, masing-masing dengan pengukuran, bukan
+penalaran:** RNG glare tak bias di tingkat populasi; `cos()` bawaan GPU
+dapat diabaikan; tidak ada korelasi hash dengan posisi; `_compress_lightness`
+benar; interpolasi bilinear `Cmax` dekat-akromatik 1,6e-6; penjumlahan
+terkompensasi 1,19e-7; rantai CAM16-UCS bebas bias ~1e-7 terhadap bayangan f64;
+parameterisasi lognormal EKSAK (`exp(mu+sigma^2/2)=0,03` dan CV=0,7, keduanya
+persis sama dengan hulu); grain dibebaskan lewat perbandingan `cmy_film`
+per-piksel deterministik; penanganan batas blur glare tidak berskala dengan
+fraksi batas (-5,19e-9 di 32x16 versus -5,23e-9 di 320x160); urutan kanal
+bersih (R/G/B semuanya +8,9e-6/+8,4e-6/+7,3e-6, t≈1,1, tak signifikan);
+`illuminant_xyz` diverifikasi sama terhadap run Python langsung.
+
+**Kenapa sisanya tampak menyebar, bukan satu mekanisme.** Pipeline glare-mati
+dibatasi di bawah 1e-5 oleh empat gerbang deterministik, kontribusi glare
+menambah ~8e-6, dan keduanya beserta batas galatnya sudah menjelaskan 2,55e-5
+tanpa menyisakan residu yang menuntut mekanisme tersendiri.
+
+**Keputusannya.** Diterima sebagai cacat diketahui. Dalam gambar 8-bit 2,55e-5
+berada jauh di bawah satu level kuantisasi (1/255 = 3,9e-3), jadi ia tidak
+terlihat. Aturan kualitas-di-atas-performa TIDAK menuntut mengejarnya tanpa
+batas; ia menuntut kita mengetahui ukurannya dan tidak berpura-pura ia nol.
+
+**Utang yang menyertainya.** Gerbang `gray_ramp_stochastic` saat ini
+membandingkan SATU undian kami lawan SATU undian Python, sementara sebaran
+undian kami sendiri (sd 3,293e-5) LEBIH BESAR dari efek yang ingin ia deteksi
+(2,55e-5). Gerbang itu bukan instrumen yang sahih pada nilai ambang berapa pun.
+Penggantinya harus merata-ratakan lintas N salt (noise turun sd/sqrt(N)) dan
+membandingkan terhadap pusat Python, dengan toleransi yang mengunci 2,55e-5
+sebagai PLAFON sehingga regresi glare di masa depan memerahkannya. Sampai itu
+ada, test-nya dibiarkan MERAH — merah yang jujur lebih bernilai daripada hijau
+yang argumennya tidak bisa dipertahankan.
+
 #### 6.5.2 Lubang cakupan: keluarga `measured` tak tergerbangi setelah `cmy_film`
 
 Diaudit setelah Gate B gagal. Gerbang deterministik yang ada per keluarga:
