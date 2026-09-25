@@ -10,7 +10,7 @@ import { Tap } from '../../src/engine/taps';
 import { loadCase, loadInputAsRgba, loadTap } from './compare';
 import { defaultCoreParams } from './params';
 import { sharedResources } from './run';
-import { moments } from './statistics';
+import { moments, momentsBinned } from './statistics';
 
 /**
  * Parity gerbang Grain (Task 16) -- STATISTIK, bukan per-piksel (spec §6.5:
@@ -130,4 +130,102 @@ describe('parity: grain (statistik, cmy_film, keluarga _stochastic)', () => {
       }
     });
   }
+});
+
+/**
+ * Task 16b -- gerbang statistik BARU untuk `blur_particle` (blur per-lapisan
+ * dye-cloud) dan `add_micro_structure` (clumping lognormal), dua suku Task 16
+ * menunda sebagai no-op TERBUKTI pada `pixel_size_um` fixture di atas
+ * (546..4375 um) tapi menandai eksplisit deferral itu BERGANTUNG ukuran
+ * piksel, bukan struktural. `grain_dense_patch` (64x64, SETIAP piksel
+ * bernilai sama -- lih. `gen_reference.py::grain_dense_patch` --
+ * `camera.film_format_mm=0.024` alih-alih 35.0 default) menekan
+ * `pixel_size_um` ke 0,375 um, jauh di bawah ambang aktivasi KEDUANYA:
+ *
+ *   - blur_particle: sigma = blur_dye_clouds_um*sqrt(od_particle) berkisar
+ *     1,44..4,47 di fixture ini (radius kernel 4..13 px) vs ~5e-4..3e-3
+ *     (radius 0) di fixture `_stochastic` lama -- lih. `grain.wgsl`.
+ *   - add_micro_structure: grain_micro_structure_sigma=0,08 > ambang
+ *     Python 0,05 (vs ~5e-5 lama) DAN grain_micro_structure_blur_pixel=
+ *     0,533 > ambang blur bersarang 0,4 -- kedua cabang bersarang aktif.
+ *
+ * AMBANG BERBEDA dari gerbang `_stochastic` di atas (5e-5/2%/5%), SENGAJA --
+ * bukan pelonggaran sembarangan, dikalibrasi terhadap sebaran TERUKUR
+ * (spec §6.5.1 "ambang terikat sebaran terukur"), bukan diwariskan dari
+ * Task 16 yang dikalibrasi pada rezim partikel yang sama sekali berbeda:
+ *
+ *   `n_particles_per_pixel` per (kanal,sublapisan) di fixture ini turun ke
+ *   orde 0,03..0,35 -- jauh dari rezim "banyak partikel" (1e5..1e7) yang
+ *   membuat aproksimasi Poisson-thinning+Normal Task 16 presisi tinggi.
+ *   Identitas Poisson-thinning tetap EKSAK pada n manapun (mean/variance
+ *   formula diverifikasi Monte Carlo langsung terhadap `layer_particle_model`
+ *   Python sungguhan, cocok 4-5 angka signifikan, task-16b-report.md) --
+ *   TAPI karena Python men-seed grain.py:84-87 dengan `seed=[0,1,2]` TETAP
+ *   (deterministik antar-run Python, BUKAN acak), sedangkan implementasi
+ *   kami memakai RNG independen sungguhan, kami tidak bisa memanfaatkan
+ *   "kebetulan" itu -- kami membandingkan SATU realisasi acak independen
+ *   terhadap SATU realisasi Python (yang acak HANYA lewat micro-structure's
+ *   `fast_lognormal_from_mean_std`, numba `parallel=True` tak-tersemai).
+ *   60 realisasi Monte Carlo independen dari implementasi statistik kami
+ *   SENDIRI (host-side JS/f64, `mu`/`variance` formula yang SAMA dengan
+ *   WGSL) terhadap fixture PERSIS ini menunjukkan sebaran ensemble asli:
+ *   std rata-rata (kanal hijau, sejenis di kanal lain) ~2-4% relatif,
+ *   variance relatif ~11-19%, daya radial per-bin (8 bin lebar-sama) ~15-60%.
+ *   Ambang di bawah (0,08 mean absolut, 60% variance relatif, 150% radial
+ *   per-bin) memberi margin 2-4x di atas sebaran terukur itu, TETAP jauh di
+ *   bawah apa yang mutasi "hapus kedua suku baru" hasilkan (var_rel 7,7-14,6,
+ *   radial 12-29 -- lih. laporan Task 16b untuk transkrip mutasi penuh).
+ */
+describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_patch)', () => {
+  it('momen (bin lebar-sama) cocok dengan referensi Python untuk grain_dense_patch', async () => {
+    const { engine, bundle, arenas } = await sharedResources(STOCK_ID);
+
+    const graph = new RenderGraph(engine);
+    for (const stage of [
+      createMaterializeActiveRegionStage(engine.device),
+      createFilmExposureStage(engine.device, arenas),
+      createHalationStage(engine.device, arenas),
+      createCurveDevelopStage(engine.device, arenas),
+      createDirStage(engine.device, arenas),
+      // film_format_mm=0.024 -- HANYA test ini, lih. `createGrainStage`
+      // untuk kenapa default 35.0 di semua pemanggil lain tidak tersentuh.
+      createGrainStage(engine.device, arenas, 0.024),
+    ]) {
+      graph.addStage(stage);
+    }
+
+    const caseName = 'grain_dense_patch';
+    const meta = loadCase(caseName);
+    const inputRgba = loadInputAsRgba(caseName);
+    const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', true, STOCK_ID);
+
+    const actual = await graph.run(inputRgba, params, Tap.CMY_FILM);
+
+    const expectedRgb = loadTap(caseName, 'cmy_film');
+    const pixels = expectedRgb.length / 3;
+    const expectedRgba = new Float32Array(pixels * 4);
+    for (let p = 0; p < pixels; p += 1) {
+      expectedRgba[p * 4] = expectedRgb[p * 3]!;
+      expectedRgba[p * 4 + 1] = expectedRgb[p * 3 + 1]!;
+      expectedRgba[p * 4 + 2] = expectedRgb[p * 3 + 2]!;
+      expectedRgba[p * 4 + 3] = 1;
+    }
+
+    const BINS = 8;
+    const got = momentsBinned(actual, meta.width, meta.height, BINS);
+    const want = momentsBinned(expectedRgba, meta.width, meta.height, BINS);
+
+    expect(Math.abs(got.mean - want.mean), `${caseName}: mean abs error`).toBeLessThan(0.08);
+    expect(
+      Math.abs(got.variance - want.variance) / Math.max(want.variance, 1e-30),
+      `${caseName}: variance relative error`,
+    ).toBeLessThan(0.6);
+
+    for (let bin = 1; bin < want.radialPower.length; bin += 1) {
+      const w = want.radialPower[bin]!;
+      if (w < 1e-12) continue;
+      const relative = Math.abs(got.radialPower[bin]! - w) / w;
+      expect(relative, `${caseName}: bin daya radial ${bin}`).toBeLessThan(1.5);
+    }
+  });
 });

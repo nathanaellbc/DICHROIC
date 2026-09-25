@@ -73,3 +73,61 @@ export function moments(rgba: Float32Array, width: number, height: number): Mome
 
   return { mean, variance: sq / pixels, radialPower: power };
 }
+
+/**
+ * Task 16b: varian `moments()` untuk `grain_dense_patch` (64x64,
+ * `pixel_size_um=0.375`) -- fixture yang membuat `blur_particle`/
+ * `add_micro_structure` aktif JUGA mendorong `n_particles_per_pixel` per
+ * (kanal,sublapisan) ke orde 0,03..0,35 (jauh dari rezim "banyak partikel"
+ * 1e5..1e7 yang membuat gerbang `_stochastic` biasa presisi 1e-4/2%/5%,
+ * lih. `grain.wgsl`/task-16b-report.md). Dua perbedaan dari `moments()`:
+ *
+ *   1. Bin radial LEBAR-SAMA (`floor(r/(size/2)*bins)`), BUKAN
+ *      `round(hypot(dx,dy))` -- pada gambar 64x64 dengan bin sempit dekat
+ *      r=0 (sedikit piksel), binning lama membuat bin rendah nyaris tak
+ *      bermakna secara statistik (diverifikasi: 60 realisasi Monte Carlo
+ *      independen dari implementasi KAMI SENDIRI menunjukkan std relatif
+ *      antar-bin 15-60%, task-16b-report.md) -- binning lebar-sama menekan
+ *      itu ke kisaran yang sama tapi dengan jumlah bin yang predictable
+ *      dan reusable oleh test lain.
+ *   2. `bins` adalah parameter eksplisit (bukan diturunkan dari
+ *      `min(width,height)>>1`) -- `grain.test.ts` memakai 8 (dikalibrasi
+ *      terhadap sebaran Monte Carlo yang sama di atas), BUKAN 32
+ *      (`min(64,64)>>1`) yang akan mewarisi noise per-bin yang sama.
+ *
+ * `moments()` di atas TIDAK disentuh -- ketiga kasus `_stochastic` Task 16
+ * (gray_ramp/log_gray_ramp/color_patches, fixture kecil di mana binning
+ * lama SUDAH lulus di ambang 5%) tetap memakainya apa adanya.
+ */
+export function momentsBinned(rgba: Float32Array, width: number, height: number, bins: number): Moments {
+  const pixels = width * height;
+  let sum = 0;
+  for (let p = 0; p < pixels; p += 1) sum += rgba[p * 4 + 1]!;
+  const mean = sum / pixels;
+
+  let sq = 0;
+  for (let p = 0; p < pixels; p += 1) {
+    const d = rgba[p * 4 + 1]! - mean;
+    sq += d * d;
+  }
+
+  const power = new Float32Array(bins);
+  const counts = new Uint32Array(bins);
+  const halfSize = Math.min(width, height) / 2;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = x - width / 2;
+      const dy = y - height / 2;
+      const rRaw = Math.hypot(dx, dy);
+      const r = Math.min(bins - 1, Math.floor((rRaw / Math.max(halfSize, 1e-9)) * bins));
+      const d = rgba[(y * width + x) * 4 + 1]! - mean;
+      power[r] = power[r]! + d * d;
+      counts[r] = counts[r]! + 1;
+    }
+  }
+  for (let i = 0; i < bins; i += 1) {
+    if (counts[i]! > 0) power[i] = power[i]! / counts[i]!;
+  }
+
+  return { mean, variance: sq / pixels, radialPower: power };
+}

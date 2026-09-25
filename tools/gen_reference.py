@@ -275,6 +275,114 @@ _DIFFUSION_SITE_PARAM_BUILDERS = {
 }
 
 
+def grain_dense_patch(width: int = 64, height: int = 64) -> np.ndarray:
+    """Task 16b: gambar UNIFORM/flat (bukan ramp) -- SETIAP piksel meminta
+    input yang SAMA persis, jadi setiap piksel adalah draw IID dari
+    distribusi grain yang SAMA (murni noise stokastik, tidak ada sinyal
+    spasial yang ikut ter-blur/tercampur ke dalam pengukuran momen). Pada
+    `pixel_size_um` sekecil yang gerbang ini butuh (lih.
+    `_build_params_grain_dense`), `n_particles_per_pixel` turun ke orde
+    0,03..0,35 partikel/piksel -- jauh dari rezim "banyak partikel" yang
+    membuat gerbang `_stochastic` biasa (Task 16) presisi sampai 1e-4/2%/5%.
+    64x64 (4096 piksel, 8x `gray_ramp`) dipilih untuk menekan noise sampling
+    lewat hukum bilangan besar TANPA melebihi batas ukuran fixture yang
+    task ini tetapkan (32x16..64x64) -- lih. task-16b-report.md untuk
+    pengukuran sebaran Python-vs-Python SENDIRI pada ukuran ini yang
+    mengalibrasi ambang gerbang statistik BARU (spec §6.5.1, "ambang terikat
+    sebaran terukur" -- BUKAN ambang 5e-5/2%/5% Task 16 yang diukur pada
+    rezim partikel/piksel yang sama sekali berbeda).
+    """
+    return np.full((height, width, 3), 0.3, dtype=np.float64)
+
+
+def _build_params_grain_dense():
+    """Task 16b: keluarga fixture BARU membuktikan `blur_particle` (dye-cloud
+    blur per-sublayer, `grain.blur_dye_clouds_um`) dan `add_micro_structure`
+    (clumping lognormal, `grain.micro_structure`) di `model/grain.py` BUKAN
+    no-op secara struktural -- task-16-report.md membuktikan keduanya no-op
+    HANYA karena `pixel_size_um` fixture yang ADA (546..4375 um, gambar
+    8x8..64x64px/35mm) jauh di bawah ambang aktivasi masing-masing. Lih.
+    `grain_probe.py`-style perhitungan (scratchpad, tidak dikomit) yang
+    memakai `density_curves_layers` SUNGGUHAN `kodak_portra_400` (stock yang
+    sama dipakai `grain.test.ts`) untuk memverifikasi angka di bawah, BUKAN
+    ditebak dari tabel ilustratif brief (kolom brief memakai rasio
+    `param/pixel_size_um` mentah, BUKAN formula aktivasi Python yang
+    sebenarnya -- lih. task-16b-report.md untuk perbedaannya).
+
+    HANYA `camera.film_format_mm` yang disimpangkan dari `_build_params`
+    (35.0 -> 0.024), atas gambar `grain_dense_patch` 64x64 BARU (BUKAN
+    `gray_ramp`, lih. docstring `grain_dense_patch`) --
+    `pixel_size_um = film_format_mm*1000/max(image.shape)` (`resize.py:18`)
+    turun ke 0.375 um, SAMA seperti perhitungan awal 32x16/0.012 (angka di
+    bawah karena itu tidak berubah -- keduanya rasio `film_format_mm/width`
+    yang sama). film_format_mm sekecil ini TIDAK merepresentasikan
+    kamera fisik apa pun; ia murni tuas matematis untuk mencapai rezim
+    pixel_size_um order-mikron TANPA memperbesar gambar (yang costnya jauh
+    lebih tinggi untuk Vitest/GPU dibanding satu skalar params). Pada
+    pixel_size_um=0.375um, terukur (lih. task-16b-report.md untuk transkrip):
+      - sigma blur_particle (per kanal/sublapisan) = blur_dye_clouds_um *
+        sqrt(od_particle) berkisar 1.44..4.47 -- radius kernel
+        int(3*sigma+0.5) berkisar 4..13, JAUH dari nol (bandingkan fixture
+        lama: sigma ~5e-4..3e-3, radius 0, no-op TERBUKTI).
+      - grain_micro_structure_sigma = micro_structure[1]*0.001/pixel_size_um
+        = 0.08 > ambang aktivasi Python `0.05` (bandingkan fixture lama:
+        ~7e-6..5e-5, TIDAK pernah menyalakan clumping sama sekali).
+      - grain_micro_structure_blur_pixel = micro_structure[0]/pixel_size_um
+        = 0.533 > ambang blur-clumping Python `0.4` -- jadi cabang NESTED
+        (blur di atas peta clumping-nya sendiri) JUGA aktif, bukan cuma
+        clumping mentah.
+    Semua tiga cabang yang task 16 tunda jadi TERUKUR AKTIF pada SATU
+    fixture ini -- tidak perlu fixture terpisah per cabang.
+
+    `stochastic=True` semantiknya (grain Python default AKTIF, TIDAK
+    `deactivate_stochastic_effects`) -- gerbangnya statistik seperti
+    `<case>_stochastic`, BUKAN keluarga `_lut`/deterministik.
+    """
+    raw = init_params()
+    raw.camera.film_format_mm = 0.024
+    params = digest_params(raw)
+    assert params.film_render.grain.active, "grain harus aktif di keluarga ini"
+    assert params.film_render.grain.sublayers_active, "cabang layers harus aktif (default)"
+    assert params.camera.film_format_mm == 0.024
+    return params
+
+
+def _generate_grain_dense_case(image: np.ndarray, case_dir: Path, name: str) -> None:
+    """Keluarga fixture terpisah Task 16b -- `input.f32` milik sendiri (sama
+    isinya dengan `gray_ramp`, tapi grup direktori TERPISAH, mengikuti pola
+    `_generate_diffusion_site_case`), TIDAK menyentuh
+    `gray_ramp`/`gray_ramp_stochastic`/`gray_ramp_lut` yang sudah dikomit.
+    """
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "input.f32").write_bytes(
+        np.ascontiguousarray(image, dtype="<f4").tobytes()
+    )
+
+    written = []
+    for tap in TAPS:
+        params = _build_params_grain_dense()
+        result = SimulationPipeline(params).process(image, collect=tap)
+        arr = np.ascontiguousarray(result, dtype="<f4")
+        (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
+        written.append({"tap": tap, "channels": int(arr.shape[2])})
+
+    meta = {
+        "name": name,
+        "height": int(image.shape[0]),
+        "width": int(image.shape[1]),
+        "stochastic": True,
+        "filmFormatMm": 0.024,
+        "taps": written,
+    }
+    _write_json_lf(case_dir / "case.json", meta)
+    print(f"Wrote {case_dir} ({len(written)} taps, film_format_mm=0.024)")
+
+
+GRAIN_DENSE_CASES = {
+    "grain_dense_patch": grain_dense_patch,
+}
+
+
 def _generate_diffusion_site_case(image: np.ndarray, case_dir: Path, name: str, *, site: str) -> None:
     """Keluarga fixture terpisah dari <case>/<case>_stochastic/<case>_lut
     yang _generate_case() bangkitkan -- `name` di sini SUDAH memuat akhiran
@@ -434,6 +542,17 @@ def main() -> int:
              "--case loop above, and not regenerated by it.",
     )
     parser.add_argument(
+        "--grain-dense-case", choices=sorted(GRAIN_DENSE_CASES), action="append",
+        help="Regenerate the Task 16b grain-dense fixture (grain_dense_patch): "
+             "a new flat/uniform 64x64 image (every pixel IID, for a clean "
+             "statistical gate), camera.film_format_mm overridden from 35.0 to "
+             "0.024 so pixel_size_um drops to 0.375um, activating grain.py's "
+             "blur_particle and add_micro_structure terms (no-op at every other "
+             "committed fixture's pixel_size_um). A sixth, separate fixture "
+             "family (own input.f32) -- NOT a variant of the --case loop above, "
+             "and not regenerated by it.",
+    )
+    parser.add_argument(
         "--manifest", action="store_true",
         help="Also (re)write <out>/manifest.json: a sha256 of every file "
              "currently under --out, checked by fixtures.test.ts. Scans "
@@ -442,7 +561,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    ran_anything_case_specific = bool(args.case or args.diffusion_case or args.diffusion_print_case)
+    ran_anything_case_specific = bool(
+        args.case or args.diffusion_case or args.diffusion_print_case or args.grain_dense_case
+    )
 
     names = args.case or (sorted(CASES) if not ran_anything_case_specific else [])
     for name in names:
@@ -464,6 +585,13 @@ def main() -> int:
     for name in diffusion_print_names:
         image = DIFFUSION_PRINT_CASES[name]()
         _generate_diffusion_site_case(image, args.out / name, name, site="print")
+
+    grain_dense_names = args.grain_dense_case or (
+        sorted(GRAIN_DENSE_CASES) if not ran_anything_case_specific else []
+    )
+    for name in grain_dense_names:
+        image = GRAIN_DENSE_CASES[name]()
+        _generate_grain_dense_case(image, args.out / name, name)
 
     if args.manifest:
         _write_manifest(args.out)

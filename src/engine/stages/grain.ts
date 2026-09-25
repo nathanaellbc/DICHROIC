@@ -34,26 +34,33 @@ import source from '../../shaders/grain.wgsl?raw';
  * -- karena itu test hanya memakai tiga kasus yang sama seperti
  * `curveDevelop.test.ts`.
  *
- * TIGA COMPUTE PIPELINE dari SATU modul WGSL (`generate`/`blurX`/`blurY`),
- * BUKAN satu pipeline dengan operation-selector seperti halation.ts --
- * setiap entry point WGSL hanya merujuk perannya sendiri, jadi
- * `layout: 'auto'` Dawn menghasilkan bind group layout BERBEDA per pipeline
- * (hanya mencakup binding yang benar-benar dipakai entry point itu), tanpa
- * perlu buffer filler/junk untuk menghindari "writable storage buffer
- * binding aliasing" (lih. Hard Constraints/task-14-report.md) -- setiap
- * dispatch di sini punya himpunan binding writable yang genuinely disjoint.
+ * SEMBILAN COMPUTE PIPELINE dari SATU modul WGSL (`generateLayers`/
+ * `blurLayersX`/`blurLayersY`/`microGenerate`/`microBlurX`/`microBlurY`/
+ * `combine`/`blurX`/`blurY`) -- Task 16b naik dari tiga jadi sembilan untuk
+ * mengimplementasikan `blur_particle` (blur per-sublapisan, sigma
+ * per-kanal berbeda) dan `add_micro_structure` (clumping lognormal +
+ * blur bersarang) yang DULU terbukti no-op pada fixture 64px, TIDAK LAGI
+ * pada `grain_dense_patch` (lih. `grain.wgsl` untuk rasional lengkap dan
+ * task-16b-report.md untuk pembuktian numerik). BUKAN satu pipeline dengan
+ * operation-selector seperti halation.ts -- setiap entry point WGSL hanya
+ * merujuk perannya sendiri, jadi `layout: 'auto'` Dawn menghasilkan bind
+ * group layout BERBEDA per pipeline (hanya mencakup binding yang benar-
+ * benar dipakai entry point itu), tanpa perlu buffer filler/junk untuk
+ * menghindari "writable storage buffer binding aliasing" (lih. Hard
+ * Constraints/task-14-report.md) -- setiap dispatch di sini punya himpunan
+ * binding writable yang genuinely disjoint.
  *
- * Dua scratch buffer (`grain:preBlur`, `grain:blurX`) diperoleh lewat
- * `ctx.scratch()`, BUKAN enam ("AuxPixelsA/B, MicroPixelsA/B, GrainLayerA/B")
- * yang disebut brief tugas -- brief itu mendeskripsikan kebutuhan
- * `SpektraGrain.comp` OFX (yang mengimplementasikan micro-structure DAN
- * blur per-lapisan sendiri, keduanya di-defer di sini, lih. `grain.wgsl`).
- * Python-lah oracle kita (Global Constraints), dan setelah micro-structure
- * + blur-per-lapisan dibuktikan no-op untuk fixture ini, hanya SATU buah
- * blur spasial akhir yang tersisa -- itu cuma butuh dua scratch (pra-blur,
- * pasca-blurX), TIDAK enam. Task mendatang yang mengaktifkan micro-
- * structure/blur-per-lapisan pada gambar resolusi produksi (lih. peringatan
- * pixel_size_um di `grain.wgsl`) mungkin butuh scratch tambahan saat itu.
+ * DELAPAN scratch buffer lewat `ctx.scratch()` (`layerRaw`, `layerBlurX`,
+ * `layerSummed`, `microRaw`, `microBlurX`, `microBlurred`, `preBlur`,
+ * `blurX`) -- naik dari dua di Task 16 karena blur_particle butuh mem-blur
+ * SETIAP (kanal,sublapisan) SENDIRI-SENDIRI (sigma berbeda per pasangan)
+ * SEBELUM dijumlahkan lintas sublapisan (blur dan penjumlahan lintas kernel
+ * berbeda TIDAK bisa dipertukarkan urutannya), dan micro-structure butuh
+ * field clumping-nya sendiri. Brief Task 16 menyebut enam buffer
+ * ("AuxPixelsA/B, MicroPixelsA/B, GrainLayerA/B") meniru kebutuhan
+ * `SpektraGrain.comp` OFX -- delapan di sini bukan menyalin angka itu,
+ * melainkan turunan independen dari struktur data Python (`layer_raw`
+ * per-sublapisan PLUS clumping, bukan pasangan A/B ping-pong OFX).
  *
  * `pixel_size_um` dihitung PER-RUN dari `ctx.params.fullWidth/fullHeight`
  * (35mm/longEdge, KONSTANTA sama dengan halation.ts/diffusion.ts -- lih.
@@ -62,40 +69,64 @@ import source from '../../shaders/grain.wgsl?raw';
  * yang di-cache lintas kasus uji berbeda ukuran (lih. penjelasan panjang di
  * `halation.ts` untuk bahaya membakar nilai ini ke arena yang di-cache).
  *
- * KETERBATASAN TILING YANG DIKETAHUI, TIDAK DISELESAIKAN DI SINI: `generate()`
- * hanya menulis `preBlur` di dalam sub-rektangel aktif (mengikuti pola
- * `curveDevelop`/`dir`); `blurX`/`blurY` membaca `preBlur`/`blurXOut` LEWAT
- * SELURUH lebar/tinggi buffer (untuk refleksi tepi yang benar). Bila
- * `activeWidth/Height` suatu hari < `width/height` (Task 19, tiling), piksel
- * `preBlur` DI LUAR sub-rektangel aktif tidak pernah ditulis (scratch buffer
- * TIDAK di-nol-kan) dan `blurX` akan membaca sampah di dekat tepi
- * sub-rektangel itu. Fixture gerbang ini SELALU `activeWidth=activeHeight=0`
- * ("seluruh buffer"), jadi ini tidak termanifestasi di sini -- dicatat
- * eksplisit untuk siapa pun yang mengaktifkan tiling pada tahap ini nanti.
+ * KETERBATASAN TILING YANG DIKETAHUI, TIDAK DISELESAIKAN DI SINI (Task 16b
+ * memperluas cakupan yang sama, tidak memperkenalkan yang baru):
+ * `generateLayers()`/`combine()` hanya menulis `layerRaw`/`preBlur` di dalam
+ * sub-rektangel aktif (mengikuti pola `curveDevelop`/`dir`, PERSIS `generate()`
+ * lama); `blurLayersX/Y`/`microGenerate`/`microBlurX/Y`/`blurX`/`blurY`
+ * membaca/menulis LEWAT SELURUH lebar/tinggi buffer (untuk refleksi tepi
+ * yang benar). Bila `activeWidth/Height` suatu hari < `width/height`
+ * (Task 19, tiling), piksel `layerRaw`/`preBlur` DI LUAR sub-rektangel aktif
+ * tidak pernah ditulis (scratch buffer TIDAK di-nol-kan) dan pass blur
+ * berikutnya akan membaca sampah di dekat tepi sub-rektangel itu. Fixture
+ * gerbang ini SELALU `activeWidth=activeHeight=0` ("seluruh buffer"), jadi
+ * ini tidak termanifestasi di sini -- dicatat eksplisit untuk siapa pun yang
+ * mengaktifkan tiling pada tahap ini nanti.
  */
-export function createGrainStage(device: GPUDevice, arenas: Arenas): Stage {
+export function createGrainStage(
+  device: GPUDevice,
+  arenas: Arenas,
+  /**
+   * Task 16b: HANYA test harness gerbang `grain_dense_patch`
+   * (`test/parity/grain.test.ts`) yang memberi nilai eksplisit di sini
+   * (0.024, mencocokkan `camera.film_format_mm` yang `gen_reference.py`'s
+   * `_build_params_grain_dense()` pakai) -- SETIAP pemanggil lain (termasuk
+   * ketiga kasus `_stochastic` lama) mewarisi default 35.0 di bawah, JADI
+   * TIDAK ADA fixture lama yang perilakunya berubah. Mengubah parameter
+   * INI (bukan konstanta modul lama) adalah alasan tepat kenapa
+   * pixel_size_um bisa disimpangkan HANYA untuk satu test tanpa menyentuh
+   * `FILM_FORMAT_MM` bersama yang halation.ts/diffusion.ts/dir.ts juga
+   * pakai -- lih. task-16b-report.md untuk kenapa `film_format_mm` (bukan
+   * memperbesar gambar) dipilih sebagai tuas termurah untuk menekan
+   * `pixel_size_um` ke rezim yang mengaktifkan `blur_particle`/
+   * `add_micro_structure`.
+   */
+  filmFormatMm: number = 35.0,
+): Stage {
   const arenaConstants = arenas.stock.wgslConstants();
   const code = `${CORE_PARAMS_WGSL}\n\n${arenaConstants}\n\n${source}`;
 
   const module = device.createShaderModule({ label: 'grain', code });
 
-  const generatePipeline = device.createComputePipeline({
-    label: 'grain:generate',
-    layout: 'auto',
-    compute: { module, entryPoint: 'generate' },
-  });
-  const blurXPipeline = device.createComputePipeline({
-    label: 'grain:blurX',
-    layout: 'auto',
-    compute: { module, entryPoint: 'blurX' },
-  });
-  const blurYPipeline = device.createComputePipeline({
-    label: 'grain:blurY',
-    layout: 'auto',
-    compute: { module, entryPoint: 'blurY' },
-  });
+  function pipeline(entryPoint: string): GPUComputePipeline {
+    return device.createComputePipeline({
+      label: `grain:${entryPoint}`,
+      layout: 'auto',
+      compute: { module, entryPoint },
+    });
+  }
 
-  const FILM_FORMAT_MM = 35.0; // lih. halation.ts/diffusion.ts -- konstanta yang sama.
+  const generateLayersPipeline = pipeline('generateLayers');
+  const blurLayersXPipeline = pipeline('blurLayersX');
+  const blurLayersYPipeline = pipeline('blurLayersY');
+  const microGeneratePipeline = pipeline('microGenerate');
+  const microBlurXPipeline = pipeline('microBlurX');
+  const microBlurYPipeline = pipeline('microBlurY');
+  const combinePipeline = pipeline('combine');
+  const blurXPipeline = pipeline('blurX');
+  const blurYPipeline = pipeline('blurY');
+
+  const FILM_FORMAT_MM = filmFormatMm;
 
   return {
     name: 'grain',
@@ -109,7 +140,18 @@ export function createGrainStage(device: GPUDevice, arenas: Arenas): Stage {
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;
+      const layerBytes = width * height * 3 * 4 * Float32Array.BYTES_PER_ELEMENT;
 
+      // Task 16b: `layerRaw`/`layerBlurX` menyimpan TIGA vec4 per piksel
+      // (satu per sublapisan, lih. blok komentar modul grain.wgsl) --
+      // `layerSummed`/`microRaw`/`microBlurXOut`/`microBlurred`/`preBlur`/
+      // `blurXOut` tetap SATU vec4 per piksel seperti sebelumnya.
+      const layerRaw = ctx.scratch('grain:layerRaw', layerBytes);
+      const layerBlurXBuf = ctx.scratch('grain:layerBlurX', layerBytes);
+      const layerSummed = ctx.scratch('grain:layerSummed', pixelBytes);
+      const microRaw = ctx.scratch('grain:microRaw', pixelBytes);
+      const microBlurXBuf = ctx.scratch('grain:microBlurX', pixelBytes);
+      const microBlurred = ctx.scratch('grain:microBlurred', pixelBytes);
       const preBlur = ctx.scratch('grain:preBlur', pixelBytes);
       const blurXOut = ctx.scratch('grain:blurX', pixelBytes);
 
@@ -133,49 +175,146 @@ export function createGrainStage(device: GPUDevice, arenas: Arenas): Stage {
       const fullGroupsX = Math.ceil(width / 32);
       const fullGroupsY = Math.ceil(height / 8);
 
-      const generateBindGroup = ctx.device.createBindGroup({
-        layout: generatePipeline.getBindGroupLayout(0),
-        entries: [
+      function dispatch(
+        label: string,
+        p: GPUComputePipeline,
+        entries: GPUBindGroupEntry[],
+        gx: number,
+        gy: number,
+      ): void {
+        const bindGroup = ctx.device.createBindGroup({ layout: p.getBindGroupLayout(0), entries });
+        const pass = encoder.beginComputePass({ label });
+        pass.setPipeline(p);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(gx, gy, 1);
+        pass.end();
+      }
+
+      // generateLayers: 0 src / 1 layerRaw / 2 params / 3 stock / 4 frameFloats
+      dispatch(
+        'grain:generateLayers',
+        generateLayersPipeline,
+        [
           { binding: 0, resource: { buffer: ctx.source } },
-          { binding: 1, resource: { buffer: preBlur } },
+          { binding: 1, resource: { buffer: layerRaw } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
           { binding: 3, resource: { buffer: arenas.stock.buffer } },
           { binding: 4, resource: { buffer: frameFloatsBuffer } },
         ],
-      });
-      const generatePass = encoder.beginComputePass({ label: 'grain:generate' });
-      generatePass.setPipeline(generatePipeline);
-      generatePass.setBindGroup(0, generateBindGroup);
-      generatePass.dispatchWorkgroups(groupsX, groupsY, 1);
-      generatePass.end();
+        groupsX,
+        groupsY,
+      );
 
-      const blurXBindGroup = ctx.device.createBindGroup({
-        layout: blurXPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 1, resource: { buffer: preBlur } },
+      // blurLayersX: 1 layerRaw(read) / 5 layerBlurX(write) / 2 params / 3 stock / 4 frameFloats
+      dispatch(
+        'grain:blurLayersX',
+        blurLayersXPipeline,
+        [
+          { binding: 1, resource: { buffer: layerRaw } },
+          { binding: 5, resource: { buffer: layerBlurXBuf } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
-          { binding: 5, resource: { buffer: blurXOut } },
+          { binding: 3, resource: { buffer: arenas.stock.buffer } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
         ],
-      });
-      const blurXPass = encoder.beginComputePass({ label: 'grain:blurX' });
-      blurXPass.setPipeline(blurXPipeline);
-      blurXPass.setBindGroup(0, blurXBindGroup);
-      blurXPass.dispatchWorkgroups(fullGroupsX, fullGroupsY, 1);
-      blurXPass.end();
+        fullGroupsX,
+        fullGroupsY,
+      );
 
-      const blurYBindGroup = ctx.device.createBindGroup({
-        layout: blurYPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 5, resource: { buffer: blurXOut } },
+      // blurLayersY: 5 layerBlurX(read) / 6 layerSummed(write) / 2 params / 3 stock / 4 frameFloats
+      dispatch(
+        'grain:blurLayersY',
+        blurLayersYPipeline,
+        [
+          { binding: 5, resource: { buffer: layerBlurXBuf } },
+          { binding: 6, resource: { buffer: layerSummed } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
-          { binding: 6, resource: { buffer: ctx.dest } },
+          { binding: 3, resource: { buffer: arenas.stock.buffer } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
         ],
-      });
-      const blurYPass = encoder.beginComputePass({ label: 'grain:blurY' });
-      blurYPass.setPipeline(blurYPipeline);
-      blurYPass.setBindGroup(0, blurYBindGroup);
-      blurYPass.dispatchWorkgroups(fullGroupsX, fullGroupsY, 1);
-      blurYPass.end();
+        fullGroupsX,
+        fullGroupsY,
+      );
+
+      // microGenerate: 7 microRaw(write) / 2 params / 4 frameFloats
+      dispatch(
+        'grain:microGenerate',
+        microGeneratePipeline,
+        [
+          { binding: 7, resource: { buffer: microRaw } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
+        ],
+        fullGroupsX,
+        fullGroupsY,
+      );
+
+      // microBlurX: 7 microRaw(read) / 8 microBlurXOut(write) / 2 params / 4 frameFloats
+      dispatch(
+        'grain:microBlurX',
+        microBlurXPipeline,
+        [
+          { binding: 7, resource: { buffer: microRaw } },
+          { binding: 8, resource: { buffer: microBlurXBuf } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
+        ],
+        fullGroupsX,
+        fullGroupsY,
+      );
+
+      // microBlurY: 8 microBlurXOut(read) / 9 microBlurred(write) / 2 params / 4 frameFloats
+      dispatch(
+        'grain:microBlurY',
+        microBlurYPipeline,
+        [
+          { binding: 8, resource: { buffer: microBlurXBuf } },
+          { binding: 9, resource: { buffer: microBlurred } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
+        ],
+        fullGroupsX,
+        fullGroupsY,
+      );
+
+      // combine: 6 layerSummed(read) / 9 microBlurred(read) / 10 preBlur(write) / 2 params
+      dispatch(
+        'grain:combine',
+        combinePipeline,
+        [
+          { binding: 6, resource: { buffer: layerSummed } },
+          { binding: 9, resource: { buffer: microBlurred } },
+          { binding: 10, resource: { buffer: preBlur } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+        ],
+        groupsX,
+        groupsY,
+      );
+
+      // blurX (LAMA, tidak berubah): 10 preBlur(read) / 11 blurXOut(write) / 2 params
+      dispatch(
+        'grain:blurX',
+        blurXPipeline,
+        [
+          { binding: 10, resource: { buffer: preBlur } },
+          { binding: 11, resource: { buffer: blurXOut } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+        ],
+        fullGroupsX,
+        fullGroupsY,
+      );
+
+      // blurY (LAMA, tidak berubah): 11 blurXOut(read) / 12 dst(write) / 2 params
+      dispatch(
+        'grain:blurY',
+        blurYPipeline,
+        [
+          { binding: 11, resource: { buffer: blurXOut } },
+          { binding: 12, resource: { buffer: ctx.dest } },
+          { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+        ],
+        fullGroupsX,
+        fullGroupsY,
+      );
     },
   };
 }
