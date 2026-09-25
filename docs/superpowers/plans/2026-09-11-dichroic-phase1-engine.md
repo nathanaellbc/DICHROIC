@@ -3368,6 +3368,22 @@ kualitas-di-atas-performa.
 
 Pada titik ini `npm test` di `spektra/` menjalankan: uji batas lisensi, uji aset, uji profil, uji device, uji params, uji arena, uji graf, uji harness, tujuh rangkaian parity, dan uji tiling. Seluruhnya lulus berarti engine cocok dengan implementasi referensi Python di setiap tap, dan render ter-tile identik dengan full-frame.
 
+### Agenda review seluruh-branch (minor yang ditunda, dikumpulkan dari ledger)
+
+Review akhir bukan "baca ulang diff dan rasakan". Ini daftar konkret hal yang
+SENGAJA ditunda dengan alasan tertulis saat ditunda, jadi review bisa memutuskan
+tiap butir alih-alih menemukannya ulang.
+
+| # | Butir | Ditunda di | Kenapa ini sekarang bisa diputuskan |
+|---|---|---|---|
+| 1 | `front`/`back` ping-pong dialokasikan ulang tiap `run()`, tidak dikolam | Task 9 | Task 19 memanggil `run()` SEKALI PER TILE, jadi ini sekarang churn alokasi per-tile, bukan per-frame. Dawn di sini rapuh terhadap pola alokasi; butir ini naik dari kosmetik menjadi layak diukur |
+| 2 | Penjaga mekanis untuk tabel bersumber-OFX versus padanan Python-nya | Task 14 | `halationStrength`/`halationFirstSigmaUm` diverifikasi byte-identik SEKALI dengan tangan. Drift OFX/Python sudah menggigit DUA kali (CAT02, `density_curves`); "sudah diperiksa sekali" bukan penjaga |
+| 3 | Pass blur grain/scannerPost dispatch full-buffer sementara `generate()` dispatch active-only | Task 19b | Terbukti tak berbahaya pada apron uji SAJA karena sisa radius masih melebihinya. Pada skala tile produksi asumsi itu belum diuji |
+| 4 | `readF32` menyalin buffer, `fixtures.test.ts` memakai view beralias | Task 10 | Aturan penundaannya adalah "ekstrak kalau muncul salinan ketiga" — hitung ulang sekarang, ada 8 berkas test parity yang tidak ada saat aturan itu dibuat |
+| 5 | Penalaran "guard 2 tak perlu test" dipakai ulang tahap yang indeks sumber dan tujuannya BERBEDA | Task 9 | Delapan tahap sudah dibangun sejak peringatan itu ditulis. Periksa apakah ada yang benar-benar mewarisi penalaran yang hanya benar separuh itu |
+| 6 | `totalFloats`/`ArenaOverflowError`/`assertWithinStorageBufferLimit` melampaui antarmuka literal brief Task 8 | Task 8 | Semuanya beralasan dan sudah dipakai luas sejak itu — kemungkinan besar diterima, tapi diputuskan eksplisit, bukan dibiarkan menggantung |
+| 7 | Fixture `_stochastic` tak reproducible: gerbang statistik murni atau fixture ter-seed? | Task 11 | Sudah terjawab SEBAGIAN: Task 16 memakai `cmy_film` yang reproducible, dan Gate B statistik dengan ambang terikat sebaran terukur (spec 6.5.1). Yang tersisa: catat keputusan itu sebagai keputusan, bukan sebagai kebetulan |
+
 ### Daftar penutup Fase 1 (status per 2026-09-25)
 
 Dua jalur kode yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1
@@ -3382,7 +3398,7 @@ yang KELIHATAN selesai. Karena itu daftar ini eksplisit, bukan "rasanya sudah".
 | **Task 18b** — varians builtin transendental lintas perangkat | ❌ WAJIB, belum dikerjakan |
 | **Gate B `gray_ramp_stochastic`** | ❌ satu-satunya test merah; sedang diselesaikan lewat perbandingan distribusi-ke-distribusi |
 | Risiko dicatat: pass blur grain/scannerPost dispatch full-buffer sementara `generate()` dispatch active-only | ⚠️ terbukti tak berbahaya pada skala tile uji SAJA, perlu ditinjau pada skala tile produksi (Task 19b) |
-| Review seluruh-branch atas minor yang ditunda di ledger | ❌ belum |
+| Review seluruh-branch atas minor yang ditunda di ledger | ❌ belum — agendanya sudah tertulis di atas, 7 butir |
 
 Ambang TIDAK pernah dilonggarkan untuk menutup salah satu pun dari ini. Satu
 test merah yang jujur lebih bernilai daripada suite hijau yang argumennya tidak
