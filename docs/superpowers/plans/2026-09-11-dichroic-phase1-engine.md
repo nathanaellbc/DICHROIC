@@ -3368,10 +3368,24 @@ kualitas-di-atas-performa.
 
 Pada titik ini `npm test` di `spektra/` menjalankan: uji batas lisensi, uji aset, uji profil, uji device, uji params, uji arena, uji graf, uji harness, tujuh rangkaian parity, dan uji tiling. Seluruhnya lulus berarti engine cocok dengan implementasi referensi Python di setiap tap, dan render ter-tile identik dengan full-frame.
 
-**Fase 1 TIDAK selesai sampai Task 16b DAN Task 18b ditutup**, dan sampai site `print`
-Diffusion (diimplementasikan di Task 15, sengaja tidak digerbangi karena tap
-`log_e_print` belum ada) benar-benar digerbangi oleh Task 17. Dua jalur kode
-yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1 yang kelihatan
-selesai.
+### Daftar penutup Fase 1 (status per 2026-09-25)
+
+Dua jalur kode yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1
+yang KELIHATAN selesai. Karena itu daftar ini eksplisit, bukan "rasanya sudah".
+
+| Item | Status |
+|---|---|
+| Task 1-17 | ✅ selesai, semuanya digerbangi |
+| Task 19 tiling, gerbang bit-identik | ✅ tertutup (6f59dfe) |
+| Site `print` Diffusion digerbangi | ✅ ditutup Task 17 (c3ada2c) — klausa lama di sini sudah usang, dikoreksi |
+| **Task 16b** — suku grain yang no-op hanya pada skala fixture | ❌ WAJIB, belum dikerjakan |
+| **Task 18b** — varians builtin transendental lintas perangkat | ❌ WAJIB, belum dikerjakan |
+| **Gate B `gray_ramp_stochastic`** | ❌ satu-satunya test merah; sedang diselesaikan lewat perbandingan distribusi-ke-distribusi |
+| Risiko dicatat: pass blur grain/scannerPost dispatch full-buffer sementara `generate()` dispatch active-only | ⚠️ terbukti tak berbahaya pada skala tile uji SAJA, perlu ditinjau pada skala tile produksi (Task 19b) |
+| Review seluruh-branch atas minor yang ditunda di ledger | ❌ belum |
+
+Ambang TIDAK pernah dilonggarkan untuk menutup salah satu pun dari ini. Satu
+test merah yang jujur lebih bernilai daripada suite hijau yang argumennya tidak
+bisa dipertahankan.
 
 Fase 2 (`io/`, UI, PWA) direncanakan setelah ini, bukan sebelumnya.
