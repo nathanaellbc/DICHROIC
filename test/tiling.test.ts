@@ -15,6 +15,8 @@ import { createDirStage } from '../src/engine/stages/dir';
 import { createGrainStage } from '../src/engine/stages/grain';
 import { createPrintExposureStage, createPrintDevelopStage } from '../src/engine/stages/printScan';
 import { createScannerPostStage } from '../src/engine/stages/scannerPost';
+import { createDiffusionStage } from '../src/engine/stages/diffusion';
+import { dirRadiusPx, halationRadiusPx } from '../src/engine/spatialRadius';
 
 describe('perencanaan tile', () => {
   it('tidak memakai apron ketika tidak ada efek spasial aktif', () => {
@@ -388,5 +390,83 @@ describe('Task 19b -- gerbang bit-identik pada skala apron produksi (agenda #3)'
       expect(tiled).toEqual(fullFrame);
     },
     60_000,
+  );
+});
+
+describe('Fase 2A.5 -- tiling di rezim resolusi produksi (IIR)', () => {
+  /**
+   * 6.25 um/px (foto sungguhan): ekor DIR sigma ~89 px, bounce halation
+   * ~18 px -- keduanya IIR Young-van Vliet, ekor tak terbatas. Overlap dan
+   * radius tahap dihitung dari sigma (`src/engine/spatialRadius.ts`):
+   * halation 181 + DIR 886 (10 sigma, lih. catatan ekor YvV di sana). Tile TIDAK bisa bit-identik dengan full-frame
+   * di rezim IIR (rekursi baris penuh dimulai dari tepi rect yang berbeda);
+   * yang dijamin adalah galat batas meluruh di bawah 1e-6 di dalam apron.
+   * Gerbang bit-identik rezim FIR di atas tetap berlaku apa adanya.
+   */
+  it(
+    'full-frame vs ter-tile (20 tile, cmy_film, halation + DIR IIR): selisih <= 1e-6',
+    async () => {
+      const stockId = 'kodak_portra_400';
+      const { engine, bundle, arenas } = await sharedResources(stockId, {
+        printStockId: 'kodak_portra_endura',
+        enlargerFilters: {
+          cFilterNeutral: 0,
+          mFilterNeutral: 51.56801468495496,
+          mFilterShift: 0,
+          yFilterNeutral: 52.53400422349596,
+          yFilterShift: 0,
+        },
+      });
+
+      const width = 1500;
+      const height = 1000;
+      const frame = { filmFormatMm: 9.375 }; // 9375 um / 1500 px = 6.25 um/px
+      const inputRgba = new Float32Array(width * height * 4);
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const i = (y * width + x) * 4;
+          let v = (x >> 7) % 2 === (y >> 7) % 2 ? 0.03 : 0.7;
+          if ((x - 700) ** 2 + (y - 480) ** 2 < 36) v = 8; // sorotan untuk halation
+          inputRgba[i] = v;
+          inputRgba[i + 1] = v * 0.9;
+          inputRgba[i + 2] = v * 0.8;
+          inputRgba[i + 3] = 1;
+        }
+      }
+      const params = defaultCoreParams(width, height, bundle, inputRgba, 'measured', false, stockId);
+
+      const pixelSizeUm = (frame.filmFormatMm * 1000) / width;
+      const firstSigma = Array.from(arenas.stock.values('halationFirstSigmaUm')) as [number, number, number];
+      const overlap = halationRadiusPx(pixelSizeUm, firstSigma) + dirRadiusPx(pixelSizeUm);
+      expect(overlap).toBe(181 + 886);
+
+      const chain = (): Stage[] => [
+        createMaterializeActiveRegionStage(engine.device),
+        createFilmExposureStage(engine.device, arenas),
+        createDiffusionStage(engine.device, arenas, 'camera', { bypassConvolution: true }),
+        createHalationStage(engine.device, arenas),
+        createCurveDevelopStage(engine.device, arenas),
+        createDirStage(engine.device, arenas),
+      ];
+      const maxBufferBytes = (300 + 2 * overlap) * (300 + 2 * overlap) * 16;
+      expect(planTiles(width, height, maxBufferBytes, overlap).length).toBe(20);
+
+      const fullGraph = new RenderGraph(engine);
+      for (const stage of chain()) fullGraph.addStage(stage);
+      const full = await fullGraph.run(inputRgba, params, Tap.CMY_FILM, { frame });
+      fullGraph.dispose();
+
+      const tiledGraph = new RenderGraph(engine);
+      for (const stage of chain()) tiledGraph.addStage(stage);
+      const tiled = await tiledGraph.run(inputRgba, params, Tap.CMY_FILM, { frame, maxBufferBytes, overlap });
+      tiledGraph.dispose();
+
+      let maxAbs = 0;
+      for (let p = 0; p < width * height; p += 1) {
+        for (let c = 0; c < 3; c += 1) maxAbs = Math.max(maxAbs, Math.abs(tiled[p * 4 + c]! - full[p * 4 + c]!));
+      }
+      expect(maxAbs, `max abs tile vs full ${maxAbs.toExponential(3)}`).toBeLessThanOrEqual(1e-6);
+    },
+    120_000,
   );
 });

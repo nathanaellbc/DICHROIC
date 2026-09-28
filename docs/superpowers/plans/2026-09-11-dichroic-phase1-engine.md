@@ -1,5 +1,10 @@
 # DICHROIC Fase 1 — Engine Terverifikasi: Rencana Implementasi
 
+> **Catatan 2026-09-28:** rencana ini ditulis saat DICHROIC masih folder
+> `spektra/` di dalam repositori EMULSION. Sejak pemisahan repositori,
+> `spektra/` = root repositori ini; jalur `spektra/...` di bawah dibaca tanpa
+> awalan itu. Isi rencana tidak ditulis ulang karena ia catatan sejarah.
+
 > **Catatan pindah repo (2026-09-28).** Dokumen ini ditulis saat DICHROIC masih
 > berupa folder `spektra/` di dalam repositori EMULSION. Proyek ini sekarang
 > berdiri sendiri di `D:\Projects\DICHROIC`, dengan seluruh riwayat git-nya

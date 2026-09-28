@@ -1,3 +1,4 @@
+// @verifies grainEnabled glareEnabled -- keduanya MATI (keluarga <case>, deterministik)
 import { describe, it } from 'vitest';
 import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
@@ -6,12 +7,12 @@ import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
 import { createDirStage } from '../../src/engine/stages/dir';
 import { createDiffusionStage } from '../../src/engine/stages/diffusion';
 import { createPrintExposureStage, createPrintDevelopStage } from '../../src/engine/stages/printScan';
-import { createScannerPostStage } from '../../src/engine/stages/scannerPost';
 import type { Arenas } from '../../src/engine/arena';
 import type { Stage } from '../../src/engine/graph';
 import { Tap } from '../../src/engine/taps';
 import type { TapName } from '../../src/engine/taps';
 import { runTapParity } from './run';
+import { buildChain } from '../../src/engine/chain';
 
 /**
  * Task 18c -- menutup lubang cakupan §6.5.2: TIDAK ADA gerbang deterministik
@@ -91,7 +92,8 @@ function stagesToCmyPrint(device: GPUDevice, arenas: Arenas): Stage[] {
 
 /** Tahap sampai (termasuk) `rgb_out` -- `stagesToCmyPrint` + scannerPost. Identik `fullChain()` minus grain. */
 function stagesToRgbOut(device: GPUDevice, arenas: Arenas): Stage[] {
-  return [...stagesToCmyPrint(device, arenas), createScannerPostStage(device, arenas)];
+  // Fase 2A Task 4: gerbang rgb_out memakai rantai produksi apa adanya.
+  return buildChain(device, arenas, { family: 'measured', grain: false });
 }
 
 const GATES: Array<{ tap: TapName; stages: (device: GPUDevice, arenas: Arenas) => Stage[] }> = [

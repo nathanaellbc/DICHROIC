@@ -110,8 +110,12 @@ export function expandF16(src: Uint16Array): Float32Array {
  * relatif/absolut lokal -- jalur yang dipakai test) lewat `node:fs`.
  */
 async function fetchBytes(url: string): Promise<ArrayBuffer> {
-  const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
-  if (isBrowser || /^https?:\/\//.test(url)) {
+  // "Web" = halaman (window/document) ATAU Web Worker (importScripts, tanpa
+  // window -- Session berjalan di sana, spec Fase 2 §4.5). Selain itu Node.
+  const g = globalThis as { window?: unknown; document?: unknown; importScripts?: unknown };
+  const isPage = typeof g.window !== 'undefined' && typeof g.document !== 'undefined';
+  const isWorker = typeof g.importScripts === 'function';
+  if (isPage || isWorker || /^https?:\/\//.test(url)) {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Gagal memuat ${url}: ${response.status} ${response.statusText}`);

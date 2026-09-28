@@ -95,22 +95,9 @@ import source from '../../shaders/grain.wgsl?raw';
 export function createGrainStage(
   device: GPUDevice,
   arenas: Arenas,
-  /**
-   * Task 16b: HANYA test harness gerbang `grain_dense_patch`
-   * (`test/parity/grain.test.ts`) yang memberi nilai eksplisit di sini
-   * (0.024, mencocokkan `camera.film_format_mm` yang `gen_reference.py`'s
-   * `_build_params_grain_dense()` pakai) -- SETIAP pemanggil lain (termasuk
-   * ketiga kasus `_stochastic` lama) mewarisi default 35.0 di bawah, JADI
-   * TIDAK ADA fixture lama yang perilakunya berubah. Mengubah parameter
-   * INI (bukan konstanta modul lama) adalah alasan tepat kenapa
-   * pixel_size_um bisa disimpangkan HANYA untuk satu test tanpa menyentuh
-   * `FILM_FORMAT_MM` bersama yang halation.ts/diffusion.ts/dir.ts juga
-   * pakai -- lih. task-16b-report.md untuk kenapa `film_format_mm` (bukan
-   * memperbesar gambar) dipilih sebagai tuas termurah untuk menekan
-   * `pixel_size_um` ke rezim yang mengaktifkan `blur_particle`/
-   * `add_micro_structure`.
-   */
-  filmFormatMm: number = 35.0,
+  // Task 16b dulu menerima `filmFormatMm` di sini khusus untuk gerbang
+  // `grain_dense_patch`; sejak Fase 2A.5 format film datang dari
+  // `ctx.frame` (`RenderGraph.run(..., { frame })`), sama untuk semua tahap.
 ): Stage {
   const arenaConstants = arenas.stock.wgslConstants();
   const code = `${CORE_PARAMS_WGSL}\n\n${arenaConstants}\n\n${source}`;
@@ -135,7 +122,6 @@ export function createGrainStage(
   const blurXPipeline = pipeline('blurX');
   const blurYPipeline = pipeline('blurY');
 
-  const FILM_FORMAT_MM = filmFormatMm;
 
   return {
     name: 'grain',
@@ -165,7 +151,8 @@ export function createGrainStage(
       const blurXOut = ctx.scratch('grain:blurX', pixelBytes);
 
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
-      const pixelSizeUm = (FILM_FORMAT_MM * 1000) / longEdge;
+      // Fase 2A.5: format film dari `ctx.frame` (dulu argumen `filmFormatMm`).
+      const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
 
       const frameFloatsBuffer = ctx.device.createBuffer({
         label: 'grain:frameFloats',

@@ -27,9 +27,26 @@ import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
 import { planTiles } from './tiling';
 import type { TileSpec } from './tiling';
 
+/**
+ * Nilai per-render yang dipakai HOST saat meng-encode tahap, tapi tidak
+ * masuk blok `CoreParams` (yang sengaja mencerminkan persis push-constant OFX,
+ * 26 field -- `test/params.test.ts`). Fase 2A.5: `filmFormatMm` menggantikan
+ * konstanta 35.0 yang dulu disalin di halation/DIR/grain, supaya ukuran
+ * piksel (`film_format_mm * 1000 / max(fullWidth, fullHeight)`, Python
+ * `ResizingService.pixel_size_um`) bisa disetel -- termasuk ke ukuran piksel
+ * foto sungguhan pada fixture 64 px.
+ */
+export interface FrameParams {
+  filmFormatMm: number;
+}
+
+/** Python `CameraParams.film_format_mm` default (35 mm). */
+export const DEFAULT_FRAME: Readonly<FrameParams> = Object.freeze({ filmFormatMm: 35 });
+
 export interface StageContext {
   device: GPUDevice;
   params: CoreParams;
+  frame: Readonly<FrameParams>;
   paramsBuffer: GPUBuffer;
   source: GPUBuffer;
   dest: GPUBuffer;
@@ -62,8 +79,19 @@ export interface Stage {
    * tahap tanpa kernel spasial (materializeActiveRegion, filmExposure,
    * curveDevelop, printExpose/printDevelop).
    */
-  spatialRadiusPx?: number;
+  spatialRadiusPx?: number | ((params: CoreParams, frame: Readonly<FrameParams>) => number);
   encode(encoder: GPUCommandEncoder, ctx: StageContext): void;
+}
+
+/**
+ * Fase 2A.5: radius boleh bergantung ukuran piksel (sigma halation/DIR dalam
+ * um -> px, `src/engine/spatialRadius.ts`), jadi diselesaikan per run dari
+ * `params` (dimensi gambar penuh) dan `frame` (format film).
+ */
+function resolveSpatialRadius(stage: Stage, params: CoreParams, frame: Readonly<FrameParams>): number {
+  const r = stage.spatialRadiusPx;
+  if (r === undefined) return 0;
+  return typeof r === 'function' ? r(params, frame) : r;
 }
 
 const PING_PONG_USAGE =
@@ -231,17 +259,18 @@ export class RenderGraph {
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
-    options?: { maxBufferBytes?: number; overlap?: number },
+    options?: { maxBufferBytes?: number; overlap?: number; frame?: FrameParams },
   ): Promise<Float32Array> {
+    const frame = options?.frame ?? DEFAULT_FRAME;
     const maxBufferBytes = options?.maxBufferBytes;
     if (maxBufferBytes !== undefined) {
       const overlap = options?.overlap ?? 0;
       const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap);
       if (tiles.length > 1) {
-        return this.runTiled(input, params, collect, tiles);
+        return this.runTiled(input, params, collect, tiles, frame);
       }
     }
-    return this.runSingleBuffer(input, params, collect);
+    return this.runSingleBuffer(input, params, collect, false, frame);
   }
 
   /**
@@ -258,6 +287,7 @@ export class RenderGraph {
     params: CoreParams,
     collect: TapName,
     tiles: readonly TileSpec[],
+    frame: Readonly<FrameParams>,
   ): Promise<Float32Array> {
     const { width, height } = params;
     const output = new Float32Array(width * height * 4);
@@ -285,7 +315,7 @@ export class RenderGraph {
       // (pusat, TANPA apron) tile ini -- `runSingleBuffer` memakainya
       // sebagai `centerRect` awal yang dibesarkan per-tahap, BUKAN sebagai
       // active rect tetap untuk seluruh tahap (beda dari sebelum Task 19b).
-      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true);
+      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true, frame);
       stitchTileOutput(output, width, tileResult, tile);
     }
 
@@ -311,6 +341,7 @@ export class RenderGraph {
     params: CoreParams,
     collect: TapName,
     shrinkApron = false,
+    frame: Readonly<FrameParams> = DEFAULT_FRAME,
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -423,7 +454,7 @@ export class RenderGraph {
     let remainingSpatialRadius = 0;
     if (shrinkApron) {
       for (let i = 0; i <= stopAt; i += 1) {
-        remainingSpatialRadius += this.stages[i]!.spatialRadiusPx ?? 0;
+        remainingSpatialRadius += resolveSpatialRadius(this.stages[i]!, params, frame);
       }
     }
     const centerRect: ActiveRect = {
@@ -478,12 +509,13 @@ export class RenderGraph {
         // tahap ini (yaitu berlaku mulai tahap BERIKUTNYA), persis
         // `SpektraVulkanRenderer.cpp`'s tujuh call-site (:6444-6604), yang
         // semuanya muncul SETELAH dispatch efek terkait, bukan sebelumnya.
-        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - (stage.spatialRadiusPx ?? 0));
+        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - resolveSpatialRadius(stage, params, frame));
       }
 
       stage.encode(encoder, {
         device,
         params: stageParams,
+        frame,
         paramsBuffer: stageParamsBuffer,
         source: front,
         dest: back,

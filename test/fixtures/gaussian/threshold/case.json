@@ -1,0 +1,12 @@
+{
+  "name": "threshold",
+  "kind": "gaussian",
+  "sigma": [
+    3.0,
+    3.0,
+    3.0
+  ],
+  "truncate": 3.0,
+  "height": 40,
+  "width": 64
+}

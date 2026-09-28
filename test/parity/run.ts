@@ -6,7 +6,7 @@ import type { AssetBundle } from '../../src/profiles/load';
 import type { ArenaPlan, PrintScanArenaOptions } from '../../src/host/spectral';
 import type { Arenas } from '../../src/engine/arena';
 import type { EngineDevice } from '../../src/engine/device';
-import type { Stage } from '../../src/engine/graph';
+import type { FrameParams, Stage } from '../../src/engine/graph';
 import type { TapName } from '../../src/engine/taps';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './compare';
 import { defaultCoreParams } from './params';
@@ -59,6 +59,12 @@ export interface TapParityOptions {
    * membawa entri PRINT. Tidak diberikan untuk gerbang non-PrintScan.
    */
   printScan?: PrintScanArenaOptions;
+  /**
+   * Fase 2A.5: format film (ukuran piksel) untuk run ini. WAJIB sama dengan
+   * `filmFormatMm` di case.json bila fixture mencatatnya (keluarga
+   * `_px6um`/`_px31um`); tanpa itu default 35 mm, seperti Python.
+   */
+  frame?: FrameParams;
 }
 
 /**
@@ -206,7 +212,14 @@ export async function runTapParity(opts: TapParityOptions): Promise<void> {
     stockId,
   );
 
-  const actual = await graph.run(inputRgba, params, opts.tap);
+  const caseFormat = (meta as { filmFormatMm?: number }).filmFormatMm;
+  if (caseFormat !== undefined && opts.frame?.filmFormatMm !== caseFormat) {
+    throw new Error(
+      `runTapParity: case "${opts.case}" dibangkitkan dengan film_format_mm=${caseFormat}, ` +
+        `tapi frame.filmFormatMm=${String(opts.frame?.filmFormatMm)}.`,
+    );
+  }
+  const actual = await graph.run(inputRgba, params, opts.tap, opts.frame ? { frame: opts.frame } : undefined);
 
   expectWithinTolerance(
     compareRgb(actual, loadTap(opts.case, opts.tap)),

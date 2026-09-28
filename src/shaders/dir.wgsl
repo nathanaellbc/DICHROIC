@@ -56,26 +56,14 @@
 // oleh `halation.ts`/`diffusion.ts` (Task 14/15/17) -- dipakai ulang di sini
 // (`dir.ts`), bukan diketik ulang tanpa verifikasi.
 //
-// LINGKUP YANG SENGAJA TIDAK DIPORT: dispatch Gaussian sigma>=3px Python
-// (`fast_gaussian_filter`'s `SMALL_SIGMA_MAX=3.0`) beralih ke pendekatan IIR
-// Young-van Vliet (aproksimasi TERPISAH, error ~1e-3 vs Gaussian analitik
-// per docstring hulu) -- TIDAK diport di sini. Tidak ada fixture yang
-// gerbang ini uji (`gray_ramp`/`log_gray_ramp`/`color_patches`, plus
-// `_stochastic` Gate B) pernah mendekati sigma itu (radius terbesar terukur
-// 2 piksel, jauh di bawah ambang IIR) -- FIR terpotong (kMaxKernelRadius
-// di bawah) benar untuk SELURUH rentang yang gerbang mana pun di repo ini
-// uji hari ini. Gambar produksi resolusi tinggi (pixel_size_um kecil) bisa
-// mendorong `diffusion_size_pixel` ke rezim IIR itu -- kalau/ketika ada
-// gerbang yang menguji itu, dispatch IIR terpisah dibutuhkan, PERSIS
-// alasan `fast_gaussian_filter_large`-nya Python sendiri ada.
-//
-// KONVENSI BATAS: reflect scipy (`mode='reflect'`, "d c b a | a b c d | d c
-// b a", TIDAK menduplikasi piksel tepi) -- BUKAN `clamp`/`edge` yang dipakai
-// `halation.wgsl`'s `sampleRaw`/`safeIndex` (aman DI SANA karena sigma
-// halation selalu radius-0 pada fixture yang ada, jadi batas tidak pernah
-// benar-benar tersentuh -- TIDAK aman di sini, karena EKOR DIR memang
-// menyentuh piksel tetangga). `reflectIndex` di bawah adalah port literal
-// `fast_gaussian_filter.py::_reflect`.
+// BLUR DIFUSI (Fase 2A.5): `(1-w)*G(size_px) + w*Exp(tail_px)` pada koreksi
+// log-raw kini dijalankan `dir.ts` lewat primitif bersama `GaussianBlur`
+// (`gaussian.wgsl`, port `fast_gaussian_filter` termasuk IIR Young-van Vliet
+// untuk sigma >= 3 px dan reflect scipy untuk FIR). Dulu berkas ini membawa
+// FIR sendiri (radius maks 16) yang sengaja tidak mencakup rezim IIR; di
+// 6 um/px sigma difusi ~3 px dan komponen ekor sampai ~90 px
+// (`test/parity/regime.test.ts`). Berkas ini tinggal menghitung koreksi dan
+// me-resolve-nya.
 //
 // PENGIKATAN BUFFER: SAMA seperti draf lama berkas ini (lih. `dir.ts`) --
 // `pairASrc`/`pairBSrc` (read) dan `pairADst`/`pairBDst` (read_write) di-
@@ -87,13 +75,7 @@
 // `logRaw` SEBELUM ditimpa keluaran `cmy_film` akhir, dalam dispatch yang
 // SAMA (baca-lalu-tulis indeks-sama, seperti sebelumnya).
 //
-// `kernelBuf` (binding 6, "read"): 4 kernel x (1 radius + 33 bobot
-// terpad-nol, kMaxKernelRadius=16) = 136 float, ditulis `dir.ts` SEKALI per
-// `encode()` (bergantung width/height run ini, PERSIS alasan `frameFloats`
-// `halation.wgsl` tidak boleh hidup di arena `stock`/`dynamic` yang di-cache
-// lintas kasus uji ukuran berbeda).
-//
-// Tujuh storage buffer (0-6) -- di bawah batas 8 (lih. catatan
+// Enam storage buffer (0-5) -- di bawah batas 8 (lih. catatan
 // `halation.wgsl`).
 
 @group(0) @binding(0) var<storage, read> pairASrc: array<vec4<f32>>;
@@ -102,13 +84,8 @@
 @group(0) @binding(3) var<storage, read_write> pairBDst: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> params: CoreParams;
 @group(0) @binding(5) var<storage, read> stockArena: array<f32>;
-@group(0) @binding(6) var<storage, read> kernelBuf: array<f32>;
 
 const kOpComputeCorrection: u32 = 0u;
-const kOpClear: u32 = 1u;
-const kOpBlurX: u32 = 2u;
-const kOpBlurYStore: u32 = 3u;
-const kOpBlurYAccumulate: u32 = 4u;
 const kOpResolve: u32 = 5u;
 
 // `_EXPONENTIAL_GAUSSIAN_FITS[3]` Python (fast_gaussian_filter.py) --
@@ -117,26 +94,14 @@ const kOpResolve: u32 = 5u;
 // halation memakai surogasi yang SAMA) -- diduplikasi di sini, bukan
 // diimpor, karena tiap shader WGSL di repo ini berdiri sendiri (lih.
 // duplikasi serupa `experimentalPushPullLogRaw` di bawah).
-fn tailAmplitude(kernelIndex: u32) -> f32 {
-  if (kernelIndex == 1u) { return 0.1633; }
-  if (kernelIndex == 2u) { return 0.6496; }
-  return 0.1870; // kernelIndex == 3u
-}
 
 // `dir_couplers.diffusion_tail_weight` -- konstanta skema, lih. blok
 // komentar berkas.
 const kDiffusionTailWeight: f32 = 0.06;
 
-const kMaxKernelRadius: i32 = 16;
 const kKernelStride: u32 = 34u; // 1 (radius, disimpan sebagai f32) + 2*16+1 bobot
 
-fn kernelRadius(kernelIndex: u32) -> i32 {
-  return i32(kernelBuf[kernelIndex * kKernelStride]);
-}
 
-fn kernelWeight(kernelIndex: u32, offset: i32) -> f32 {
-  return kernelBuf[kernelIndex * kKernelStride + 1u + u32(offset + kMaxKernelRadius)];
-}
 
 // Port literal `fast_gaussian_filter.py::_reflect` -- scipy `mode='reflect'`
 // ("d c b a | a b c d | d c b a", TIDAK menduplikasi piksel tepi). Cabang
@@ -144,40 +109,9 @@ fn kernelWeight(kernelIndex: u32, offset: i32) -> f32 {
 // gerbang ini uji (radius maksimum terukur 2, jauh di bawah n manapun),
 // tapi diport UTUH (bukan dipangkas ke tiga cabang pertama) supaya benar
 // untuk radius lebih besar yang mungkin dipakai kelak.
-fn reflectIndex(i: i32, n: i32) -> i32 {
-  if (i >= 0 && i < n) { return i; }
-  if (i >= -n && i < 0) { return -i - 1; }
-  if (i >= n && i < 2 * n) { return 2 * n - 1 - i; }
-  let period = 2 * n;
-  var m = i % period;
-  if (m < 0) { m = m + period; }
-  if (m >= n) { m = period - 1 - m; }
-  return m;
-}
 
-fn sampleA(x: i32, y: i32) -> vec4<f32> {
-  let sx = reflectIndex(x, i32(params.width));
-  let sy = reflectIndex(y, i32(params.height));
-  return pairASrc[u32(sy) * params.width + u32(sx)];
-}
 
-fn blurAX(kernelIndex: u32, x: i32, y: i32) -> vec4<f32> {
-  let radius = kernelRadius(kernelIndex);
-  var acc = vec4<f32>(0.0);
-  for (var o: i32 = -radius; o <= radius; o = o + 1) {
-    acc += sampleA(x + o, y) * kernelWeight(kernelIndex, o);
-  }
-  return acc;
-}
 
-fn blurAY(kernelIndex: u32, x: i32, y: i32) -> vec4<f32> {
-  let radius = kernelRadius(kernelIndex);
-  var acc = vec4<f32>(0.0);
-  for (var o: i32 = -radius; o <= radius; o = o + 1) {
-    acc += sampleA(x, y + o) * kernelWeight(kernelIndex, o);
-  }
-  return acc;
-}
 
 fn curveExposureValue(i: u32) -> f32 {
   return stockArena[ARENA_CURVEEXPOSURE_OFFSET + i * 2u];
@@ -376,24 +310,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // untuk dispatch ini -- lih. `dir.ts`.
     let densityCmy = pairASrc[index].rgb;
     pairADst[index] = vec4<f32>(correctionFromDensity(densityCmy), 1.0);
-    return;
-  }
-  if (params.slot0 == kOpClear) {
-    pairADst[index] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    return;
-  }
-  if (params.slot0 == kOpBlurX) {
-    pairADst[index] = blurAX(params.slot2, x, y);
-    return;
-  }
-  if (params.slot0 == kOpBlurYStore) {
-    pairADst[index] = blurAY(params.slot2, x, y);
-    return;
-  }
-  if (params.slot0 == kOpBlurYAccumulate) {
-    let blurred = blurAY(params.slot2, x, y);
-    let amplitude = tailAmplitude(params.slot2);
-    pairBDst[index] = vec4<f32>(pairBDst[index].rgb + amplitude * blurred.rgb, 1.0);
     return;
   }
   if (params.slot0 == kOpResolve) {

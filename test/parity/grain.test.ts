@@ -186,10 +186,10 @@ describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_p
       createFilmExposureStage(engine.device, arenas),
       createHalationStage(engine.device, arenas),
       createCurveDevelopStage(engine.device, arenas),
+      // film_format_mm=0.024 untuk SELURUH pipeline (seperti Python): sigma
+      // difusi DIR ~53 px, jalur IIR `GaussianBlur` (Fase 2A.5).
       createDirStage(engine.device, arenas),
-      // film_format_mm=0.024 -- HANYA test ini, lih. `createGrainStage`
-      // untuk kenapa default 35.0 di semua pemanggil lain tidak tersentuh.
-      createGrainStage(engine.device, arenas, 0.024),
+      createGrainStage(engine.device, arenas),
     ]) {
       graph.addStage(stage);
     }
@@ -199,7 +199,8 @@ describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_p
     const inputRgba = loadInputAsRgba(caseName);
     const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', true, STOCK_ID);
 
-    const actual = await graph.run(inputRgba, params, Tap.CMY_FILM);
+    // film_format_mm=0.024: `_build_params_grain_dense()` di gen_reference.py.
+    const actual = await graph.run(inputRgba, params, Tap.CMY_FILM, { frame: { filmFormatMm: 0.024 } });
 
     const expectedRgb = loadTap(caseName, 'cmy_film');
     const pixels = expectedRgb.length / 3;

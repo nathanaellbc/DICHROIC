@@ -61,6 +61,17 @@ Keputusan pemilik proyek (2026-09-28): parameter dibuka **bertahap**;
    `provia_100f`) tidak masuk rantai print di `PrintSimulation`. Keempatnya
    ikut batch parameter 2 bersama mode proses.
 
+8. **(Ditemukan saat eksekusi 2A, Task 6.) Rezim resolusi produksi belum
+   di-port.** Semua blur spasial hulu (DIR, halation/scatter, filter difusi,
+   glare, grain) memakai `fast_gaussian_filter`, yang beralih dari FIR ke IIR
+   Young-van Vliet pada sigma ≥ 3 px (`SMALL_SIGMA_MAX`). Fase 1 hanya
+   mem-port jalur FIR, karena semua fixture ≤ 64 px (ukuran piksel sekitar
+   550 µm, sigma < 3 px). Di foto sungguhan sigma jauh di atas 3 px:
+   `dir.ts` melempar galat di radius > 16, dan tahap lain belum diaudit.
+   Engine saat ini hanya benar untuk gambar dengan sisi terpanjang sekitar
+   ≤ 500 px. Ini menjadi sub-proyek **2A.5** (§6a) dan wajib selesai sebelum
+   `Session` berguna untuk foto nyata.
+
 ---
 
 ## 3. Struktur modul
@@ -271,6 +282,65 @@ penulis baseline sendiri (sekitar 100 baris, tanpa dependensi). Nilai
 
 ---
 
+## 6a. 2A.5 — Rezim resolusi produksi
+
+Tujuan: setiap tahap spasial benar di ukuran piksel foto sungguhan
+(sekitar 3–40 µm), bukan hanya di ukuran piksel fixture.
+
+- Satu modul Gaussian WGSL bersama yang mencerminkan
+  `fast_gaussian_filter.py` persis: FIR terpotong (`truncate=3`) untuk
+  sigma < 3 px dan IIR Young-van Vliet (`_yvv_coeffs`, pass horizontal lalu
+  vertikal, batas reflect) untuk sigma ≥ 3 px. `fast_exponential_filter`
+  (jumlah beberapa Gaussian) memakai modul yang sama.
+- Setiap tahap yang di hulu memanggil `fast_gaussian_filter` memakai modul
+  itu: DIR (`couplers.py:104`), halation/scatter (`diffusion.py:53,74`),
+  filter difusi (`diffusion.py:19,86,100`), glare (`glare.py:23`), grain
+  (`grain.py:50,62,106,162`). Tahap yang sudah punya kernel sendiri diaudit
+  apakah hasilnya sama di rezim sigma besar.
+- **Fixture** tetap kecil (64 px): ukuran piksel produksi dicapai dengan
+  menurunkan `camera.film_format_mm` (teknik Task 16b), misalnya 0,4 mm →
+  6,25 µm/px. Satu keluarga fixture per efek spasial, di dua ukuran piksel
+  (sekitar 6 dan 30 µm).
+- **Tiling:** apron `SPATIAL_EFFECT_RADIUS_PX = 256` diukur ulang terhadap
+  ekor IIR. Gerbang bit-identik tile vs full-frame diulang di rezim ini.
+- **Penerimaan:** `Session.render('preview')` pada gambar 2048 px
+  menghasilkan 1024 px tanpa galat, dan render penuh gambar ≥ 4000 px
+  berjalan lewat tiling.
+
+### 6a.1 Hasil (2026-09-28, selesai)
+
+- **Primitif `GaussianBlur`** vs `fast_gaussian_filter` numba f64: galat maks
+  ≤ 2,4e-7 di semua kasus oracle (ambang 1e-6). IIR Young-van Vliet dalam f32
+  polos meleset hingga 1,6e-3 (koefisien YvV hampir saling menghapus,
+  B ≈ 2e-3 pada σ 13), jadi rekursinya dihitung dalam **df64** (pasangan
+  hi+lo f32, two-sum Knuth dan two-prod dengan split Dekker, tidak
+  bergantung `fma`). **Risiko portabilitas terbuka:** compiler yang
+  melakukan reasosiasi fast-math akan meruntuhkan df64 ke presisi f32
+  polos. Mitigasi (sudah diterapkan): `Session.create` menjalankan self-test
+  kecil (blur σ 2/9/25 di GPU dibandingkan referensi CPU f64 yang digerbangi
+  terhadap Python, ambang 1e-5) dan melaporkannya lewat
+  `Session.diagnostics.iirPrecisionOk`, supaya UI bisa memperingatkan.
+- **Halation dan DIR** memakai primitif ini. Gerbang rezim produksi
+  (`hard_edge`/`impulse_highlight` di 6,25 dan 31,25 µm/px) lulus
+  `log_e_film`, `cmy_film`, dan `rgb_out` di ambang 1e-5. FIR lama meleset
+  hingga 3,3e-2.
+- **`filmFormatMm`** dibawa `FrameParams` (bukan `CoreParams`, yang tetap
+  cermin persis 26 field push-constant OFX).
+- **Apron tiling** dihitung dari σ sebenarnya: FIR memakai support eksak,
+  IIR memakai `ceil(10σ)`. Ekor maju-mundur YvV eksponensial dan
+  berosilasi, bukan Gaussian: massa ekor 5,5σ sekitar 6e-4. Apron 256 px
+  OFX tidak lagi dipakai untuk halation dan DIR.
+- **Invarian tiling (menggantikan "nol perbedaan" spec induk §4.4 untuk
+  rezim IIR saja):** rezim FIR tetap bit-identik. Rezim IIR: jahitan
+  `cmy_film` ≤ 1e-6 (terukur 2,4e-7) dan `rgb_out` rantai penuh ≤ 2e-6
+  (terukur 1,55e-6). Didiagnosis per tap sebagai derau pembulatan f32
+  1–2 ulp yang diperkuat kurva print/scan, bukan jahitan.
+- **Performa** (mesin pengembangan, Dawn/D3D12): pratinjau hangat 1024 px
+  sekitar 0,3 s; render penuh 2048 px sekitar 1,8 s; graf varian rantai
+  baru butuh 2–9 s untuk kompilasi shader pertama (kandidat *prewarm*).
+
+---
+
 ## 6. 2C — Batch parameter 1
 
 Setiap field di bawah naik dari `locked` ke `verified` hanya setelah:
@@ -315,7 +385,7 @@ dan dicatat sebagai temuan. Batch tidak ditahan demi satu field.
 
 ## 8. Titik henti
 
-Setelah 2A, 2B, dan 2C selesai dan diverifikasi (tsc, eslint, dan suite penuh
+Setelah 2A, 2A.5, 2B, dan 2C selesai dan diverifikasi (tsc, eslint, dan suite penuh
 hijau pada dua run berurutan), pekerjaan **berhenti**. Laporan ke pemilik
 proyek memuat daftar field `verified` dan `locked` serta keterbatasan yang
 tercatat. UI baru dimulai setelah pemilik proyek memberikan dokumen desain

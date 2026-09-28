@@ -1,0 +1,12 @@
+{
+  "name": "narrow",
+  "kind": "gaussian",
+  "sigma": [
+    2.0,
+    2.9,
+    4.0
+  ],
+  "truncate": 3.0,
+  "height": 4,
+  "width": 5
+}

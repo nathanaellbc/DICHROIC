@@ -1,0 +1,12 @@
+{
+  "name": "exponential",
+  "kind": "exponential",
+  "sigma": [
+    4.0,
+    10.0,
+    30.0
+  ],
+  "truncate": 3.0,
+  "height": 40,
+  "width": 64
+}

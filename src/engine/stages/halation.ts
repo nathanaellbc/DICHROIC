@@ -1,10 +1,12 @@
 import { CORE_PARAMS_BYTES, CORE_PARAMS_WGSL, writeCoreParams } from '../params';
 import type { CoreParams } from '../params';
+import { GaussianBlur, validInputRect } from '../gaussian';
+import type { Vec3 } from '../gaussian';
 import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
-import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
+import { halationRadiusPx } from '../spatialRadius';
 import source from '../../shaders/halation.wgsl?raw';
 
 /**
@@ -141,19 +143,22 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
     compute: { module, entryPoint: 'main' },
   });
 
-  // Operasi/sigmaMode -- HARUS sama persis dengan konstanta di halation.wgsl.
-  const OP_CLEAR = 0;
-  const OP_BLUR_X = 1;
-  const OP_BLUR_Y_STORE = 2;
-  const OP_BLUR_Y_ACCUMULATE = 3;
+  // Operasi -- HARUS sama persis dengan konstanta di halation.wgsl.
   const OP_SCATTER_RESOLVE = 4;
   const OP_BOUNCE_RESOLVE_LOG = 5;
 
-  const SIGMA_SCATTER_CORE = 0;
-  const SIGMA_SCATTER_TAIL = 1;
-  const SIGMA_BOUNCE = 2;
+  const blur = GaussianBlur.shared(device);
 
-  const FILM_FORMAT_MM = 35.0; // lih. blok komentar modul di atas.
+  // Parameter `HalationParams` default Python (`params_schema.py:104-126`),
+  // sama dengan konstanta `halation.wgsl` -- tidak ada yang terbuka ke UI.
+  const SCATTER_SPATIAL_SCALE = 1.0;
+  const HALATION_SPATIAL_SCALE = 1.0;
+  const SCATTER_CORE_UM: Vec3 = [2.2, 2.0, 1.6];
+  const SCATTER_TAIL_UM: Vec3 = [9.3, 9.7, 9.1];
+  const N_BOUNCES = 3;
+  const BOUNCE_DECAY = 0.5;
+  const firstSigmaUm = Array.from(arenas.stock.values('halationFirstSigmaUm')) as Vec3;
+
 
   return {
     name: 'halation',
@@ -163,7 +168,13 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
     // halationBounceEnabled` SELALU true di sini, lih. blok komentar modul
     // di atas: "kedua langkah SELALU berjalan, tahap ini tidak membutuhkan
     // percabangan host untuk melewatinya").
-    spatialRadiusPx: SPATIAL_EFFECT_RADIUS_PX,
+    // Fase 2A.5: radius dari sigma blur sebenarnya (FIR support eksak / IIR
+    // 5.5 sigma), bukan konstanta OFX 256 -- lih. `src/engine/spatialRadius.ts`.
+    spatialRadiusPx: (params, frame) =>
+      halationRadiusPx(
+        (frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1),
+        firstSigmaUm,
+      ),
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;
@@ -172,66 +183,35 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
       const rawB = ctx.scratch('halation:rawB', pixelBytes);
       const rawC = ctx.scratch('halation:rawC', pixelBytes);
       const rawD = ctx.scratch('halation:rawD', pixelBytes);
-      // Filler untuk binding 1/3 (`pairADst`/`pairBDst`, keduanya
-      // `read_write` di WGSL) pada dispatch yang tidak benar-benar
-      // memakainya -- WebGPU MENOLAK seluruh command buffer (bukan cuma
-      // dispatch itu) kalau buffer yang sama diikat ke DUA binding
-      // "writable" (read_write) sekaligus, ATAU ke satu binding writable
-      // DAN satu binding lain (read atau write) pada saat bersamaan --
-      // "Writable storage buffer binding aliasing", diverifikasi lewat
-      // pesan validasi Dawn persis saat ini ditemukan (lih. task-14-report.md).
-      // Aturannya statis (dari DEKLARASI akses WGSL, bukan dari cabang mana
-      // yang benar-benar dieksekusi), jadi binding 1 dan binding 3 masing-
-      // masing HARUS beda dari KETIGA binding pixel lain di setiap dispatch,
-      // bahkan ketika operasi itu sendiri tidak pernah membaca/menulisnya.
-      // `junk` ada murni untuk mengisi slot writable yang tidak dipakai;
-      // binding 0/2 (keduanya `read` di WGSL) BOLEH mengalias satu sama
-      // lain dengan aman (dua view baca ke buffer yang sama tidak dilarang).
       const junk = ctx.scratch('halation:junk', pixelBytes);
 
+      // Python `ResizingService.pixel_size_um`: film_format_mm*1000/max(shape),
+      // dari dimensi gambar PENUH (bukan tile) -- sama di setiap tile.
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
-      const pixelSizeUm = (FILM_FORMAT_MM * 1000) / longEdge;
+      const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
+      const px = (um: Vec3, scale: number): Vec3 =>
+        um.map((v) => Math.max((v * scale) / pixelSizeUm, 1e-6)) as Vec3;
 
-      const frameFloatsBuffer = ctx.device.createBuffer({
-        label: 'halation:frameFloats',
-        size: 4,
-        usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST,
-        mappedAtCreation: true,
-      });
-      new Float32Array(frameFloatsBuffer.getMappedRange()).set([pixelSizeUm]);
-      frameFloatsBuffer.unmap();
+      // Blur hanya di dalam active rect (lih. `validInputRect`).
+      const rect = validInputRect(ctx.params);
+      const geometry = { bufferWidth: width, bufferHeight: height, rect };
 
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
       const activeHeight =
         ctx.params.activeHeight === 0 ? ctx.params.height : ctx.params.activeHeight;
-      const groupsX = Math.ceil(activeWidth / 32);
-      const groupsY = Math.ceil(activeHeight / 8);
 
-      function makeParamsBuffer(operation: number, sigmaMode: number, component: number): GPUBuffer {
-        const overridden: CoreParams = { ...ctx.params, slot0: operation, slot1: sigmaMode, slot2: component };
+      function combine(operation: number, b0: GPUBuffer, b1: GPUBuffer, b2: GPUBuffer, b3: GPUBuffer): void {
+        const overridden: CoreParams = { ...ctx.params, slot0: operation };
         const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
         writeCoreParams(overridden, staging);
-        const buffer = ctx.device.createBuffer({
-          label: `halation:params:${operation}:${sigmaMode}:${component}`,
+        const paramsBuffer = ctx.device.createBuffer({
+          label: `halation:params:${operation}`,
           size: CORE_PARAMS_BYTES,
           usage: gpuBufferUsage.UNIFORM,
           mappedAtCreation: true,
         });
-        new Uint8Array(buffer.getMappedRange()).set(new Uint8Array(staging));
-        buffer.unmap();
-        return buffer;
-      }
-
-      function dispatch(
-        operation: number,
-        sigmaMode: number,
-        component: number,
-        b0: GPUBuffer,
-        b1: GPUBuffer,
-        b2: GPUBuffer,
-        b3: GPUBuffer,
-      ): void {
-        const paramsBuffer = makeParamsBuffer(operation, sigmaMode, component);
+        new Uint8Array(paramsBuffer.getMappedRange()).set(new Uint8Array(staging));
+        paramsBuffer.unmap();
         const bindGroup = ctx.device.createBindGroup({
           layout: pipeline.getBindGroupLayout(0),
           entries: [
@@ -241,41 +221,53 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
             { binding: 3, resource: { buffer: b3 } },
             { binding: 4, resource: { buffer: paramsBuffer } },
             { binding: 5, resource: { buffer: arenas.stock.buffer } },
-            { binding: 6, resource: { buffer: frameFloatsBuffer } },
           ],
         });
         const pass = encoder.beginComputePass({ label: 'halation' });
         pass.setPipeline(pipeline);
         pass.setBindGroup(0, bindGroup);
-        pass.dispatchWorkgroups(groupsX, groupsY, 1);
+        pass.dispatchWorkgroups(Math.ceil(activeWidth / 32), Math.ceil(activeHeight / 8), 1);
         pass.end();
       }
 
       const src = ctx.source;
 
-      // 1-2: scatter core (Gaussian penuh 2D lewat X lalu Y).
-      dispatch(OP_BLUR_X, SIGMA_SCATTER_CORE, 0, src, rawA, src, junk);
-      dispatch(OP_BLUR_Y_STORE, SIGMA_SCATTER_CORE, 0, rawA, rawB, rawA, junk);
+      // 1. Scatter: core = G(sigma_c), tail = Exp(lambda_t) (campuran 3 Gaussian).
+      blur.encode(encoder, {
+        ...geometry,
+        src,
+        dst: rawB,
+        scratch: junk,
+        sigma: px(SCATTER_CORE_UM, SCATTER_SPATIAL_SCALE),
+      });
+      blur.encodeExponential(encoder, {
+        ...geometry,
+        src,
+        dst: rawC,
+        component: rawA,
+        scratch: junk,
+        decay: px(SCATTER_TAIL_UM, SCATTER_SPATIAL_SCALE),
+      });
+      combine(OP_SCATTER_RESOLVE, src, rawB, rawC, rawD);
 
-      // 3-4: scatter tail (fast_exponential_filter -- campuran 3-Gaussian).
-      dispatch(OP_CLEAR, 0, 0, src, rawC, src, junk);
-      for (let c = 0; c < 3; c += 1) {
-        dispatch(OP_BLUR_X, SIGMA_SCATTER_TAIL, c, src, rawA, src, junk);
-        dispatch(OP_BLUR_Y_ACCUMULATE, SIGMA_SCATTER_TAIL, c, rawA, rawC, rawA, junk);
+      // 2. Bounce: sum_k w_k * G(raw1, sigma_h*sqrt(k)), w = rho^(k-1) / sum.
+      let decaySum = 0;
+      for (let k = 1; k <= N_BOUNCES; k += 1) decaySum += BOUNCE_DECAY ** (k - 1);
+      const sigmaH = firstSigmaUm.map((v) => (v * HALATION_SPATIAL_SCALE) / pixelSizeUm);
+      for (let k = 1; k <= N_BOUNCES; k += 1) {
+        const sigma = sigmaH.map((v) => Math.max(v * Math.sqrt(k), 1e-6)) as Vec3;
+        blur.encode(encoder, { ...geometry, src: rawD, dst: rawA, scratch: junk, sigma });
+        blur.encodeScaleAdd(encoder, {
+          ...geometry,
+          src: rawA,
+          dst: rawC,
+          scratch: junk,
+          amplitude: BOUNCE_DECAY ** (k - 1) / decaySum,
+          first: k === 1,
+        });
       }
 
-      // 5: gabungkan core+tail, blend dengan scatter_amount -> rawD.
-      dispatch(OP_SCATTER_RESOLVE, 0, 0, src, rawB, rawC, rawD);
-
-      // 6-7: halation refleksi-balik, N=3 bounce lebar sqrt(k).
-      dispatch(OP_CLEAR, 0, 0, rawD, rawC, rawD, junk);
-      for (let k = 0; k < 3; k += 1) {
-        dispatch(OP_BLUR_X, SIGMA_BOUNCE, k, rawD, rawA, rawD, junk);
-        dispatch(OP_BLUR_Y_ACCUMULATE, SIGMA_BOUNCE, k, rawA, rawC, rawA, junk);
-      }
-
-      // 8: jumlahkan + log10 -> tap log_e_film, ditulis ke ctx.dest.
-      dispatch(OP_BOUNCE_RESOLVE_LOG, 0, 0, rawD, rawC, rawD, ctx.dest);
+      combine(OP_BOUNCE_RESOLVE_LOG, rawD, rawC, rawD, ctx.dest);
     },
   };
 }

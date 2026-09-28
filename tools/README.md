@@ -576,3 +576,42 @@ claims for halation and DIR-coupler defaults, and the "every other field
 confirmed byte-identical" claim from `_py_density_curve_data`'s docstring
 (`bake_web_assets.py`), are both re-verified mechanically here, not just
 trusted from prose.
+
+## Fase 2A: fixture lattice `.cube` (`identity_lattice_17_lut`)
+
+`gen_reference.py --lattice-case identity_lattice_17 --manifest` membangkitkan
+keluarga fixture ketujuh: lattice identitas 17³ sebagai citra 17×289 (R
+tercepat, urutan data `.cube`, identik `src/io/cube.ts::identityLattice`),
+HANYA `lut_mode=True` — semantik yang sama dengan `Session.exportCube`
+(auto-exposure, efek spasial, dan efek stokastik mati). `input.f32` ditulis di
+direktori `_lut` itu sendiri karena tidak ada direktori kasus dasar.
+`rgb_pre.f32` byte-identik dengan `input.f32` (tanpa auto-exposure), yang
+sekaligus memastikan `lut_mode` benar-benar aktif. Dibangkitkan pada commit
+hulu yang sama seperti fixture Fase 1; manifest hanya bertambah 8 entri, tidak
+ada hash lama yang berubah.
+
+## Fase 2A.5: oracle primitif Gaussian (`test/fixtures/gaussian/`)
+
+`tools/gen_gaussian_reference.py --out test/fixtures --manifest` mengadu
+`fast_gaussian_filter`/`fast_exponential_filter` hulu (numba, f64) pada citra
+acak ber-seed: `zero` (σ 0), `small` (0.3/1.2/2.9, FIR), `threshold` (3.0,
+tepat di ambang IIR), `large` (5/8/13, IIR), `mixed` (2.5/3.0/20, FIR dan IIR
+berbeda kanal), `narrow` (5×4 px, reflect periodik FIR), dan `exponential`
+(λ 4/10/30, campuran 3 Gaussian). `truncate = 3.0` (bawaan hulu). Oracle ini
+menggerbangi modul WGSL `GaussianBlur` secara langsung, terlepas dari tahap
+yang memakainya. Manifest hanya bertambah 21 entri.
+
+## Fase 2A.5: fixture rezim resolusi produksi (`<case>_px6um`, `<case>_px31um`)
+
+`gen_reference.py --pixel-regime-case hard_edge --pixel-regime-case
+impulse_highlight --manifest` membangkitkan keluarga deterministik
+(`deactivate_stochastic_effects`) dengan `camera.film_format_mm` diturunkan
+agar citra 64 px mencapai ukuran piksel foto sungguhan (teknik Task 16b):
+
+| sufiks | film_format_mm | um/px | halation 65 um | DIR 20 um | ekor DIR 200 um (σ komponen) |
+|---|---|---|---|---|---|
+| `_px6um` | 0.4 | 6.25 | 10.4 px (IIR) | 3.2 px (IIR) | 17 / 49 / 89 px (IIR) |
+| `_px31um` | 2.0 | 31.25 | 2.1 px (FIR) | 0.64 px (FIR) | 3.4 / 9.8 / 17.7 px (IIR) |
+
+Semua tap, `input.f32` di tiap direktori, dan `case.json` mencatat
+`filmFormatMm`. Manifest hanya bertambah 32 entri.
