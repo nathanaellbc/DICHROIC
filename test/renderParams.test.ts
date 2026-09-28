@@ -71,7 +71,9 @@ describe('applyParamsPatch', () => {
   it('atomik: patch yang ditolak tidak mengubah parameter asal', () => {
     const current: RenderParams = { ...BASELINE_RENDER_PARAMS };
     const snapshot = { ...current };
-    expect(() => applyParamsPatch(current, { film: 'kodak_gold_200' })).toThrow(UnverifiedParameterError);
+    // `rgbToRawMethod` di luar batch parameter 1 (stock sudah terverifikasi sejak Fase 2C Task 8).
+    const patch = { rgbToRawMethod: 'hanatos2026' } as unknown as Partial<RenderParams>;
+    expect(() => applyParamsPatch(current, patch)).toThrow(UnverifiedParameterError);
     expect(current).toEqual(snapshot);
   });
 
