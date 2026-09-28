@@ -340,4 +340,23 @@
 
 ## Status 2A
 
-(diisi di Task 9)
+**Selesai 2026-09-28** di branch `phase2/core` (6a49c2f..HEAD). tsc dan eslint
+bersih; suite **429 lulus + 1 dilewati (430) di 26 berkas** pada dua run
+berurutan. Yang dilewati adalah cek batas lisensi arah balik ke `../web/src`,
+yang memang tidak ada di repositori mandiri.
+
+| Task | Commit |
+|---|---|
+| 1 auto-exposure ke `src/host` | 3732c16 |
+| 2 `RenderParams` + registri | 57c3964 |
+| 3 `buildRenderPlan` | 02d0f77 |
+| 4 `buildChain` | 100e8cf |
+| 5 `Session` render penuh | 1d275cf |
+| 6 pratinjau, antrean, cache | 3d01d45 |
+| 7 `.cube` + fixture lattice | 09d6785 |
+| 8 RPC Worker + `fetchBytes` | 61c46a4 |
+
+Temuan yang mengubah lingkup: rezim resolusi produksi (IIR Young-van Vliet
+untuk sigma ≥ 3 px) belum di-port di Fase 1. Dicatat sebagai sub-proyek 2A.5
+di spec Fase 2 (§2.8, §6a), dan harus dikerjakan sebelum 2B/2C karena
+`Session` belum bisa merender foto berukuran nyata.

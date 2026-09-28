@@ -32,8 +32,8 @@ Premiere, atau NLE lain.
 
 Ia adalah aplikasi saudara dari EMULSION, bukan penggantinya. EMULSION
 mengimplementasikan model fisik dari `main.tex`; DICHROIC mengimplementasikan
-model spektral spektrafilm. Keduanya hidup di repositori yang sama tetapi tidak
-berbagi satu baris kode pun.
+model spektral spektrafilm. Keduanya tidak berbagi satu baris kode pun, dan
+sejak 2026-09-28 hidup di repositori terpisah (lihat README).
 
 ### Apa yang dikerjakan untuk pengguna
 

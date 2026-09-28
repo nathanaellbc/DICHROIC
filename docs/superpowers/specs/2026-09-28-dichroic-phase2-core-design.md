@@ -61,6 +61,17 @@ Keputusan pemilik proyek (2026-09-28): parameter dibuka **bertahap**;
    `provia_100f`) tidak masuk rantai print di `PrintSimulation`. Keempatnya
    ikut batch parameter 2 bersama mode proses.
 
+8. **(Ditemukan saat eksekusi 2A, Task 6.) Rezim resolusi produksi belum
+   di-port.** Semua blur spasial hulu (DIR, halation/scatter, filter difusi,
+   glare, grain) memakai `fast_gaussian_filter`, yang beralih dari FIR ke IIR
+   Young-van Vliet pada sigma ≥ 3 px (`SMALL_SIGMA_MAX`). Fase 1 hanya
+   mem-port jalur FIR, karena semua fixture ≤ 64 px (ukuran piksel sekitar
+   550 µm, sigma < 3 px). Di foto sungguhan sigma jauh di atas 3 px:
+   `dir.ts` melempar galat di radius > 16, dan tahap lain belum diaudit.
+   Engine saat ini hanya benar untuk gambar dengan sisi terpanjang sekitar
+   ≤ 500 px. Ini menjadi sub-proyek **2A.5** (§6a) dan wajib selesai sebelum
+   `Session` berguna untuk foto nyata.
+
 ---
 
 ## 3. Struktur modul
@@ -271,6 +282,33 @@ penulis baseline sendiri (sekitar 100 baris, tanpa dependensi). Nilai
 
 ---
 
+## 6a. 2A.5 — Rezim resolusi produksi
+
+Tujuan: setiap tahap spasial benar di ukuran piksel foto sungguhan
+(sekitar 3–40 µm), bukan hanya di ukuran piksel fixture.
+
+- Satu modul Gaussian WGSL bersama yang mencerminkan
+  `fast_gaussian_filter.py` persis: FIR terpotong (`truncate=3`) untuk
+  sigma < 3 px dan IIR Young-van Vliet (`_yvv_coeffs`, pass horizontal lalu
+  vertikal, batas reflect) untuk sigma ≥ 3 px. `fast_exponential_filter`
+  (jumlah beberapa Gaussian) memakai modul yang sama.
+- Setiap tahap yang di hulu memanggil `fast_gaussian_filter` memakai modul
+  itu: DIR (`couplers.py:104`), halation/scatter (`diffusion.py:53,74`),
+  filter difusi (`diffusion.py:19,86,100`), glare (`glare.py:23`), grain
+  (`grain.py:50,62,106,162`). Tahap yang sudah punya kernel sendiri diaudit
+  apakah hasilnya sama di rezim sigma besar.
+- **Fixture** tetap kecil (64 px): ukuran piksel produksi dicapai dengan
+  menurunkan `camera.film_format_mm` (teknik Task 16b), misalnya 0,4 mm →
+  6,25 µm/px. Satu keluarga fixture per efek spasial, di dua ukuran piksel
+  (sekitar 6 dan 30 µm).
+- **Tiling:** apron `SPATIAL_EFFECT_RADIUS_PX = 256` diukur ulang terhadap
+  ekor IIR. Gerbang bit-identik tile vs full-frame diulang di rezim ini.
+- **Penerimaan:** `Session.render('preview')` pada gambar 2048 px
+  menghasilkan 1024 px tanpa galat, dan render penuh gambar ≥ 4000 px
+  berjalan lewat tiling.
+
+---
+
 ## 6. 2C — Batch parameter 1
 
 Setiap field di bawah naik dari `locked` ke `verified` hanya setelah:
@@ -315,7 +353,7 @@ dan dicatat sebagai temuan. Batch tidak ditahan demi satu field.
 
 ## 8. Titik henti
 
-Setelah 2A, 2B, dan 2C selesai dan diverifikasi (tsc, eslint, dan suite penuh
+Setelah 2A, 2A.5, 2B, dan 2C selesai dan diverifikasi (tsc, eslint, dan suite penuh
 hijau pada dua run berurutan), pekerjaan **berhenti**. Laporan ke pemilik
 proyek memuat daftar field `verified` dan `locked` serta keterbatasan yang
 tercatat. UI baru dimulai setelah pemilik proyek memberikan dokumen desain
