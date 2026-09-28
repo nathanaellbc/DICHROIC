@@ -91,6 +91,17 @@ export function validateRenderParams(p: RenderParams): void {
 
 /** Terapkan patch lalu validasi; `current` tidak pernah dimutasi. */
 export function applyParamsPatch(current: RenderParams, patch: Partial<RenderParams>): RenderParams {
+  // Patch bisa datang lewat RPC tanpa jaminan tipe: kunci salah ketik atau
+  // tipe yang keliru harus gagal keras, bukan diam-diam tanpa efek.
+  for (const [key, value] of Object.entries(patch)) {
+    if (!Object.prototype.hasOwnProperty.call(FIELD_STATUS, key)) {
+      throw new TypeError(`Parameter tidak dikenal: "${key}".`);
+    }
+    const expected = typeof BASELINE_RENDER_PARAMS[key as keyof RenderParams];
+    if (typeof value !== expected) {
+      throw new TypeError(`Parameter "${key}" harus bertipe ${expected}, diterima ${typeof value}.`);
+    }
+  }
   const next: RenderParams = { ...current, ...patch };
   validateRenderParams(next);
   return next;

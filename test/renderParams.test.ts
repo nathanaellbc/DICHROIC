@@ -76,6 +76,22 @@ describe('applyParamsPatch', () => {
   });
 });
 
+describe('applyParamsPatch: bentuk patch', () => {
+  it('menolak kunci yang tidak dikenal (mis. salah ketik dari UI lewat RPC)', () => {
+    const patch = { filmExposure: 1 } as unknown as Partial<RenderParams>;
+    expect(() => applyParamsPatch({ ...BASELINE_RENDER_PARAMS }, patch)).toThrow(/tidak dikenal.*filmExposure/);
+  });
+
+  it('menolak tipe nilai yang berbeda dari baseline', () => {
+    const patch = { grainEnabled: 1, glareEnabled: 1 } as unknown as Partial<RenderParams>;
+    expect(() => applyParamsPatch({ ...BASELINE_RENDER_PARAMS }, patch)).toThrow(TypeError);
+  });
+
+  it('menerima patch kosong', () => {
+    expect(applyParamsPatch({ ...BASELINE_RENDER_PARAMS }, {})).toEqual(BASELINE_RENDER_PARAMS);
+  });
+});
+
 describe('FIELD_STATUS', () => {
   it('mencakup tepat kunci-kunci baseline', () => {
     expect(Object.keys(FIELD_STATUS).sort()).toEqual(Object.keys(BASELINE_RENDER_PARAMS).sort());
