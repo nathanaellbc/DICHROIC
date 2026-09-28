@@ -209,5 +209,8 @@
   "log_gray_ramp_stochastic/log_e_film.f32": "0f23057edf662b42201f2ff0881651662d2778e96c18efb45721e6a87f499ca5",
   "log_gray_ramp_stochastic/log_e_print.f32": "3f6603f2b3a09909dc68d4652c81e59770d4668490711032b3b99927a93cd641",
   "log_gray_ramp_stochastic/rgb_out.f32": "65f1bdeb1c9fc25580f0c3579dbded93e3cb6dc8ff1531746a368de5dfdbca5d",
-  "log_gray_ramp_stochastic/rgb_pre.f32": "d141984444e29e50078f19da32fd3cb5e304e2d866b9f9f8143de6188db2d1ed"
+  "log_gray_ramp_stochastic/rgb_pre.f32": "d141984444e29e50078f19da32fd3cb5e304e2d866b9f9f8143de6188db2d1ed",
+  "raw/synthetic_rggb/case.json": "e3419fc8fd58c05ed51708d859550fb6301b2d6224f4e3751d6d73cf2f07df81",
+  "raw/synthetic_rggb/input.dng": "57d0a258613982c6de4428344cedd29bcfdadeb6795acd2e5677e5900b93cbf6",
+  "raw/synthetic_rggb/output.f32": "539c3d67865866a28495bc51213e30ec5f29c5c77c1fd74be944808ccd657275"
 }
