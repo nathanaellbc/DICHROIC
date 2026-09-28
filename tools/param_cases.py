@@ -187,4 +187,37 @@ PARAM_CASES: dict[str, ParamCase] = {
                           "camera.exposure_compensation_ev = 1.0"),
         pre=lambda p: (_push_pull(-2.0)(p), setattr(p.camera, "exposure_compensation_ev", 1.0)),
     ),
+    # Task 5: halation. `halationAmount` -> `halation.halation_amount`
+    # (mengalikan a_tot); `halationEnabled` -> `halation.active`. Rezim FIR
+    # (35 mm/64 px, ~550 um/px) dan IIR (px6um, 6.25 um/px) sama-sama diuji.
+    "halation_amount2_5": ParamCase(
+        image="impulse_highlight", family="deterministic",
+        render_params={"halationAmount": 2.5},
+        python_overrides=("film_render.halation.halation_amount = 2.5",),
+        pre=lambda p: setattr(p.film_render.halation, "halation_amount", 2.5),
+    ),
+    "halation_amount0_4_px6um": ParamCase(
+        image="impulse_highlight", family="deterministic",
+        render_params={"halationAmount": 0.4}, film_format_mm=0.4,
+        python_overrides=("film_render.halation.halation_amount = 0.4", "camera.film_format_mm = 0.4"),
+        pre=lambda p: setattr(p.film_render.halation, "halation_amount", 0.4),
+    ),
+    "halation_amount0_px6um": ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"halationAmount": 0.0}, film_format_mm=0.4,
+        python_overrides=("film_render.halation.halation_amount = 0.0", "camera.film_format_mm = 0.4"),
+        pre=lambda p: setattr(p.film_render.halation, "halation_amount", 0.0),
+    ),
+    "halation_off": ParamCase(
+        image="impulse_highlight", family="deterministic",
+        render_params={"halationEnabled": False},
+        python_overrides=("film_render.halation.active = False",),
+        pre=lambda p: setattr(p.film_render.halation, "active", False),
+    ),
+    "halation_off_px6um": ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"halationEnabled": False}, film_format_mm=0.4,
+        python_overrides=("film_render.halation.active = False", "camera.film_format_mm = 0.4"),
+        pre=lambda p: setattr(p.film_render.halation, "active", False),
+    ),
 }

@@ -33,8 +33,9 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   filterC: 'verified',
   filterMShift: 'verified',
   filterYShift: 'verified',
-  halationEnabled: 'locked',
-  halationAmount: 'locked',
+  // Fase 2C Task 5: param/halation_* (`test/parity/halationParams.test.ts`).
+  halationEnabled: 'verified',
+  halationAmount: 'verified',
   // Keluarga `<case>` (keduanya mati, `measuredChain.test.ts`) dan
   // `<case>_stochastic` (keduanya hidup, `grain.test.ts`,
   // `scannerPostGlare.test.ts`) -- lih. aturan kombinasi di bawah.

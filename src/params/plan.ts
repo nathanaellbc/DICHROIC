@@ -211,6 +211,9 @@ function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFor
     exposureCompensationEv: params.filmExposureEv,
     printExposureCompensation: true,
     printExposure: 2 ** params.printExposureEv,
+    // Fase 2C Task 5: `film_render.halation.active`/`halation_amount`.
+    halationEnabled: params.halationEnabled,
+    halationAmount: params.halationAmount,
   };
 }
 

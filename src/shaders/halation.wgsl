@@ -62,14 +62,18 @@
 @group(0) @binding(3) var<storage, read_write> pairBDst: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> params: CoreParams;
 @group(0) @binding(5) var<storage, read> stockArena: array<f32>;
+// Fase 2C: x = `halation.halation_amount` (per render, `FrameParams.halationAmount`).
+@group(0) @binding(6) var<uniform> halationFrame: vec4<f32>;
 
 const kLog10E: f32 = 0.4342944819032518;
 
 const kOpScatterResolve: u32 = 4u;
 const kOpBounceResolveLog: u32 = 5u;
+// Fase 2C: `halation.active = False` -- `apply_halation_um` mengembalikan raw
+// apa adanya; tahap ini hanya menutup `log10` untuk keluarga measured.
+const kOpLogOnly: u32 = 6u;
 
 const kScatterAmount: f32 = 1.0;
-const kHalationAmount: f32 = 1.0;
 
 @compute @workgroup_size(32, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -101,9 +105,14 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let raw = pairASrc[index];
     let o = ARENA_HALATIONSTRENGTH_OFFSET;
     let amount = max(vec3<f32>(stockArena[o], stockArena[o + 1u], stockArena[o + 2u]), vec3<f32>(0.0))
-      * max(kHalationAmount, 0.0);
+      * max(halationFrame.x, 0.0);
     let resolved = (raw.rgb + amount * pairADst[index].rgb) / (vec3<f32>(1.0) + amount);
     pairBDst[index] = vec4<f32>(log(max(resolved, vec3<f32>(0.0)) + vec3<f32>(1.0e-10)) * kLog10E, raw.a);
+    return;
+  }
+  if (params.slot0 == kOpLogOnly) {
+    let raw = pairASrc[index];
+    pairBDst[index] = vec4<f32>(log(max(raw.rgb, vec3<f32>(0.0)) + vec3<f32>(1.0e-10)) * kLog10E, raw.a);
     return;
   }
 }

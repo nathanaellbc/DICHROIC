@@ -139,6 +139,8 @@ describe('buildRenderPlan -> FrameParams', () => {
       exposureCompensationEv: 0,
       printExposureCompensation: true,
       printExposure: 1,
+      halationEnabled: true,
+      halationAmount: 1,
     });
   });
 

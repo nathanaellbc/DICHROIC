@@ -146,6 +146,7 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
   // Operasi -- HARUS sama persis dengan konstanta di halation.wgsl.
   const OP_SCATTER_RESOLVE = 4;
   const OP_BOUNCE_RESOLVE_LOG = 5;
+  const OP_LOG_ONLY = 6;
 
   const blur = GaussianBlur.shared(device);
 
@@ -170,11 +171,14 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
     // percabangan host untuk melewatinya").
     // Fase 2A.5: radius dari sigma blur sebenarnya (FIR support eksak / IIR
     // 5.5 sigma), bukan konstanta OFX 256 -- lih. `src/engine/spatialRadius.ts`.
+    // Fase 2C: halation mati tidak mengonsumsi apron (hanya `log10`).
     spatialRadiusPx: (params, frame) =>
-      halationRadiusPx(
-        (frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1),
-        firstSigmaUm,
-      ),
+      frame.halationEnabled === false
+        ? 0
+        : halationRadiusPx(
+            (frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1),
+            firstSigmaUm,
+          ),
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;
@@ -200,6 +204,16 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
       const activeHeight =
         ctx.params.activeHeight === 0 ? ctx.params.height : ctx.params.activeHeight;
 
+      // Fase 2C: `halation_amount` per render (binding 6).
+      const halationFrame = ctx.device.createBuffer({
+        label: 'halation:frame',
+        size: 16,
+        usage: gpuBufferUsage.UNIFORM,
+        mappedAtCreation: true,
+      });
+      new Float32Array(halationFrame.getMappedRange()).set([ctx.frame.halationAmount ?? 1, 0, 0, 0]);
+      halationFrame.unmap();
+
       function combine(operation: number, b0: GPUBuffer, b1: GPUBuffer, b2: GPUBuffer, b3: GPUBuffer): void {
         const overridden: CoreParams = { ...ctx.params, slot0: operation };
         const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
@@ -221,6 +235,7 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
             { binding: 3, resource: { buffer: b3 } },
             { binding: 4, resource: { buffer: paramsBuffer } },
             { binding: 5, resource: { buffer: arenas.stock.buffer } },
+            { binding: 6, resource: { buffer: halationFrame } },
           ],
         });
         const pass = encoder.beginComputePass({ label: 'halation' });
@@ -231,6 +246,13 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
       }
 
       const src = ctx.source;
+
+      // Fase 2C: `halation.active = False` -- `apply_halation_um` mengembalikan
+      // raw apa adanya (tanpa scatter maupun bounce); hanya `log10`.
+      if (ctx.frame.halationEnabled === false) {
+        combine(OP_LOG_ONLY, src, rawA, rawB, ctx.dest);
+        return;
+      }
 
       // 1. Scatter: core = G(sigma_c), tail = Exp(lambda_t) (campuran 3 Gaussian).
       blur.encode(encoder, {

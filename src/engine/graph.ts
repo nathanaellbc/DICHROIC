@@ -47,6 +47,10 @@ export interface FrameParams {
   printExposureCompensation?: boolean;
   /** Fase 2C: `enlarger.print_exposure` Python (linear, `2**printExposureEv`). Baku 1. */
   printExposure?: number;
+  /** Fase 2C: `film_render.halation.active` Python. Baku `true`. */
+  halationEnabled?: boolean;
+  /** Fase 2C: `film_render.halation.halation_amount` Python. Baku 1. */
+  halationAmount?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */
