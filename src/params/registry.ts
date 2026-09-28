@@ -28,9 +28,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   filmExposureEv: 'verified',
   printExposureEv: 'verified',
   filmPushPullStops: 'locked',
-  filterC: 'locked',
-  filterMShift: 'locked',
-  filterYShift: 'locked',
+  // Fase 2C Task 3: param/enlarger_* (`test/parity/enlarger.test.ts`).
+  filterC: 'verified',
+  filterMShift: 'verified',
+  filterYShift: 'verified',
   halationEnabled: 'locked',
   halationAmount: 'locked',
   // Keluarga `<case>` (keduanya mati, `measuredChain.test.ts`) dan

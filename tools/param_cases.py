@@ -106,4 +106,34 @@ PARAM_CASES: dict[str, ParamCase] = {
                           "(lut_mode menimpa keduanya)"),
         pre=lambda p: (setattr(p.camera, "exposure_compensation_ev", 2.0), setattr(p.enlarger, "print_exposure", 2.0)),
     ),
+    # Task 3: filter enlarger. M/Y -> `*_filter_shift`; `filterC` OFX
+    # (`neutral[c] + cFilter`) -> `c_filter_neutral += filterC` SETELAH
+    # digest (digest menimpa netral dari database).
+    "enlarger_m_plus20_y_minus10": ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"filterMShift": 20.0, "filterYShift": -10.0},
+        python_overrides=("enlarger.m_filter_shift = 20.0", "enlarger.y_filter_shift = -10.0"),
+        pre=lambda p: (setattr(p.enlarger, "m_filter_shift", 20.0), setattr(p.enlarger, "y_filter_shift", -10.0)),
+    ),
+    "enlarger_c15": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"filterC": 15.0},
+        python_overrides=("enlarger.c_filter_neutral += 15.0 (setelah digest_params)",),
+        post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 15.0),
+    ),
+    # netral M ~51.6: shift -58 memberi cc negatif. Python tidak meng-clamp
+    # (OFX meng-clamp di 0); gerbang ini mengunci perilaku Python.
+    "enlarger_m_minus58_lut": ParamCase(
+        image="color_patches", family="lut",
+        render_params={"filterMShift": -58.0},
+        python_overrides=("enlarger.m_filter_shift = -58.0",),
+        pre=lambda p: setattr(p.enlarger, "m_filter_shift", -58.0),
+    ),
+    "enlarger_y_plus40_c30_lut": ParamCase(
+        image="log_gray_ramp", family="lut",
+        render_params={"filterYShift": 40.0, "filterC": 30.0},
+        python_overrides=("enlarger.y_filter_shift = 40.0", "enlarger.c_filter_neutral += 30.0 (setelah digest_params)"),
+        pre=lambda p: setattr(p.enlarger, "y_filter_shift", 40.0),
+        post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 30.0),
+    ),
 }

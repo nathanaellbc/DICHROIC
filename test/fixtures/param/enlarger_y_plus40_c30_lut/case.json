@@ -1,0 +1,44 @@
+{
+  "name": "param/enlarger_y_plus40_c30_lut",
+  "height": 16,
+  "width": 32,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "filterYShift": 40.0,
+    "filterC": 30.0
+  },
+  "pythonOverrides": [
+    "enlarger.y_filter_shift = 40.0",
+    "enlarger.c_filter_neutral += 30.0 (setelah digest_params)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

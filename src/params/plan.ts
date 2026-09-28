@@ -106,10 +106,19 @@ export class MissingNeutralFiltersError extends Error {
   }
 }
 
+/**
+ * `filterC` OFX ditambahkan ke C netral (`filteredEnlargerIlluminantCpu`:
+ * `neutral[c] + cFilter`); padanan Python-nya `enlarger.c_filter_neutral`
+ * setelah `digest_params` (Python tidak punya shift C). M/Y memakai
+ * `*_filter_shift`. Ruling 2C: OFX meng-clamp `netral + shift` di 0, Python
+ * tidak (cc negatif -> transmitansi > 1); kita mengikuti Python, digerbangi
+ * `param/enlarger_m_minus58_lut`.
+ */
 export function resolveEnlargerFilters(
   bundle: AssetBundle,
   film: string,
   paper: string,
+  cFilter: number,
   mShift: number,
   yShift: number,
 ): EnlargerFilterState {
@@ -118,7 +127,7 @@ export function resolveEnlargerFilters(
     throw new MissingNeutralFiltersError(film, paper);
   }
   return {
-    cFilterNeutral: baked.neutralFilterC,
+    cFilterNeutral: baked.neutralFilterC + cFilter,
     mFilterNeutral: baked.neutralFilterM,
     mFilterShift: mShift,
     yFilterNeutral: baked.neutralFilterY,
@@ -143,6 +152,7 @@ export function buildRenderPlan(
     bundle,
     params.film,
     params.paper,
+    params.filterC,
     params.filterMShift,
     params.filterYShift,
   );
@@ -152,7 +162,7 @@ export function buildRenderPlan(
 
   return {
     core: buildCoreParams(params, bundle, image, family, stochasticEffectsActive),
-    arenaKey: `${params.film}::print=${params.paper}::m=${params.filterMShift}::y=${params.filterYShift}`,
+    arenaKey: `${params.film}::print=${params.paper}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: {
       stockId: params.film,
       printScan: { printStockId: params.paper, enlargerFilters },

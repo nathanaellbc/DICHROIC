@@ -111,7 +111,7 @@ describe('buildRenderPlan -> arena dan apron', () => {
       yFilterNeutral: bundle.manifest.printScan.neutralFilterY,
       yFilterShift: 0,
     });
-    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::m=0::y=0');
+    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::c=0::m=0::y=0');
   });
 
   it('apron dari sigma sebenarnya: halation + DIR (spatialRadius.ts) + grain 64 + unsharp 256', () => {
@@ -176,7 +176,7 @@ describe('buildRenderPlan -> penolakan', () => {
   });
 
   it('pasangan film/paper tanpa filter netral ter-bake gagal keras', () => {
-    expect(() => resolveEnlargerFilters(bundle, 'kodak_gold_200', 'kodak_portra_endura', 0, 0)).toThrow(
+    expect(() => resolveEnlargerFilters(bundle, 'kodak_gold_200', 'kodak_portra_endura', 0, 0, 0)).toThrow(
       MissingNeutralFiltersError,
     );
   });
