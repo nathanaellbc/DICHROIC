@@ -45,6 +45,12 @@ class ParamCase:
     film: str = "kodak_portra_400"
     print_stock: str = "kodak_portra_endura"
     film_format_mm: float | None = None
+    # Keluarga stochastic: jumlah realisasi Python yang momennya dicatat di
+    # case.json (`pythonStats`), untuk gerbang statistik terhadap PUSAT
+    # distribusi Python dengan ambang kelipatan sebarannya (spec §6.5.1).
+    realizations: int = 0
+    stat_taps: tuple[str, ...] = ("rgb_out",)
+    stat_bins: int = 8
 
 
 def film_push_pull_gamma(stops: float) -> float:
@@ -238,6 +244,48 @@ PARAM_CASES: dict[str, ParamCase] = {
     # naik linear ~2.9e-6 per unit amount (8.3e-7 di 0 -> 8.3e-6 di 2.5 ->
     # 1.14e-5 di 3.5, diukur 2026-09-28). Gerbang 1e-5 di 2.5; 3.5 dicatat
     # sebagai temuan, ambang tidak dilonggarkan.
+    # Task 6b: glare. `glarePercent` -> `print_render.glare.percent` (mean
+    # lognormal); percent 0 dilewati `add_glare`. Kombinasi grain x glare
+    # diuji terpisah di citra datar, dengan momen 16 realisasi Python.
+    "glare_only_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainEnabled": False, "glareEnabled": True},
+        python_overrides=("film_render.grain.active = False",),
+        pre=lambda p: setattr(p.film_render.grain, "active", False),
+        realizations=16,
+    ),
+    "glare_only_p0_15_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainEnabled": False, "glareEnabled": True, "glarePercent": 0.15},
+        python_overrides=("film_render.grain.active = False", "print_render.glare.percent = 0.15"),
+        pre=lambda p: (setattr(p.film_render.grain, "active", False), setattr(p.print_render.glare, "percent", 0.15)),
+        realizations=16,
+    ),
+    "grain_glare_p0_1_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"glarePercent": 0.1},
+        python_overrides=("print_render.glare.percent = 0.1",),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.1),
+        realizations=16,
+    ),
+    "grain_only_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0",),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.0),
+        realizations=16,
+    ),
+    "grain_glare_default_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        realizations=16,
+    ),
+    # percent 0 tanpa grain: deterministik (glare dilewati) -- per piksel.
+    "glare_p0_no_grain": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"glareEnabled": True, "glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0 (glare.active dimatikan keluarga deterministic;"
+                          " add_glare melewati keduanya)",),
+    ),
     "unsharp_amount2_5": ParamCase(
         image="color_patches", family="deterministic",
         render_params={"scannerUnsharpAmount": 2.5},

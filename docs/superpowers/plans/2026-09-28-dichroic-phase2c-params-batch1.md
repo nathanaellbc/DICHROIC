@@ -157,7 +157,8 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
 | 3 enlarger | `filterC`, `filterMShift`, `filterYShift` | 12/12 @1e-5 | `ddf258a` |
 | 4 push/pull | `filmPushPullStops` (Standard) | 16/16 @1e-5 | `3c9839c` |
 | 5 halation | `halationEnabled`, `halationAmount` | 15/15 @1e-5 (FIR + IIR) | `c36a692` |
-| 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | (task ini) |
+| 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | `feb749e` |
+| 6b glare | `glarePercent`; kombinasi `grainEnabled` x `glareEnabled` | 5 statistik + 1 per piksel | (task ini) |
 
 ### Temuan dan ruling
 
@@ -179,6 +180,15 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
   derau f32 diperkuat `(1 + 2a)` dan kemiringan CCTF sRGB, bukan galat
   struktural (sigma meleset 1% memberi ~1e-3). Gerbang berhenti di 2.5;
   ambang tidak dilonggarkan. Rentang OFX sampai 4.
+- **Bug ditemukan dan diperbaiki (glare):** flag glare dulu diturunkan dari
+  `grainEnabled` (sisa aturan kopling Fase 1), jadi glare tanpa grain diam-diam
+  tidak menambahkan glare (varians 0). Kini grain dan glare independen.
+- **Gerbang statistik baru** (`runParamStatParity`): satu realisasi engine vs
+  pusat 16 realisasi Python, `|d| <= 4 sd sqrt(1+1/K) + lantai` untuk mean,
+  varians, dan autokorelasi lag-1. Grain hulu identik antar-realisasi dalam
+  satu proses (sd grain 0, diukur), jadi bila grain hidup lantainya konstanta
+  Gate B (mean 1e-4, varians 2%). Uji negatif: percent +20% gagal di kasus glare
+  saja (mean meleset 3.5x ambang).
 - Kinerja: kunci arena menyertakan filter C/M/Y, jadi mengubah filter
   memra-hitung ulang arena (termasuk tabel Hanatos). Kandidat optimasi saat UI:
   pindahkan `printFilteredIlluminant` ke nilai per render.

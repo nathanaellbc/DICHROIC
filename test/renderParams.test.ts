@@ -57,15 +57,13 @@ describe('validateRenderParams', () => {
     ).not.toThrow();
   });
 
-  it('menolak grain dan glare campuran, kombinasi yang belum digerbangi', () => {
-    let caught: unknown;
-    try {
-      validateRenderParams({ ...BASELINE_RENDER_PARAMS, grainEnabled: false, glareEnabled: true });
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(UnverifiedParameterError);
-    expect((caught as UnverifiedParameterError).field).toBe('glareEnabled');
+  it('menerima grain dan glare campuran (digerbangi Fase 2C, test/parity/glare.test.ts)', () => {
+    expect(() =>
+      validateRenderParams({ ...BASELINE_RENDER_PARAMS, grainEnabled: false, glareEnabled: true }),
+    ).not.toThrow();
+    expect(() =>
+      validateRenderParams({ ...BASELINE_RENDER_PARAMS, grainEnabled: true, glareEnabled: false }),
+    ).not.toThrow();
   });
 });
 

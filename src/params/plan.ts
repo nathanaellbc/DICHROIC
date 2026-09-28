@@ -161,9 +161,10 @@ export function buildRenderPlan(
   validateRenderParams(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
-  // `grainEnabled === glareEnabled` dijamin validateRenderParams; keduanya
-  // mati di lut_mode.
-  const stochasticEffectsActive = family === 'measured' && params.grainEnabled;
+  // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
+  // `print_render.glare.active`); keduanya mati di lut_mode.
+  const grainActive = family === 'measured' && params.grainEnabled;
+  const glareActive = family === 'measured' && params.glareEnabled && params.glarePercent > 0;
 
   const enlargerFilters = resolveEnlargerFilters(
     bundle,
@@ -178,13 +179,13 @@ export function buildRenderPlan(
   const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
 
   return {
-    core: buildCoreParams(params, bundle, image, family, stochasticEffectsActive),
+    core: buildCoreParams(params, bundle, image, family, glareActive),
     arenaKey: `${params.film}::print=${params.paper}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: {
       stockId: params.film,
       printScan: { printStockId: params.paper, enlargerFilters },
     },
-    chain: { family, grain: stochasticEffectsActive },
+    chain: { family, grain: grainActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: exposureFrame(params, family, filmFormatMm),
@@ -308,7 +309,7 @@ function buildCoreParams(
   bundle: AssetBundle,
   image: PlanImage,
   family: 'measured' | 'lut',
-  stochasticEffectsActive: boolean,
+  glareActive: boolean,
 ): CoreParams {
   const { width, height } = image;
   const { colorSpaces } = bundle.manifest;
@@ -331,10 +332,10 @@ function buildCoreParams(
   }
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
-  // Guard Python: `add_glare` hanya bila `percent > 0`; `_apply_blur_and_unsharp`
-  // hanya bila `sigma > 0 and amount > 0` (sigma tetap 0.7).
-  const glareActiveFlag =
-    family === 'measured' && stochasticEffectsActive && params.glarePercent > 0 ? FLAG_GLARE_ACTIVE : 0;
+  // Guard Python: `add_glare` hanya bila `active and percent > 0` (sudah di
+  // `glareActive`); `_apply_blur_and_unsharp` hanya bila `sigma > 0 and
+  // amount > 0` (sigma tetap 0.7).
+  const glareActiveFlag = glareActive ? FLAG_GLARE_ACTIVE : 0;
   const unsharpActiveFlag = family === 'measured' && params.scannerUnsharpAmount > 0 ? FLAG_UNSHARP_ACTIVE : 0;
 
   return {

@@ -30,8 +30,10 @@ import { BASELINE_RENDER_PARAMS } from '../../src/params/renderParams';
 import type { RenderParams } from '../../src/params/renderParams';
 import { loadAssets } from '../../src/profiles/load';
 import type { AssetBundle } from '../../src/profiles/load';
+import { expect } from 'vitest';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './compare';
 import type { CaseMeta, Comparison } from './compare';
+import { lag1Correlation, momentsBinned } from './statistics';
 
 export type ParamFamily = 'deterministic' | 'stochastic' | 'lut';
 
@@ -134,6 +136,51 @@ export async function renderParamCase(name: string, tap: TapName): Promise<{ rgb
     frame: p.plan.frame,
   });
   return { rgba, meta: p.meta };
+}
+
+interface StatSummary {
+  bins: number;
+  realizations: number;
+  mean: [number, number];
+  variance: [number, number];
+  lag1: [number, number];
+}
+
+/**
+ * Gerbang statistik keluarga `stochastic` (Fase 2C): satu realisasi engine
+ * dibandingkan dengan PUSAT distribusi `realizations` realisasi Python
+ * (`case.json` `pythonStats`, spec §6.5.1 "ambang terikat sebaran terukur"):
+ *
+ *   |engine - mu| <= 4 * sd * sqrt(1 + 1/K) + lantai
+ *
+ * `sd` adalah sebaran realisasi TUNGGAL Python; engine juga satu realisasi,
+ * dan pusat Python rata-rata K. Lantai menutup bagian yang tidak tercermin di
+ * `sd`: grain hulu identik antar-realisasi dalam satu proses (sd grain 0,
+ * diukur), sementara RNG engine algoritma lain -- jadi bila grain hidup
+ * lantainya konstanta Gate B (mean 1e-4, varians 2%), bila mati ambang per
+ * piksel (mean 1e-5). Lag-1 (struktur spasial derau) lantai 0.02.
+ */
+export async function runParamStatParity(name: string, tap: TapName): Promise<void> {
+  const { rgba, meta } = await renderParamCase(name, tap);
+  const stats = (meta as ParamCaseMeta & { pythonStats?: Record<string, StatSummary> }).pythonStats?.[tap];
+  if (meta.family !== 'stochastic' || !stats) {
+    throw new Error(`runParamStatParity: "${name}" tidak punya pythonStats untuk ${tap}.`);
+  }
+  const grain = paramCaseRenderParams(meta).grainEnabled;
+  const got = momentsBinned(rgba, meta.width, meta.height, stats.bins);
+  const lag1 = lag1Correlation(rgba, meta.width, meta.height);
+  const k = Math.sqrt(1 + 1 / stats.realizations);
+  const check = (label: string, value: number, [mu, sd]: [number, number], floor: number) => {
+    const tolerance = 4 * sd * k + floor;
+    expect(
+      Math.abs(value - mu),
+      `${tap} / param/${name}: ${label} ${value.toExponential(4)} vs Python ${mu.toExponential(4)} ` +
+        `(sd ${sd.toExponential(2)}, ambang ${tolerance.toExponential(2)})`,
+    ).toBeLessThanOrEqual(tolerance);
+  };
+  check('mean', got.mean, stats.mean, grain ? 1e-4 : 1e-5);
+  check('variance', got.variance, stats.variance, 0.02 * stats.variance[0]);
+  check('lag1', lag1, stats.lag1, 0.02);
 }
 
 /** Gerbang per piksel untuk kasus deterministik/`lut`. */

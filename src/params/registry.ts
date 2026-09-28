@@ -50,7 +50,8 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   printDiffusionFamily: 'locked',
   printDiffusionStrength: 'locked',
   glareEnabled: 'verified',
-  glarePercent: 'locked',
+  // Fase 2C Task 6: param/glare_*, grain_* (`test/parity/glare.test.ts`).
+  glarePercent: 'verified',
   // Fase 2C Task 6: param/unsharp_* (`test/parity/unsharp.test.ts`).
   scannerUnsharpAmount: 'verified',
 });
@@ -81,17 +82,10 @@ export function validateRenderParams(p: RenderParams): void {
       throw new UnverifiedParameterError(field, p[field], BASELINE_RENDER_PARAMS[field]);
     }
   }
-  // Fase 1 menggerbangi grain dan glare HANYA bersamaan (keduanya mati di
-  // `deactivate_stochastic_effects`, keduanya hidup di default). Campuran
-  // tidak pernah dibangkitkan Python.
-  if (p.grainEnabled !== p.glareEnabled) {
-    throw new UnverifiedParameterError(
-      'glareEnabled',
-      p.glareEnabled,
-      p.grainEnabled,
-      'glare dan grain hanya terverifikasi bila keduanya sama-sama hidup atau mati',
-    );
-  }
+  // Fase 1 menggerbangi grain dan glare HANYA bersamaan. Fase 2C Task 6
+  // menggerbangi campurannya (`test/parity/glare.test.ts`: glare tanpa grain,
+  // grain tanpa glare lewat percent 0), jadi keempat kombinasi terverifikasi
+  // dan aturan kopling lama dilepas.
 }
 
 /** Terapkan patch lalu validasi; `current` tidak pernah dimutasi. */

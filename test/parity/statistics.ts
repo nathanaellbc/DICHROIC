@@ -99,6 +99,28 @@ export function moments(rgba: Float32Array, width: number, height: number): Mome
  * (gray_ramp/log_gray_ramp/color_patches, fixture kecil di mana binning
  * lama SUDAH lulus di ambang 5%) tetap memakainya apa adanya.
  */
+/**
+ * Fase 2C: autokorelasi lag-1 kanal hijau (rata-rata arah x dan y), port
+ * `tools/gen_reference.py::_moments_binned`. Peka terhadap blur derau (glare
+ * `blur`, grain) -- struktur spasial yang tidak terlihat dari mean/varians.
+ */
+export function lag1Correlation(rgba: Float32Array, width: number, height: number): number {
+  const pixels = width * height;
+  let sum = 0;
+  for (let p = 0; p < pixels; p += 1) sum += rgba[p * 4 + 1]!;
+  const mean = sum / pixels;
+  const dev = (x: number, y: number) => rgba[(y * width + x) * 4 + 1]! - mean;
+  let variance = 0;
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) variance += dev(x, y) ** 2;
+  variance /= pixels;
+  if (variance <= 0) return 0;
+  let lx = 0;
+  for (let y = 0; y < height; y += 1) for (let x = 1; x < width; x += 1) lx += dev(x, y) * dev(x - 1, y);
+  let ly = 0;
+  for (let y = 1; y < height; y += 1) for (let x = 0; x < width; x += 1) ly += dev(x, y) * dev(x, y - 1);
+  return (lx / (height * (width - 1)) / variance + ly / ((height - 1) * width) / variance) / 2;
+}
+
 export function momentsBinned(rgba: Float32Array, width: number, height: number, bins: number): Moments {
   const pixels = width * height;
   let sum = 0;

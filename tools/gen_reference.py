@@ -545,11 +545,62 @@ def _generate_pixel_regime_case(image: np.ndarray, case_dir: Path, name: str, fi
 
 
 # Fase 2C: keluarga `param/`. Tabel kasus di `tools/param_cases.py`.
+def flat_patch(width: int = 64, height: int = 64) -> np.ndarray:
+    """Abu-abu datar 0.184 (midgray): setiap piksel draw IID, jadi momen
+    `rgb_out` murni derau grain/glare, bukan sinyal spasial."""
+    return np.full((height, width, 3), 0.184, dtype=np.float64)
+
+
 PARAM_IMAGES = {
     **CASES,
     "grain_dense_patch": grain_dense_patch,
     "identity_lattice_17": identity_lattice_17,
+    "flat_patch": flat_patch,
 }
+
+
+def _moments_binned(rgb: np.ndarray, bins: int) -> dict:
+    """Port `test/parity/statistics.ts::momentsBinned` (kanal hijau): mean,
+    varians populasi, dan profil varians radial dengan bin lebar-sama."""
+    g = np.asarray(rgb, dtype=np.float64)[:, :, 1]
+    height, width = g.shape
+    mean = float(g.mean())
+    d2 = (g - mean) ** 2
+    ys, xs = np.mgrid[0:height, 0:width]
+    r_raw = np.hypot(xs - width / 2, ys - height / 2)
+    half = max(min(width, height) / 2, 1e-9)
+    r = np.minimum(bins - 1, np.floor(r_raw / half * bins)).astype(int)
+    power = [float(d2[r == i].mean()) if np.any(r == i) else 0.0 for i in range(bins)]
+    # Autokorelasi lag-1 (rata-rata arah x dan y): peka terhadap blur derau.
+    dev = g - mean
+    var = float(d2.mean())
+    lag_x = float((dev[:, 1:] * dev[:, :-1]).mean()) / var if var > 0 else 0.0
+    lag_y = float((dev[1:, :] * dev[:-1, :]).mean()) / var if var > 0 else 0.0
+    return {"mean": mean, "variance": var, "radialPower": power, "lag1": (lag_x + lag_y) / 2}
+
+
+def _python_stats(case, image: np.ndarray) -> dict:
+    """Momen tiap `stat_taps` atas `case.realizations` realisasi Python
+    independen (RNG hulu tidak di-seed): rata-rata dan simpangan baku sampel."""
+    samples = {tap: [] for tap in case.stat_taps}
+    for _ in range(case.realizations):
+        for tap in case.stat_taps:
+            result = SimulationPipeline(_build_param_case_params(case)).process(image, collect=tap)
+            samples[tap].append(_moments_binned(result, case.stat_bins))
+    out = {}
+    for tap, rows in samples.items():
+        def summarize(values):
+            arr = np.asarray(values, dtype=np.float64)
+            return [float(arr.mean()), float(arr.std(ddof=1))]
+        out[tap] = {
+            "bins": case.stat_bins,
+            "realizations": case.realizations,
+            "mean": summarize([r["mean"] for r in rows]),
+            "variance": summarize([r["variance"] for r in rows]),
+            "lag1": summarize([r["lag1"] for r in rows]),
+            "radialPower": [summarize([r["radialPower"][i] for r in rows]) for i in range(case.stat_bins)],
+        }
+    return out
 
 
 def _build_param_case_params(case):
@@ -605,6 +656,10 @@ def _generate_param_case(name: str, case_dir: Path) -> None:
         meta["lutMode"] = True
     if case.film_format_mm is not None:
         meta["filmFormatMm"] = case.film_format_mm
+    if case.realizations > 0:
+        if case.family != "stochastic":
+            raise ValueError(f"{name}: realizations hanya untuk keluarga stochastic")
+        meta["pythonStats"] = _python_stats(case, image)
     _write_json_lf(case_dir / "case.json", meta)
     print(f"Wrote {case_dir} (family={case.family})")
 
