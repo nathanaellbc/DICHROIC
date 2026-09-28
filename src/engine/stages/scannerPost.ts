@@ -16,6 +16,19 @@ const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
  * tidak mengonversi lewat `pixel_size_um` di titik ini sama sekali).
  */
 const UNSHARP_SIGMA_PX = 0.7;
+
+/** `GlareParams.roughness` default; `sigma2 = ln(1 + roughness^2)` (`fast_lognormal_from_mean_std`). */
+const GLARE_ROUGHNESS = 0.7;
+
+/**
+ * Fase 2C: mu lognormal glare untuk `percent` (mean linear), `ln(m) - sigma2/2`.
+ * Percent <= 0 tidak pernah dibaca (`add_glare` melewati glare; plan
+ * memadamkan `FLAG_GLARE_ACTIVE`), jadi dikembalikan 0 yang terhingga.
+ */
+export function glareLogMu(percent: number): number {
+  if (!(percent > 0)) return 0;
+  return Math.log(percent) - Math.log(1 + GLARE_ROUGHNESS ** 2) / 2;
+}
 const GAUSSIAN_TRUNCATE = 3.0; // default `fast_gaussian_filter` truncate.
 const MAX_KERNEL_RADIUS = 16; // lih. dir.ts -- headroom jauh di atas radius terpakai (2).
 const KERNEL_STRIDE = 1 + 2 * MAX_KERNEL_RADIUS + 1; // 1 (radius) + 33 bobot terpad-nol.
@@ -162,6 +175,21 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
       const glareBlurXOut = ctx.scratch('scannerPost:glareBlurX', floatBytes);
       const glareBlurred = ctx.scratch('scannerPost:glareBlurred', floatBytes);
 
+      // Fase 2C: amount unsharp dan mu glare per render (binding 12).
+      const scannerFrame = ctx.device.createBuffer({
+        label: 'scannerPost:frame',
+        size: 16,
+        usage: gpuBufferUsage.UNIFORM,
+        mappedAtCreation: true,
+      });
+      new Float32Array(scannerFrame.getMappedRange()).set([
+        ctx.frame.scannerUnsharpAmount ?? 0.7,
+        glareLogMu(ctx.frame.glarePercent ?? 0.03),
+        0,
+        0,
+      ]);
+      scannerFrame.unmap();
+
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
       const activeHeight =
         ctx.params.activeHeight === 0 ? ctx.params.height : ctx.params.activeHeight;
@@ -175,6 +203,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
         entries: [
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
           { binding: 5, resource: { buffer: glarePreBlur } },
+          { binding: 12, resource: { buffer: scannerFrame } },
         ],
       });
       const glareGeneratePass = encoder.beginComputePass({ label: 'scannerPost:glareGenerate' });
@@ -286,6 +315,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
           { binding: 8, resource: { buffer: preUnsharp } },
           { binding: 10, resource: { buffer: unsharpBlurred } },
+          { binding: 12, resource: { buffer: scannerFrame } },
         ],
       });
       const scanPass = encoder.beginComputePass({ label: 'scannerPost:scan' });

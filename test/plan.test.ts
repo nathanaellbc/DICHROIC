@@ -141,6 +141,8 @@ describe('buildRenderPlan -> FrameParams', () => {
       printExposure: 1,
       halationEnabled: true,
       halationAmount: 1,
+      scannerUnsharpAmount: 0.7,
+      glarePercent: 0.03,
     });
   });
 

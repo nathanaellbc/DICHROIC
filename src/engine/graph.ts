@@ -51,6 +51,10 @@ export interface FrameParams {
   halationEnabled?: boolean;
   /** Fase 2C: `film_render.halation.halation_amount` Python. Baku 1. */
   halationAmount?: number;
+  /** Fase 2C: `scanner.unsharp_mask[1]` Python (amount; sigma tetap 0.7 px). Baku 0.7. */
+  scannerUnsharpAmount?: number;
+  /** Fase 2C: `print_render.glare.percent` Python. Baku 0.03. */
+  glarePercent?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

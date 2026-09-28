@@ -152,7 +152,10 @@
 @group(0) @binding(10) var<storage, read_write> unsharpBlurred: array<vec4<f32>>;
 @group(0) @binding(11) var<storage, read> unsharpKernel: array<f32>;
 
-const kUnsharpAmount: f32 = 0.7; // `scanner.unsharp_mask[1]` default, konstanta skema.
+// Fase 2C: per render (`FrameParams`), dibaca HANYA `scan` (x) dan `glareGenerate` (y):
+//   x = `scanner.unsharp_mask[1]` (amount; sigma tetap 0.7),
+//   y = mu lognormal glare = ln(percent) - sigma2/2 (`fast_lognormal_from_mean_std`).
+@group(0) @binding(12) var<uniform> scannerFrame: vec4<f32>;
 const kUnsharpMaxRadius: i32 = 16; // lih. dir.wgsl::kMaxKernelRadius -- headroom jauh di atas radius terpakai (2).
 
 fn unsharpKernelRadius() -> i32 {
@@ -273,17 +276,15 @@ fn scanToOutputRgb(xyz: vec3<f32>) -> vec3<f32> {
 //      terbaca 1:1 terhadap `glare.py`).
 // ============================================================================
 
-const kGlarePercent: f32 = 0.03;
 const kGlareRoughness: f32 = 0.7;
 const kGlareBlurSigma: f32 = 0.5;
 // int(3.0*0.5 + 0.5) = 2 (`_gaussian_kernel_1d`, fast_gaussian_filter.py).
 const kGlareBlurRadius: i32 = 2;
 // sigma2 = ln(1 + roughness^2) = ln(1.49); sigma = sqrt(sigma2);
-// mu = ln(percent) - sigma2/2. Dihitung host-side (node) dari formula
-// `fast_lognormal_from_mean_std` di atas, bukan ditebak -- lih. blok
-// komentar modul untuk derivasi lengkap.
+// mu = ln(percent) - sigma2/2 bergantung `glarePercent`, jadi sejak Fase 2C
+// dihitung host per render (`glareLogMu`, `stages/scannerPost.ts`) dan
+// dibaca dari `scannerFrame.y`. sigma tidak bergantung percent (s/m = roughness).
 const kGlareLogSigma: f32 = 0.6314872286573718;
-const kGlareLogMu: f32 = -3.7059459572986655;
 
 fn illuminantXyz() -> vec3<f32> {
   let o = ARENA_SCANNERILLUMINANTXYZ_OFFSET;
@@ -370,7 +371,7 @@ fn glareGenerate(@builtin(global_invocation_id) gid: vec3<u32>) {
   // piksel yang sama tergantung tile yang memuatnya.
   let tileGid = absoluteGid + vec2<u32>(params.tileOriginX, params.tileOriginY);
   let z = glareRandNormal(tileGid.x, tileGid.y);
-  glarePreBlur[index] = exp(kGlareLogMu + kGlareLogSigma * z);
+  glarePreBlur[index] = exp(scannerFrame.y + kGlareLogSigma * z);
 }
 
 @compute @workgroup_size(32, 8, 1)
@@ -900,7 +901,7 @@ fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
   let index = absoluteIndex(gid);
   let pre = preUnsharp[index];
   let unsharpOn = (params.slot1 & 8u) != 0u;
-  let sharpened = select(pre.rgb, pre.rgb + kUnsharpAmount * (pre.rgb - unsharpBlurred[index].rgb), unsharpOn);
+  let sharpened = select(pre.rgb, pre.rgb + scannerFrame.x * (pre.rgb - unsharpBlurred[index].rgb), unsharpOn);
 
   let rgbEncoded = applyCctfEncoding(sharpened);
 

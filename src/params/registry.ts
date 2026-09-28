@@ -51,7 +51,8 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   printDiffusionStrength: 'locked',
   glareEnabled: 'verified',
   glarePercent: 'locked',
-  scannerUnsharpAmount: 'locked',
+  // Fase 2C Task 6: param/unsharp_* (`test/parity/unsharp.test.ts`).
+  scannerUnsharpAmount: 'verified',
 });
 
 export class UnverifiedParameterError extends Error {

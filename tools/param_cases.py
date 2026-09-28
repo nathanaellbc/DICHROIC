@@ -220,4 +220,28 @@ PARAM_CASES: dict[str, ParamCase] = {
         python_overrides=("film_render.halation.active = False", "camera.film_format_mm = 0.4"),
         pre=lambda p: setattr(p.film_render.halation, "active", False),
     ),
+    # Task 6: unsharp scanner. `scannerUnsharpAmount` -> `scanner.unsharp_mask
+    # = (0.7, amount)`; amount 0 dilewati Python (`sigma > 0 and amount > 0`).
+    "unsharp_amount0": ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"scannerUnsharpAmount": 0.0},
+        python_overrides=("scanner.unsharp_mask = (0.7, 0.0)",),
+        pre=lambda p: setattr(p.scanner, "unsharp_mask", (0.7, 0.0)),
+    ),
+    "unsharp_amount1_5": ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"scannerUnsharpAmount": 1.5},
+        python_overrides=("scanner.unsharp_mask = (0.7, 1.5)",),
+        pre=lambda p: setattr(p.scanner, "unsharp_mask", (0.7, 1.5)),
+    ),
+    # Amount besar memperkuat derau f32: galat maks rgb_out pada color_patches
+    # naik linear ~2.9e-6 per unit amount (8.3e-7 di 0 -> 8.3e-6 di 2.5 ->
+    # 1.14e-5 di 3.5, diukur 2026-09-28). Gerbang 1e-5 di 2.5; 3.5 dicatat
+    # sebagai temuan, ambang tidak dilonggarkan.
+    "unsharp_amount2_5": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"scannerUnsharpAmount": 2.5},
+        python_overrides=("scanner.unsharp_mask = (0.7, 2.5)",),
+        pre=lambda p: setattr(p.scanner, "unsharp_mask", (0.7, 2.5)),
+    ),
 }

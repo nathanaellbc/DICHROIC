@@ -147,4 +147,38 @@ spektrafilm-ofx `86476af`, Python 3.13, versi paket `tools/README.md`).
 
 ## Status 2C
 
-(diisi saat eksekusi)
+Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
+`phase2c/params-batch1` (di atas PR 2B #3).
+
+| Task | Field | Gerbang | Commit |
+|---|---|---|---|
+| 1 harness `param/` | — | 3 kasus kendali bit-identik dengan fixture lama, 10/10 | `3744e84` |
+| 2 exposure | `filmExposureEv`, `autoExposure`, `printExposureEv` | 28/28 @1e-5 | `0f883be` |
+| 3 enlarger | `filterC`, `filterMShift`, `filterYShift` | 12/12 @1e-5 | `ddf258a` |
+| 4 push/pull | `filmPushPullStops` (Standard) | 16/16 @1e-5 | `3c9839c` |
+| 5 halation | `halationEnabled`, `halationAmount` | 15/15 @1e-5 (FIR + IIR) | `c36a692` |
+| 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | (task ini) |
+
+### Temuan dan ruling
+
+- **Midgray print memakai sRGB linear**, bukan colour space gambar:
+  `_rgb_to_film_raw` dipanggil tanpa argumen colour space. Probe: jalur gambar
+  ProPhoto 0.184 memberi log raw 0.0054330, jalur midgray 0.0055470. Port host
+  (`src/host/printExposure.ts`) cocok dengan `densitySpectralMidgray` bake
+  Python sampai 9.3e-8.
+- **Ruling `filmExposureEv`:** Python default `print_exposure_compensation=True`
+  me-retime print ke `0.184 * 2**ev`; OFX tidak. Kita mengikuti Python.
+  Uji negatif: tanpa cabang `_comp`, `log_e_print` meleset 0.357.
+- **`.cube` mengabaikan kedua EV** (`lut_mode` memaksa `exposure_compensation_ev=0`,
+  `print_exposure=1`); tercatat di header `# disabled effects`.
+- **Ruling filter enlarger:** OFX meng-clamp `netral + shift` di 0, Python
+  tidak (cc negatif -> transmitansi > 1). Kita mengikuti Python, digerbangi
+  `enlarger_m_minus58_lut`.
+- **Unsharp amount besar:** galat maks `rgb_out` pada `color_patches` naik
+  linear ~2.9e-6 per unit amount (8.3e-7 di 0, 8.3e-6 di 2.5, 1.14e-5 di 3.5):
+  derau f32 diperkuat `(1 + 2a)` dan kemiringan CCTF sRGB, bukan galat
+  struktural (sigma meleset 1% memberi ~1e-3). Gerbang berhenti di 2.5;
+  ambang tidak dilonggarkan. Rentang OFX sampai 4.
+- Kinerja: kunci arena menyertakan filter C/M/Y, jadi mengubah filter
+  memra-hitung ulang arena (termasuk tabel Hanatos). Kandidat optimasi saat UI:
+  pindahkan `printFilteredIlluminant` ke nilai per render.

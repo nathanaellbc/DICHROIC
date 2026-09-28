@@ -214,6 +214,9 @@ function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFor
     // Fase 2C Task 5: `film_render.halation.active`/`halation_amount`.
     halationEnabled: params.halationEnabled,
     halationAmount: params.halationAmount,
+    // Fase 2C Task 6: `scanner.unsharp_mask[1]`, `print_render.glare.percent`.
+    scannerUnsharpAmount: params.scannerUnsharpAmount,
+    glarePercent: params.glarePercent,
   };
 }
 
@@ -328,8 +331,11 @@ function buildCoreParams(
   }
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
-  const glareActiveFlag = family === 'measured' && stochasticEffectsActive ? FLAG_GLARE_ACTIVE : 0;
-  const unsharpActiveFlag = family === 'measured' ? FLAG_UNSHARP_ACTIVE : 0;
+  // Guard Python: `add_glare` hanya bila `percent > 0`; `_apply_blur_and_unsharp`
+  // hanya bila `sigma > 0 and amount > 0` (sigma tetap 0.7).
+  const glareActiveFlag =
+    family === 'measured' && stochasticEffectsActive && params.glarePercent > 0 ? FLAG_GLARE_ACTIVE : 0;
+  const unsharpActiveFlag = family === 'measured' && params.scannerUnsharpAmount > 0 ? FLAG_UNSHARP_ACTIVE : 0;
 
   return {
     width,
