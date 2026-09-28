@@ -159,7 +159,8 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
 | 5 halation | `halationEnabled`, `halationAmount` | 15/15 @1e-5 (FIR + IIR) | `c36a692` |
 | 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | `feb749e` |
 | 6b glare | `glarePercent`; kombinasi `grainEnabled` x `glareEnabled` | 5 statistik + 1 per piksel | `d6fbbc8` |
-| 7 grain + format | `grainAmount`, `grainSeed`, `filmFormat` | 10 statistik + 1 seed + 9 per piksel | (task ini) |
+| 7 grain + format | `grainAmount`, `grainSeed`, `filmFormat` | 10 statistik + 1 seed + 9 per piksel | `24208d9` |
+| 8 stock | `film` (16 negatif), `paper` (8) | 138/138 @1e-5 (23 pasangan x lut + measured) | (task ini) |
 
 ### Temuan dan ruling
 
@@ -205,6 +206,11 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
 - `grainSeed` dicampur ke hash RNG grain sebagai `(seed - 1) * 0x85ebca6b`:
   seed 1 mereproduksi realisasi Fase 1 bit-identik (gerbang tiling bit-identik
   tetap hijau).
+- **Database filter netral OFX berbeda dari Python** sampai 77 CC
+  (`kodak_2383`/`fujifilm_c200`), 3.3 CC pada pasangan baseline. Tabel Python
+  di-bake ke `manifest.neutralPrintFilters` (bake ulang: ketiga blob
+  bit-identik, kunci manifest lama tidak berubah). Pasangan di luar database
+  dan film reversal ditolak `validateStocks` (juga di `Session.setParams`).
 - Kinerja: kunci arena menyertakan filter C/M/Y, jadi mengubah filter
   memra-hitung ulang arena (termasuk tabel Hanatos). Kandidat optimasi saat UI:
   pindahkan `printFilteredIlluminant` ke nilai per render.

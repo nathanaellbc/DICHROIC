@@ -1,0 +1,42 @@
+{
+  "name": "param/stock_kodak_portra_400__fujifilm_crystal_archive_typeii",
+  "height": 64,
+  "width": 64,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "fujifilm_crystal_archive_typeii",
+  "renderParams": {
+    "film": "kodak_portra_400",
+    "paper": "fujifilm_crystal_archive_typeii"
+  },
+  "pythonOverrides": [
+    "init_params('kodak_portra_400', 'fujifilm_crystal_archive_typeii')"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

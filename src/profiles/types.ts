@@ -217,11 +217,23 @@ export interface PrintScanDefaults {
   neutralFilterY: number;
 }
 
+/**
+ * Fase 2C Task 8 -- filter netral enlarger (Kodak CC, C/M/Y) SEMUA pasangan
+ * dari database Python (`read_neutral_print_filters`), `table[print][film]`.
+ * BUKAN `static.neutralPrintFilters` (salinan OFX, berbeda sampai 77 CC) --
+ * lih. `tools/bake_web_assets.py::_python_neutral_print_filters`.
+ */
+export interface NeutralPrintFilters {
+  illuminant: string;
+  table: Record<string, Record<string, [number, number, number]>>;
+}
+
 export interface Manifest {
   hanatos: HanatosDims;
   colorSpaces: ColorSpaces;
   counts: Counts;
   printScan: PrintScanDefaults;
+  neutralPrintFilters: NeutralPrintFilters;
   stocks: StockEntry[];
   static: Record<StaticTableName, BlobRef>;
 }

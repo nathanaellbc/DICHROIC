@@ -25,7 +25,7 @@ import type { DecodedImage } from '../io/decoded';
 import { encodePng, encodeTiff16 } from '../io/encode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
-import { buildRenderPlan } from '../params/plan';
+import { buildRenderPlan, validateStocks } from '../params/plan';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
 import { applyParamsPatch } from '../params/registry';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
@@ -202,7 +202,9 @@ export class Session {
   /** Validasi segera dan atomik: patch yang ditolak tidak mengubah apa pun. */
   setParams(patch: Partial<RenderParams>): void {
     this.assertAlive();
-    this.#params = applyParamsPatch(this.#params, patch);
+    const next = applyParamsPatch(this.#params, patch);
+    validateStocks(this.bundle, next.film, next.paper);
+    this.#params = next;
     this.#paramsVersion += 1;
   }
 

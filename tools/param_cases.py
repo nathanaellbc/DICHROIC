@@ -357,3 +357,35 @@ PARAM_CASES: dict[str, ParamCase] = {
         pre=lambda p: setattr(p.scanner, "unsharp_mask", (0.7, 2.5)),
     ),
 }
+
+# Task 8: stock. `film`/`paper` -> argumen `init_params(film, print)`; filter
+# netral dari database Python per pasangan. Film negatif saja (reversal ikut
+# batch 2). Daftar dari `manifest.neutralPrintFilters` (database Python).
+NEGATIVE_FILMS = (
+    "kodak_ektar_100", "kodak_portra_160", "kodak_portra_400", "kodak_portra_800",
+    "kodak_portra_800_push1", "kodak_portra_800_push2", "kodak_gold_200", "kodak_ultramax_400",
+    "kodak_vision3_50d", "kodak_vision3_250d", "kodak_verita_200d", "kodak_vision3_200t",
+    "kodak_vision3_500t", "fujifilm_pro_400h", "fujifilm_c200", "fujifilm_xtra_400",
+)
+PAPERS = (
+    "kodak_endura_premier", "kodak_ultra_endura", "kodak_ektacolor_edge", "kodak_supra_endura",
+    "kodak_portra_endura", "fujifilm_crystal_archive_typeii", "kodak_2383", "kodak_2393",
+)
+
+
+def _stock_pairs():
+    pairs = [(film, "kodak_portra_endura") for film in NEGATIVE_FILMS]
+    pairs += [("kodak_portra_400", paper) for paper in PAPERS if paper != "kodak_portra_endura"]
+    return pairs
+
+
+for _film, _paper in _stock_pairs():
+    _patch = {"film": _film, "paper": _paper}
+    PARAM_CASES[f"stock_{_film}__{_paper}_lut"] = ParamCase(
+        image="color_patches", family="lut", film=_film, print_stock=_paper,
+        render_params=_patch, python_overrides=(f"init_params({_film!r}, {_paper!r})",),
+    )
+    PARAM_CASES[f"stock_{_film}__{_paper}"] = ParamCase(
+        image="hard_edge", family="deterministic", film=_film, print_stock=_paper,
+        render_params=_patch, python_overrides=(f"init_params({_film!r}, {_paper!r})",),
+    )

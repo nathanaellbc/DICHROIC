@@ -9,6 +9,7 @@ import {
   MissingNeutralFiltersError,
   buildRenderPlan,
   resolveEnlargerFilters,
+  validateStocks,
 } from '../src/params/plan';
 import { loadCase, loadInputAsRgba } from './parity/compare';
 import { dirRadiusPx, halationRadiusPx } from '../src/engine/spatialRadius';
@@ -177,12 +178,33 @@ describe('buildRenderPlan -> FrameParams', () => {
 describe('buildRenderPlan -> penolakan', () => {
   it('memvalidasi parameter lebih dulu', () => {
     expect(() =>
-      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, film: 'kodak_gold_200' }, bundle, image('gray_ramp'), 'image'),
+      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, rgbToRawMethod: 'hanatos2026' as 'hanatos2025' }, bundle, image('gray_ramp'), 'image'),
     ).toThrow(UnverifiedParameterError);
   });
 
-  it('pasangan film/paper tanpa filter netral ter-bake gagal keras', () => {
-    expect(() => resolveEnlargerFilters(bundle, 'kodak_gold_200', 'kodak_portra_endura', 0, 0, 0)).toThrow(
+  it('film reversal ditolak (batch parameter 2)', () => {
+    let caught: unknown;
+    try {
+      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, film: 'fujifilm_velvia_100' }, bundle, image('gray_ramp'), 'image');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnverifiedParameterError);
+    expect((caught as UnverifiedParameterError).field).toBe('film');
+    expect((caught as Error).message).toContain('reversal');
+  });
+
+  it('stock kertas sebagai film, dan film sebagai paper, ditolak', () => {
+    expect(() => validateStocks(bundle, 'kodak_portra_endura', 'kodak_portra_endura')).toThrow(UnverifiedParameterError);
+    expect(() => validateStocks(bundle, 'kodak_portra_400', 'kodak_portra_400')).toThrow(UnverifiedParameterError);
+    expect(() => validateStocks(bundle, 'kodak_gold_200', 'kodak_2383')).not.toThrow();
+  });
+
+  it('filter netral dari database Python per pasangan', () => {
+    const baseline = resolveEnlargerFilters(bundle, 'kodak_portra_400', 'kodak_portra_endura', 0, 0, 0);
+    expect(baseline.mFilterNeutral).toBe(bundle.manifest.printScan.neutralFilterM);
+    expect(baseline.yFilterNeutral).toBe(bundle.manifest.printScan.neutralFilterY);
+    expect(() => resolveEnlargerFilters(bundle, 'kodak_portra_400', 'bukan_paper', 0, 0, 0)).toThrow(
       MissingNeutralFiltersError,
     );
   });

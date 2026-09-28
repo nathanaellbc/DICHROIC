@@ -17,8 +17,10 @@ import type { RenderParams } from './renderParams';
 export type FieldStatus = 'verified' | 'locked';
 
 export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = Object.freeze({
-  film: 'locked',
-  paper: 'locked',
+  // Fase 2C Task 8: param/stock_* (`test/parity/stocks.test.ts`). Pasangan
+  // dan jenis stock divalidasi `validateStocks` (plan.ts; butuh aset).
+  film: 'verified',
+  paper: 'verified',
   rgbToRawMethod: 'locked',
   inputColorSpace: 'locked',
   inputCctfDecoding: 'locked',

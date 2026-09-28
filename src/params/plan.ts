@@ -27,7 +27,8 @@ import { measureAutoExposureEv } from '../host/autoExposure';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
-import { validateRenderParams } from './registry';
+import { UnverifiedParameterError, validateRenderParams } from './registry';
+import { BASELINE_RENDER_PARAMS } from './renderParams';
 import type { FilmFormat, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
@@ -106,20 +107,45 @@ const CUBE_DISABLED_EFFECTS = [
 ];
 
 /**
- * Filter netral enlarger (Kodak CC) hanya ter-bake untuk SATU triple
- * (film, print, illuminant) -- `manifest.printScan`, hasil
- * `apply_database_neutral_print_filters()` Python (lih.
- * `tools/bake_web_assets.py::_default_enlarger_neutral_filters`). Memakai
- * nilai triple itu untuk pasangan lain akan memberi keseimbangan warna
- * yang salah tanpa galat apa pun, jadi pasangan lain ditolak keras.
+ * Filter netral enlarger (Kodak CC) per pasangan (print, film) untuk
+ * illuminant TH-KG3 -- `manifest.neutralPrintFilters`, database Python yang
+ * `apply_database_neutral_print_filters()` baca (Fase 2C Task 8). Pasangan
+ * di luar database ditolak keras: Python akan diam-diam memakai default
+ * dataclass, konfigurasi yang tidak pernah kita gerbangi.
  */
 export class MissingNeutralFiltersError extends Error {
   constructor(film: string, paper: string) {
     super(
-      `Filter netral enlarger untuk pasangan film "${film}" / paper "${paper}" belum ter-bake ` +
-        '(hanya pasangan di manifest.printScan yang tersedia).',
+      `Filter netral enlarger untuk pasangan film "${film}" / paper "${paper}" tidak ada ` +
+        'di database Python (manifest.neutralPrintFilters).',
     );
     this.name = 'MissingNeutralFiltersError';
+  }
+}
+
+/**
+ * Stock yang sah untuk batch parameter 1: `film` harus film NEGATIF yang ada
+ * di database netral, `paper` harus stock kertas di database itu. Film
+ * reversal (`positive`) ikut batch parameter 2 bersama `ProcessMode` (spec
+ * Fase 2 §2.7). Dipanggil `buildRenderPlan` dan `Session.setParams`.
+ */
+export function validateStocks(bundle: AssetBundle, film: string, paper: string): void {
+  const { table } = bundle.manifest.neutralPrintFilters;
+  const papers = Object.keys(table);
+  if (!papers.includes(paper)) {
+    throw new UnverifiedParameterError('paper', paper, BASELINE_RENDER_PARAMS.paper, `bukan stock kertas (${papers.join(', ')})`);
+  }
+  const films = Object.keys(table[paper]!);
+  if (!films.includes(film)) {
+    throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, 'bukan stock film di database netral');
+  }
+  if (bundle.stockEntry(film).type !== 'negative') {
+    throw new UnverifiedParameterError(
+      'film',
+      film,
+      BASELINE_RENDER_PARAMS.film,
+      'film reversal ikut batch parameter 2 (ProcessMode)',
+    );
   }
 }
 
@@ -139,15 +165,13 @@ export function resolveEnlargerFilters(
   mShift: number,
   yShift: number,
 ): EnlargerFilterState {
-  const baked = bundle.manifest.printScan;
-  if (film !== baked.filmStock || paper !== baked.printStock) {
-    throw new MissingNeutralFiltersError(film, paper);
-  }
+  const neutral = bundle.manifest.neutralPrintFilters.table[paper]?.[film];
+  if (!neutral) throw new MissingNeutralFiltersError(film, paper);
   return {
-    cFilterNeutral: baked.neutralFilterC + cFilter,
-    mFilterNeutral: baked.neutralFilterM,
+    cFilterNeutral: neutral[0] + cFilter,
+    mFilterNeutral: neutral[1],
     mFilterShift: mShift,
-    yFilterNeutral: baked.neutralFilterY,
+    yFilterNeutral: neutral[2],
     yFilterShift: yShift,
   };
 }
@@ -159,6 +183,7 @@ export function buildRenderPlan(
   mode: RenderMode,
 ): RenderPlan {
   validateRenderParams(params);
+  validateStocks(bundle, params.film, params.paper);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,

@@ -268,6 +268,33 @@ def _py_density_spectral_midgray(stock_id: str, *, is_film: bool) -> list | None
     return [float(v) for v in np.asarray(density_spectral_midgray).reshape(-1)]
 
 
+def _python_neutral_print_filters() -> dict:
+    """Fase 2C Task 8: tabel filter netral enlarger (Kodak CC, C/M/Y) SEMUA
+    pasangan (print, film) untuk illuminant `TH-KG3`, persis database yang
+    `digest_params()` -> `apply_database_neutral_print_filters()` baca
+    (`spektrafilm.utils.io.read_neutral_print_filters`).
+
+    BUKAN `static.neutralPrintFilters` (tabel OFX dari
+    `generate_profile_curves.py::_neutral_print_filter_table`): OFX membaca
+    salinan `neutral_print_filters.json` MILIKNYA SENDIRI, yang terbukti
+    berbeda dari database Python sampai 77 CC (`kodak_2383`/`fujifilm_c200`)
+    dan 3.3 CC pada pasangan baseline portra_400/portra_endura (Y 55.84 vs
+    52.53). Python oracle proyek ini, jadi tabel ini yang dipakai
+    `resolveEnlargerFilters`. Hanya pasangan yang ADA di database; pasangan
+    lain ditolak di TS (Python akan memakai default dataclass dengan
+    peringatan -- konfigurasi yang tidak pernah kita gerbangi).
+    """
+    from spektrafilm.utils.io import read_neutral_print_filters
+
+    database = read_neutral_print_filters()
+    table: dict[str, dict[str, list[float]]] = {}
+    for paper in sorted(database):
+        films = database[paper].get("TH-KG3", {})
+        if films:
+            table[paper] = {film: [float(v) for v in films[film]] for film in sorted(films)}
+    return {"illuminant": "TH-KG3", "table": table}
+
+
 def _default_enlarger_neutral_filters() -> dict:
     """Resolved enlarger C/M/Y "neutral" filter values for the default film
     (`kodak_portra_400`) + print (`kodak_portra_endura`) + illuminant
@@ -645,6 +672,8 @@ def main() -> int:
         # docstring for why this is resolved (database-backed), not the raw
         # `EnlargerParams` dataclass defaults.
         "printScan": _default_enlarger_neutral_filters(),
+        # Fase 2C Task 8 -- see `_python_neutral_print_filters`.
+        "neutralPrintFilters": _python_neutral_print_filters(),
         "stocks": stock_entries,
         "static": static_entries,
     }
