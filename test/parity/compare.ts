@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readF32 } from '../readF32';
 
 // Relatif terhadap cwd proses test (spektra/), sama seperti konvensi di
 // test/fixtures.test.ts. `npm test` selalu dijalankan dari spektra/.
@@ -18,13 +19,6 @@ export function loadCase(name: string): CaseMeta {
   return JSON.parse(
     readFileSync(join(FIXTURES, name, 'case.json'), 'utf8'),
   ) as CaseMeta;
-}
-
-function readF32(path: string): Float32Array {
-  const buf = readFileSync(path);
-  return new Float32Array(
-    buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-  );
 }
 
 export function loadTap(name: string, tap: string): Float32Array {

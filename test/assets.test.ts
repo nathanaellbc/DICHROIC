@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readF32 } from './readF32';
 
 const DATA = join('public', 'data');
 const manifest = JSON.parse(readFileSync(join(DATA, 'manifest.json'), 'utf8'));
@@ -121,11 +122,12 @@ const stocksById = new Map<string, StockEntry>(
   manifest.stocks.map((s: StockEntry) => [s.id, s]),
 );
 
+// Review seluruh-branch agenda #4: dulu alias lokal per-blob, sekarang
+// `readF32` bersama (lih. `test/readF32.ts`).
 let stocksBlobCache: Float32Array | null = null;
 function stocksBlob(): Float32Array {
   if (!stocksBlobCache) {
-    const buf = readFileSync(join(DATA, 'stocks.f32'));
-    stocksBlobCache = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    stocksBlobCache = readF32(join(DATA, 'stocks.f32'));
   }
   return stocksBlobCache;
 }
@@ -133,8 +135,7 @@ function stocksBlob(): Float32Array {
 let staticBlobCache: Float32Array | null = null;
 function staticBlob(): Float32Array {
   if (!staticBlobCache) {
-    const buf = readFileSync(join(DATA, 'static.f32'));
-    staticBlobCache = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+    staticBlobCache = readF32(join(DATA, 'static.f32'));
   }
   return staticBlobCache;
 }

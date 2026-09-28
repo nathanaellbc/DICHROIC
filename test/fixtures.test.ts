@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
+import { readF32 } from './readF32';
 
 const FIXTURES_DIR = join('test', 'fixtures');
 const BASE_CASES = [
@@ -15,9 +16,12 @@ function loadCase(dir: string) {
   return JSON.parse(readFileSync(join(dir, 'case.json'), 'utf8'));
 }
 
+// Review seluruh-branch agenda #4: dulu alias lokal (`new Float32Array(buf.
+// buffer, buf.byteOffset, ...)`), sekarang `readF32` bersama -- lih.
+// `test/readF32.ts` untuk kenapa varian SALIN dipilih sebagai basis
+// ekstraksi (bukan alias, yang rapuh terhadap alignment kolam Buffer Node).
 function loadTap(dir: string, tap: string): Float32Array {
-  const buf = readFileSync(join(dir, `${tap}.f32`));
-  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  return readF32(join(dir, `${tap}.f32`));
 }
 
 // Setiap kasus dasar dibangkitkan dalam dua keluarga (lihat

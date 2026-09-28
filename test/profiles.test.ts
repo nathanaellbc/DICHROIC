@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadAssets, expandF16, STOCK_FIELD_NAMES, STATIC_TABLE_NAMES } from '../src/profiles/load';
+import { readF32 } from './readF32';
 import type {
   AssetBundle,
   ReadonlyFloat32Array,
@@ -25,9 +25,10 @@ beforeAll(async () => {
  * di sini (dari offsetFloats/lengthFloats manifest secara langsung) akan
  * gagal.
  */
+// Review seluruh-branch agenda #4: dulu alias lokal, sekarang `readF32`
+// bersama (lih. `test/readF32.ts`).
 function readRawBlob(name: string): Float32Array {
-  const buf = readFileSync(join(DATA, name));
-  return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  return readF32(join(DATA, name));
 }
 
 /**
