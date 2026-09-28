@@ -3450,7 +3450,7 @@ tiap butir alih-alih menemukannya ulang.
 | 6 | `totalFloats`/`ArenaOverflowError`/`assertWithinStorageBufferLimit` melampaui antarmuka literal brief Task 8 | Task 8 | Semuanya beralasan dan sudah dipakai luas sejak itu — kemungkinan besar diterima, tapi diputuskan eksplisit, bukan dibiarkan menggantung |
 | 7 | Fixture `_stochastic` tak reproducible: gerbang statistik murni atau fixture ter-seed? | Task 11 | Sudah terjawab SEBAGIAN: Task 16 memakai `cmy_film` yang reproducible, dan Gate B statistik dengan ambang terikat sebaran terukur (spec 6.5.1). Yang tersisa: catat keputusan itu sebagai keputusan, bukan sebagai kebetulan |
 
-### Daftar penutup Fase 1 (status per 2026-09-25)
+### Daftar penutup Fase 1 — SELESAI (2026-09-28)
 
 Dua jalur kode yang tidak terverifikasi bukan Fase 1 yang selesai — ia Fase 1
 yang KELIHATAN selesai. Karena itu daftar ini eksplisit, bukan "rasanya sudah".
@@ -3458,16 +3458,19 @@ yang KELIHATAN selesai. Karena itu daftar ini eksplisit, bukan "rasanya sudah".
 | Item | Status |
 |---|---|
 | Task 1-17 | ✅ selesai, semuanya digerbangi |
-| Task 19 tiling, gerbang bit-identik | ✅ tertutup (6f59dfe) |
-| Site `print` Diffusion digerbangi | ✅ ditutup Task 17 (c3ada2c) — klausa lama di sini sudah usang, dikoreksi |
-| **Task 16b** — suku grain yang no-op hanya pada skala fixture | ❌ WAJIB, belum dikerjakan |
-| **Task 18b** — varians builtin transendental lintas perangkat | ✅ diukur, spec §6.5.3 — tidak ada penggantian (tidak ada manfaat terukur), `pow`/`sqrt` dibenderai sebagai risiko portabilitas terbuka |
-| **Gate B `gray_ramp_stochastic`** | ❌ satu-satunya test merah; sedang diselesaikan lewat perbandingan distribusi-ke-distribusi |
-| Risiko dicatat: pass blur grain/scannerPost dispatch full-buffer sementara `generate()` dispatch active-only | ⚠️ terbukti tak berbahaya pada skala tile uji SAJA, perlu ditinjau pada skala tile produksi (Task 19b) |
-| Review seluruh-branch atas minor yang ditunda di ledger | ❌ belum — agendanya sudah tertulis di atas, 7 butir |
+| Task 19 tiling, gerbang bit-identik | ✅ 6f59dfe |
+| Site `print` Diffusion digerbangi | ✅ Task 17 (c3ada2c) |
+| Task 16b — suku grain bergantung ukuran piksel | ✅ aa8f9ac — gerbang baru, dibuktikan menggigit |
+| Task 18b — varians builtin transendental lintas perangkat | ✅ f39f7a1 — diukur, nol diganti dengan alasan terukur; `pow`/`sqrt` tanpa batas WGSL independen dicatat sebagai risiko portabilitas terbuka §6.5.3 |
+| Gate B `gray_ramp_stochastic` | ✅ 7319db3 — instrumen tak sahih diganti rata-rata 16-salt vs pusat Python; bias 2,55e-5 dikunci sebagai plafon, cacat diketahui §6.5.1a |
+| Blur grain/scannerPost full-buffer vs `generate()` active-only | ✅ a594448 — diukur aman pada skala apron produksi (576 px), gerbang baru |
+| Review seluruh-branch, 7 butir tertunda | ✅ a594448..6b428c8 — ketujuhnya diputuskan |
 
-Ambang TIDAK pernah dilonggarkan untuk menutup salah satu pun dari ini. Satu
-test merah yang jujur lebih bernilai daripada suite hijau yang argumennya tidak
-bisa dipertahankan.
+**Fase 1 selesai.** Diverifikasi controller, bukan diambil dari laporan: tsc dan
+eslint bersih; suite **361/361 di 18 berkas** pada dua run berurutan; tidak ada
+fixture atau aset ter-bake yang tersentuh sejak 7319db3;
+`tools/verify_profile_agreement.py` **352/352** saat dijalankan langsung.
+
+Ambang TIDAK pernah dilonggarkan untuk menutup satu pun dari ini.
 
 Fase 2 (`io/`, UI, PWA) direncanakan setelah ini, bukan sebelumnya.
