@@ -8,7 +8,7 @@ import { loadIoInput } from './ioFixtures';
 // 4:2:0 -- jadi decodernya diganti (src/io/jpegDecoder.ts, meniru
 // libjpeg-turbo) dan gerbangnya menjadi bit-identik, sama seperti PNG.
 describe('JPEG vs Pillow (libjpeg-turbo)', () => {
-  describeBitIdenticalDecoder('jpeg', { suggestedColorSpace: () => 'sRGB', encoding: 'encoded' });
+  describeBitIdenticalDecoder('jpeg', { suggestedColorSpace: () => 'sRGB', encoding: () => 'encoded' });
 });
 
 describe('JPEG: masukan tidak sah', () => {

@@ -6,7 +6,8 @@ lalu mendecodenya dengan pustaka rujukan:
 - JPEG dan PNG 8-bit: Pillow (libjpeg-turbo / zlib);
 - PNG 16-bit: OpenImageIO (libpng) -- Pillow tidak bisa menulis atau
   membaca PNG RGB 16-bit tanpa memotongnya ke 8-bit;
-- TIFF: tifffile; EXR: OpenImageIO (ditambahkan Task 3-4 rencana 2B).
+- TIFF: tifffile (float disimpan apa adanya, tanpa normalisasi);
+- EXR: OpenImageIO (ditambahkan Task 4 rencana 2B).
 
 Keluaran (`test/fixtures/io/<case>/`): `input.<ext>`, `expected.f32` (RGB f32
 little-endian, baris-mayor, integer dinormalisasi `v / (2^bits - 1)`,
@@ -23,6 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import OpenImageIO as oiio
+import tifffile
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -106,6 +108,20 @@ def _oiio_write(path: Path, array: np.ndarray, **attrs) -> None:
     out.close()
 
 
+def _tifffile(path: Path) -> tuple[np.ndarray, int]:
+    array = tifffile.imread(path)
+    return _to_rgb(array), 8 * array.dtype.itemsize
+
+
+def _tifffile_planar(path: Path) -> tuple[np.ndarray, int]:
+    array = np.moveaxis(tifffile.imread(path), 0, -1)
+    return _to_rgb(array), 8 * array.dtype.itemsize
+
+
+def _tiff(array: np.ndarray, **kwargs):
+    return lambda p: tifffile.imwrite(p, array, **kwargs)
+
+
 def _gray(rgb: np.ndarray) -> np.ndarray:
     return rgb @ np.array([0.2126, 0.7152, 0.0722])
 
@@ -117,6 +133,9 @@ def _cases(scene: np.ndarray):
     rgb16 = _quant(scene, 16)
     gray16 = _quant(_gray(scene), 16)
     gray8 = _quant(_gray(scene), 8)
+    # Linear HDR: melampaui 1 dan sedikit negatif, seperti keluaran render.
+    hdr = (scene * 3.0 - 0.05).astype(np.float32)
+    rgba16 = np.concatenate([rgb16, _quant(_alpha(WIDTH, HEIGHT), 16)[..., None]], axis=-1)
     return {
         "jpeg_baseline_q90": ("jpg", lambda p: Image.fromarray(rgb8).save(p, quality=90), _pillow,
                               "Pillow q90, baseline, subsampling 4:2:0"),
@@ -143,6 +162,33 @@ def _cases(scene: np.ndarray):
                       "Pillow mode 1 (gray 1-bit, baris ber-padding)"),
         "png_rgb16": ("png", lambda p: _oiio_write(p, rgb16), _oiio, "OIIO/libpng RGB 16-bit big-endian"),
         "png_gray16": ("png", lambda p: _oiio_write(p, gray16), _oiio, "OIIO/libpng gray 16-bit"),
+        "tiff_rgb8": ("tif", _tiff(rgb8, photometric="rgb"), _tifffile, "tifffile RGB 8-bit, tanpa kompresi"),
+        "tiff_rgb16_le": ("tif", _tiff(rgb16, photometric="rgb", byteorder="<"), _tifffile, "tifffile RGB 16-bit little-endian"),
+        "tiff_rgb16_be": ("tif", _tiff(rgb16, photometric="rgb", byteorder=">"), _tifffile, "tifffile RGB 16-bit big-endian"),
+        "tiff_float32": ("tif", _tiff(hdr, photometric="rgb"), _tifffile, "tifffile RGB float32 linear"),
+        "tiff_float32_be": ("tif", _tiff(hdr, photometric="rgb", byteorder=">"), _tifffile, "tifffile RGB float32 big-endian"),
+        "tiff_float16": ("tif", _tiff(hdr.astype(np.float16), photometric="rgb"), _tifffile, "tifffile RGB float16"),
+        "tiff_lzw": ("tif", _tiff(rgb8, photometric="rgb", compression="lzw", rowsperstrip=4), _tifffile,
+                     "tifffile RGB 8-bit LZW, strip 4 baris"),
+        "tiff_lzw_pred16": ("tif", _tiff(rgb16, photometric="rgb", compression="lzw", predictor=True), _tifffile,
+                            "tifffile RGB 16-bit LZW + predictor horizontal"),
+        "tiff_deflate": ("tif", _tiff(rgb16, photometric="rgb", compression="zlib"), _tifffile,
+                         "tifffile RGB 16-bit Deflate"),
+        "tiff_deflate_pred8": ("tif", _tiff(rgb8, photometric="rgb", compression="zlib", predictor=True, byteorder=">"),
+                               _tifffile, "tifffile RGB 8-bit Deflate + predictor horizontal, big-endian"),
+        "tiff_float_pred3": ("tif", _tiff(hdr, photometric="rgb", compression="zlib", predictor=True), _tifffile,
+                             "tifffile float32 Deflate + predictor floating-point"),
+        "tiff_float_pred3_be": ("tif", _tiff(hdr, photometric="rgb", compression="zlib", predictor=True, byteorder=">"),
+                                _tifffile, "tifffile float32 Deflate + predictor floating-point, big-endian"),
+        "tiff_packbits": ("tif", _tiff(rgb8, photometric="rgb", compression="packbits"), _tifffile,
+                          "tifffile RGB 8-bit PackBits"),
+        "tiff_tiled": ("tif", _tiff(rgb16, photometric="rgb", compression="zlib", tile=(16, 16)), _tifffile,
+                       "tifffile RGB 16-bit Deflate, tile 16x16 (tile tepi terpotong)"),
+        "tiff_planar": ("tif", _tiff(np.moveaxis(rgb16, -1, 0), photometric="rgb", planarconfig="separate"),
+                        _tifffile_planar, "tifffile RGB 16-bit planar terpisah"),
+        "tiff_gray16": ("tif", _tiff(gray16, photometric="minisblack"), _tifffile, "tifffile gray 16-bit"),
+        "tiff_rgba16": ("tif", _tiff(rgba16, photometric="rgb", extrasamples=["unassalpha"]), _tifffile,
+                        "tifffile RGBA 16-bit (alpha tak terasosiasi)"),
     }
 
 
@@ -159,12 +205,13 @@ def main() -> int:
         src = case_dir / f"input.{ext}"
         write(src)
         values, bits = read(src)
-        expected = _norm(values, bits)
+        is_float = values.dtype.kind == "f"
+        expected = values.astype(np.float32) if is_float else _norm(values, bits)
         assert expected.shape == (HEIGHT, WIDTH, 3), (name, expected.shape)
         (case_dir / "expected.f32").write_bytes(np.ascontiguousarray(expected, dtype="<f4").tobytes())
         _write_json_lf(case_dir / "case.json", {
             "name": name,
-            "format": {"jpg": "jpeg"}.get(ext, ext),
+            "format": {"jpg": "jpeg", "tif": "tiff"}.get(ext, ext),
             "width": WIDTH,
             "height": HEIGHT,
             "bitDepth": bits,

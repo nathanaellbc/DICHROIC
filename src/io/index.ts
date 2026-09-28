@@ -16,6 +16,7 @@ type Decoder = (bytes: Uint8Array, name?: string) => Promise<DecodedImage> | Dec
 const DECODERS: Partial<Record<ImageFormat, () => Promise<Decoder>>> = {
   jpeg: async () => (await import('./jpeg')).decodeJpeg,
   png: async () => (await import('./png')).decodePng,
+  tiff: async () => (await import('./tiff')).decodeTiff,
 };
 
 async function runDecoder(format: ImageFormat, bytes: Uint8Array, name?: string): Promise<DecodedImage> {

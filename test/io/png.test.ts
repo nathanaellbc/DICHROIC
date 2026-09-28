@@ -4,7 +4,7 @@ import { describeBitIdenticalDecoder } from './codecGates';
 import { loadIoInput } from './ioFixtures';
 
 describe('PNG vs Pillow/OIIO', () => {
-  describeBitIdenticalDecoder('png', { suggestedColorSpace: () => 'sRGB', encoding: 'encoded' });
+  describeBitIdenticalDecoder('png', { suggestedColorSpace: () => 'sRGB', encoding: () => 'encoded' });
 });
 
 describe('PNG: alpha dan kerusakan', () => {

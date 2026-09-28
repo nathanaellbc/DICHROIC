@@ -1,0 +1,8 @@
+{
+  "name": "tiff_float32_be",
+  "format": "tiff",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 32,
+  "oracle": "tifffile RGB float32 big-endian"
+}

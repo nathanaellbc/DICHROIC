@@ -1,0 +1,8 @@
+{
+  "name": "tiff_rgba16",
+  "format": "tiff",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "tifffile RGBA 16-bit (alpha tak terasosiasi)"
+}

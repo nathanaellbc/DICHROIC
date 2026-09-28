@@ -164,5 +164,7 @@ export function detectFormat(bytes: Uint8Array): ImageFormat | 'unknown' {
 
   if (startsWith(bytes, [0x49, 0x49, 0x2a, 0x00])) return tiffIsRaw(bytes, true) ? 'raw' : 'tiff';
   if (startsWith(bytes, [0x4d, 0x4d, 0x00, 0x2a])) return tiffIsRaw(bytes, false) ? 'raw' : 'tiff';
+  // BigTIFF: dikenali agar decoder bisa menolaknya dengan alasan yang jelas.
+  if (startsWith(bytes, [0x49, 0x49, 0x2b, 0x00]) || startsWith(bytes, [0x4d, 0x4d, 0x00, 0x2b])) return 'tiff';
   return 'unknown';
 }

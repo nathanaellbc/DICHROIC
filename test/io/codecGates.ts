@@ -10,7 +10,7 @@ import { ioCases, loadIoExpected, loadIoInput, loadIoMeta, mismatches } from './
  */
 export function describeBitIdenticalDecoder(
   format: ImageFormat,
-  expectations: { suggestedColorSpace: (name: string) => string; encoding: 'encoded' | 'linear' },
+  expectations: { suggestedColorSpace: (name: string) => string; encoding: (name: string) => 'encoded' | 'linear' },
 ): void {
   const cases = ioCases(format);
 
@@ -27,7 +27,7 @@ export function describeBitIdenticalDecoder(
       expect(mismatches(image.rgba, loadIoExpected(name)), meta.oracle).toBe(0);
       expect(image.source).toEqual({ format, bitDepth: meta.bitDepth, name: `${name}.${format}` });
       expect(image.suggestedColorSpace).toBe(expectations.suggestedColorSpace(name));
-      expect(image.encoding).toBe(expectations.encoding);
+      expect(image.encoding).toBe(expectations.encoding(name));
     });
 
     it('berkas terpotong -> DecodeError', async () => {

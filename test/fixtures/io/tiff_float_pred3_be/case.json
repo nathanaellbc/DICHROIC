@@ -1,0 +1,8 @@
+{
+  "name": "tiff_float_pred3_be",
+  "format": "tiff",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 32,
+  "oracle": "tifffile float32 Deflate + predictor floating-point, big-endian"
+}
