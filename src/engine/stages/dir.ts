@@ -5,7 +5,7 @@ import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { GaussianBlur, validInputRect } from '../gaussian';
-import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
+import { dirRadiusPx } from '../spatialRadius';
 import source from '../../shaders/dir.wgsl?raw';
 
 /**
@@ -130,7 +130,11 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
     // hulu artinya "kernel DIR benar-benar spasial", PERSIS
     // `spatialDiffusionActive` di sini (`false` => keempat kernel
     // radius-0/identitas, lih. `DirStageOptions` di atas).
-    spatialRadiusPx: spatialDiffusionActive ? SPATIAL_EFFECT_RADIUS_PX : 0,
+    // Fase 2A.5: radius dari sigma blur sebenarnya (lih. `spatialRadius.ts`).
+    spatialRadiusPx: spatialDiffusionActive
+      ? (params, frame) =>
+          dirRadiusPx((frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1))
+      : 0,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;

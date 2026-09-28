@@ -6,7 +6,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
-import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
+import { halationRadiusPx } from '../spatialRadius';
 import source from '../../shaders/halation.wgsl?raw';
 
 /**
@@ -168,7 +168,13 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
     // halationBounceEnabled` SELALU true di sini, lih. blok komentar modul
     // di atas: "kedua langkah SELALU berjalan, tahap ini tidak membutuhkan
     // percabangan host untuk melewatinya").
-    spatialRadiusPx: SPATIAL_EFFECT_RADIUS_PX,
+    // Fase 2A.5: radius dari sigma blur sebenarnya (FIR support eksak / IIR
+    // 5.5 sigma), bukan konstanta OFX 256 -- lih. `src/engine/spatialRadius.ts`.
+    spatialRadiusPx: (params, frame) =>
+      halationRadiusPx(
+        (frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1),
+        firstSigmaUm,
+      ),
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
       const pixelBytes = width * height * 4 * Float32Array.BYTES_PER_ELEMENT;

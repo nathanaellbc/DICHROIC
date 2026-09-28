@@ -11,6 +11,7 @@ import {
   resolveEnlargerFilters,
 } from '../src/params/plan';
 import { loadCase, loadInputAsRgba } from './parity/compare';
+import { dirRadiusPx, halationRadiusPx } from '../src/engine/spatialRadius';
 
 let bundle: AssetBundle;
 beforeAll(async () => {
@@ -113,11 +114,21 @@ describe('buildRenderPlan -> arena dan apron', () => {
     expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::m=0::y=0');
   });
 
-  it('apron image mencakup halation, DIR, grain, dan unsharp; tanpa grain lebih kecil', () => {
+  it('apron dari sigma sebenarnya: halation + DIR (spatialRadius.ts) + grain 64 + unsharp 256', () => {
+    // gray_ramp 32 px, 35 mm -> 1093.75 um/px: halation 0 (bounce sigma 0.10 px),
+    // DIR 2 (komponen ekor sigma 0.51 px, FIR int(3*0.51+0.5)).
     const withGrain = buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, image('gray_ramp'), 'image');
     const noGrain = buildRenderPlan(DETERMINISTIC, bundle, image('gray_ramp'), 'image');
-    expect(withGrain.overlap).toBe(256 * 3 + 64);
-    expect(noGrain.overlap).toBe(256 * 3);
+    expect(withGrain.overlap).toBe(0 + 2 + 64 + 256);
+    expect(noGrain.overlap).toBe(0 + 2 + 256);
+  });
+
+  it('apron foto 6000 px (5.83 um/px) mengikuti radius IIR', () => {
+    const big = { width: 6000, height: 4000, rgba: new Float32Array(4) };
+    const px = 35000 / 6000;
+    const expected = halationRadiusPx(px, [65, 65, 65]) + dirRadiusPx(px) + 256;
+    expect(buildRenderPlan(DETERMINISTIC, bundle, big, 'image').overlap).toBe(expected);
+    expect(expected).toBeGreaterThan(900);
   });
 });
 

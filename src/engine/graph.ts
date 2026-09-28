@@ -79,8 +79,19 @@ export interface Stage {
    * tahap tanpa kernel spasial (materializeActiveRegion, filmExposure,
    * curveDevelop, printExpose/printDevelop).
    */
-  spatialRadiusPx?: number;
+  spatialRadiusPx?: number | ((params: CoreParams, frame: Readonly<FrameParams>) => number);
   encode(encoder: GPUCommandEncoder, ctx: StageContext): void;
+}
+
+/**
+ * Fase 2A.5: radius boleh bergantung ukuran piksel (sigma halation/DIR dalam
+ * um -> px, `src/engine/spatialRadius.ts`), jadi diselesaikan per run dari
+ * `params` (dimensi gambar penuh) dan `frame` (format film).
+ */
+function resolveSpatialRadius(stage: Stage, params: CoreParams, frame: Readonly<FrameParams>): number {
+  const r = stage.spatialRadiusPx;
+  if (r === undefined) return 0;
+  return typeof r === 'function' ? r(params, frame) : r;
 }
 
 const PING_PONG_USAGE =
@@ -443,7 +454,7 @@ export class RenderGraph {
     let remainingSpatialRadius = 0;
     if (shrinkApron) {
       for (let i = 0; i <= stopAt; i += 1) {
-        remainingSpatialRadius += this.stages[i]!.spatialRadiusPx ?? 0;
+        remainingSpatialRadius += resolveSpatialRadius(this.stages[i]!, params, frame);
       }
     }
     const centerRect: ActiveRect = {
@@ -498,7 +509,7 @@ export class RenderGraph {
         // tahap ini (yaitu berlaku mulai tahap BERIKUTNYA), persis
         // `SpektraVulkanRenderer.cpp`'s tujuh call-site (:6444-6604), yang
         // semuanya muncul SETELAH dispatch efek terkait, bukan sebelumnya.
-        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - (stage.spatialRadiusPx ?? 0));
+        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - resolveSpatialRadius(stage, params, frame));
       }
 
       stage.encode(encoder, {

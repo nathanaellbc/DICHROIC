@@ -21,7 +21,7 @@
 
 import { FLAG_GLARE_ACTIVE, FLAG_UNSHARP_ACTIVE } from '../engine/params';
 import type { CoreParams } from '../engine/params';
-import { estimateTileOverlap } from '../engine/tiling';
+import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import type { EnlargerFilterState } from '../host/enlarger';
@@ -145,21 +145,8 @@ export function buildRenderPlan(
     params.filterYShift,
   );
 
-  const overlap =
-    family === 'lut'
-      ? 0
-      : estimateTileOverlap({
-          halationEnabled: params.halationEnabled,
-          grainEnabled: params.grainEnabled,
-          // Kedua situs diffusion berjalan sebagai identitas spasial
-          // (`bypassConvolution`, lih. `src/engine/chain.ts`) selama
-          // `*DiffusionEnabled` locked ke false.
-          cameraDiffusionEnabled: params.cameraDiffusionEnabled,
-          printDiffusionEnabled: params.printDiffusionEnabled,
-          // DIR coupler aktif (amount 1, difusi spasial 20 um) di keluarga measured.
-          dirCouplersAmount: 1,
-          scannerUnsharpEnabled: params.scannerUnsharpAmount > 0,
-        });
+  const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
+  const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
 
   return {
     core: buildCoreParams(params, bundle, image, family, stochasticEffectsActive),
@@ -171,8 +158,30 @@ export function buildRenderPlan(
     chain: { family, grain: stochasticEffectsActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
-    frame: { filmFormatMm: FILM_FORMAT_LONG_EDGE_MM[params.filmFormat] },
+    frame: { filmFormatMm },
   };
+}
+
+/**
+ * Overlap tile keluarga measured (Fase 2A.5): jumlah radius tahap spasial
+ * yang aktif, dihitung dengan fungsi yang SAMA dengan `Stage.spatialRadiusPx`
+ * halation/DIR (`src/engine/spatialRadius.ts`), sehingga apron tile dan
+ * penyusutan active rect per tahap tidak bisa berselisih. Kedua situs
+ * diffusion berjalan sebagai identitas (`bypassConvolution`) selama
+ * `*DiffusionEnabled` locked ke false, jadi radiusnya 0.
+ */
+function measuredOverlapPx(params: RenderParams, bundle: AssetBundle, image: PlanImage, filmFormatMm: number): number {
+  const pixelSizeUm = (filmFormatMm * 1000) / Math.max(image.width, image.height, 1);
+  const firstSigma = bundle.stockField(params.film, 'halationFirstSigmaUm');
+  if (!firstSigma) throw new Error(`Stock '${params.film}' tidak punya halationFirstSigmaUm`);
+  return productionOverlapPx({
+    halation: params.halationEnabled
+      ? halationRadiusPx(pixelSizeUm, [firstSigma[0]!, firstSigma[1]!, firstSigma[2]!])
+      : 0,
+    dir: dirRadiusPx(pixelSizeUm), // DIR spasial selalu aktif di keluarga measured
+    grain: params.grainEnabled,
+    unsharp: params.scannerUnsharpAmount > 0,
+  });
 }
 
 /**
