@@ -186,13 +186,9 @@ describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_p
       createFilmExposureStage(engine.device, arenas),
       createHalationStage(engine.device, arenas),
       createCurveDevelopStage(engine.device, arenas),
-      // SEMENTARA (Fase 2A.5 Task 3 -> Task 5): Python membangkitkan fixture
-      // ini dengan film_format_mm=0.024 untuk SELURUH pipeline, dan sejak
-      // `ctx.frame` DIR ikut melihatnya -- sigma difusinya ~53 px, rezim IIR
-      // yang baru di-port di Task 5 (dir.ts melempar di radius > 16). Input
-      // patch SERAGAM membuat blur spasial DIR identitas, jadi DIR
-      // non-spasial memberi hasil yang sama sampai Task 5 mengembalikannya.
-      createDirStage(engine.device, arenas, { spatialDiffusionActive: false }),
+      // film_format_mm=0.024 untuk SELURUH pipeline (seperti Python): sigma
+      // difusi DIR ~53 px, jalur IIR `GaussianBlur` (Fase 2A.5).
+      createDirStage(engine.device, arenas),
       createGrainStage(engine.device, arenas),
     ]) {
       graph.addStage(stage);

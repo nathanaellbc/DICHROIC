@@ -186,7 +186,8 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
       const px = (um: Vec3, scale: number): Vec3 =>
         um.map((v) => Math.max((v * scale) / pixelSizeUm, 1e-6)) as Vec3;
 
-      const rect = validInputRect(ctx.params, SPATIAL_EFFECT_RADIUS_PX);
+      // Blur hanya di dalam active rect (lih. `validInputRect`).
+      const rect = validInputRect(ctx.params);
       const geometry = { bufferWidth: width, bufferHeight: height, rect };
 
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;

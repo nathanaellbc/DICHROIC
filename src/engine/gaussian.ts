@@ -64,32 +64,34 @@ export interface ExponentialArgs extends Omit<BlurArgs, 'sigma'> {
 }
 
 /**
- * Rektangel data SAH untuk blur di satu tahap: active rect tahap itu (lih.
- * `CoreParams.active*`; 0 = seluruh buffer) digelembungkan `radius` px dan
- * diklip ke buffer. Di bawah tiling dengan apron menyusut (`RenderGraph`
- * `shrinkApron`), di luar rect ini buffer bisa berisi data basi dari tahap
- * sebelumnya; rekursi IIR membaca satu baris penuh, jadi batasnya WAJIB rect
- * ini, bukan buffer. Untuk render full-frame hasilnya seluruh buffer.
+ * Rektangel data SAH untuk blur di satu tahap = active rect tahap itu
+ * (`CoreParams.active*`; 0 = seluruh buffer). Di bawah tiling dengan apron
+ * menyusut (`RenderGraph` `shrinkApron`, port `setActiveForRemainingRadius`
+ * OFX), input tahap hanya dijamin sah di DALAM active rect-nya; di luarnya
+ * buffer bisa berisi data basi. FIR dulu membaca paling jauh radiusnya ke
+ * luar, dan piksel tepi yang tercemar jatuh di margin apron tahap itu sendiri;
+ * rekursi IIR membaca SATU BARIS PENUH, jadi batasnya wajib rect ini. Galat
+ * batas di tepi rect meluruh ke dalam margin apron (dijaga Task 6). Tepi rect
+ * yang berimpit tepi gambar memakai replikasi/reflect di tepi gambar persis
+ * seperti full-frame. Untuk render full-frame hasilnya seluruh buffer.
  */
-export function validInputRect(
-  params: {
-    width: number;
-    height: number;
-    activeOriginX: number;
-    activeOriginY: number;
-    activeWidth: number;
-    activeHeight: number;
-  },
-  radius: number,
-): BlurRect {
+export function validInputRect(params: {
+  width: number;
+  height: number;
+  activeOriginX: number;
+  activeOriginY: number;
+  activeWidth: number;
+  activeHeight: number;
+}): BlurRect {
   if (params.activeWidth === 0 || params.activeHeight === 0) {
     return { x: 0, y: 0, width: params.width, height: params.height };
   }
-  const x0 = Math.max(0, params.activeOriginX - radius);
-  const y0 = Math.max(0, params.activeOriginY - radius);
-  const x1 = Math.min(params.width, params.activeOriginX + params.activeWidth + radius);
-  const y1 = Math.min(params.height, params.activeOriginY + params.activeHeight + radius);
-  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  return {
+    x: params.activeOriginX,
+    y: params.activeOriginY,
+    width: Math.min(params.activeWidth, params.width - params.activeOriginX),
+    height: Math.min(params.activeHeight, params.height - params.activeOriginY),
+  };
 }
 
 /** Port `_yvv_coeffs`: [B, b1/b0, b2/b0, b3/b0]. */

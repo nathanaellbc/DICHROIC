@@ -4,6 +4,7 @@ import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
 import { createDiffusionStage } from '../../src/engine/stages/diffusion';
 import { createHalationStage } from '../../src/engine/stages/halation';
 import { Tap } from '../../src/engine/taps';
+import { buildChain } from '../../src/engine/chain';
 import { loadCase } from './compare';
 import { runTapParity } from './run';
 
@@ -51,5 +52,26 @@ describe('parity rezim produksi: log_e_film (halation)', () => {
         ],
       });
     });
+  }
+});
+
+describe('parity rezim produksi: cmy_film (DIR) dan rgb_out (rantai penuh)', () => {
+  for (const tap of [Tap.CMY_FILM, Tap.RGB_OUT]) {
+    for (const name of CASES) {
+      it(`${tap} / ${name}`, async () => {
+        await runTapParity({
+          case: name,
+          family: 'measured',
+          stochasticEffectsActive: false,
+          tap,
+          tolerance: 1e-5,
+          printScan: PRINT,
+          frame: frameOf(name),
+          // Rantai produksi apa adanya (keluarga <case> deterministik): runTapParity
+          // berhenti di tahap TERAKHIR yang menulis tap (DIR untuk cmy_film).
+          stages: (device, arenas) => buildChain(device, arenas, { family: 'measured', grain: false }),
+        });
+      });
+    }
   }
 });
