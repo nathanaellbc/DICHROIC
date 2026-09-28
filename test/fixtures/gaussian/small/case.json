@@ -1,0 +1,12 @@
+{
+  "name": "small",
+  "kind": "gaussian",
+  "sigma": [
+    0.3,
+    1.2,
+    2.9
+  ],
+  "truncate": 3.0,
+  "height": 40,
+  "width": 64
+}

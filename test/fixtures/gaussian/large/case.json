@@ -1,0 +1,12 @@
+{
+  "name": "large",
+  "kind": "gaussian",
+  "sigma": [
+    5.0,
+    8.0,
+    13.0
+  ],
+  "truncate": 3.0,
+  "height": 40,
+  "width": 64
+}

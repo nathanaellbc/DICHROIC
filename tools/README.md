@@ -589,3 +589,14 @@ direktori `_lut` itu sendiri karena tidak ada direktori kasus dasar.
 sekaligus memastikan `lut_mode` benar-benar aktif. Dibangkitkan pada commit
 hulu yang sama seperti fixture Fase 1; manifest hanya bertambah 8 entri, tidak
 ada hash lama yang berubah.
+
+## Fase 2A.5: oracle primitif Gaussian (`test/fixtures/gaussian/`)
+
+`tools/gen_gaussian_reference.py --out test/fixtures --manifest` mengadu
+`fast_gaussian_filter`/`fast_exponential_filter` hulu (numba, f64) pada citra
+acak ber-seed: `zero` (σ 0), `small` (0.3/1.2/2.9, FIR), `threshold` (3.0,
+tepat di ambang IIR), `large` (5/8/13, IIR), `mixed` (2.5/3.0/20, FIR dan IIR
+berbeda kanal), `narrow` (5×4 px, reflect periodik FIR), dan `exponential`
+(λ 4/10/30, campuran 3 Gaussian). `truncate = 3.0` (bawaan hulu). Oracle ini
+menggerbangi modul WGSL `GaussianBlur` secara langsung, terlepas dari tahap
+yang memakainya. Manifest hanya bertambah 21 entri.

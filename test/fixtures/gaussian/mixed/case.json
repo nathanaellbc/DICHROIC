@@ -1,0 +1,12 @@
+{
+  "name": "mixed",
+  "kind": "gaussian",
+  "sigma": [
+    2.5,
+    3.0,
+    20.0
+  ],
+  "truncate": 3.0,
+  "height": 40,
+  "width": 64
+}
