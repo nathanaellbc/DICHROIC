@@ -248,3 +248,34 @@ describe('loadAssets', () => {
     });
   });
 });
+
+describe('loadAssets di dalam Web Worker', () => {
+  /**
+   * Fase 2A Task 8: worker tidak punya `window`/`document`. Deteksi lama
+   * (`typeof window !== 'undefined'`) jatuh ke `node:fs` dan gagal memuat
+   * `/data/...` di browser. Di sini lingkungan worker disimulasikan dengan
+   * `importScripts` + `fetch` palsu yang menyajikan berkas dari disk.
+   */
+  it('memuat lewat fetch, bukan node:fs', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const g = globalThis as unknown as { importScripts?: unknown; fetch: typeof fetch };
+    const originalFetch = g.fetch;
+    const requested: string[] = [];
+    g.importScripts = () => undefined;
+    g.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      const buf = await readFile(join(DATA, url.replace(/^\/data\//, '')));
+      return new Response(buf);
+    }) as typeof fetch;
+    try {
+      const viaWorker = await loadAssets('/data');
+      expect(requested).toContain('/data/manifest.json');
+      expect(requested).toContain('/data/hanatos.f16');
+      expect(viaWorker.manifest.stocks.length).toBe(bundle.manifest.stocks.length);
+    } finally {
+      delete g.importScripts;
+      g.fetch = originalFetch;
+    }
+  });
+});
