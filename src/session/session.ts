@@ -21,6 +21,8 @@ import { buildChain } from '../engine/chain';
 import { precomputeArenaData, uploadArenas } from '../host/spectral';
 import type { ArenaPlan } from '../host/spectral';
 import type { DecodedImage } from '../io/decoded';
+import { formatCube, identityLattice } from '../io/cube';
+import { DICHROIC_VERSION } from '../version';
 import { buildRenderPlan } from '../params/plan';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
 import { applyParamsPatch } from '../params/registry';
@@ -252,6 +254,27 @@ export class Session {
     return `${this.#imageId}|${quality}|${JSON.stringify(this.#params)}`;
   }
 
+  /**
+   * `.cube` `size^3` (spec induk §7.2, spec Fase 2 §4.6): lattice identitas
+   * dirender sebagai frame lewat rencana `'cube'` (semantik `lut_mode`,
+   * digerbangi `test/parity/cube.test.ts`). Tidak butuh gambar terbuka.
+   */
+  async exportCube(size: number): Promise<string> {
+    this.assertAlive();
+    const lattice = identityLattice(size);
+    const params = this.#params;
+    const { rgb, plan } = await this.renderFrameWithPlan(lattice, params, 'cube');
+    return formatCube(rgb, size, {
+      title: `DICHROIC ${params.film} / ${params.paper}`,
+      film: params.film,
+      paper: params.paper,
+      inputColorSpace: params.inputColorSpace,
+      outputColorSpace: params.outputColorSpace,
+      disabledEffects: plan.disabledEffects,
+      version: DICHROIC_VERSION,
+    });
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
@@ -265,11 +288,19 @@ export class Session {
   }
 
   /** Render satu frame lewat rencana `mode`; keluaran 3 kanal rapat. */
-  protected async renderFrame(
+  private async renderFrame(
     frame: { width: number; height: number; rgba: Float32Array },
     params: RenderParams,
     mode: RenderMode,
   ): Promise<Float32Array> {
+    return (await this.renderFrameWithPlan(frame, params, mode)).rgb;
+  }
+
+  private async renderFrameWithPlan(
+    frame: { width: number; height: number; rgba: Float32Array },
+    params: RenderParams,
+    mode: RenderMode,
+  ): Promise<{ rgb: Float32Array; plan: RenderPlan }> {
     const plan = buildRenderPlan(params, this.bundle, frame, mode);
     const graph = await this.graphFor(plan);
     this.assertAlive();
@@ -277,7 +308,7 @@ export class Session {
       maxBufferBytes: this.engine.maxStorageBufferBindingSize,
       overlap: plan.overlap,
     });
-    return packRgb(rgba, frame.width * frame.height);
+    return { rgb: packRgb(rgba, frame.width * frame.height), plan };
   }
 
   private async graphFor(plan: RenderPlan): Promise<RenderGraph> {

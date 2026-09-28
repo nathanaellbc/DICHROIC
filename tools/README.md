@@ -576,3 +576,16 @@ claims for halation and DIR-coupler defaults, and the "every other field
 confirmed byte-identical" claim from `_py_density_curve_data`'s docstring
 (`bake_web_assets.py`), are both re-verified mechanically here, not just
 trusted from prose.
+
+## Fase 2A: fixture lattice `.cube` (`identity_lattice_17_lut`)
+
+`gen_reference.py --lattice-case identity_lattice_17 --manifest` membangkitkan
+keluarga fixture ketujuh: lattice identitas 17³ sebagai citra 17×289 (R
+tercepat, urutan data `.cube`, identik `src/io/cube.ts::identityLattice`),
+HANYA `lut_mode=True` — semantik yang sama dengan `Session.exportCube`
+(auto-exposure, efek spasial, dan efek stokastik mati). `input.f32` ditulis di
+direktori `_lut` itu sendiri karena tidak ada direktori kasus dasar.
+`rgb_pre.f32` byte-identik dengan `input.f32` (tanpa auto-exposure), yang
+sekaligus memastikan `lut_mode` benar-benar aktif. Dibangkitkan pada commit
+hulu yang sama seperti fixture Fase 1; manifest hanya bertambah 8 entri, tidak
+ada hash lama yang berubah.
