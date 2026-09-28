@@ -283,6 +283,7 @@ export class GaussianBlur {
     f32.set([...lo(o.iir.b3), 0], 40);
     f32[44] = o.amplitude ?? 0;
     u32[45] = o.first ? 1 : 0;
+    u32[46] = 0; // opaqueZero: penghalang reasosiasi df64 (lih. `opq` di gaussian.wgsl)
 
     const params = this.device.createBuffer({
       label: `gaussian:params:${o.op}`,

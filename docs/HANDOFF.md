@@ -16,6 +16,13 @@ peta jalan untuk melanjutkan.
   `iirPrecisionOk = false`) -- sama persis sebelum dan sesudah 2B. Test GPU
   yang bukan parity (antrean, cache, tiling paksa, `exportImage`) lulus.
   **Konfirmasi suite penuh dua kali hijau di mesin ber-GPU sebelum merge.**
+- **Update 2026-09-28 (Windows, RTX 3060 Ti, Dawn/D3D12):** run pertama
+  gagal 11 test -- semuanya gerbang IIR, karena D3D12 meruntuhkan df64
+  (self-test 8,9e-5; D3D11 lulus 1,4e-7). Diperbaiki dengan penghalang
+  optimasi `opq` di `gaussian.wgsl` (spec §6a.1). Setelahnya suite penuh
+  **hijau dua kali**: 838 lulus, 4 dilewati (butuh toolchain hulu), 0 gagal.
+  Backend Vulkan tidak bisa dimuat Dawn di mesin ini (`vulkan-1.dll`
+  Windows Error 87), jadi tidak ikut diuji.
 
 | Sub-proyek | Status | Rencana |
 |---|---|---|

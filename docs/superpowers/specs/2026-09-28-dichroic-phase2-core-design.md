@@ -402,6 +402,15 @@ Tujuan: setiap tahap spasial benar di ukuran piksel foto sungguhan
   kecil (blur σ 2/9/25 di GPU dibandingkan referensi CPU f64 yang digerbangi
   terhadap Python, ambang 1e-5) dan melaporkannya lewat
   `Session.diagnostics.iirPrecisionOk`, supaya UI bisa memperingatkan.
+  **Risiko itu terbukti nyata (2026-09-28):** Dawn/D3D12 di Windows (jalur
+  bawaan Chrome) pada RTX 3060 Ti meruntuhkan df64 -- self-test 8,9e-5, 11
+  gerbang parity IIR gagal -- sementara D3D11 lulus 1,4e-7. Perbaikan:
+  setiap hasil antara transformasi bebas galat dilewatkan `opq` (XOR bit
+  dengan `BlurParams.opaqueZero`, selalu 0 dari host, tak diketahui
+  compiler), sehingga identitas aljabar seperti `t-(t-a) -> a` tidak bisa
+  dilipat. Hasil: D3D12 1,395e-7, bit-identik dengan D3D11; bahkan dengan
+  toggle `d3d_disable_ieee_strictness` (tanpanya 2,2e-4) lulus 1,5e-7.
+  Self-test tetap dipertahankan sebagai jaring pengaman.
 - **Halation dan DIR** memakai primitif ini. Gerbang rezim produksi
   (`hard_edge`/`impulse_highlight` di 6,25 dan 31,25 µm/px) lulus
   `log_e_film`, `cmy_film`, dan `rgb_out` di ambang 1e-5. FIR lama meleset
