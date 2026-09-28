@@ -136,6 +136,15 @@
 @group(0) @binding(12) var<storage, read_write> dst: array<vec4<f32>>;
 
 const kFrameFilmPixelSizeUm: u32 = 0u;
+// Fase 2C: `grainSeed` OFX (bilangan bulat disimpan f32, eksak sampai 2^24).
+const kFrameGrainSeed: u32 = 1u;
+// Fase 2C: `grainAmount` OFX (`SpektraGrain.comp::applyGrainControls`, saturasi 1).
+const kFrameGrainAmount: u32 = 2u;
+
+// Seed 1 (baseline) memberi salt 0, jadi realisasi Fase 1 tidak berubah.
+fn seedSalt() -> u32 {
+  return (u32(max(frameFloats[kFrameGrainSeed], 0.0)) - 1u) * 0x85ebca6bu;
+}
 
 // GrainParams default (params_schema.py:89-100) -- TIDAK PERNAH disentuh
 // gen_reference.py untuk fixture yang gerbang ini pakai, jadi konstanta
@@ -234,7 +243,7 @@ fn hash32(seed: u32) -> u32 {
 // memakai `salt=7u` (di luar rentang sublapisan sungguhan) untuk
 // men-dekorelasi draw micro-structure dari draw grain layer.
 fn randNormal(x: u32, y: u32, channel: u32, salt: u32) -> f32 {
-  let a = hash32((x * 73856093u) ^ (y * 19349663u) ^ (channel * 83492791u) ^ (salt * 2654435761u));
+  let a = hash32((x * 73856093u) ^ (y * 19349663u) ^ (channel * 83492791u) ^ (salt * 2654435761u) ^ seedSalt());
   let b = hash32(a ^ 0x9e3779b9u);
   let u1 = max(f32(a >> 8u) / 16777216.0, 1.0e-9);
   let u2 = f32(b >> 8u) / 16777216.0;
@@ -573,5 +582,15 @@ fn blurY(@builtin(global_invocation_id) gid: vec3<u32>) {
     weightSum += w;
   }
   let index = gid.y * params.width + gid.x;
-  dst[index] = vec4<f32>(max((acc / max(weightSum, 1.0e-8)).rgb, vec3<f32>(0.0)), blurXOut[index].a);
+  let grained = max((acc / max(weightSum, 1.0e-8)).rgb, vec3<f32>(0.0));
+  // Fase 2C: `applyGrainControls` OFX -- `base + (grained - base) * amount`,
+  // setelah blur densitas akhir (kOpDensityBlurY -> kOpApplyControls). Amount
+  // 1 memakai `grained` apa adanya: Python tidak punya amount.
+  let amount = max(frameFloats[kFrameGrainAmount], 0.0);
+  var out = grained;
+  if (amount != 1.0) {
+    let base = densityCmySrc[index].rgb;
+    out = max(base + (grained - base) * amount, vec3<f32>(0.0));
+  }
+  dst[index] = vec4<f32>(out, blurXOut[index].a);
 }

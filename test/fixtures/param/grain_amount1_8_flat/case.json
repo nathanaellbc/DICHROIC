@@ -1,0 +1,145 @@
+{
+  "name": "param/grain_amount1_8_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "grainAmount": 1.8,
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.0",
+    "grain_amount=1.8: cmy_film = base + (grained - base) * amount; hilir inject=cmy_film"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "cmy_film": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.7035910913582967,
+        0.0
+      ],
+      "variance": [
+        2.2077181949908935e-07,
+        0.0
+      ],
+      "lag1": [
+        0.507450514485013,
+        0.0
+      ],
+      "radialPower": [
+        [
+          2.546765924643052e-07,
+          0.0
+        ],
+        [
+          1.682782742761748e-07,
+          0.0
+        ],
+        [
+          1.9965703086660523e-07,
+          0.0
+        ],
+        [
+          2.0178383230989227e-07,
+          0.0
+        ],
+        [
+          2.0821694633053537e-07,
+          0.0
+        ],
+        [
+          2.138119158829926e-07,
+          0.0
+        ],
+        [
+          2.074807525769645e-07,
+          0.0
+        ],
+        [
+          2.4286541766738467e-07,
+          0.0
+        ]
+      ]
+    },
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.45766617469887205,
+        0.0
+      ],
+      "variance": [
+        4.167572233786123e-07,
+        0.0
+      ],
+      "lag1": [
+        0.4091322504040553,
+        0.0
+      ],
+      "radialPower": [
+        [
+          4.919610900418746e-07,
+          0.0
+        ],
+        [
+          3.20567360762025e-07,
+          0.0
+        ],
+        [
+          3.5796964169478194e-07,
+          0.0
+        ],
+        [
+          3.8808380921678905e-07,
+          0.0
+        ],
+        [
+          4.1542148090154467e-07,
+          0.0
+        ],
+        [
+          3.960935644162344e-07,
+          0.0
+        ],
+        [
+          4.0184376372397436e-07,
+          0.0
+        ],
+        [
+          4.5142115810059244e-07,
+          0.0
+        ]
+      ]
+    }
+  }
+}

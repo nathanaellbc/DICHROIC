@@ -38,6 +38,33 @@ import type { TileSpec } from './tiling';
  */
 export interface FrameParams {
   filmFormatMm: number;
+  /**
+   * Fase 2C: `camera.exposure_compensation_ev` Python (EV kompensasi, TANPA
+   * auto-exposure) untuk midgray `_comp` print. Baku 0.
+   */
+  exposureCompensationEv?: number;
+  /** Fase 2C: `enlarger.print_exposure_compensation` Python. Baku `false`. */
+  printExposureCompensation?: boolean;
+  /** Fase 2C: `enlarger.print_exposure` Python (linear, `2**printExposureEv`). Baku 1. */
+  printExposure?: number;
+  /** Fase 2C: `film_render.halation.active` Python. Baku `true`. */
+  halationEnabled?: boolean;
+  /** Fase 2C: `film_render.halation.halation_amount` Python. Baku 1. */
+  halationAmount?: number;
+  /** Fase 2C: `scanner.unsharp_mask[1]` Python (amount; sigma tetap 0.7 px). Baku 0.7. */
+  scannerUnsharpAmount?: number;
+  /** Fase 2C: `print_render.glare.percent` Python. Baku 0.03. */
+  glarePercent?: number;
+  /** Fase 2C: `grainSeed` OFX (RNG grain; Python memakai seed tetap). Baku 1. */
+  grainSeed?: number;
+  /** Fase 2C: `grainAmount` OFX (`applyGrainControls`). Baku 1. */
+  grainAmount?: number;
+  /**
+   * Fase 2C: pengali nilai input TER-ENCODE sebelum decode CCTF
+   * (`2**autoexposure_ev`, Python `FilmingStage.auto_exposure`). Hanya dibaca
+   * bila flag decode menyala. Baku 1.
+   */
+  inputDecodeScale?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

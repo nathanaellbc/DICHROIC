@@ -1,0 +1,42 @@
+{
+  "name": "param/pushpull_plus1_5_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "filmPushPullStops": 1.5
+  },
+  "pythonOverrides": [
+    "film_render.density_curve_gamma = film_push_pull_gamma(1.5)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

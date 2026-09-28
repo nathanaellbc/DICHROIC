@@ -459,6 +459,41 @@ Kalau suatu field ternyata butuh pekerjaan yang jauh lebih besar dari
 perkiraan (misalnya struktur tahap harus berubah), field itu tetap `locked`
 dan dicatat sebagai temuan. Batch tidak ditahan demi satu field.
 
+### 6.1 Hasil (2026-09-29, selesai)
+
+Rencana dan status per task: `docs/superpowers/plans/2026-09-28-dichroic-phase2c-params-batch1.md`.
+
+- **Harness `param/`.** Setiap field digerbangi lewat JALUR PRODUKSI
+  (`buildRenderPlan` -> `buildChain` -> `graph.run`), dari fixture
+  `test/fixtures/param/<kasus>` yang mencatat patch `RenderParams` dan padanan
+  Python-nya (`tools/param_cases.py`). Kasus kendali bit-identik dengan
+  fixture Fase 1. Gerbang deterministik 1e-5 per piksel; gerbang stokastik
+  membandingkan mean, varians, dan autokorelasi lag-1 terhadap pusat
+  distribusi Python dengan ambang `4 sd sqrt(1+1/K)` + lantai f32 (spec
+  §6.5.1). Grain hulu di-seed tetap, jadi sebarannya diukur dari engine lewat
+  8 nilai `grainSeed`.
+- **21 field `verified`**, 7 `locked` (`rgbToRawMethod` dan enam field
+  difusi). Stock: 16 negatif x 8 print (138/138). Colour space input: 26
+  label tanpa decode, 20 dengan decode (150/150). Keluaran: 10 ruang SDR
+  (13/13). Setiap kelompok punya uji negatif yang membuktikan gerbangnya
+  diskriminatif.
+- **Ruling (Python mengalahkan OFX):** `filmExposureEv` me-retime print
+  (`print_exposure_compensation=True`), filter enlarger tanpa clamp di 0,
+  database filter netral Python (OFX berbeda sampai 77 CC), auto-exposure di
+  ruang ter-encode saat decode CCTF. `.cube` (`lut_mode`) mengabaikan kedua EV.
+- **Bug yang ditemukan gerbang:** glare tanpa grain diam-diam hilang (flag
+  glare diturunkan dari `grainEnabled`); kini grain dan glare independen dan
+  keempat kombinasinya digerbangi.
+- **Difusi tetap `locked`.** PSF Python adalah jumlah eksponensial radial 2D
+  (tidak separable) lewat `fftconvolve` dengan radius `8 lambda_max`
+  (di-clamp ke setengah sisi pendek): 153..1999 px, 94 ribu..16 juta tap per
+  piksel pada 1024..6000 px. Butuh konvolusi FFT 2D frame-penuh di GPU --
+  sub-proyek tersendiri.
+- **Keterbatasan tercatat:** unsharp amount di atas ~2.5 memperkuat derau f32
+  melewati 1e-5 pada tepi kontras tinggi (1.14e-5 di 3.5, linear terhadap
+  amount); gerbang berhenti di 2.5. Mengubah filter enlarger memra-hitung
+  ulang arena (termasuk tabel Hanatos).
+
 ---
 
 ## 7. Testing

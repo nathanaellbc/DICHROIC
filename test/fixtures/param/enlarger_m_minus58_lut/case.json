@@ -1,0 +1,42 @@
+{
+  "name": "param/enlarger_m_minus58_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "filterMShift": -58.0
+  },
+  "pythonOverrides": [
+    "enlarger.m_filter_shift = -58.0"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

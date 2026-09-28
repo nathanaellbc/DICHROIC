@@ -1,39 +1,35 @@
 # DICHROIC — Handoff Fase 2
 
-Ditulis 2026-09-28, saat pekerjaan dijeda untuk dipindah ke mesin lain. Ledger
+Ditulis 2026-09-28, diperbarui 2026-09-29 di akhir 2C. Ledger
 kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-28, akhir 2B)
+## Posisi sekarang (diperbarui 2026-09-29, akhir 2C -- TITIK HENTI UI)
 
-- **Branch:** `claude/admiring-galileo-1vwlrk`, bercabang dari `main` setelah
-  PR #2 (2A + 2A.5 sudah digabung). Belum ada PR untuk 2B.
-- **Suite:** 842 test di 39 berkas; `tsc` dan `eslint` bersih. Semua test
-  non-GPU hijau, termasuk 309 test baru 2B. Sesi 2B berjalan di mesin TANPA
-  GPU: Dawn dijalankan di atas lavapipe (Mesa, Vulkan perangkat lunak), dan
-  di sana 39 gerbang parity GPU lama gagal karena presisi (self-test df64
-  `iirPrecisionOk = false`) -- sama persis sebelum dan sesudah 2B. Test GPU
-  yang bukan parity (antrean, cache, tiling paksa, `exportImage`) lulus.
-  **Konfirmasi suite penuh dua kali hijau di mesin ber-GPU sebelum merge.**
-- **Update 2026-09-28 (Windows, RTX 3060 Ti, Dawn/D3D12):** run pertama
-  gagal 11 test -- semuanya gerbang IIR, karena D3D12 meruntuhkan df64
-  (self-test 8,9e-5; D3D11 lulus 1,4e-7). Diperbaiki dengan penghalang
-  optimasi `opq` di `gaussian.wgsl` (spec §6a.1). Setelahnya suite penuh
-  **hijau dua kali**: 838 lulus, 4 dilewati (butuh toolchain hulu), 0 gagal.
-  Backend Vulkan tidak bisa dimuat Dawn di mesin ini (`vulkan-1.dll`
-  Windows Error 87), jadi tidak ikut diuji.
+- **Branch:** `phase2c/params-batch1` (2C), di atas `claude/admiring-galileo-1vwlrk`
+  (2B + perbaikan df64 D3D12, PR [#3](https://github.com/nathanaellbc/DICHROIC/pull/3)).
+  Merge #3 dulu, lalu PR 2C.
+- **Mesin:** Windows 11, RTX 3060 Ti, Dawn/D3D12. Toolchain hulu di
+  `../upstream/` (lih. "Lingkungan sesi 2C" di bawah).
+- **Suite:** 2457 lulus, 2 dilewati, 0 gagal di 51 berkas, **hijau dua kali berurutan** (~260 s per run); `tsc` dan
+  `eslint` bersih.
+- **Perbaikan df64 D3D12 (2B):** run pertama di mesin ini gagal 11 gerbang IIR
+  karena D3D12 meruntuhkan df64 (self-test 8,9e-5; D3D11 lulus 1,4e-7).
+  Diperbaiki dengan penghalang optimasi `opq` di `gaussian.wgsl` (spec §6a.1).
+  Backend Vulkan tidak bisa dimuat Dawn di mesin ini (`vulkan-1.dll` Windows
+  Error 87).
 
 | Sub-proyek | Status | Rencana |
 |---|---|---|
 | 2A tulang punggung (`Session`, `RenderParams`, `RenderPlan`, rantai produksi, `.cube`, RPC worker) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a-backbone.md` |
 | 2A.5 rezim resolusi produksi (blur IIR, apron dari sigma, self-test df64) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a5-production-regime.md` |
-| 2B `io/` (decode JPEG/PNG/TIFF/EXR/RAW, encode PNG 8/16 + TIFF 16, `exportImage`, RPC `decode`) | **selesai** | `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md` (Status 2B) |
-| 2C batch parameter 1 | belum direncanakan; butuh toolchain hulu + GPU (lihat di bawah) | spec Fase 2 §6 |
+| 2B `io/` (decode JPEG/PNG/TIFF/EXR/RAW, encode PNG 8/16 + TIFF 16, `exportImage`, RPC `decode`) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md` (Status 2B) |
+| 2C batch parameter 1 | **selesai**: 21 field `verified`, 7 `locked` (difusi, `rgbToRawMethod`) | `docs/superpowers/plans/2026-09-28-dichroic-phase2c-params-batch1.md` (Status 2C) |
 | UI | **titik henti**: minta dokumen desain dan panduan visual dari pemilik proyek dulu | — |
 
 Spec Fase 2: `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`
-(§5.1 berisi angka terukur 2B, ruling, dan keterbatasan; §6a.1 angka 2A.5).
+(§5.1 angka 2B, §6.1 hasil 2C, §6a.1 angka 2A.5).
 
 ## Cara kerja yang disepakati pemilik proyek
 
@@ -76,43 +72,56 @@ Spec Fase 2: `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`
   lavapipe ke Dawn: berguna untuk test non-parity, tidak untuk gerbang
   parity.
 
-## Kenapa 2C belum dimulai
+## Lingkungan sesi 2C (Windows, ber-GPU)
 
-Setiap field 2C naik ke `verified` hanya lewat fixture baru dari
-`gen_reference.py` (butuh `spektrafilm` di `.venv-ref`) dan gerbang parity
-GPU yang lulus. Keduanya tidak tersedia di sesi 2B: paket hulu tidak
-terpasang, dan lavapipe sudah menggagalkan gerbang parity yang ada. Membuka
-field tanpa gerbang melanggar aturan "tidak ada parameter tanpa parity".
-Langkah berikutnya: di mesin ber-GPU dengan toolchain hulu, tulis rencana 2C
-dari spec §6 dan temuan di bawah, lalu eksekusi.
+- Toolchain hulu di `../upstream/`: `spektrafilm` `3bb2c2d`, `spektrafilm-ofx`
+  `86476af`, `.venv-ref` dan `.venv-bake` Python 3.13.15 dengan versi paket
+  persis `tools/README.md`. `gen_reference.py` membangkitkan ulang 181/190
+  berkas parity lama bit-identik (semua deterministik; 9 sisanya tap stokastik
+  yang memang berubah antar-run).
+- Menjalankan generator: set `SPEKTRAFILM_PY`/`SPEKTRAFILM_OFX` ke
+  `../upstream/...`, lalu `../upstream/.venv-ref/Scripts/python.exe
+  tools/gen_reference.py --out test/fixtures --param-case <nama> --manifest`.
+- Di Windows `python3` adalah stub Microsoft Store yang menggantung; selalu
+  panggil Python venv secara eksplisit.
 
-## Temuan yang harus dibawa ke 2C
+## Ringkasan 2C (detail di spec §6.1 dan status rencana 2C)
 
-- `DecodedImage` dari 2B membawa `suggestedColorSpace` (label manifest) dan
-  `encoding` (`encoded`/`linear`). Begitu `inputColorSpace` terverifikasi,
-  UI bisa mengisinya dari saran ini (JPEG/PNG/TIFF int → `sRGB`, TIFF float
-  dan EXR → dari chromaticities / `Linear Rec.709`, RAW → `ACES2065-1`).
-- Filter netral enlarger hanya ter-bake untuk **satu** pasangan
-  (`kodak_portra_400` / `kodak_portra_endura`, `manifest.printScan`). Membuka
-  `film`/`paper` butuh bake tabel netral untuk semua pasangan
-  (`apply_database_neutral_print_filters` Python).
-- `EnlargerParams.print_exposure_compensation` default `True` di Python,
-  tapi cabang `_comp` belum diimplementasi (`addPrintScanDynamicData`).
-  `printExposureEv` menyentuhnya.
-- `decodeInputRgb` di `filmExposure.wgsl` masih identitas: decode CCTF input
-  belum ada. `inputColorSpace` dan `inputCctfDecoding` butuh itu. Tanpanya,
-  JPEG sRGB yang dibuka akan ditafsirkan sebagai ProPhoto tanpa decode (jalur
-  terverifikasi, tapi warnanya belum benar untuk foto nyata).
-- Filter difusi masih `bypassConvolution` di rantai produksi. PSF-nya
-  dibakukan pada ukuran piksel fixture (546,875 µm), dan hulu memakai
-  konvolusi FFT dengan radius ratusan piksel di resolusi produksi. Membuka
-  difusi butuh PSF per ukuran gambar dan FFT di GPU.
-- Stock reversal (`ektachrome_100`, `kodachrome_64`, `velvia_100`,
-  `provia_100f`) ikut batch 2 bersama `ProcessMode`. `grainModel` hanya
-  `Production` (Preview/GrainSynthesis tidak punya oracle Python).
-- `.cube` pada input linear (baseline ProPhoto linear) meleset 9e-3 bila
-  diinterpolasi trilinear; UI sebaiknya menyarankan input log saat ekspor
-  kubus, setelah `inputColorSpace` terverifikasi.
+- Harness `param/` menggerbangi setiap field lewat jalur produksi
+  (`buildRenderPlan`), dari `tools/param_cases.py` (patch `RenderParams` +
+  padanan Python). Gerbang stokastik baru: pusat K realisasi Python, sebaran
+  grain dari 8 `grainSeed` engine.
+- `verified`: stock (16 negatif x 8 print), colour space input (26 label; 20
+  dengan decode CCTF) dan keluaran (10 ruang SDR), exposure film/print/auto,
+  push/pull Standard, filter C/M/Y, halation, grain (amount/seed/format),
+  glare (percent, kombinasi grain x glare), unsharp.
+- Ruling atas nama pemilik proyek (Python mengalahkan OFX; semuanya bisa
+  dibalik): `filmExposureEv` me-retime print; filter enlarger tanpa clamp di
+  0; database filter netral Python (OFX berbeda sampai 77 CC); auto-exposure
+  di ruang ter-encode saat decode; `.cube` mengabaikan kedua EV; unsharp
+  digerbangi sampai amount 2.5 (derau f32 di atasnya).
+- `locked`: enam field difusi (butuh konvolusi FFT 2D frame-penuh di GPU,
+  kernel 94 ribu..16 juta tap), `rgbToRawMethod`.
+
+## Temuan untuk UI dan batch 2
+
+- `DecodedImage` 2B membawa `suggestedColorSpace` dan `encoding`. Kini
+  `inputColorSpace`/`inputCctfDecoding` terverifikasi: JPEG/PNG/TIFF int ->
+  `sRGB` + decode, TIFF float/EXR -> linear tanpa decode, RAW -> `ACES2065-1`
+  tanpa decode. Enam label tanpa oracle decode ditolak bila decode.
+- Default OFX `Rec.709 Gamma 2.4` untuk keluaran TIDAK tersedia (colour BT.709
+  memakai OETF); baseline tetap sRGB.
+- Mengubah filter enlarger (C/M/Y) memra-hitung ulang arena termasuk tabel
+  Hanatos (beberapa ratus ms). Kandidat optimasi saat UI: pindahkan
+  `printFilteredIlluminant` ke nilai per render. Graf varian rantai baru tetap
+  butuh 2..9 s kompilasi shader pertama -- *prewarm* saat UI.
+- Stock reversal ikut batch 2 bersama `ProcessMode`. `grainModel` hanya
+  `Production`.
+- `.cube` pada input linear meleset 9e-3 bila diinterpolasi trilinear; UI
+  sebaiknya menyarankan input log (kini tersedia, mis. ACEScct) saat ekspor
+  kubus.
+- Difusi: sub-proyek FFT 2D di GPU (reflect pad, PSF ternormalisasi pada grid
+  terpotong, radius `min(8 lambda_max, min(h, w)//2 - 1)` persis Python).
 
 ## Ruling 2A dan 2A.5 (keputusan yang diambil atas nama pemilik proyek)
 
@@ -176,22 +185,22 @@ Setiap baris: keputusan — alasan — biaya bila salah.
 ```bash
 gh auth login
 gh repo clone nathanaellbc/DICHROIC
-cd DICHROIC && git checkout claude/admiring-galileo-1vwlrk   # atau main setelah 2B digabung
+cd DICHROIC && git checkout phase2c/params-batch1   # atau main setelah 2B dan 2C digabung
 npm ci
 npm test
 ```
 
 Butuh GPU yang didukung WebGPU lewat paket `webgpu` (Dawn); test berjalan
-satu proses per berkas (lih. `vitest.config.ts`). Untuk membangkitkan fixture
-baru, siapkan toolchain Python hulu sesuai `tools/setup_envs.md`
-(`spektrafilm`, `spektrafilm-ofx`, `.venv-ref`, `.venv-bake`); sesuaikan
-jalur `D:/Projects/upstream/` bila berbeda. Tanpa toolchain itu seluruh test
-tetap jalan karena fixture sudah di-commit.
+satu proses per berkas (lih. `vitest.config.ts`). Suite penuh sekitar 4,5
+menit di RTX 3060 Ti. Untuk membangkitkan fixture baru, siapkan toolchain
+Python hulu sesuai `tools/setup_envs.md` dan "Lingkungan sesi 2C" di atas
+(`../upstream/` sejajar repositori). Tanpa toolchain itu seluruh test tetap
+jalan karena fixture sudah di-commit.
 
-Prompt untuk melanjutkan di Claude Code (mesin ber-GPU, toolchain hulu siap):
+**Langkah berikutnya adalah UI, dan itu menunggu pemilik proyek**: dokumen
+desain dan panduan visual. Setelah itu tersedia, prompt untuk melanjutkan:
 
-> Lanjutkan Fase 2 DICHROIC. Baca `docs/HANDOFF.md` dan spec
-> `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md` (§5.1,
-> §6). Pastikan suite penuh hijau dua kali di mesin ini, lalu tulis rencana
-> 2C (batch parameter 1) dan eksekusi, berhenti sebelum UI. Pakai skill yang
-> relevan.
+> Lanjutkan DICHROIC ke UI. Baca `docs/HANDOFF.md`, spec Fase 2 §6.1, dan
+> dokumen desain + panduan visual yang saya berikan. `Session`/`SessionClient`
+> adalah satu-satunya antarmuka engine; hanya field `verified` di
+> `src/params/registry.ts` yang boleh diekspos. Pakai skill yang relevan.

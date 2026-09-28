@@ -1,0 +1,43 @@
+{
+  "name": "param/stock_kodak_portra_400__kodak_2393_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_2393",
+  "renderParams": {
+    "film": "kodak_portra_400",
+    "paper": "kodak_2393"
+  },
+  "pythonOverrides": [
+    "init_params('kodak_portra_400', 'kodak_2393')"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

@@ -1,0 +1,145 @@
+{
+  "name": "param/grain_amount0_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "grainAmount": 0.0,
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.0",
+    "grain_amount=0.0: cmy_film = base + (grained - base) * amount; hilir inject=cmy_film"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "cmy_film": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.7046324710667289,
+        0.0
+      ],
+      "variance": [
+        0.0,
+        0.0
+      ],
+      "lag1": [
+        0.0,
+        0.0
+      ],
+      "radialPower": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    },
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.4605369612309084,
+        0.0
+      ],
+      "variance": [
+        0.0,
+        0.0
+      ],
+      "lag1": [
+        0.0,
+        0.0
+      ],
+      "radialPower": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0
+        ]
+      ]
+    }
+  }
+}

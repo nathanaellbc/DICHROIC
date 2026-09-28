@@ -217,11 +217,39 @@ export interface PrintScanDefaults {
   neutralFilterY: number;
 }
 
+/**
+ * Fase 2C Task 8 -- filter netral enlarger (Kodak CC, C/M/Y) SEMUA pasangan
+ * dari database Python (`read_neutral_print_filters`), `table[print][film]`.
+ * BUKAN `static.neutralPrintFilters` (salinan OFX, berbeda sampai 77 CC) --
+ * lih. `tools/bake_web_assets.py::_python_neutral_print_filters`.
+ */
+export interface NeutralPrintFilters {
+  illuminant: string;
+  table: Record<string, Record<string, [number, number, number]>>;
+}
+
+/**
+ * Fase 2C Task 9 -- colour space KELUARAN dari colour-science (yang
+ * `ScanningStage` Python pakai), per label manifest. Hanya label SDR yang
+ * encode OFX-nya identik dengan `cctf_encoding` colour -- lih.
+ * `tools/bake_web_assets.py::_python_output_color_spaces`. Matriks baris-mayor.
+ */
+export interface OutputColorSpaceSpec {
+  key: string;
+  rgbToXyz: number[];
+  xyzToRgb: number[];
+  whitepointXyz: [number, number, number];
+  encoding: 'linear' | 'srgb' | 'romm' | 'gamma';
+  gamma: number | null;
+}
+
 export interface Manifest {
   hanatos: HanatosDims;
   colorSpaces: ColorSpaces;
   counts: Counts;
   printScan: PrintScanDefaults;
+  neutralPrintFilters: NeutralPrintFilters;
+  outputColorSpaces: Record<string, OutputColorSpaceSpec>;
   stocks: StockEntry[];
   static: Record<StaticTableName, BlobRef>;
 }

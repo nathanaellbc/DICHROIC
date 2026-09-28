@@ -19,15 +19,17 @@
  *   `slot0 = 0`: film/print exposure menutup `log10` sendiri.
  */
 
-import { FLAG_GLARE_ACTIVE, FLAG_UNSHARP_ACTIVE } from '../engine/params';
+import { FLAG_GLARE_ACTIVE, FLAG_INPUT_CCTF_DECODING, FLAG_UNSHARP_ACTIVE } from '../engine/params';
 import type { CoreParams } from '../engine/params';
 import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
+import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
-import { validateRenderParams } from './registry';
+import { UnverifiedParameterError, validateRenderParams } from './registry';
+import { BASELINE_RENDER_PARAMS } from './renderParams';
 import type { FilmFormat, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
@@ -69,6 +71,23 @@ export const FILM_FORMAT_LONG_EDGE_MM: Readonly<Record<FilmFormat, number>> = Ob
   imax70: 70.41,
 });
 
+/**
+ * Push/pull mode `Standard`: pengali gamma kurva film dari waktu develop ECN-2
+ * (`SpektraVulkanRenderer.cpp::filmPushPullGamma`, 180 s normal, pull-1 150 s,
+ * push-1 220 s, push-2 280 s). Padanan Python: `film_render.density_curve_gamma`,
+ * yang dipakai `develop_simple`, koreksi DIR, dan midgray print.
+ */
+export function filmPushPullGamma(stops: number): number {
+  const s = Math.min(Math.max(stops, -2), 2);
+  const normal = 180;
+  const pull1 = 150;
+  const push1 = 220;
+  const push2 = 280;
+  if (s < 0) return (pull1 / normal) ** -s;
+  if (s <= 1) return Math.exp(Math.log(push1 / normal) * s);
+  return Math.exp(Math.log(push1 / normal) + Math.log(push2 / push1) * (s - 1));
+}
+
 export interface PlanImage {
   width: number;
   height: number;
@@ -84,42 +103,76 @@ const CUBE_DISABLED_EFFECTS = [
   'glare',
   'unsharp mask',
   'auto exposure',
+  'film exposure compensation',
+  'print exposure',
 ];
 
 /**
- * Filter netral enlarger (Kodak CC) hanya ter-bake untuk SATU triple
- * (film, print, illuminant) -- `manifest.printScan`, hasil
- * `apply_database_neutral_print_filters()` Python (lih.
- * `tools/bake_web_assets.py::_default_enlarger_neutral_filters`). Memakai
- * nilai triple itu untuk pasangan lain akan memberi keseimbangan warna
- * yang salah tanpa galat apa pun, jadi pasangan lain ditolak keras.
+ * Filter netral enlarger (Kodak CC) per pasangan (print, film) untuk
+ * illuminant TH-KG3 -- `manifest.neutralPrintFilters`, database Python yang
+ * `apply_database_neutral_print_filters()` baca (Fase 2C Task 8). Pasangan
+ * di luar database ditolak keras: Python akan diam-diam memakai default
+ * dataclass, konfigurasi yang tidak pernah kita gerbangi.
  */
 export class MissingNeutralFiltersError extends Error {
   constructor(film: string, paper: string) {
     super(
-      `Filter netral enlarger untuk pasangan film "${film}" / paper "${paper}" belum ter-bake ` +
-        '(hanya pasangan di manifest.printScan yang tersedia).',
+      `Filter netral enlarger untuk pasangan film "${film}" / paper "${paper}" tidak ada ` +
+        'di database Python (manifest.neutralPrintFilters).',
     );
     this.name = 'MissingNeutralFiltersError';
   }
 }
 
+/**
+ * Stock yang sah untuk batch parameter 1: `film` harus film NEGATIF yang ada
+ * di database netral, `paper` harus stock kertas di database itu. Film
+ * reversal (`positive`) ikut batch parameter 2 bersama `ProcessMode` (spec
+ * Fase 2 §2.7). Dipanggil `buildRenderPlan` dan `Session.setParams`.
+ */
+export function validateStocks(bundle: AssetBundle, film: string, paper: string): void {
+  const { table } = bundle.manifest.neutralPrintFilters;
+  const papers = Object.keys(table);
+  if (!papers.includes(paper)) {
+    throw new UnverifiedParameterError('paper', paper, BASELINE_RENDER_PARAMS.paper, `bukan stock kertas (${papers.join(', ')})`);
+  }
+  const films = Object.keys(table[paper]!);
+  if (!films.includes(film)) {
+    throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, 'bukan stock film di database netral');
+  }
+  if (bundle.stockEntry(film).type !== 'negative') {
+    throw new UnverifiedParameterError(
+      'film',
+      film,
+      BASELINE_RENDER_PARAMS.film,
+      'film reversal ikut batch parameter 2 (ProcessMode)',
+    );
+  }
+}
+
+/**
+ * `filterC` OFX ditambahkan ke C netral (`filteredEnlargerIlluminantCpu`:
+ * `neutral[c] + cFilter`); padanan Python-nya `enlarger.c_filter_neutral`
+ * setelah `digest_params` (Python tidak punya shift C). M/Y memakai
+ * `*_filter_shift`. Ruling 2C: OFX meng-clamp `netral + shift` di 0, Python
+ * tidak (cc negatif -> transmitansi > 1); kita mengikuti Python, digerbangi
+ * `param/enlarger_m_minus58_lut`.
+ */
 export function resolveEnlargerFilters(
   bundle: AssetBundle,
   film: string,
   paper: string,
+  cFilter: number,
   mShift: number,
   yShift: number,
 ): EnlargerFilterState {
-  const baked = bundle.manifest.printScan;
-  if (film !== baked.filmStock || paper !== baked.printStock) {
-    throw new MissingNeutralFiltersError(film, paper);
-  }
+  const neutral = bundle.manifest.neutralPrintFilters.table[paper]?.[film];
+  if (!neutral) throw new MissingNeutralFiltersError(film, paper);
   return {
-    cFilterNeutral: baked.neutralFilterC,
-    mFilterNeutral: baked.neutralFilterM,
+    cFilterNeutral: neutral[0] + cFilter,
+    mFilterNeutral: neutral[1],
     mFilterShift: mShift,
-    yFilterNeutral: baked.neutralFilterY,
+    yFilterNeutral: neutral[2],
     yFilterShift: yShift,
   };
 }
@@ -131,16 +184,20 @@ export function buildRenderPlan(
   mode: RenderMode,
 ): RenderPlan {
   validateRenderParams(params);
+  validateStocks(bundle, params.film, params.paper);
+  validateOutputColorSpace(bundle, params.outputColorSpace);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
-  // `grainEnabled === glareEnabled` dijamin validateRenderParams; keduanya
-  // mati di lut_mode.
-  const stochasticEffectsActive = family === 'measured' && params.grainEnabled;
+  // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
+  // `print_render.glare.active`); keduanya mati di lut_mode.
+  const grainActive = family === 'measured' && params.grainEnabled;
+  const glareActive = family === 'measured' && params.glareEnabled && params.glarePercent > 0;
 
   const enlargerFilters = resolveEnlargerFilters(
     bundle,
     params.film,
     params.paper,
+    params.filterC,
     params.filterMShift,
     params.filterYShift,
   );
@@ -148,17 +205,129 @@ export function buildRenderPlan(
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
 
+  const inputColorSpace = validateInputColorSpace(bundle, params.inputColorSpace, params.inputCctfDecoding);
+  // Auto-exposure diukur dari gambar ter-decode (bila decode), tapi Python
+  // MENERAPKANNYA pada gambar ter-encode (`image * 2**ev`, sebelum
+  // `rgb_to_raw`). Tanpa decode keduanya linear dan EV cukup dijumlah ke
+  // `filmExposureEv`; dengan decode EV itu dibawa `frame.inputDecodeScale`.
+  const autoEv =
+    family === 'measured' && params.autoExposure
+      ? measureAutoExposureEv(
+          image.rgba,
+          image.width,
+          image.height,
+          bundle.staticTable('inputMeterXyzMatrices'),
+          inputColorSpace,
+          params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined,
+        )
+      : 0;
+
   return {
-    core: buildCoreParams(params, bundle, image, family, stochasticEffectsActive),
-    arenaKey: `${params.film}::print=${params.paper}::m=${params.filterMShift}::y=${params.filterYShift}`,
+    core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
+    arenaKey: `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: {
       stockId: params.film,
-      printScan: { printStockId: params.paper, enlargerFilters },
+      printScan: { printStockId: params.paper, enlargerFilters, outputColorSpace: params.outputColorSpace },
     },
-    chain: { family, grain: stochasticEffectsActive },
+    chain: { family, grain: grainActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
-    frame: { filmFormatMm },
+    frame: {
+      ...exposureFrame(params, family, filmFormatMm),
+      inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
+    },
+  };
+}
+
+/**
+ * Label colour space input yang decode OFX-nya TIDAK sama dengan
+ * `cctf_decoding` colour pada kunci Python-nya (diukur Fase 2C Task 9:
+ * selisih relatif 1..74; 20 label lain identik persis). Tanpa decode, ke-26
+ * label sah (primaries identik).
+ */
+export const INPUT_DECODE_WITHOUT_ORACLE: readonly string[] = Object.freeze([
+  'Canon Log2 CinemaGamut D55',
+  'Canon Log3 CinemaGamut D55',
+  'Linear Rec.709',
+  'P3-D65 Gamma 2.2',
+  'Rec.709 Gamma 2.2',
+  'Rec.709 Gamma 2.4',
+]);
+
+/** Indeks label di manifest; menolak label tak dikenal dan decode tanpa oracle. */
+export function validateInputColorSpace(bundle: AssetBundle, label: string, decode: boolean): number {
+  const index = bundle.manifest.colorSpaces.labels.indexOf(label);
+  if (index < 0) {
+    throw new UnverifiedParameterError('inputColorSpace', label, BASELINE_RENDER_PARAMS.inputColorSpace, 'bukan label colour space');
+  }
+  if (decode && INPUT_DECODE_WITHOUT_ORACLE.includes(label)) {
+    throw new UnverifiedParameterError(
+      'inputCctfDecoding',
+      decode,
+      false,
+      `decode "${label}" tidak punya padanan cctf_decoding di colour-science`,
+    );
+  }
+  return index;
+}
+
+/**
+ * Colour space keluaran harus ada di `manifest.outputColorSpaces`: label SDR
+ * yang encode OFX-nya identik dengan `cctf_encoding` colour (10 dari 26;
+ * mis. "Rec.709 Gamma 2.4", default OFX, TIDAK -- colour BT.709 memakai OETF).
+ */
+export function validateOutputColorSpace(bundle: AssetBundle, label: string): void {
+  const supported = Object.keys(bundle.manifest.outputColorSpaces);
+  if (!supported.includes(label)) {
+    throw new UnverifiedParameterError(
+      'outputColorSpace',
+      label,
+      BASELINE_RENDER_PARAMS.outputColorSpace,
+      `hanya ${supported.join(', ')} yang punya padanan colour-science`,
+    );
+  }
+}
+
+function inputDecoder(bundle: AssetBundle, colorSpace: number): (value: number) => number {
+  const { colorSpaces } = bundle.manifest;
+  const table = {
+    luts: bundle.staticTable('colorDecodeLuts'),
+    size: colorSpaces.transferLutSize,
+    min: colorSpaces.decodeLutMin,
+    max: colorSpaces.decodeLutMax,
+  };
+  return (value) => decodeWithLut(table, colorSpace, value);
+}
+
+/**
+ * Exposure print (Fase 2C Task 2), mengikuti `digest_params` Python:
+ *
+ * - `measured`: `print_exposure_compensation=True` (default) -- midgray print
+ *   dihitung pada `0.184 * 2**filmExposureEv`, jadi print di-retime terhadap
+ *   EV kompensasi film (BUKAN EV auto-exposure). `print_exposure =
+ *   2**printExposureEv`.
+ * - `lut` (`lut_mode`): kompensasi mati, `exposure_compensation_ev = 0`,
+ *   `print_exposure = 1` -- kubus mengabaikan kedua EV, dicatat di
+ *   `CUBE_DISABLED_EFFECTS`.
+ */
+function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFormatMm: number): FrameParams {
+  if (family === 'lut') {
+    return { filmFormatMm, exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1 };
+  }
+  return {
+    filmFormatMm,
+    exposureCompensationEv: params.filmExposureEv,
+    printExposureCompensation: true,
+    printExposure: 2 ** params.printExposureEv,
+    // Fase 2C Task 5: `film_render.halation.active`/`halation_amount`.
+    halationEnabled: params.halationEnabled,
+    halationAmount: params.halationAmount,
+    // Fase 2C Task 6: `scanner.unsharp_mask[1]`, `print_render.glare.percent`.
+    scannerUnsharpAmount: params.scannerUnsharpAmount,
+    glarePercent: params.glarePercent,
+    // Fase 2C Task 7: RNG dan blend grain OFX.
+    grainSeed: params.grainSeed,
+    grainAmount: params.grainAmount,
   };
 }
 
@@ -250,35 +419,33 @@ function buildCoreParams(
   bundle: AssetBundle,
   image: PlanImage,
   family: 'measured' | 'lut',
-  stochasticEffectsActive: boolean,
+  glareActive: boolean,
+  inputColorSpace: number,
+  autoEv: number,
 ): CoreParams {
   const { width, height } = image;
   const { colorSpaces } = bundle.manifest;
-  const inputColorSpace = colorSpaces.labels.indexOf(params.inputColorSpace);
-  if (inputColorSpace < 0) {
-    throw new Error(`"${params.inputColorSpace}" tidak ditemukan di manifest.colorSpaces.labels`);
-  }
 
-  let filmExposureEv = params.filmExposureEv;
-  if (family === 'measured' && params.autoExposure) {
-    filmExposureEv += measureAutoExposureEv(
-      image.rgba,
-      width,
-      height,
-      bundle.staticTable('inputMeterXyzMatrices'),
-      inputColorSpace,
-    );
-  }
+  // `lut_mode` memaksa `camera.exposure_compensation_ev = 0` dan
+  // `auto_exposure = False` (`params_builder.py`); `autoEv` sudah 0 di sana.
+  // Dengan decode CCTF, auto-EV diterapkan di ruang ter-encode lewat
+  // `frame.inputDecodeScale`, jadi tidak dijumlah di sini.
+  const filmExposureEv = (family === 'lut' ? 0 : params.filmExposureEv) + (params.inputCctfDecoding ? 0 : autoEv);
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
-  const glareActiveFlag = family === 'measured' && stochasticEffectsActive ? FLAG_GLARE_ACTIVE : 0;
-  const unsharpActiveFlag = family === 'measured' ? FLAG_UNSHARP_ACTIVE : 0;
+  const inputDecodingFlag = params.inputCctfDecoding ? FLAG_INPUT_CCTF_DECODING : 0;
+  // Guard Python: `add_glare` hanya bila `active and percent > 0` (sudah di
+  // `glareActive`); `_apply_blur_and_unsharp` hanya bila `sigma > 0 and
+  // amount > 0` (sigma tetap 0.7).
+  const glareActiveFlag = glareActive ? FLAG_GLARE_ACTIVE : 0;
+  const unsharpActiveFlag = family === 'measured' && params.scannerUnsharpAmount > 0 ? FLAG_UNSHARP_ACTIVE : 0;
 
   return {
     width,
     height,
     filmExposureEv,
-    filmGamma: 1, // density_curve_gamma default Python (FilmRenderingParams)
+    // `density_curve_gamma` Python; push/pull `Standard` (Fase 2C Task 4).
+    filmGamma: filmPushPullGamma(params.filmPushPullStops),
     // curveDevelop.wgsl membaca ini sebagai batas pencarian biner kurva H&D.
     exposureCount: bundle.stock(params.film).entry.exposureCount,
     inputColorSpace,
@@ -290,10 +457,11 @@ function buildCoreParams(
     hanatosWidth: bundle.manifest.hanatos.width,
     hanatosHeight: bundle.manifest.hanatos.height,
     slot0: family === 'lut' ? 0 : 1,
-    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag,
+    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag | inputDecodingFlag,
     // Tidak lagi dibaca filmExposure.wgsl (review seluruh-branch Fase 1, agenda #5).
     slot2: 0,
-    // Push/pull tidak aktif; curveDevelop.wgsl membaca mode ini.
+    // Mode `Standard` (0): efeknya hanya lewat `filmGamma` di atas, persis OFX.
+    // Mode `Experimental` (1) tidak punya oracle Python dan tidak dibuka.
     filmPushPullMode: 0,
     filmPushPullStops: params.filmPushPullStops,
     fullWidth: width,

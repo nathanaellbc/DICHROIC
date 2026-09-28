@@ -58,8 +58,14 @@ export function measureAutoExposureEv(
   height: number,
   meterMatrix: ArrayLike<number>,
   colorSpace: number,
+  /**
+   * Fase 2C Task 9: decode CCTF sebelum metering (`io.input_cctf_decoding`,
+   * Python `colour.RGB_to_XYZ(..., apply_cctf_decoding)`); `undefined` = identitas.
+   */
+  decode?: (value: number) => number,
 ): number {
   if (width <= 0 || height <= 0) return 0;
+  const d = decode ?? ((v: number) => v);
   const preview = autoExposurePreviewShape(width, height);
   const luminance = new Float64Array(preview.width * preview.height);
   for (let y = 0; y < preview.height; y += 1) {
@@ -68,9 +74,9 @@ export function measureAutoExposureEv(
       const sourceX = Math.min(width - 1, Math.floor((x * width) / preview.width));
       const p = (sourceY * width + sourceX) * 4;
       luminance[y * preview.width + x] = meterY(
-        inputRgba[p]!,
-        inputRgba[p + 1]!,
-        inputRgba[p + 2]!,
+        d(inputRgba[p]!),
+        d(inputRgba[p + 1]!),
+        d(inputRgba[p + 2]!),
         meterMatrix,
         colorSpace,
       );

@@ -1,0 +1,93 @@
+{
+  "name": "param/grain_glare_p0_1_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "glarePercent": 0.1
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.1"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 16,
+      "mean": [
+        0.46014845133773924,
+        1.4761714075249261e-05
+      ],
+      "variance": [
+        6.874756109869399e-07,
+        3.6204842217031204e-08
+      ],
+      "lag1": [
+        0.190951453392387,
+        0.012071677578352851
+      ],
+      "radialPower": [
+        [
+          7.32364358462368e-07,
+          3.1045843370722843e-07
+        ],
+        [
+          6.61234249683154e-07,
+          1.3800137948139756e-07
+        ],
+        [
+          6.182756829252594e-07,
+          1.0310743997456621e-07
+        ],
+        [
+          6.724292338219548e-07,
+          1.4170521115489107e-07
+        ],
+        [
+          6.433296068251229e-07,
+          7.983338608919157e-08
+        ],
+        [
+          7.119757709512162e-07,
+          9.558963948276026e-08
+        ],
+        [
+          6.92083120623496e-07,
+          7.501265415058843e-08
+        ],
+        [
+          7.042879795690887e-07,
+          6.506608172971208e-08
+        ]
+      ]
+    }
+  }
+}

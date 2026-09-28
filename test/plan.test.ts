@@ -9,6 +9,7 @@ import {
   MissingNeutralFiltersError,
   buildRenderPlan,
   resolveEnlargerFilters,
+  validateStocks,
 } from '../src/params/plan';
 import { loadCase, loadInputAsRgba } from './parity/compare';
 import { dirRadiusPx, halationRadiusPx } from '../src/engine/spatialRadius';
@@ -111,7 +112,7 @@ describe('buildRenderPlan -> arena dan apron', () => {
       yFilterNeutral: bundle.manifest.printScan.neutralFilterY,
       yFilterShift: 0,
     });
-    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::m=0::y=0');
+    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::out=sRGB::c=0::m=0::y=0');
   });
 
   it('apron dari sigma sebenarnya: halation + DIR (spatialRadius.ts) + grain 64 + unsharp 256', () => {
@@ -136,7 +137,29 @@ describe('buildRenderPlan -> FrameParams', () => {
   it('baseline standard35 memberi filmFormatMm 35 (Python camera.film_format_mm default)', () => {
     expect(buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, image('gray_ramp'), 'image').frame).toEqual({
       filmFormatMm: 35,
+      exposureCompensationEv: 0,
+      printExposureCompensation: true,
+      printExposure: 1,
+      halationEnabled: true,
+      halationAmount: 1,
+      scannerUnsharpAmount: 0.7,
+      glarePercent: 0.03,
+      grainSeed: 1,
+      grainAmount: 1,
+      inputDecodeScale: 1,
     });
+  });
+
+  it('exposure print mengikuti digest_params: measured mengompensasi, cube (lut_mode) tidak', () => {
+    const p = { ...BASELINE_RENDER_PARAMS, filmExposureEv: 1.5, printExposureEv: -1 };
+    expect(buildRenderPlan(p, bundle, image('gray_ramp'), 'image').frame).toMatchObject({
+      exposureCompensationEv: 1.5,
+      printExposureCompensation: true,
+      printExposure: 0.5,
+    });
+    const cube = buildRenderPlan(p, bundle, image('gray_ramp'), 'cube');
+    expect(cube.frame).toMatchObject({ exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1 });
+    expect(cube.core.filmExposureEv).toBe(0);
   });
 
   it('tabel sisi panjang format film mengikuti filmFormatLongEdgeMm OFX', () => {
@@ -156,12 +179,33 @@ describe('buildRenderPlan -> FrameParams', () => {
 describe('buildRenderPlan -> penolakan', () => {
   it('memvalidasi parameter lebih dulu', () => {
     expect(() =>
-      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, film: 'kodak_gold_200' }, bundle, image('gray_ramp'), 'image'),
+      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, rgbToRawMethod: 'hanatos2026' as 'hanatos2025' }, bundle, image('gray_ramp'), 'image'),
     ).toThrow(UnverifiedParameterError);
   });
 
-  it('pasangan film/paper tanpa filter netral ter-bake gagal keras', () => {
-    expect(() => resolveEnlargerFilters(bundle, 'kodak_gold_200', 'kodak_portra_endura', 0, 0)).toThrow(
+  it('film reversal ditolak (batch parameter 2)', () => {
+    let caught: unknown;
+    try {
+      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, film: 'fujifilm_velvia_100' }, bundle, image('gray_ramp'), 'image');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(UnverifiedParameterError);
+    expect((caught as UnverifiedParameterError).field).toBe('film');
+    expect((caught as Error).message).toContain('reversal');
+  });
+
+  it('stock kertas sebagai film, dan film sebagai paper, ditolak', () => {
+    expect(() => validateStocks(bundle, 'kodak_portra_endura', 'kodak_portra_endura')).toThrow(UnverifiedParameterError);
+    expect(() => validateStocks(bundle, 'kodak_portra_400', 'kodak_portra_400')).toThrow(UnverifiedParameterError);
+    expect(() => validateStocks(bundle, 'kodak_gold_200', 'kodak_2383')).not.toThrow();
+  });
+
+  it('filter netral dari database Python per pasangan', () => {
+    const baseline = resolveEnlargerFilters(bundle, 'kodak_portra_400', 'kodak_portra_endura', 0, 0, 0);
+    expect(baseline.mFilterNeutral).toBe(bundle.manifest.printScan.neutralFilterM);
+    expect(baseline.yFilterNeutral).toBe(bundle.manifest.printScan.neutralFilterY);
+    expect(() => resolveEnlargerFilters(bundle, 'kodak_portra_400', 'bukan_paper', 0, 0, 0)).toThrow(
       MissingNeutralFiltersError,
     );
   });

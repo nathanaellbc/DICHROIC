@@ -1,0 +1,44 @@
+{
+  "name": "param/cs_arri_logc3_ei800_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "inputColorSpace": "ARRI LogC3 EI800",
+    "inputCctfDecoding": false
+  },
+  "pythonOverrides": [
+    "io.input_color_space = 'ARRI Wide Gamut 3'",
+    "io.input_cctf_decoding = False"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

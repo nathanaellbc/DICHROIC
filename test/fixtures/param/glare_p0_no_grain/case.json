@@ -1,0 +1,42 @@
+{
+  "name": "param/glare_p0_no_grain",
+  "height": 8,
+  "width": 8,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "glareEnabled": true,
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.0 (glare.active dimatikan keluarga deterministic; add_glare melewati keduanya)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

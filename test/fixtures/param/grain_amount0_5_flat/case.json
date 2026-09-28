@@ -1,0 +1,145 @@
+{
+  "name": "param/grain_amount0_5_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "grainAmount": 0.5,
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.0",
+    "grain_amount=0.5: cmy_film = base + (grained - base) * amount; hilir inject=cmy_film"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "cmy_film": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.7043431989254977,
+        0.0
+      ],
+      "variance": [
+        1.7034862615670387e-08,
+        0.0
+      ],
+      "lag1": [
+        0.5074505144850121,
+        0.0
+      ],
+      "radialPower": [
+        [
+          1.9650971640765508e-08,
+          0.0
+        ],
+        [
+          1.2984434743529995e-08,
+          0.0
+        ],
+        [
+          1.540563509773167e-08,
+          0.0
+        ],
+        [
+          1.5569740147367983e-08,
+          0.0
+        ],
+        [
+          1.606612240204707e-08,
+          0.0
+        ],
+        [
+          1.649783301566284e-08,
+          0.0
+        ],
+        [
+          1.6009317328470082e-08,
+          0.0
+        ],
+        [
+          1.8739615560754923e-08,
+          0.0
+        ]
+      ]
+    },
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.45974947031187074,
+        0.0
+      ],
+      "variance": [
+        3.244240396045569e-08,
+        0.0
+      ],
+      "lag1": [
+        0.40911471345226247,
+        0.0
+      ],
+      "radialPower": [
+        [
+          3.8287223605327264e-08,
+          0.0
+        ],
+        [
+          2.496589386467145e-08,
+          0.0
+        ],
+        [
+          2.7872189072671583e-08,
+          0.0
+        ],
+        [
+          3.0205338844492557e-08,
+          0.0
+        ],
+        [
+          3.2333630283735965e-08,
+          0.0
+        ],
+        [
+          3.083508101402257e-08,
+          0.0
+        ],
+        [
+          3.127848359108396e-08,
+          0.0
+        ],
+        [
+          3.5142325668155324e-08,
+          0.0
+        ]
+      ]
+    }
+  }
+}

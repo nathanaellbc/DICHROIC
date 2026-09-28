@@ -2,6 +2,7 @@ import { CORE_PARAMS_WGSL } from '../params';
 import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
+import { gpuBufferUsage } from '../webgpuGlobals';
 import source from '../../shaders/filmExposure.wgsl?raw';
 
 /**
@@ -38,6 +39,16 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
     name: 'filmExposure',
     writesTaps: [Tap.LOG_E_FILM],
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
+      // Fase 2C Task 9: pengali ruang ter-encode sebelum decode CCTF (binding 6).
+      const inputFrame = ctx.device.createBuffer({
+        label: 'filmExposure:inputFrame',
+        size: 16,
+        usage: gpuBufferUsage.UNIFORM,
+        mappedAtCreation: true,
+      });
+      new Float32Array(inputFrame.getMappedRange()).set([ctx.frame.inputDecodeScale ?? 1, 0, 0, 0]);
+      inputFrame.unmap();
+
       const bindGroup = ctx.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -47,6 +58,7 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
           { binding: 3, resource: { buffer: arenas.static.buffer } },
           { binding: 4, resource: { buffer: arenas.stock.buffer } },
           { binding: 5, resource: { buffer: arenas.dynamic.buffer } },
+          { binding: 6, resource: { buffer: inputFrame } },
         ],
       });
 

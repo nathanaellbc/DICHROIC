@@ -1,0 +1,42 @@
+{
+  "name": "param/stock_kodak_ultramax_400__kodak_portra_endura",
+  "height": 64,
+  "width": 64,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_ultramax_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "film": "kodak_ultramax_400",
+    "paper": "kodak_portra_endura"
+  },
+  "pythonOverrides": [
+    "init_params('kodak_ultramax_400', 'kodak_portra_endura')"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

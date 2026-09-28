@@ -1,0 +1,42 @@
+{
+  "name": "param/stock_fujifilm_c200__kodak_portra_endura",
+  "height": 64,
+  "width": 64,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "fujifilm_c200",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "film": "fujifilm_c200",
+    "paper": "kodak_portra_endura"
+  },
+  "pythonOverrides": [
+    "init_params('fujifilm_c200', 'kodak_portra_endura')"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

@@ -17,28 +17,39 @@ import type { RenderParams } from './renderParams';
 export type FieldStatus = 'verified' | 'locked';
 
 export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = Object.freeze({
-  film: 'locked',
-  paper: 'locked',
+  // Fase 2C Task 8: param/stock_* (`test/parity/stocks.test.ts`). Pasangan
+  // dan jenis stock divalidasi `validateStocks` (plan.ts; butuh aset).
+  film: 'verified',
+  paper: 'verified',
   rgbToRawMethod: 'locked',
-  inputColorSpace: 'locked',
-  inputCctfDecoding: 'locked',
-  outputColorSpace: 'locked',
-  autoExposure: 'locked',
-  filmExposureEv: 'locked',
-  printExposureEv: 'locked',
-  filmPushPullStops: 'locked',
-  filterC: 'locked',
-  filterMShift: 'locked',
-  filterYShift: 'locked',
-  halationEnabled: 'locked',
-  halationAmount: 'locked',
+  // Fase 2C Task 9: param/cs_* (`test/parity/inputColorSpace.test.ts`). Label
+  // dan kombinasi decode divalidasi `validateInputColorSpace` (plan.ts; butuh aset).
+  inputColorSpace: 'verified',
+  inputCctfDecoding: 'verified',
+  // Fase 2C Task 9: param/out_* (`test/parity/outputColorSpace.test.ts`); label
+  // divalidasi `validateOutputColorSpace` (plan.ts; butuh aset).
+  outputColorSpace: 'verified',
+  // Fase 2C Task 2: param/exposure_* (`test/parity/exposure.test.ts`).
+  autoExposure: 'verified',
+  filmExposureEv: 'verified',
+  printExposureEv: 'verified',
+  // Fase 2C Task 4: param/pushpull_* (`test/parity/pushPull.test.ts`), mode Standard.
+  filmPushPullStops: 'verified',
+  // Fase 2C Task 3: param/enlarger_* (`test/parity/enlarger.test.ts`).
+  filterC: 'verified',
+  filterMShift: 'verified',
+  filterYShift: 'verified',
+  // Fase 2C Task 5: param/halation_* (`test/parity/halationParams.test.ts`).
+  halationEnabled: 'verified',
+  halationAmount: 'verified',
   // Keluarga `<case>` (keduanya mati, `measuredChain.test.ts`) dan
   // `<case>_stochastic` (keduanya hidup, `grain.test.ts`,
   // `scannerPostGlare.test.ts`) -- lih. aturan kombinasi di bawah.
   grainEnabled: 'verified',
-  grainAmount: 'locked',
-  grainSeed: 'locked',
-  filmFormat: 'locked',
+  // Fase 2C Task 7: param/grain_*, format_* (`test/parity/grainParams.test.ts`).
+  grainAmount: 'verified',
+  grainSeed: 'verified',
+  filmFormat: 'verified',
   cameraDiffusionEnabled: 'locked',
   cameraDiffusionFamily: 'locked',
   cameraDiffusionStrength: 'locked',
@@ -46,8 +57,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   printDiffusionFamily: 'locked',
   printDiffusionStrength: 'locked',
   glareEnabled: 'verified',
-  glarePercent: 'locked',
-  scannerUnsharpAmount: 'locked',
+  // Fase 2C Task 6: param/glare_*, grain_* (`test/parity/glare.test.ts`).
+  glarePercent: 'verified',
+  // Fase 2C Task 6: param/unsharp_* (`test/parity/unsharp.test.ts`).
+  scannerUnsharpAmount: 'verified',
 });
 
 export class UnverifiedParameterError extends Error {
@@ -76,17 +89,10 @@ export function validateRenderParams(p: RenderParams): void {
       throw new UnverifiedParameterError(field, p[field], BASELINE_RENDER_PARAMS[field]);
     }
   }
-  // Fase 1 menggerbangi grain dan glare HANYA bersamaan (keduanya mati di
-  // `deactivate_stochastic_effects`, keduanya hidup di default). Campuran
-  // tidak pernah dibangkitkan Python.
-  if (p.grainEnabled !== p.glareEnabled) {
-    throw new UnverifiedParameterError(
-      'glareEnabled',
-      p.glareEnabled,
-      p.grainEnabled,
-      'glare dan grain hanya terverifikasi bila keduanya sama-sama hidup atau mati',
-    );
-  }
+  // Fase 1 menggerbangi grain dan glare HANYA bersamaan. Fase 2C Task 6
+  // menggerbangi campurannya (`test/parity/glare.test.ts`: glare tanpa grain,
+  // grain tanpa glare lewat percent 0), jadi keempat kombinasi terverifikasi
+  // dan aturan kopling lama dilepas.
 }
 
 /** Terapkan patch lalu validasi; `current` tidak pernah dimutasi. */

@@ -1,0 +1,41 @@
+{
+  "name": "param/out_acescg",
+  "height": 64,
+  "width": 64,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "outputColorSpace": "ACEScg"
+  },
+  "pythonOverrides": [
+    "io.output_color_space = 'ACEScg'"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

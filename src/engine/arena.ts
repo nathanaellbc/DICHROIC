@@ -278,6 +278,17 @@ export class ArenaBuilder {
   }
 
   /**
+   * Salinan host satu entri sebelum `build()` -- sama dengan `Arena.values`,
+   * untuk perhitungan host yang membaca tabel arena tanpa device (Fase 2C,
+   * `src/host/printExposure.ts`).
+   */
+  values(name: string): Float32Array {
+    const chunk = this.chunks.find((c) => c.entry.name === name);
+    if (!chunk) throw new Error(`Entri '${name}' tidak ada di ArenaBuilder.`);
+    return chunk.data.slice();
+  }
+
+  /**
    * Menyalin seluruh entri yang terkumpul ke satu `GPUBuffer` dan
    * mengembalikan `Arena` yang mengekspos offset-nya. Boleh dipanggil dengan
    * NOL entri (arena kosong) — lihat `MIN_ARENA_BUFFER_BYTES` di atas untuk

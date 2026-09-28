@@ -1,0 +1,44 @@
+{
+  "name": "param/cs_slog3_sgamut3_decode_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "inputColorSpace": "Sony S-Log3 S-Gamut3",
+    "inputCctfDecoding": true
+  },
+  "pythonOverrides": [
+    "io.input_color_space = 'S-Gamut3'",
+    "io.input_cctf_decoding = True"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}

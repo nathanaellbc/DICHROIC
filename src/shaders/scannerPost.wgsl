@@ -152,7 +152,10 @@
 @group(0) @binding(10) var<storage, read_write> unsharpBlurred: array<vec4<f32>>;
 @group(0) @binding(11) var<storage, read> unsharpKernel: array<f32>;
 
-const kUnsharpAmount: f32 = 0.7; // `scanner.unsharp_mask[1]` default, konstanta skema.
+// Fase 2C: per render (`FrameParams`), dibaca HANYA `scan` (x) dan `glareGenerate` (y):
+//   x = `scanner.unsharp_mask[1]` (amount; sigma tetap 0.7),
+//   y = mu lognormal glare = ln(percent) - sigma2/2 (`fast_lognormal_from_mean_std`).
+@group(0) @binding(12) var<uniform> scannerFrame: vec4<f32>;
 const kUnsharpMaxRadius: i32 = 16; // lih. dir.wgsl::kMaxKernelRadius -- headroom jauh di atas radius terpakai (2).
 
 fn unsharpKernelRadius() -> i32 {
@@ -273,17 +276,15 @@ fn scanToOutputRgb(xyz: vec3<f32>) -> vec3<f32> {
 //      terbaca 1:1 terhadap `glare.py`).
 // ============================================================================
 
-const kGlarePercent: f32 = 0.03;
 const kGlareRoughness: f32 = 0.7;
 const kGlareBlurSigma: f32 = 0.5;
 // int(3.0*0.5 + 0.5) = 2 (`_gaussian_kernel_1d`, fast_gaussian_filter.py).
 const kGlareBlurRadius: i32 = 2;
 // sigma2 = ln(1 + roughness^2) = ln(1.49); sigma = sqrt(sigma2);
-// mu = ln(percent) - sigma2/2. Dihitung host-side (node) dari formula
-// `fast_lognormal_from_mean_std` di atas, bukan ditebak -- lih. blok
-// komentar modul untuk derivasi lengkap.
+// mu = ln(percent) - sigma2/2 bergantung `glarePercent`, jadi sejak Fase 2C
+// dihitung host per render (`glareLogMu`, `stages/scannerPost.ts`) dan
+// dibaca dari `scannerFrame.y`. sigma tidak bergantung percent (s/m = roughness).
 const kGlareLogSigma: f32 = 0.6314872286573718;
-const kGlareLogMu: f32 = -3.7059459572986655;
 
 fn illuminantXyz() -> vec3<f32> {
   let o = ARENA_SCANNERILLUMINANTXYZ_OFFSET;
@@ -370,7 +371,7 @@ fn glareGenerate(@builtin(global_invocation_id) gid: vec3<u32>) {
   // piksel yang sama tergantung tile yang memuatnya.
   let tileGid = absoluteGid + vec2<u32>(params.tileOriginX, params.tileOriginY);
   let z = glareRandNormal(tileGid.x, tileGid.y);
-  glarePreBlur[index] = exp(kGlareLogMu + kGlareLogSigma * z);
+  glarePreBlur[index] = exp(scannerFrame.y + kGlareLogSigma * z);
 }
 
 @compute @workgroup_size(32, 8, 1)
@@ -552,20 +553,24 @@ const kMatrixInverse16 = mat3x3<f32>(
   -1.01125463, 0.62144744, -0.03412294,
   0.14918678, -0.00897399, 1.04996444,
 );
-// `colour.RGB_COLOURSPACES['sRGB'].matrix_RGB_to_XYZ`/`matrix_XYZ_to_RGB`
-// -- konstanta TERBIT independen, BUKAN sepasang invers (lih. blok komentar
-// berkas). WGSL `mat3x3` kolom-mayor: baris matriks Python jadi KOLOM di
-// sini (pola sama dengan `kMatrix16` di atas).
-const kSrgbRgbToXyz = mat3x3<f32>(
-  0.4124, 0.2126, 0.0193,
-  0.3576, 0.7152, 0.1192,
-  0.1805, 0.0722, 0.9505,
-);
-const kSrgbXyzToRgb = mat3x3<f32>(
-  3.2406, -0.9689, 0.0557,
-  -1.5372, 1.8758, -0.2040,
-  -0.4986, 0.0415, 1.0570,
-);
+// `colour.RGB_COLOURSPACES[output].matrix_RGB_to_XYZ`/`matrix_XYZ_to_RGB`
+// APA ADANYA (untuk sRGB: konstanta TERBIT independen, BUKAN sepasang invers
+// -- lih. blok komentar berkas). Fase 2C Task 9: dibaca dari arena dynamic
+// (`scannerOutput*`, baris-mayor) per colour space keluaran; dulu konstanta
+// sRGB di sini. WGSL `mat3x3` kolom-mayor: baris jadi KOLOM.
+fn outputMatrix(base: u32) -> mat3x3<f32> {
+  return mat3x3<f32>(
+    vec3<f32>(dynamicArena[base], dynamicArena[base + 3u], dynamicArena[base + 6u]),
+    vec3<f32>(dynamicArena[base + 1u], dynamicArena[base + 4u], dynamicArena[base + 7u]),
+    vec3<f32>(dynamicArena[base + 2u], dynamicArena[base + 5u], dynamicArena[base + 8u]),
+  );
+}
+fn outputRgbToXyz() -> mat3x3<f32> {
+  return outputMatrix(ARENA_SCANNEROUTPUTRGBTOXYZ_OFFSET);
+}
+fn outputXyzToRgb() -> mat3x3<f32> {
+  return outputMatrix(ARENA_SCANNEROUTPUTXYZTORGB_OFFSET);
+}
 
 const kSurroundC: f32 = 0.69;
 const kSurroundNc: f32 = 1.0;
@@ -746,7 +751,7 @@ fn cmaxLookup(Jp: f32, h: f32) -> f32 {
 // `OutputGamutCompressSpec` default dan probe host langsung (kwargs
 // SUNGGUHAN yang `compress_rgb` teruskan), bukan ditebak.
 fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
-  let xyz = kSrgbRgbToXyz * rgbLinear;
+  let xyz = outputRgbToXyz() * rgbLinear;
   var jab = xyzToCam16Ucs(xyz, vc);
   // `_compress_lightness`: knee satu-sisi pada Jp, dinormalisasi `L_white`
   // -- `_cam16ucs_white_Jp` TERBUKTI ALJABAR persis 100.0 untuk SEMBARANG
@@ -763,7 +768,7 @@ fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
   let bpNew = CpNew * sinAccurate(hp);
 
   let xyzNew = cam16UcsToXyz(jab.x, apNew, bpNew, vc);
-  return kSrgbXyzToRgb * xyzNew;
+  return outputXyzToRgb() * xyzNew;
 }
 
 // `_apply_cctf_encoding` (`colour.RGB_to_RGB(rgb, cs, cs,
@@ -777,10 +782,31 @@ fn srgbEncode(v: f32) -> f32 {
   return 1.055 * spow(v, 1.0 / 2.4) - 0.055;
 }
 
+// Fase 2C Task 9: `cctf_encoding` colour space keluaran, jenis dari
+// `scannerOutputEncoding` (lih. `bake_web_assets.py::_python_output_color_spaces`,
+// dideteksi numerik): 0 linear, 1 sRGB (IEC 61966-2-1), 2 ROMM (ProPhoto:
+// `16v` di bawah 1/512, `v**(1/1.8)`), 3 gamma `v**(1/g)`.
+fn outputEncode(v: f32) -> f32 {
+  let kind = u32(dynamicArena[ARENA_SCANNEROUTPUTENCODING_OFFSET]);
+  if (kind == 1u) {
+    return srgbEncode(v);
+  }
+  if (kind == 2u) {
+    if (v < 1.0 / 512.0) {
+      return 16.0 * v;
+    }
+    return spow(v, 1.0 / 1.8);
+  }
+  if (kind == 3u) {
+    return spow(v, 1.0 / dynamicArena[ARENA_SCANNEROUTPUTENCODING_OFFSET + 1u]);
+  }
+  return v;
+}
+
 fn applyCctfEncoding(rgbCompressed: vec3<f32>) -> vec3<f32> {
-  let xyz = kSrgbRgbToXyz * rgbCompressed;
-  let rgb2 = kSrgbXyzToRgb * xyz;
-  return vec3<f32>(srgbEncode(rgb2.x), srgbEncode(rgb2.y), srgbEncode(rgb2.z));
+  let xyz = outputRgbToXyz() * rgbCompressed;
+  let rgb2 = outputXyzToRgb() * xyz;
+  return vec3<f32>(outputEncode(rgb2.x), outputEncode(rgb2.y), outputEncode(rgb2.z));
 }
 
 // Batas aktif SAMA di keempat entry point di bawah (`scanPreUnsharp`,
@@ -900,7 +926,7 @@ fn scan(@builtin(global_invocation_id) gid: vec3<u32>) {
   let index = absoluteIndex(gid);
   let pre = preUnsharp[index];
   let unsharpOn = (params.slot1 & 8u) != 0u;
-  let sharpened = select(pre.rgb, pre.rgb + kUnsharpAmount * (pre.rgb - unsharpBlurred[index].rgb), unsharpOn);
+  let sharpened = select(pre.rgb, pre.rgb + scannerFrame.x * (pre.rgb - unsharpBlurred[index].rgb), unsharpOn);
 
   let rgbEncoded = applyCctfEncoding(sharpened);
 

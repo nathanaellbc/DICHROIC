@@ -29,9 +29,16 @@
 @group(0) @binding(3) var<storage, read> staticArena: array<f32>;
 @group(0) @binding(4) var<storage, read> stockArena: array<f32>;
 @group(0) @binding(5) var<storage, read> dynamicArena: array<f32>;
+// Fase 2C Task 9: x = pengali nilai TER-ENCODE sebelum decode CCTF
+// (`2**autoexposure_ev` -- Python `FilmingStage.auto_exposure` mengalikan
+// gambar input APA ADANYA, sebelum `rgb_to_raw` men-decode). 1 bila decode mati
+// (auto-exposure lalu ikut `filmExposureEv`, setara karena linear).
+@group(0) @binding(6) var<uniform> inputFrame: vec4<f32>;
 
 const kLog10E: f32 = 0.4342944819032518;
 const kColorAdaptationInputCompression: u32 = 1u << 0u;
+// Fase 2C Task 9: `io.input_cctf_decoding` Python (`FLAG_INPUT_CCTF_DECODING`, params.ts).
+const kInputCctfDecoding: u32 = 1u << 4u;
 
 fn colorSpaceIndex() -> u32 {
   return u32(clamp(params.inputColorSpace, 0, i32(max(params.colorSpaceCount, 1u)) - 1));
@@ -96,17 +103,23 @@ fn sampleDecodeLut(value: f32, colorSpace: u32) -> f32 {
 //     ~1.8) MENGUBAH NILAI SUBSTANSIAL (0.5 -> 0.287 dkk), sementara Python
 //     memang tidak pernah menyentuhnya untuk kombinasi ini.
 //
-// Jadi `decodeInputRgb` di sini SENGAJA menjadi identitas -- bukan
-// menghapus fungsi (dipertahankan untuk kejelasan niat dan andai CoreParams
-// suatu saat mendapat slot independen), tapi tidak dipanggil dengan cabang
-// LUT aktif untuk stock/config yang gerbang Task 11 uji. Jika tugas
-// berikutnya memerlukan color space yang BENAR-BENAR perlu didekode (mis.
-// sRGB dengan flag Python True), kembalikan pemanggilan LUT di sini DAN
-// selesaikan dulu bagaimana CoreParams akan membawa flag itu -- jangan
-// menebak dari colorTransferKinds saja seperti GLSL hulu, yang terbukti
-// salah untuk konfigurasi test ini.
+// FASE 2C TASK 9: flag independen itu kini ada -- `kInputCctfDecoding` (bit 4
+// `slot1`, dari `RenderParams.inputCctfDecoding`), BUKAN `colorTransferKinds`.
+// Mati: identitas (perilaku yang dibuktikan di atas). Hidup: LUT decode
+// label ini, pada nilai ter-encode yang lebih dulu dikalikan `inputFrame.x`
+// (auto-exposure Python bekerja di ruang ter-encode). Decode OFX identik
+// dengan `cctf_decoding` colour untuk 20 label (diukur, selisih 0);
+// `validateInputColorSpace` (plan.ts) menolak decode untuk 6 sisanya.
 fn decodeInputRgb(rgb: vec3<f32>, colorSpace: u32) -> vec3<f32> {
-  return rgb;
+  if (!colorAdaptationEnabled(kInputCctfDecoding)) {
+    return rgb;
+  }
+  let scaled = rgb * inputFrame.x;
+  return vec3<f32>(
+    sampleDecodeLut(scaled.r, colorSpace),
+    sampleDecodeLut(scaled.g, colorSpace),
+    sampleDecodeLut(scaled.b, colorSpace),
+  );
 }
 
 // Baca satu matriks 3x3 row-major dari `arena` mulai `base`, kalikan `rgb`.

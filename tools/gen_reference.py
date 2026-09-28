@@ -544,7 +544,158 @@ def _generate_pixel_regime_case(image: np.ndarray, case_dir: Path, name: str, fi
     print(f"Wrote {case_dir} (film_format_mm={film_format_mm})")
 
 
+# Fase 2C: keluarga `param/`. Tabel kasus di `tools/param_cases.py`.
+def flat_patch(width: int = 64, height: int = 64) -> np.ndarray:
+    """Abu-abu datar 0.184 (midgray): setiap piksel draw IID, jadi momen
+    `rgb_out` murni derau grain/glare, bukan sinyal spasial."""
+    return np.full((height, width, 3), 0.184, dtype=np.float64)
+
+
+def encoded_patches() -> np.ndarray:
+    """Seperti `color_patches` tetapi nilai TER-ENCODE di [0, 1] (tanpa 2.0):
+    untuk kasus decode CCTF, yang domain LUT decode-nya [-0.125, 1.5]."""
+    colors = np.array([
+        [0.46, 0.46, 0.46], [0.73, 0.25, 0.25], [0.25, 0.73, 0.25],
+        [0.25, 0.25, 0.73], [0.90, 0.85, 0.70], [0.15, 0.15, 0.15],
+        [0.98, 0.98, 0.98], [0.95, 0.66, 0.35],
+    ], dtype=np.float64)
+    return np.repeat(colors[None, :, :], 8, axis=0)
+
+
+PARAM_IMAGES = {
+    **CASES,
+    "grain_dense_patch": grain_dense_patch,
+    "identity_lattice_17": identity_lattice_17,
+    "flat_patch": flat_patch,
+    "encoded_patches": encoded_patches,
+}
+
+
+def _moments_binned(rgb: np.ndarray, bins: int) -> dict:
+    """Port `test/parity/statistics.ts::momentsBinned` (kanal hijau): mean,
+    varians populasi, dan profil varians radial dengan bin lebar-sama."""
+    g = np.asarray(rgb, dtype=np.float64)[:, :, 1]
+    height, width = g.shape
+    mean = float(g.mean())
+    d2 = (g - mean) ** 2
+    ys, xs = np.mgrid[0:height, 0:width]
+    r_raw = np.hypot(xs - width / 2, ys - height / 2)
+    half = max(min(width, height) / 2, 1e-9)
+    r = np.minimum(bins - 1, np.floor(r_raw / half * bins)).astype(int)
+    power = [float(d2[r == i].mean()) if np.any(r == i) else 0.0 for i in range(bins)]
+    # Autokorelasi lag-1 (rata-rata arah x dan y): peka terhadap blur derau.
+    dev = g - mean
+    var = float(d2.mean())
+    lag_x = float((dev[:, 1:] * dev[:, :-1]).mean()) / var if var > 0 else 0.0
+    lag_y = float((dev[1:, :] * dev[:-1, :]).mean()) / var if var > 0 else 0.0
+    return {"mean": mean, "variance": var, "radialPower": power, "lag1": (lag_x + lag_y) / 2}
+
+
+def _run_param_tap(case, image: np.ndarray, tap):
+    """Satu tap untuk kasus `param/`. Bila `grain_amount` diset, `cmy_film`
+    adalah campuran OFX `applyGrainControls` dan tap hilirnya diinjeksi dari
+    campuran itu; tap hulu `cmy_film` tidak dipengaruhi grain."""
+    params = _build_param_case_params(case)
+    if case.grain_amount is None or TAPS.index(tap) < TAPS.index(Tap.CMY_FILM):
+        return SimulationPipeline(params).process(image, collect=tap)
+    grained = SimulationPipeline(params).process(image, collect=Tap.CMY_FILM)
+    base_params = _build_param_case_params(case)
+    base_params.film_render.grain.active = False
+    base = SimulationPipeline(base_params).process(image, collect=Tap.CMY_FILM)
+    blend = np.maximum(base + (grained - base) * case.grain_amount, 0.0)
+    if tap == Tap.CMY_FILM:
+        return blend
+    return SimulationPipeline(params).process(blend, inject=Tap.CMY_FILM, collect=tap)
+
+
+def _python_stats(case, image: np.ndarray) -> dict:
+    """Momen tiap `stat_taps` atas `case.realizations` realisasi Python
+    independen (RNG hulu tidak di-seed): rata-rata dan simpangan baku sampel."""
+    samples = {tap: [] for tap in case.stat_taps}
+    for _ in range(case.realizations):
+        for tap in case.stat_taps:
+            samples[tap].append(_moments_binned(_run_param_tap(case, image, tap), case.stat_bins))
+    out = {}
+    for tap, rows in samples.items():
+        def summarize(values):
+            arr = np.asarray(values, dtype=np.float64)
+            return [float(arr.mean()), float(arr.std(ddof=1))]
+        out[tap] = {
+            "bins": case.stat_bins,
+            "realizations": case.realizations,
+            "mean": summarize([r["mean"] for r in rows]),
+            "variance": summarize([r["variance"] for r in rows]),
+            "lag1": summarize([r["lag1"] for r in rows]),
+            "radialPower": [summarize([r["radialPower"][i] for r in rows]) for i in range(case.stat_bins)],
+        }
+    return out
+
+
+def _build_param_case_params(case):
+    raw = init_params(case.film, case.print_stock)
+    if case.family == "lut":
+        raw.debug.lut_mode = True
+    elif case.family == "deterministic":
+        raw.debug.deactivate_stochastic_effects = True
+    elif case.family != "stochastic":
+        raise ValueError(f"keluarga tidak dikenal: {case.family}")
+    if case.film_format_mm is not None:
+        raw.camera.film_format_mm = case.film_format_mm
+    if case.pre is not None:
+        case.pre(raw)
+    params = digest_params(raw)
+    if case.post is not None:
+        case.post(params)
+    assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
+    if case.family != "stochastic":
+        assert not params.film_render.grain.active and not params.print_render.glare.active
+    return params
+
+
+def _generate_param_case(name: str, case_dir: Path) -> None:
+    """Keluarga `param/<name>` (Fase 2C): input.f32 sendiri, semua tap, dan
+    case.json yang mencatat patch `RenderParams` beserta padanan Python-nya."""
+    from param_cases import PARAM_CASES
+
+    case = PARAM_CASES[name]
+    image = PARAM_IMAGES[case.image]()
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
+    written = []
+    for tap in TAPS:
+        result = _run_param_tap(case, image, tap)
+        arr = np.ascontiguousarray(result, dtype="<f4")
+        (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
+        written.append({"tap": tap, "channels": int(arr.shape[2])})
+    meta = {
+        "name": f"param/{name}",
+        "height": int(image.shape[0]),
+        "width": int(image.shape[1]),
+        "family": case.family,
+        "stochastic": case.family == "stochastic",
+        "film": case.film,
+        "print": case.print_stock,
+        "renderParams": case.render_params,
+        "pythonOverrides": list(case.python_overrides)
+        + ([f"grain_amount={case.grain_amount}: cmy_film = base + (grained - base) * amount; hilir inject=cmy_film"]
+           if case.grain_amount is not None else []),
+        "taps": written,
+    }
+    if case.family == "lut":
+        meta["lutMode"] = True
+    if case.film_format_mm is not None:
+        meta["filmFormatMm"] = case.film_format_mm
+    if case.realizations > 0:
+        if case.family != "stochastic":
+            raise ValueError(f"{name}: realizations hanya untuk keluarga stochastic")
+        meta["pythonStats"] = _python_stats(case, image)
+    _write_json_lf(case_dir / "case.json", meta)
+    print(f"Wrote {case_dir} (family={case.family})")
+
+
 def main() -> int:
+    from param_cases import PARAM_CASES
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--case", choices=sorted(CASES), action="append")
@@ -588,6 +739,11 @@ def main() -> int:
              "pixel sizes (IIR regime of fast_gaussian_filter).",
     )
     parser.add_argument(
+        "--param-case", choices=[*sorted(PARAM_CASES), "all"], action="append",
+        help="Regenerate Fase 2C `param/<name>` fixtures (tools/param_cases.py). "
+             "Use --param-case all for every entry.",
+    )
+    parser.add_argument(
         "--manifest", action="store_true",
         help="Also (re)write <out>/manifest.json: a sha256 of every file "
              "currently under --out, checked by fixtures.test.ts. Scans "
@@ -598,7 +754,7 @@ def main() -> int:
 
     ran_anything_case_specific = bool(
         args.case or args.diffusion_case or args.diffusion_print_case or args.grain_dense_case
-        or args.lattice_case or args.pixel_regime_case
+        or args.lattice_case or args.pixel_regime_case or args.param_case
     )
 
     names = args.case or (sorted(CASES) if not ran_anything_case_specific else [])
@@ -643,6 +799,12 @@ def main() -> int:
         image = PIXEL_REGIME_CASES[name]()
         for suffix, film_format_mm in PIXEL_REGIME_FILM_FORMAT_MM.items():
             _generate_pixel_regime_case(image, args.out / f"{name}_{suffix}", name, film_format_mm)
+
+    param_names = args.param_case or ([] if ran_anything_case_specific else ["all"])
+    if "all" in param_names:
+        param_names = sorted(PARAM_CASES)
+    for name in param_names:
+        _generate_param_case(name, args.out / "param" / name)
 
     if args.manifest:
         _write_manifest(args.out)

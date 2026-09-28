@@ -1,0 +1,41 @@
+{
+  "name": "param/exposure_print_plus0_7",
+  "height": 16,
+  "width": 32,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "printExposureEv": 0.7
+  },
+  "pythonOverrides": [
+    "enlarger.print_exposure = 2**0.7"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}
