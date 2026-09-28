@@ -186,12 +186,32 @@ SOFTWARE.
 
 Source: `Legal/THIRD_PARTY_NOTICES.txt` in `chaert-s/spektrafilm-ofx`.
 
+## Running the app
+
+```bash
+npm ci
+npm run dev        # http://localhost:5173 — open it on your phone with `npm run dev -- --host`
+npm run build      # production bundle in dist/
+npm run preview    # serve dist/ with the same headers
+```
+
+DICHROIC needs WebGPU (Safari on iOS 26+, current Chrome, Edge or Firefox).
+RAW decoding uses shared WASM memory, so the page must be cross-origin
+isolated: the dev and preview servers send `Cross-Origin-Opener-Policy:
+same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, and any
+hosting must send the same two headers.
+
 ## Project layout
 
 ```
-spektra/
-  src/            engine source (TypeScript + WGSL)
-  test/           vitest tests, including the licence boundary test
-  tools/          upstream toolchain verification records (Task 1)
-  package.json    independent dependency graph — see "Licence" above
+index.html        app entry
+src/
+  ui/             React + Motion interface (iPhone-first, Apple HIG / Liquid Glass)
+  session/        Session facade and its Web Worker RPC
+  engine/         WebGPU render graph and stages (TypeScript + WGSL in shaders/)
+  io/             image decoders and encoders
+  params/         RenderParams, parity-gated field registry, render plan
+test/             vitest tests, including the licence boundary test
+tools/            upstream toolchain records and fixture generators
+package.json      independent dependency graph — see "Licence" above
 ```
