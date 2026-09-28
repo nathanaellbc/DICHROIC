@@ -606,6 +606,125 @@ Penutupnya sudah tersedia tanpa fixture baru: keluarga `<case>` BIASA
 Menggerbangi `cmy_film`, `log_e_print`, `cmy_print`, dan `rgb_out` di situ akan
 memaku divergensinya ke satu tahap sekaligus menutup lubangnya secara permanen.
 
+### 6.5.3 Portabilitas builtin transendental lintas perangkat (Task 18b)
+
+Gerbang parity memverifikasi DUA hal yang berbeda, dan sebelum tugas ini
+keduanya tidak dibedakan secara eksplisit:
+
+1. **ALGORITMA** — urutan operasi, konvensi matriks, cabang mana yang aktif,
+   rumus mana yang dipakai. Ini port yang gerbang ada untuk membuktikan, dan
+   ia berlaku di GPU apa pun (algoritma tidak bergantung backend).
+2. **ARITMETIKA pada backend pengujian** — bahwa builtin WGSL (`pow`, `exp`,
+   `log`, `sin`, `cos`, `atan2`, `sqrt`, ...) pada Dawn/D3D12/Intel Iris Xe
+   (Gen12LP) yang menjalankan CI cukup akurat untuk lolos ambang 1e-5/1e-4.
+   Ini TIDAK berlaku di GPU lain secara otomatis — WGSL §15.9 hanya menjamin
+   `atan2` akurat sampai 4096 ULP, dan builtin lain punya jaminan yang lebih
+   longgar lagi atau tidak punya jaminan independen sama sekali (lih. di
+   bawah). Dua GPU yang SAMA-SAMA patuh spesifikasi boleh memberi hasil
+   berbeda untuk builtin yang sama.
+
+**Klaim portabilitas yang tepat, per builtin:**
+
+- **Aritmetika PORTABLE (diklaim, bukan cuma diuji di sini):** `atan2`,
+  `sin`, `cos` di seluruh rantai CAM16/CAM16-UCS `scannerPost.wgsl`. Ketiganya
+  sudah diganti polinomial minimax perkalian-tambah (`atan2Accurate`,
+  `sinAccurate`, `cosAccurate`) yang diverifikasi terhadap `Math.atan2`/
+  `Math.sin`/`Math.cos` di SELURUH domainnya (bukan cuma titik uji), dengan
+  margin >40x di atas builtin native yang diukur pada backend ini (Task
+  18/18c/18d). Karena polinomialnya tidak memanggil builtin transendental
+  bawaan sama sekali, akurasinya TIDAK bergantung implementasi backend --
+  klaim portabilitas ini berlaku di GPU manapun yang mengeksekusi
+  perkalian-tambah f32 sesuai kontrak dasar WEBGPU (bukan kontrak builtin
+  transendental yang longgar).
+- **Aritmetika TERUKUR DENGAN MARGIN pada backend ini, TIDAK diganti (Task
+  18b):** `pow`, `sqrt`, `exp`, `log` di seluruh sembilan shader. Diukur
+  langsung lewat probe compute-shader (metode Task 18: `device.
+  createComputePipeline` mentah, dibandingkan `Math.pow`/`Math.sqrt`/
+  `Math.exp`/`Math.log` f64 yang di-downcast f32) pada rentang input yang
+  benar-benar dipakai tiap situs panggil (bukan rentang generik): `sqrt`
+  1 ULP (praktis correctly-rounded) di setiap situs; `pow`/`exp`/`log` 2-31
+  ULP tergantung situs, abs error ~1e-7..1e-6 pada magnitudo realistis. Gain
+  propagasi tiap situs ke `rgb_out` diukur lewat injeksi sensitivitas host
+  f64 (metode yang sama dipakai untuk menemukan gain `hp`≈0.81 di Task 18) --
+  tiga situs (`pow(t,0.42)`/`pow(ratio,1/0.42)` di `postAdaptForward`/
+  `postAdaptInverse`, `pow(J/100,1/(surroundC·z))` di `cam16Inverse`) punya
+  gain tertinggi yang terukur di seluruh rantai (68-76x) setelah `atan2`/
+  `sin`/`cos`. Produk galat×gain KONSERVATIF (memakai maksimum independen
+  keduanya, yang secara aljabar TIDAK bisa terjadi bersamaan pada satu piksel
+  yang sama) mendarat ~1e-5..1.7e-5 -- mendekati ambang -- tapi residual
+  NYATA yang diukur end-to-end di Gate A (1,8e-6 max abs error setelah
+  `atan2`/`sin`/`cos` diganti, TANPA menyentuh `pow`/`sqrt`) sudah 13x di
+  bawah ambang, dan Task 18 sendiri sudah MENGUJI dua kandidat penggantian di
+  titik `pow` yang sama (`pow(x,6)` siku kroma jadi rantai kali eksak; baking
+  `F_L^0.25`/`(1,64-0,29^n)^0,73` jadi konstanta host) dan mengukur KEDUANYA
+  tidak membeli apa pun (regresi level-derau). Mengulang penggantian tanpa
+  manfaat terukur adalah utang, bukan kualitas -- **tidak diganti**, tapi
+  DIBENDERAI: `pow`/`sqrt` TIDAK punya jaminan ULP independen di spesifikasi
+  WGSL §15.7.4 sama sekali (keduanya masuk kelas "diwariskan dari dekomposisi/
+  reasosiasi", bukan kelas "batas eksplisit" tempat `atan2`/`sin`/`cos`/`exp`/
+  `log` berada) -- backend lain yang SAMA-SAMA patuh spesifikasi boleh punya
+  `pow` jauh lebih tidak akurat dari 2-31 ULP yang terukur di sini, dan pada
+  gain 68-76x itulah risiko portabilitas SEBENARNYA duduk, bukan pada
+  backend ini.
+- **Aritmetika TIDAK RELEVAN (kode mati untuk fixture manapun):** `log`
+  (`developmentActivity`) dan `exp` (`sigmoidCurve`) di `curveDevelop.wgsl`
+  DAN `dir.wgsl` (mesin push/pull eksperimental) hanya dieksekusi ketika
+  `params.filmPushPullMode==1`, dan `filmPushPullMode` bernilai `0` untuk
+  SETIAP fixture gerbang di repo ini (`test/parity/params.ts:310`, satu-
+  satunya default yang dipakai ulang seluruh gerbang) -- gain-nya ke `rgb_out`
+  adalah NOL secara struktural, bukan sekadar kecil. Dicatat sebagai cakupan,
+  bukan risiko: kalau push/pull suatu hari diaktifkan untuk render produksi,
+  jalur ini BELUM diverifikasi aritmetikanya sama sekali (algoritma maupun
+  aritmetika), dan harus diaudit ulang saat itu.
+- **`cos()` di `glareRandNormal`/`grain.wgsl::randNormal` (Box-Muller,
+  gerbang STATISTIK 1e-4, bukan per-piksel):** SENGAJA tidak direduksi ke
+  `[-π,π]` sebelum dipanggil (argumennya `2π·u2`, `u2∈[0,1)`, jadi domain asli
+  `[0,2π)`) -- diverifikasi Task 18e (`glareRandNormal`) dan Task 18b (probe
+  langsung di kedua shader) bahwa ini AMAN: galat absolut native `cos()` di
+  SELURUH `[0,2π)` pada backend ini terukur ≤2,25e-7 (ULP meledak dekat
+  nol-lintasan `cos`, tapi galat absolut-nya sendiri kecil -- metrik ULP
+  menyesatkan dekat nol fungsi apapun), dan gain Box-Muller ke `rgb_out`
+  terukur ~0,79 (Task 18e) -- kontribusi ~1,8e-7, jauh di bawah ambang. TIDAK
+  diganti karena tidak ada manfaat terukur, bukan karena tidak diperiksa.
+- **`densityToLight`/`log10Vec3` (`pow(10,-density)`, `log(x)*kLog10E`) di
+  `scannerPost.wgsl`, `printScan.wgsl`, `halation.wgsl`, `filmExposure.wgsl`,
+  `diffusion.wgsl` (situs `log10` penutup tap):** gain ke tap-nya SENDIRI
+  adalah faktor skala langsung (`kLog10E`≈0,434, atau identik 1 untuk
+  `pow(10,x)` yang me-roundtrip `10**log10(y)==y`), TIDAK dikuatkan siku
+  nonlinier manapun (beda dari rantai CAM16). Empat dari lima tap yang
+  dihasilkannya (`log_e_film`, `log_e_print`, dan turunannya) sudah lulus
+  gerbang deterministik di ~3e-7..5,7e-7 -- lantai f32 biasa, bukan sinyal
+  builtin bermasalah.
+
+**Metode pengukuran gain, diulang dari Task 18 (bukan diciptakan baru):**
+injeksi sensitivitas host f64 -- reimplementasi rantai CAM16/CAM16-UCS
+(`src/host/cam16.ts`, yang JUGA membangun tabel `C_max` yang dipakai
+`scannerPost.wgsl` sungguhan) dengan hook di tiap situs panggil `pow`/`sqrt`/
+`log`/`exp` INDIVIDUAL (bukan di kuantitas gabungan seperti `J`/`M`, yang
+sering memuat 2-3 panggilan transendental berbeda dalam satu baris rumus),
+lalu beda-hingga tengah (`h`=maks(|nilai|·1e-6, 1e-9)) untuk mengukur
+`|Δ(rgb_out_terenkode)/Δ(situs)|` pada sepuluh titik `rgbLinear` representatif
+(hitam, abu-abu-tengah, putih, primer/sekunder jenuh pada dua kecerahan, dan
+titik yang membentuk `Cp/CpMax`>1, siku gamut yang SAMA yang menyingkap bug
+`atan2` di Task 18).
+
+**Keterbatasan yang diakui secara eksplisit (satu backend, satu sesi):**
+angka "di sini" di atas berasal dari SATU adapter (Intel Iris Xe Gen12LP,
+Dawn/D3D12) dan SATU sesi pengukuran -- ia membuktikan builtin ini akurat
+DI SINI, bukan di mana pun. Rentang input "realistis" untuk `pow`/`sqrt`
+diturunkan dari sepuluh sampel `rgbLinear` representatif (termasuk yang
+sengaja dibuat jenuh/cerah untuk menekan rantai), BUKAN dari penjejakan
+piksel demi piksel seluruh fixture gerbang lewat sebelas tahap pipeline --
+itu di luar anggaran tugas ini, dan sepuluh sampel di atas + gerbang Gate A
+yang sudah lulus (1,8e-6, 13x di bawah ambang) adalah bukti korroboratif,
+bukan pembuktian lengkap. Situs yang aman di sini dan pada rentang realistis
+BISA melebihi 1e-5 pada input yang lebih ekstrem BAHKAN di backend yang sama
+(diukur langsung: `exp()` di `expm1Stable`'s fallback branch, kontribusi
+~6,6e-7 pada rentang realistis `Mp`≤50 tapi ~3,15e-5 pada rentang ekstrem
+`Mp`≤150 yang tidak pernah dicapai fixture gerbang manapun hari ini) -- ini
+DICATAT sebagai risiko, bukan diabaikan, karena persis kelas risiko yang
+tugas ini ada untuk menemukan.
+
 ### 6.6 Harness
 
 Pembangkitan referensi: skrip Python yang memanggil `SimulationPipeline` dengan

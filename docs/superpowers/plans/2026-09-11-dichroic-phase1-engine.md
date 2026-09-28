@@ -3313,19 +3313,46 @@ membuktikan satu backend. Yang dipakai hari ini:
 Semuanya lulus gerbangnya di ~1e-7 **pada backend ini**, yang berarti akurasinya
 memadai di sini — bukan bahwa ia memadai di mana pun.
 
-- [ ] Pakai ulang probe compute-shader Task 18 untuk mengukur galat ULP SETIAP
+- [x] Pakai ulang probe compute-shader Task 18 untuk mengukur galat ULP SETIAP
       builtin di tabel itu terhadap padanan f64, pada rentang masukan yang
       benar-benar dipakai tiap situs panggil (bukan rentang generik).
-- [ ] Ukur gain propagasi tiap situs panggil ke tap keluarannya, seperti yang
+- [x] Ukur gain propagasi tiap situs panggil ke tap keluarannya, seperti yang
       dilakukan untuk `hp = atan2(...)`. Galat besar pada suku bergain rendah
       tidak penting; galat kecil pada suku bergain tinggi penting.
-- [ ] Ganti HANYA yang hasil kali galat-x-gain-nya mendekati 1e-5, dengan
+- [x] Ganti HANYA yang hasil kali galat-x-gain-nya mendekati 1e-5, dengan
       polinomial perkalian-tambah seperti `atan2Accurate`. Jangan ganti yang
       lain — kode yang ditulis tangan tanpa alasan terukur adalah utang, bukan
       kualitas.
-- [ ] Catat di spec: gerbang parity memverifikasi ALGORITMA, dan pada backend
+- [x] Catat di spec: gerbang parity memverifikasi ALGORITMA, dan pada backend
       pengujian juga memverifikasi aritmetikanya; portabilitas aritmetika adalah
       klaim TERPISAH yang hanya berlaku untuk builtin yang sudah diganti.
+
+**Selesai (sesi lanjutan, setelah Task 18/18c/18d).** Inventori dihitung ULANG
+dari `scannerPost.wgsl` sungguhan (tabel di atas SUDAH USANG -- `atan2`, SEMUA
+`sin`/`cos` di rantai CAM16-UCS sudah diganti `atan2Accurate`/`sinAccurate`/
+`cosAccurate` oleh sesi Task 18d yang tidak sempat menulis laporannya sendiri,
+ditemukan lewat pembacaan sumber langsung, bukan dipercaya dari tabel ini).
+Builtin native yang TERSISA per shader (dihitung lewat `grep` teks kode SAJA,
+komentar disingkirkan): `scannerPost.wgsl` — `pow`×11, `exp`×3, `log`×2,
+`cos`×1 (glare), `sqrt`×6; `halation.wgsl` — `pow`×1, `exp`×6, `log`×2,
+`sqrt`×1; `grain.wgsl` — `exp`×3, `log`×2, `cos`×1, `sqrt`×4; `printScan.wgsl`
+— `pow`×2, `log`×1; `curveDevelop.wgsl`/`dir.wgsl` — `exp`×1/`log`×1 MASING²,
+tapi KEDUANYA kode MATI (`filmPushPullMode` selalu 0 di setiap fixture gerbang,
+`test/parity/params.ts:310`); `filmExposure.wgsl` — `exp2`×1, `log`×1;
+`diffusion.wgsl` — `log`×1. Diukur lewat probe compute-shader real (metode
+Task 18) pada rentang realistis per situs (diturunkan dari sensitivitas host
+f64, BUKAN ditebak dari nama parameter): `sqrt` 1 ULP di setiap situs
+(praktis correctly-rounded di backend ini), `pow`/`exp`/`log` 2-31 ULP, abs
+error ~1e-7..1e-6 pada magnitudo realistis. TIDAK ADA yang diganti — tiga
+situs `pow` bergain tertinggi (68-76x, di `postAdaptForward`/`postAdaptInverse`
+/`cam16Inverse`) mendarat dekat 1e-5 pada perhitungan galat×gain KONSERVATIF
+(maksimum independen, tidak bisa terjadi bersamaan satu piksel), tapi residual
+NYATA Gate A (1,8e-6, 13x di bawah ambang) DAN dua eksperimen penggantian
+`pow` yang Task 18 SUDAH jalankan di titik yang sama (keduanya nol manfaat)
+adalah bukti kuat bahwa mengganti `pow`/`sqrt` di sini adalah utang, bukan
+kualitas — DIBENDERAI di spec §6.5.3 sebagai risiko portabilitas TERUKUR
+(WGSL tidak memberi `pow`/`sqrt` batas ULP independen sama sekali), bukan
+diperbaiki. Detail lengkap: `.superpowers/sdd/2026-09-11-dichroic-phase1-engine/task-18b-report.md`.
 
 ## Task 16b: Suku grain yang bergantung ukuran piksel
 
@@ -3434,7 +3461,7 @@ yang KELIHATAN selesai. Karena itu daftar ini eksplisit, bukan "rasanya sudah".
 | Task 19 tiling, gerbang bit-identik | ✅ tertutup (6f59dfe) |
 | Site `print` Diffusion digerbangi | ✅ ditutup Task 17 (c3ada2c) — klausa lama di sini sudah usang, dikoreksi |
 | **Task 16b** — suku grain yang no-op hanya pada skala fixture | ❌ WAJIB, belum dikerjakan |
-| **Task 18b** — varians builtin transendental lintas perangkat | ❌ WAJIB, belum dikerjakan |
+| **Task 18b** — varians builtin transendental lintas perangkat | ✅ diukur, spec §6.5.3 — tidak ada penggantian (tidak ada manfaat terukur), `pow`/`sqrt` dibenderai sebagai risiko portabilitas terbuka |
 | **Gate B `gray_ramp_stochastic`** | ❌ satu-satunya test merah; sedang diselesaikan lewat perbandingan distribusi-ke-distribusi |
 | Risiko dicatat: pass blur grain/scannerPost dispatch full-buffer sementara `generate()` dispatch active-only | ⚠️ terbukti tak berbahaya pada skala tile uji SAJA, perlu ditinjau pada skala tile produksi (Task 19b) |
 | Review seluruh-branch atas minor yang ditunda di ledger | ❌ belum — agendanya sudah tertulis di atas, 7 butir |
