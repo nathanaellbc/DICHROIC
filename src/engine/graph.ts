@@ -27,9 +27,26 @@ import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
 import { planTiles } from './tiling';
 import type { TileSpec } from './tiling';
 
+/**
+ * Nilai per-render yang dipakai HOST saat meng-encode tahap, tapi tidak
+ * masuk blok `CoreParams` (yang sengaja mencerminkan persis push-constant OFX,
+ * 26 field -- `test/params.test.ts`). Fase 2A.5: `filmFormatMm` menggantikan
+ * konstanta 35.0 yang dulu disalin di halation/DIR/grain, supaya ukuran
+ * piksel (`film_format_mm * 1000 / max(fullWidth, fullHeight)`, Python
+ * `ResizingService.pixel_size_um`) bisa disetel -- termasuk ke ukuran piksel
+ * foto sungguhan pada fixture 64 px.
+ */
+export interface FrameParams {
+  filmFormatMm: number;
+}
+
+/** Python `CameraParams.film_format_mm` default (35 mm). */
+export const DEFAULT_FRAME: Readonly<FrameParams> = Object.freeze({ filmFormatMm: 35 });
+
 export interface StageContext {
   device: GPUDevice;
   params: CoreParams;
+  frame: Readonly<FrameParams>;
   paramsBuffer: GPUBuffer;
   source: GPUBuffer;
   dest: GPUBuffer;
@@ -231,17 +248,18 @@ export class RenderGraph {
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
-    options?: { maxBufferBytes?: number; overlap?: number },
+    options?: { maxBufferBytes?: number; overlap?: number; frame?: FrameParams },
   ): Promise<Float32Array> {
+    const frame = options?.frame ?? DEFAULT_FRAME;
     const maxBufferBytes = options?.maxBufferBytes;
     if (maxBufferBytes !== undefined) {
       const overlap = options?.overlap ?? 0;
       const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap);
       if (tiles.length > 1) {
-        return this.runTiled(input, params, collect, tiles);
+        return this.runTiled(input, params, collect, tiles, frame);
       }
     }
-    return this.runSingleBuffer(input, params, collect);
+    return this.runSingleBuffer(input, params, collect, false, frame);
   }
 
   /**
@@ -258,6 +276,7 @@ export class RenderGraph {
     params: CoreParams,
     collect: TapName,
     tiles: readonly TileSpec[],
+    frame: Readonly<FrameParams>,
   ): Promise<Float32Array> {
     const { width, height } = params;
     const output = new Float32Array(width * height * 4);
@@ -285,7 +304,7 @@ export class RenderGraph {
       // (pusat, TANPA apron) tile ini -- `runSingleBuffer` memakainya
       // sebagai `centerRect` awal yang dibesarkan per-tahap, BUKAN sebagai
       // active rect tetap untuk seluruh tahap (beda dari sebelum Task 19b).
-      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true);
+      const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true, frame);
       stitchTileOutput(output, width, tileResult, tile);
     }
 
@@ -311,6 +330,7 @@ export class RenderGraph {
     params: CoreParams,
     collect: TapName,
     shrinkApron = false,
+    frame: Readonly<FrameParams> = DEFAULT_FRAME,
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -484,6 +504,7 @@ export class RenderGraph {
       stage.encode(encoder, {
         device,
         params: stageParams,
+        frame,
         paramsBuffer: stageParamsBuffer,
         source: front,
         dest: back,

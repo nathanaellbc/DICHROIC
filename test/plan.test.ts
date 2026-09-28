@@ -4,7 +4,12 @@ import { loadAssets } from '../src/profiles/load';
 import type { AssetBundle } from '../src/profiles/load';
 import { BASELINE_RENDER_PARAMS } from '../src/params/renderParams';
 import { UnverifiedParameterError } from '../src/params/registry';
-import { MissingNeutralFiltersError, buildRenderPlan, resolveEnlargerFilters } from '../src/params/plan';
+import {
+  FILM_FORMAT_LONG_EDGE_MM,
+  MissingNeutralFiltersError,
+  buildRenderPlan,
+  resolveEnlargerFilters,
+} from '../src/params/plan';
 import { loadCase, loadInputAsRgba } from './parity/compare';
 
 let bundle: AssetBundle;
@@ -113,6 +118,27 @@ describe('buildRenderPlan -> arena dan apron', () => {
     const noGrain = buildRenderPlan(DETERMINISTIC, bundle, image('gray_ramp'), 'image');
     expect(withGrain.overlap).toBe(256 * 3 + 64);
     expect(noGrain.overlap).toBe(256 * 3);
+  });
+});
+
+describe('buildRenderPlan -> FrameParams', () => {
+  it('baseline standard35 memberi filmFormatMm 35 (Python camera.film_format_mm default)', () => {
+    expect(buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, image('gray_ramp'), 'image').frame).toEqual({
+      filmFormatMm: 35,
+    });
+  });
+
+  it('tabel sisi panjang format film mengikuti filmFormatLongEdgeMm OFX', () => {
+    expect(FILM_FORMAT_LONG_EDGE_MM).toEqual({
+      standard8: 4.8,
+      super8: 5.79,
+      standard16: 10.26,
+      super16: 12.52,
+      standard35: 35,
+      super35: 24.89,
+      standard65: 52.48,
+      imax70: 70.41,
+    });
   });
 });
 

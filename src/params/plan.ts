@@ -22,12 +22,13 @@
 import { FLAG_GLARE_ACTIVE, FLAG_UNSHARP_ACTIVE } from '../engine/params';
 import type { CoreParams } from '../engine/params';
 import { estimateTileOverlap } from '../engine/tiling';
+import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
 import { validateRenderParams } from './registry';
-import type { RenderParams } from './renderParams';
+import type { FilmFormat, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
 
@@ -52,7 +53,21 @@ export interface RenderPlan {
   overlap: number;
   /** Efek yang dimatikan mode ini -- ditulis ke header `.cube` (spec induk §7.2). */
   disabledEffects: string[];
+  /** Nilai host per render (format film -> ukuran piksel). */
+  frame: FrameParams;
 }
+
+/** `filmFormatLongEdgeMm` OFX (`SpektraVulkanRenderer.cpp:2008`), mm sisi panjang. */
+export const FILM_FORMAT_LONG_EDGE_MM: Readonly<Record<FilmFormat, number>> = Object.freeze({
+  standard8: 4.8,
+  super8: 5.79,
+  standard16: 10.26,
+  super16: 12.52,
+  standard35: 35,
+  super35: 24.89,
+  standard65: 52.48,
+  imax70: 70.41,
+});
 
 export interface PlanImage {
   width: number;
@@ -156,6 +171,7 @@ export function buildRenderPlan(
     chain: { family, grain: stochasticEffectsActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
+    frame: { filmFormatMm: FILM_FORMAT_LONG_EDGE_MM[params.filmFormat] },
   };
 }
 

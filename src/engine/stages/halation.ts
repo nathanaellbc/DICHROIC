@@ -153,7 +153,6 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
   const SIGMA_SCATTER_TAIL = 1;
   const SIGMA_BOUNCE = 2;
 
-  const FILM_FORMAT_MM = 35.0; // lih. blok komentar modul di atas.
 
   return {
     name: 'halation',
@@ -190,7 +189,8 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
       const junk = ctx.scratch('halation:junk', pixelBytes);
 
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
-      const pixelSizeUm = (FILM_FORMAT_MM * 1000) / longEdge;
+      // Fase 2A.5: format film dari `ctx.frame` (dulu konstanta 35.0 di sini).
+      const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
 
       const frameFloatsBuffer = ctx.device.createBuffer({
         label: 'halation:frameFloats',

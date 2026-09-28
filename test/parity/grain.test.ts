@@ -186,10 +186,14 @@ describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_p
       createFilmExposureStage(engine.device, arenas),
       createHalationStage(engine.device, arenas),
       createCurveDevelopStage(engine.device, arenas),
-      createDirStage(engine.device, arenas),
-      // film_format_mm=0.024 -- HANYA test ini, lih. `createGrainStage`
-      // untuk kenapa default 35.0 di semua pemanggil lain tidak tersentuh.
-      createGrainStage(engine.device, arenas, 0.024),
+      // SEMENTARA (Fase 2A.5 Task 3 -> Task 5): Python membangkitkan fixture
+      // ini dengan film_format_mm=0.024 untuk SELURUH pipeline, dan sejak
+      // `ctx.frame` DIR ikut melihatnya -- sigma difusinya ~53 px, rezim IIR
+      // yang baru di-port di Task 5 (dir.ts melempar di radius > 16). Input
+      // patch SERAGAM membuat blur spasial DIR identitas, jadi DIR
+      // non-spasial memberi hasil yang sama sampai Task 5 mengembalikannya.
+      createDirStage(engine.device, arenas, { spatialDiffusionActive: false }),
+      createGrainStage(engine.device, arenas),
     ]) {
       graph.addStage(stage);
     }
@@ -199,7 +203,8 @@ describe('parity: grain Task 16b (blur_particle + micro_structure, grain_dense_p
     const inputRgba = loadInputAsRgba(caseName);
     const params = defaultCoreParams(meta.width, meta.height, bundle, inputRgba, 'measured', true, STOCK_ID);
 
-    const actual = await graph.run(inputRgba, params, Tap.CMY_FILM);
+    // film_format_mm=0.024: `_build_params_grain_dense()` di gen_reference.py.
+    const actual = await graph.run(inputRgba, params, Tap.CMY_FILM, { frame: { filmFormatMm: 0.024 } });
 
     const expectedRgb = loadTap(caseName, 'cmy_film');
     const pixels = expectedRgb.length / 3;

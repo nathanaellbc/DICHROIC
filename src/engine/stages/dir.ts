@@ -181,7 +181,6 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
 
   const KERNEL_BASE = 0;
 
-  const FILM_FORMAT_MM = 35.0; // lih. blok komentar modul di atas.
   const DIFFUSION_SIZE_UM = 20.0; // `DirCouplersParams.diffusion_size_um` default, konstanta skema.
   const DIFFUSION_TAIL_UM = 200.0; // `DirCouplersParams.diffusion_tail_um` default, konstanta skema.
 
@@ -209,7 +208,8 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
       const junk = ctx.scratch('dir:junk', pixelBytes);
 
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
-      const pixelSizeUm = (FILM_FORMAT_MM * 1000) / longEdge;
+      // Fase 2A.5: format film dari `ctx.frame` (dulu konstanta 35.0 di sini).
+      const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
       // `spatialDiffusionActive=false`: keempat sigma 0 -> keempat kernel
       // radius-0 (identitas) -> resolve mereduksi ke `corrRaw` murni,
       // PERSIS `diffusion_size_pixel<=0` Python. Lih. `DirStageOptions`.

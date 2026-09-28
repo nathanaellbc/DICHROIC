@@ -524,6 +524,46 @@ def _generate_lattice_case(image: np.ndarray, case_dir: Path, name: str) -> None
     _generate_case(image, case_dir, name, stochastic=False, lut_mode=True)
 
 
+# Fase 2A.5: rezim resolusi produksi. Citra 64 px dengan film_format_mm kecil
+# memberi ukuran piksel foto sungguhan (pixel_size_um = film_format_mm*1000/64)
+# -- teknik Task 16b -- sehingga sigma halation/DIR (um) jatuh di rezim IIR
+# `fast_gaussian_filter` (sigma >= 3 px) tanpa fixture besar.
+PIXEL_REGIME_FILM_FORMAT_MM = {
+    "px6um": 0.4,   # 6.25 um/px: halation 65um -> 10.4 px, DIR 20um -> 3.2 px, ekor 200um -> 32 px
+    "px31um": 2.0,  # 31.25 um/px: halation 2.1 px (FIR), DIR 0.64 px (FIR), ekor 6.4 px (IIR)
+}
+PIXEL_REGIME_CASES = {
+    "hard_edge": hard_edge,
+    "impulse_highlight": impulse_highlight,
+}
+
+
+def _generate_pixel_regime_case(image: np.ndarray, case_dir: Path, name: str, film_format_mm: float) -> None:
+    """Keluarga kedelapan: deterministik (`deactivate_stochastic_effects`,
+    grain dan glare mati) dengan `camera.film_format_mm` diturunkan. Semua
+    tap, input.f32 sendiri."""
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
+    written = []
+    for tap in TAPS:
+        params = _build_params(stochastic=False)
+        params.camera.film_format_mm = film_format_mm
+        result = SimulationPipeline(params).process(image, collect=tap)
+        arr = np.ascontiguousarray(result, dtype="<f4")
+        (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
+        written.append({"tap": tap, "channels": int(arr.shape[2])})
+    meta = {
+        "name": name,
+        "height": int(image.shape[0]),
+        "width": int(image.shape[1]),
+        "stochastic": False,
+        "taps": written,
+        "filmFormatMm": film_format_mm,
+    }
+    _write_json_lf(case_dir / "case.json", meta)
+    print(f"Wrote {case_dir} (film_format_mm={film_format_mm})")
+
+
 def _write_manifest(out_dir: Path) -> None:
     """Write test/fixtures/manifest.json: sha256 of every fixture file
     currently on disk under ``out_dir``.
@@ -583,6 +623,13 @@ def main() -> int:
              "lut_mode only, written to <name>_lut with its own input.f32).",
     )
     parser.add_argument(
+        "--pixel-regime-case", choices=sorted(PIXEL_REGIME_CASES), action="append",
+        help="Regenerate the Fase 2A.5 production-pixel-size fixtures "
+             "(<case>_px6um, <case>_px31um): deterministic family with "
+             "camera.film_format_mm lowered so 64 px images reach real-photo "
+             "pixel sizes (IIR regime of fast_gaussian_filter).",
+    )
+    parser.add_argument(
         "--manifest", action="store_true",
         help="Also (re)write <out>/manifest.json: a sha256 of every file "
              "currently under --out, checked by fixtures.test.ts. Scans "
@@ -593,7 +640,7 @@ def main() -> int:
 
     ran_anything_case_specific = bool(
         args.case or args.diffusion_case or args.diffusion_print_case or args.grain_dense_case
-        or args.lattice_case
+        or args.lattice_case or args.pixel_regime_case
     )
 
     names = args.case or (sorted(CASES) if not ran_anything_case_specific else [])
@@ -630,6 +677,14 @@ def main() -> int:
     for name in lattice_names:
         image = LATTICE_CASES[name]()
         _generate_lattice_case(image, args.out / f"{name}_lut", name)
+
+    regime_names = args.pixel_regime_case or (
+        sorted(PIXEL_REGIME_CASES) if not ran_anything_case_specific else []
+    )
+    for name in regime_names:
+        image = PIXEL_REGIME_CASES[name]()
+        for suffix, film_format_mm in PIXEL_REGIME_FILM_FORMAT_MM.items():
+            _generate_pixel_regime_case(image, args.out / f"{name}_{suffix}", name, film_format_mm)
 
     if args.manifest:
         _write_manifest(args.out)

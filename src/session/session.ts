@@ -307,6 +307,7 @@ export class Session {
     const rgba = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
       maxBufferBytes: this.engine.maxStorageBufferBindingSize,
       overlap: plan.overlap,
+      frame: plan.frame,
     });
     return { rgb: packRgb(rgba, frame.width * frame.height), plan };
   }
