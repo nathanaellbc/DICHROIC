@@ -677,36 +677,18 @@ function evaluateFittedDensity(
  *                                 -- lih. catatan "CoreParams adalah cermin EXACT
  *                                 blok push-constant hulu" di `params.ts`, field baru
  *                                 di sana akan menyimpang dari kontrak itu).
- *   `printFactorMidgray`       -- 1 f32, `_compute_exposure_factor_midgray` --
- *                                 digabung dari `densitySpectralMidgray` (DIBAKE per
- *                                 stock FILM, lih. `tools/bake_web_assets.py`) dan
- *                                 `printFilteredIlluminant` yang baru dihitung di sini.
- *                                 Cabang `_comp` TIDAK diimplementasikan --
- *                                 `print_exposure_compensation` dipaksa `False` di
- *                                 bawah `lut_mode` (satu-satunya keluarga fixture
- *                                 gerbang ini pakai), jadi `_compute_exposure_factor_midgray`
- *                                 SELALU mengambil cabang non-`_comp` untuk keluarga ini
- *                                 (dibuktikan lewat pembacaan langsung kondisi cabangnya,
- *                                 `printing.py:100-107`, bukan diasumsikan).
- *   `printExposureScale`       -- 1 f32, `print_exposure * black_white_printing_exposure_correction()`
- *                                 digabung jadi satu skalar. `print_exposure` DIBACA dari
- *                                 CoreParams? TIDAK -- CoreParams tidak punya slot untuk
- *                                 ini (kontrak exact-mirror yang sama), jadi tetap konstanta
- *                                 host di sini. `black_white_printing_exposure_correction()`
- *                                 == 1.0 TERBUKTI (bukan diasumsikan) untuk SETIAP fixture
- *                                 gerbang ini: `scanner.white_correction`/`black_correction`
- *                                 keduanya `False` di bawah `lut_mode`
- *                                 (`params_builder.py:116-117`), dan fungsi itu sendiri
- *                                 `return 1.0` persis ketika keduanya `False`
- *                                 (`color_reference.py:98-100`) -- TIDAK ADA cabang lain
- *                                 yang bisa dijangkau untuk keluarga `_lut`. `print_exposure`
- *                                 sendiri `EnlargerParams.print_exposure` default `1.0`,
- *                                 dan `lut_mode` MEMAKSANYA `1.0` juga
- *                                 (`params_builder.py:109`) -- jadi skalar ini SELALU `1.0`
- *                                 untuk keluarga `_lut`, disimpan sebagai konstanta terpisah
- *                                 (bukan dihardcode `1.0` di WGSL) supaya gerbang non-`_lut`
- *                                 masa depan (mis. debt diffusion print, family `measured`)
- *                                 bisa mengoper nilai lain tanpa menyentuh shader.
+ *   `printMidgrayColorSpace`   -- 1 f32, indeks "sRGB" di `manifest.colorSpaces.labels`:
+ *                                 midgray print Python memakai default `_rgb_to_film_raw`
+ *                                 (sRGB linear), bukan colour space gambar. Faktor midgray
+ *                                 (`_compute_exposure_factor_midgray`, termasuk cabang `_comp`)
+ *                                 dan `print_exposure` TIDAK lagi di arena sejak Fase 2C:
+ *                                 keduanya bergantung EV kompensasi, gamma push/pull, dan
+ *                                 print exposure, jadi dihitung per render oleh tahap
+ *                                 `printScan:expose` (`src/host/printExposure.ts`) dan
+ *                                 dikirim lewat uniform `printFrame`.
+ *                                 `black_white_printing_exposure_correction()` tetap 1.0:
+ *                                 `scanner.white_correction`/`black_correction` default `False`
+ *                                 dan tidak dibuka (`color_reference.py:98-100`).
  *   `printExposureCount`       -- 1 f32, `printLogExposure.length`.
  *   `printCurveExposure`       -- (printExposureCount*2) f32, pasangan
  *                                 [nilai, 1/delta] PRINT stock (`makePackedCurveExposure`,
@@ -748,8 +730,7 @@ function addPrintScanDynamicData(
       `Stock print '${printStockId}' tidak punya logSensitivity/logExposure/densityCurvesModel*`,
     );
   }
-  const densitySpectralMidgray = bundle.stockField(filmStockId, 'densitySpectralMidgray');
-  if (!densitySpectralMidgray) {
+  if (!bundle.stockField(filmStockId, 'densitySpectralMidgray')) {
     throw new Error(
       `Stock film '${filmStockId}' tidak punya densitySpectralMidgray (stock kertas tidak sah dipakai sebagai film)`,
     );
@@ -764,25 +745,9 @@ function addPrintScanDynamicData(
   );
 
   const printLinearSensitivity = linearSensitivityFrom(printLogSensitivity);
-
-  // `_compute_exposure_factor_midgray`, cabang non-`_comp` (lih. docstring
-  // di atas untuk bukti kenapa itu satu-satunya cabang yang gerbang ini
-  // capai): `_exposure_factor(sensitivity, print_illuminant, density_spectral_midgray)`.
   const wavelengthCount = printFilteredIlluminant.length;
-  const rawMidgray: [number, number, number] = [0, 0, 0];
-  for (let wl = 0; wl < wavelengthCount; wl += 1) {
-    const densitySpectral = densitySpectralMidgray[wl]!;
-    let transmitted = 10 ** -densitySpectral * printFilteredIlluminant[wl]!;
-    if (Number.isNaN(transmitted)) transmitted = 0;
-    rawMidgray[0] += transmitted * printLinearSensitivity[wl * 3]!;
-    rawMidgray[1] += transmitted * printLinearSensitivity[wl * 3 + 1]!;
-    rawMidgray[2] += transmitted * printLinearSensitivity[wl * 3 + 2]!;
-  }
-  const clampedMidgray = rawMidgray.map((v) => Math.max(v, 1e-10));
-  const logMean =
-    (Math.log(clampedMidgray[0]!) + Math.log(clampedMidgray[1]!) + Math.log(clampedMidgray[2]!)) / 3;
-  const rawMidgrayGeomean = Math.exp(logMean);
-  const factorMidgray = 1 / rawMidgrayGeomean;
+  const srgbColorSpace = bundle.manifest.colorSpaces.labels.indexOf('sRGB');
+  if (srgbColorSpace < 0) throw new Error('"sRGB" tidak ada di manifest.colorSpaces.labels');
 
   const printExposureCount = printLogExposureField.length;
   const printStockType = bundle.stockEntry(printStockId).type;
@@ -797,11 +762,11 @@ function addPrintScanDynamicData(
   dynamicBuilder.add('printLinearSensitivity', printLinearSensitivity);
   dynamicBuilder.add('printFilteredIlluminant', printFilteredIlluminant);
   dynamicBuilder.add('printWavelengthCount', Float32Array.of(wavelengthCount));
-  dynamicBuilder.add('printFactorMidgray', Float32Array.of(factorMidgray));
-  // print_exposure(1.0, forced by lut_mode) * black_white_printing_exposure_correction()
-  // (1.0, proven above) -- see docstring for why this is 1.0 for every
-  // current fixture and why it is still a named constant, not a WGSL literal.
-  dynamicBuilder.add('printExposureScale', Float32Array.of(1.0));
+  // Fase 2C: faktor midgray dan print exposure dihitung PER RENDER oleh tahap
+  // `printScan:expose` (`src/host/printExposure.ts`), karena bergantung pada
+  // EV kompensasi, gamma push/pull, dan print exposure. Yang tetap per arena
+  // hanya indeks colour space midgray (sRGB, default `_rgb_to_film_raw`).
+  dynamicBuilder.add('printMidgrayColorSpace', Float32Array.of(srgbColorSpace));
   dynamicBuilder.add('printExposureCount', Float32Array.of(printExposureCount));
   dynamicBuilder.add('printCurveExposure', makePackedCurveExposure(printLogExposureField));
   dynamicBuilder.add('printDensityCurvesMorphed', printDensityCurvesMorphed);
@@ -1165,6 +1130,11 @@ export function precomputeArenaData(
   const curveStock = bundle.stock(stockId);
   stockBuilder.add('curveExposure', makePackedCurveExposure(curveStock.logExposure));
   stockBuilder.add('densityCurves', curveStock.densityCurves.slice());
+  // Fase 2C: kurva MENTAH = ternormalisasi + minimum, untuk `develop_simple`
+  // midgray print (`src/host/printExposure.ts`).
+  const densityCurveMinimum = bundle.stockField(stockId, 'densityCurveMinimum');
+  if (!densityCurveMinimum) throw new Error(`Stock '${stockId}' tidak punya densityCurveMinimum`);
+  stockBuilder.add('densityCurveMinimum', densityCurveMinimum.slice());
 
   // --- Task 17 (PrintScan): FILM stock's spectral density model, read by
   // `printScan.wgsl`'s `expose` entry (`compute_density_spectral`,

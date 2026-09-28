@@ -50,9 +50,15 @@ export interface RenderParams {
   outputColorSpace: string;
   /** Python: `camera.auto_exposure` (`:51`). */
   autoExposure: boolean;
-  /** Python: `camera.exposure_compensation_ev` (`:50`). */
+  /**
+   * Python: `camera.exposure_compensation_ev` (`:50`). Dengan
+   * `print_exposure_compensation=True` (default Python) print di-retime
+   * terhadap EV ini (midgray `0.184 * 2**ev`), jadi efeknya pada kecerahan
+   * akhir kecil -- BEDA dari OFX, yang tidak mengompensasi (ruling 2C:
+   * Python oracle-nya). Diabaikan `.cube` (`lut_mode`).
+   */
   filmExposureEv: number;
-  /** Python: `enlarger.print_exposure` (`:63`) dalam EV relatif terhadap 1.0. */
+  /** Python: `enlarger.print_exposure = 2**printExposureEv` (`:63`). Diabaikan `.cube` (`lut_mode`). */
   printExposureEv: number;
   /** Python: argumen push/pull stock (mode `Standard`). */
   filmPushPullStops: number;

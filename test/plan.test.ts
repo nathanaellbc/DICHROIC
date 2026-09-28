@@ -136,7 +136,22 @@ describe('buildRenderPlan -> FrameParams', () => {
   it('baseline standard35 memberi filmFormatMm 35 (Python camera.film_format_mm default)', () => {
     expect(buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, image('gray_ramp'), 'image').frame).toEqual({
       filmFormatMm: 35,
+      exposureCompensationEv: 0,
+      printExposureCompensation: true,
+      printExposure: 1,
     });
+  });
+
+  it('exposure print mengikuti digest_params: measured mengompensasi, cube (lut_mode) tidak', () => {
+    const p = { ...BASELINE_RENDER_PARAMS, filmExposureEv: 1.5, printExposureEv: -1 };
+    expect(buildRenderPlan(p, bundle, image('gray_ramp'), 'image').frame).toMatchObject({
+      exposureCompensationEv: 1.5,
+      printExposureCompensation: true,
+      printExposure: 0.5,
+    });
+    const cube = buildRenderPlan(p, bundle, image('gray_ramp'), 'cube');
+    expect(cube.frame).toMatchObject({ exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1 });
+    expect(cube.core.filmExposureEv).toBe(0);
   });
 
   it('tabel sisi panjang format film mengikuti filmFormatLongEdgeMm OFX', () => {

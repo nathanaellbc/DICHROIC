@@ -84,6 +84,8 @@ const CUBE_DISABLED_EFFECTS = [
   'glare',
   'unsharp mask',
   'auto exposure',
+  'film exposure compensation',
+  'print exposure',
 ];
 
 /**
@@ -158,7 +160,30 @@ export function buildRenderPlan(
     chain: { family, grain: stochasticEffectsActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
-    frame: { filmFormatMm },
+    frame: exposureFrame(params, family, filmFormatMm),
+  };
+}
+
+/**
+ * Exposure print (Fase 2C Task 2), mengikuti `digest_params` Python:
+ *
+ * - `measured`: `print_exposure_compensation=True` (default) -- midgray print
+ *   dihitung pada `0.184 * 2**filmExposureEv`, jadi print di-retime terhadap
+ *   EV kompensasi film (BUKAN EV auto-exposure). `print_exposure =
+ *   2**printExposureEv`.
+ * - `lut` (`lut_mode`): kompensasi mati, `exposure_compensation_ev = 0`,
+ *   `print_exposure = 1` -- kubus mengabaikan kedua EV, dicatat di
+ *   `CUBE_DISABLED_EFFECTS`.
+ */
+function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFormatMm: number): FrameParams {
+  if (family === 'lut') {
+    return { filmFormatMm, exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1 };
+  }
+  return {
+    filmFormatMm,
+    exposureCompensationEv: params.filmExposureEv,
+    printExposureCompensation: true,
+    printExposure: 2 ** params.printExposureEv,
   };
 }
 
@@ -259,7 +284,9 @@ function buildCoreParams(
     throw new Error(`"${params.inputColorSpace}" tidak ditemukan di manifest.colorSpaces.labels`);
   }
 
-  let filmExposureEv = params.filmExposureEv;
+  // `lut_mode` memaksa `camera.exposure_compensation_ev = 0` dan
+  // `auto_exposure = False` (`params_builder.py`).
+  let filmExposureEv = family === 'lut' ? 0 : params.filmExposureEv;
   if (family === 'measured' && params.autoExposure) {
     filmExposureEv += measureAutoExposureEv(
       image.rgba,

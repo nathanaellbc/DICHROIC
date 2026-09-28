@@ -1,8 +1,43 @@
-import { CORE_PARAMS_WGSL } from '../params';
+import { CORE_PARAMS_WGSL, FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION } from '../params';
+import type { CoreParams } from '../params';
 import { Tap } from '../taps';
-import type { Stage, StageContext } from '../graph';
+import type { FrameParams, Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
+import { gpuBufferUsage } from '../webgpuGlobals';
+import { midgrayTablesFrom, printMidgrayFactor } from '../../host/printExposure';
+import type { MidgrayTables } from '../../host/printExposure';
 import source from '../../shaders/printScan.wgsl?raw';
+
+/**
+ * Fase 2C: nilai `printFrame` (binding 5) untuk satu render -- faktor midgray
+ * print dan `print_exposure`. Faktor bergantung pada `filmGamma` (push/pull),
+ * EV kompensasi, dan saklar kompensasi; di-memo per kombinasi supaya render
+ * ter-tile tidak menghitung ulang per tile.
+ */
+function printFrameValues(
+  tables: MidgrayTables,
+  srgbColorSpace: number,
+  params: CoreParams,
+  frame: Readonly<FrameParams>,
+  memo: Map<string, number>,
+): Float32Array {
+  const inputCompression = (params.slot1 & FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION) !== 0;
+  const compensation = frame.printExposureCompensation ?? false;
+  const ev = frame.exposureCompensationEv ?? 0;
+  const key = `${params.filmGamma}|${inputCompression}|${compensation}|${ev}`;
+  let factor = memo.get(key);
+  if (factor === undefined) {
+    factor = printMidgrayFactor(tables, {
+      srgbColorSpace,
+      inputCompression,
+      gamma: params.filmGamma,
+      compensation,
+      exposureCompensationEv: ev,
+    });
+    memo.set(key, factor);
+  }
+  return Float32Array.of(factor, frame.printExposure ?? 1, 0, 0);
+}
 
 /**
  * Tahap PrintScan (Task 17): dua entry point WGSL (`expose`/`develop`, satu
@@ -39,10 +74,31 @@ export function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Sta
     compute: { module, entryPoint: 'expose' },
   });
 
+  // Salinan host tabel midgray, SEKALI per tahap (arena tetap selama tahap hidup).
+  let tables: MidgrayTables | undefined;
+  const srgbColorSpace = arenas.dynamic.values('printMidgrayColorSpace')[0]!;
+  const memo = new Map<string, number>();
+
   return {
     name: 'printScan:expose',
     writesTaps: [Tap.LOG_E_PRINT],
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
+      tables ??= midgrayTablesFrom(
+        (arena, name) => arenas[arena].values(name),
+        ctx.params.hanatosWidth,
+        ctx.params.hanatosHeight,
+      );
+      const printFrame = ctx.device.createBuffer({
+        label: 'printScan:printFrame',
+        size: 16,
+        usage: gpuBufferUsage.UNIFORM,
+        mappedAtCreation: true,
+      });
+      new Float32Array(printFrame.getMappedRange()).set(
+        printFrameValues(tables, srgbColorSpace, ctx.params, ctx.frame, memo),
+      );
+      printFrame.unmap();
+
       const bindGroup = ctx.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
@@ -51,6 +107,7 @@ export function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Sta
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
           { binding: 3, resource: { buffer: arenas.stock.buffer } },
           { binding: 4, resource: { buffer: arenas.dynamic.buffer } },
+          { binding: 5, resource: { buffer: printFrame } },
         ],
       });
 

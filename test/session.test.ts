@@ -4,6 +4,7 @@ import { Session } from '../src/session/session';
 import { RenderSupersededError, SessionStateError } from '../src/session/errors';
 import type { RenderResult } from '../src/session/session';
 import { UnverifiedParameterError } from '../src/params/registry';
+import type { RenderParams } from '../src/params/renderParams';
 import type { DecodedImage } from '../src/io/decoded';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './parity/compare';
 import { sharedResources } from './parity/run';
@@ -87,8 +88,10 @@ describe('Session: urutan pemakaian', () => {
   });
 
   it('setParams dengan field locked ditolak dan parameter tidak berubah', () => {
-    expect(() => session.setParams({ filmExposureEv: 2 })).toThrow(UnverifiedParameterError);
-    expect(session.params.filmExposureEv).toBe(0);
+    // `rgbToRawMethod` di luar batch parameter 1 (Hanatos2026 OFX tanpa oracle Python).
+    const patch = { rgbToRawMethod: 'hanatos2026' } as unknown as Partial<RenderParams>;
+    expect(() => session.setParams(patch)).toThrow(UnverifiedParameterError);
+    expect(session.params.rgbToRawMethod).toBe('hanatos2025');
   });
 });
 

@@ -49,7 +49,7 @@
 //   ke arena `stock` yang SUDAH ADA (bukan arena baru).
 //   `dynamic`: `printLinearSensitivity` (wavelengthCount x 3, PRINT stock),
 //   `printFilteredIlluminant` (wavelengthCount), `printWavelengthCount` (1),
-//   `printFactorMidgray` (1), `printExposureScale` (1),
+//   `printMidgrayColorSpace` (1, dibaca host saja),
 //   `printExposureCount` (1), `printCurveExposure` (printExposureCount x 2,
 //   pasangan [nilai, 1/delta] SAMA bentuk dengan `curveExposure` FILM),
 //   `printDensityCurvesMorphed` (printExposureCount x 3).
@@ -68,6 +68,10 @@
 @group(0) @binding(2) var<uniform> params: CoreParams;
 @group(0) @binding(3) var<storage, read> filmStockArena: array<f32>;
 @group(0) @binding(4) var<storage, read> dynamicArena: array<f32>;
+// Fase 2C, hanya `expose`: x = faktor midgray (`_compute_exposure_factor_midgray`,
+// termasuk cabang `_comp`), y = `print_exposure * black_white_printing_exposure_correction()`.
+// Dihitung host per render (`src/host/printExposure.ts`, `stages/printScan.ts`).
+@group(0) @binding(5) var<uniform> printFrame: vec4<f32>;
 
 const kLog10E: f32 = 0.4342944819032518;
 
@@ -133,17 +137,15 @@ fn expose(@builtin(global_invocation_id) gid: vec3<u32>) {
       dynamicArena[so], dynamicArena[so + 1u], dynamicArena[so + 2u],
     );
   }
-  raw *= dynamicArena[ARENA_PRINTFACTORMIDGRAY_OFFSET];
+  raw *= printFrame.x;
   // `_compute_raw_preflash` -- TIDAK diimplementasikan, TERBUKTI no-op
   // untuk setiap fixture gerbang ini (lih. komentar berkas di atas).
   let logRawPrint = log10Vec3(max(raw, vec3<f32>(0.0)) + vec3<f32>(1.0e-10));
 
   // `raw = 10**log_raw_print; raw *= print_exposure; raw *= black_white_printing_exposure_correction()`
-  // -- keduanya digabung host-side jadi `printExposureScale` (lih.
-  // `addPrintScanDynamicData` untuk bukti keduanya == 1.0 untuk keluarga
-  // `_lut`, disimpan sebagai konstanta bernama, bukan literal WGSL, supaya
-  // gerbang debt (diffusion print, family lain) bisa mengoper nilai lain).
-  let raw2 = pow(vec3<f32>(10.0), logRawPrint) * dynamicArena[ARENA_PRINTEXPOSURESCALE_OFFSET];
+  // -- keduanya digabung host-side jadi `printFrame.y` (Fase 2C; koreksi
+  // hitam/putih scanner tetap 1.0, lih. `addPrintScanDynamicData`).
+  let raw2 = pow(vec3<f32>(10.0), logRawPrint) * printFrame.y;
 
   // `apply_diffusion_filter_um(raw, enlarger.diffusion_filter, ...)` --
   // dijalankan sebagai tahap TERPISAH (`diffusion.wgsl`, site='print')

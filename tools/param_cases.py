@@ -57,4 +57,53 @@ PARAM_CASES: dict[str, ParamCase] = {
     "baseline_hard_edge_px6um": ParamCase(
         image="hard_edge", family="deterministic", render_params={}, film_format_mm=0.4,
     ),
+    # Task 2: exposure. `filmExposureEv` -> `camera.exposure_compensation_ev`
+    # (menyeret midgray `_comp` print, `print_exposure_compensation=True`
+    # default); `autoExposure` -> `camera.auto_exposure`; `printExposureEv`
+    # -> `enlarger.print_exposure = 2**ev`.
+    "exposure_film_plus2": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"filmExposureEv": 2.0},
+        python_overrides=("camera.exposure_compensation_ev = 2.0",),
+        pre=lambda p: setattr(p.camera, "exposure_compensation_ev", 2.0),
+    ),
+    "exposure_film_minus1_5": ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"filmExposureEv": -1.5},
+        python_overrides=("camera.exposure_compensation_ev = -1.5",),
+        pre=lambda p: setattr(p.camera, "exposure_compensation_ev", -1.5),
+    ),
+    "exposure_auto_off": ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"autoExposure": False},
+        python_overrides=("camera.auto_exposure = False",),
+        pre=lambda p: setattr(p.camera, "auto_exposure", False),
+    ),
+    "exposure_auto_off_film_plus1": ParamCase(
+        image="log_gray_ramp", family="deterministic",
+        render_params={"autoExposure": False, "filmExposureEv": 1.0},
+        python_overrides=("camera.auto_exposure = False", "camera.exposure_compensation_ev = 1.0"),
+        pre=lambda p: (setattr(p.camera, "auto_exposure", False), setattr(p.camera, "exposure_compensation_ev", 1.0)),
+    ),
+    "exposure_print_minus1": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"printExposureEv": -1.0},
+        python_overrides=("enlarger.print_exposure = 2**-1.0",),
+        pre=lambda p: setattr(p.enlarger, "print_exposure", 2 ** -1.0),
+    ),
+    "exposure_print_plus0_7": ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"printExposureEv": 0.7},
+        python_overrides=("enlarger.print_exposure = 2**0.7",),
+        pre=lambda p: setattr(p.enlarger, "print_exposure", 2 ** 0.7),
+    ),
+    # `lut_mode` memaksa exposure_compensation_ev=0 dan print_exposure=1: kubus
+    # mengabaikan kedua EV (header `.cube` mencatatnya).
+    "exposure_lut_ignored": ParamCase(
+        image="color_patches", family="lut",
+        render_params={"filmExposureEv": 2.0, "printExposureEv": 1.0},
+        python_overrides=("camera.exposure_compensation_ev = 2.0", "enlarger.print_exposure = 2**1.0",
+                          "(lut_mode menimpa keduanya)"),
+        pre=lambda p: (setattr(p.camera, "exposure_compensation_ev", 2.0), setattr(p.enlarger, "print_exposure", 2.0)),
+    ),
 }

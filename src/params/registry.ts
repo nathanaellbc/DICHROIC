@@ -23,9 +23,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   inputColorSpace: 'locked',
   inputCctfDecoding: 'locked',
   outputColorSpace: 'locked',
-  autoExposure: 'locked',
-  filmExposureEv: 'locked',
-  printExposureEv: 'locked',
+  // Fase 2C Task 2: param/exposure_* (`test/parity/exposure.test.ts`).
+  autoExposure: 'verified',
+  filmExposureEv: 'verified',
+  printExposureEv: 'verified',
   filmPushPullStops: 'locked',
   filterC: 'locked',
   filterMShift: 'locked',

@@ -38,6 +38,15 @@ import type { TileSpec } from './tiling';
  */
 export interface FrameParams {
   filmFormatMm: number;
+  /**
+   * Fase 2C: `camera.exposure_compensation_ev` Python (EV kompensasi, TANPA
+   * auto-exposure) untuk midgray `_comp` print. Baku 0.
+   */
+  exposureCompensationEv?: number;
+  /** Fase 2C: `enlarger.print_exposure_compensation` Python. Baku `false`. */
+  printExposureCompensation?: boolean;
+  /** Fase 2C: `enlarger.print_exposure` Python (linear, `2**printExposureEv`). Baku 1. */
+  printExposure?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

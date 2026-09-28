@@ -15,30 +15,40 @@ describe('validateRenderParams', () => {
     expect(() => validateRenderParams(BASELINE_RENDER_PARAMS)).not.toThrow();
   });
 
-  it('menolak field locked yang berbeda dari baseline, menyebut field, nilai, dan baseline', () => {
-    let caught: unknown;
-    try {
-      validateRenderParams({ ...BASELINE_RENDER_PARAMS, filmExposureEv: 1 });
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(UnverifiedParameterError);
-    const err = caught as UnverifiedParameterError;
-    expect(err.field).toBe('filmExposureEv');
-    expect(err.value).toBe(1);
-    expect(err.baseline).toBe(0);
-    expect(err.message).toContain('filmExposureEv');
-    expect(err.message).toContain('1');
-    expect(err.message).toContain('0');
-  });
+  // Field contoh dipilih dari registri, bukan dihardcode: batch parameter
+  // terus membuka field, dan test ini harus tetap menguji field yang masih locked.
+  const lockedNumbers = (Object.keys(FIELD_STATUS) as Array<keyof RenderParams>).filter(
+    (f) => FIELD_STATUS[f] === 'locked' && typeof BASELINE_RENDER_PARAMS[f] === 'number',
+  );
+  const lockedZero = lockedNumbers.find((f) => BASELINE_RENDER_PARAMS[f] === 0);
 
-  it('menangkap -0 dan NaN sebagai beda dari baseline 0', () => {
-    expect(() => validateRenderParams({ ...BASELINE_RENDER_PARAMS, printExposureEv: -0 })).toThrow(
-      UnverifiedParameterError,
-    );
-    expect(() => validateRenderParams({ ...BASELINE_RENDER_PARAMS, printExposureEv: NaN })).toThrow(
-      UnverifiedParameterError,
-    );
+  it.skipIf(lockedNumbers.length === 0)(
+    'menolak field locked yang berbeda dari baseline, menyebut field, nilai, dan baseline',
+    () => {
+      const field = lockedNumbers[0]!;
+      const baseline = BASELINE_RENDER_PARAMS[field] as number;
+      const value = baseline + 1;
+      let caught: unknown;
+      try {
+        validateRenderParams({ ...BASELINE_RENDER_PARAMS, [field]: value });
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeInstanceOf(UnverifiedParameterError);
+      const err = caught as UnverifiedParameterError;
+      expect(err.field).toBe(field);
+      expect(err.value).toBe(value);
+      expect(err.baseline).toBe(baseline);
+      expect(err.message).toContain(field);
+      expect(err.message).toContain(String(value));
+      expect(err.message).toContain(String(baseline));
+    },
+  );
+
+  it.skipIf(lockedZero === undefined)('menangkap -0 dan NaN sebagai beda dari baseline 0', () => {
+    const field = lockedZero!;
+    expect(() => validateRenderParams({ ...BASELINE_RENDER_PARAMS, [field]: -0 })).toThrow(UnverifiedParameterError);
+    expect(() => validateRenderParams({ ...BASELINE_RENDER_PARAMS, [field]: NaN })).toThrow(UnverifiedParameterError);
   });
 
   it('menerima grain dan glare mati bersamaan (keluarga <case> Fase 1)', () => {
