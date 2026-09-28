@@ -1,0 +1,8 @@
+{
+  "name": "jpeg_progressive_gray",
+  "format": "jpeg",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 8,
+  "oracle": "Pillow q80, progresif grayscale"
+}

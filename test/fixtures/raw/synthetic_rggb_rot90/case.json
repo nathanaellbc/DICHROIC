@@ -1,0 +1,9 @@
+{
+  "name": "synthetic_rggb_rot90",
+  "width": 64,
+  "height": 96,
+  "libraw": "0.22.1",
+  "rawpy": "0.27.1",
+  "settings": "output_color=ACES, output_bps=16, no_auto_bright=True, gamma=(1,1), use_camera_wb=True",
+  "orientation": 6
+}

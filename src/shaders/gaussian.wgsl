@@ -38,7 +38,8 @@ struct BlurParams {
   iirB3Lo: vec4<f32>,
   amplitude: f32,
   first: u32,
-  _pad0: u32,
+  // Selalu 0 dari host. Penghalang optimasi df64 -- lih. `opq`.
+  opaqueZero: u32,
   _pad1: u32,
 }
 
@@ -80,26 +81,38 @@ fn reflectIndex(i: i32, n: i32) -> i32 {
 // mantisa Dekker eksak). Yang mematahkannya hanya reasosiasi fast-math --
 // risiko portabilitas yang dicatat di spec Fase 2 §6a. Nilai antar-pass tetap
 // disimpan f32 (galat input tidak diperkuat: gain DC filter = 1).
+//
+// Reasosiasi itu NYATA di Dawn/D3D12 (Windows, jalur bawaan Chrome): pada
+// RTX 3060 Ti self-test meleset 8,9e-5 -- df64 runtuh ke f32 -- sementara
+// D3D11 lulus 1,4e-7. Karena itu setiap hasil antara yang identitas
+// aljabarnya akan menghapus suku galat (`(a+b)-a -> b`, `t-(t-a) -> a`)
+// dilewatkan `opq`: XOR bit dengan `p.opaqueZero`, yang selalu 0 saat
+// runtime tetapi tak diketahui compiler. Nilainya identik bit-per-bit;
+// compiler tidak bisa menalar melewatinya.
+
+fn opq(x: f32) -> f32 {
+  return bitcast<f32>(bitcast<u32>(x) ^ p.opaqueZero);
+}
 
 fn twoSum(a: f32, b: f32) -> vec2<f32> {
-  let s = a + b;
-  let bb = s - a;
-  return vec2<f32>(s, (a - (s - bb)) + (b - bb));
+  let s = opq(a + b);
+  let bb = opq(s - a);
+  return vec2<f32>(s, (a - opq(s - bb)) + (b - bb));
 }
 
 fn quickTwoSum(a: f32, b: f32) -> vec2<f32> {
-  let s = a + b;
-  return vec2<f32>(s, b - (s - a));
+  let s = opq(a + b);
+  return vec2<f32>(s, b - opq(s - a));
 }
 
 fn split(a: f32) -> vec2<f32> {
-  let t = 4097.0 * a;
-  let hi = t - (t - a);
+  let t = opq(4097.0 * a);
+  let hi = t - opq(t - a);
   return vec2<f32>(hi, a - hi);
 }
 
 fn twoProd(a: f32, b: f32) -> vec2<f32> {
-  let p = a * b;
+  let p = opq(a * b);
   let sa = split(a);
   let sb = split(b);
   let err = ((sa.x * sb.x - p) + sa.x * sb.y + sa.y * sb.x) + sa.y * sb.y;

@@ -9,13 +9,14 @@
  */
 
 import type { DecodedImage } from '../io/decoded';
+import { DecodeError } from '../io/errors';
 import { MissingNeutralFiltersError } from '../params/plan';
 import { UnverifiedParameterError } from '../params/registry';
 import type { RenderParams } from '../params/renderParams';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 export class SessionClient {
   #nextId = 1;
@@ -38,6 +39,15 @@ export class SessionClient {
     const client = new SessionClient(port);
     await client.call('init', [init]);
     return client;
+  }
+
+  /**
+   * Decode berkas di worker (`io/decodeImage`). `bytes` DITRANSFER ke worker
+   * (buffer pemanggil ter-detach). Galat decode tiba sebagai `DecodeError`.
+   * Boleh dipanggil sebelum `connect` selesai menginisialisasi `Session`.
+   */
+  decode(bytes: Uint8Array, name?: string): Promise<DecodedImage> {
+    return this.call('decode', [bytes, name], transferablesOf(bytes)) as Promise<DecodedImage>;
   }
 
   /** `image.rgba` DITRANSFER ke worker (buffer pemanggil ter-detach). */
@@ -65,11 +75,16 @@ export class SessionClient {
     return this.call('exportCube', [size]) as Promise<string>;
   }
 
+  /** Berkas PNG/TIFF dari render penuh (lihat `Session.exportImage`). */
+  exportImage(format: ExportFormat): Promise<Uint8Array> {
+    return this.call('exportImage', [format]) as Promise<Uint8Array>;
+  }
+
   dispose(): Promise<void> {
     return this.call('dispose', []) as Promise<void>;
   }
 
-  private call(method: SessionMethod | 'init', args: unknown[], transfer: Transferable[] = []): Promise<unknown> {
+  private call(method: SessionMethod | 'init' | 'decode', args: unknown[], transfer: Transferable[] = []): Promise<unknown> {
     const id = this.#nextId++;
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
@@ -90,6 +105,9 @@ export function rehydrateError(e: RpcError): Error {
       break;
     case 'SessionStateError':
       err = new SessionStateError(e.message);
+      break;
+    case 'DecodeError':
+      err = new DecodeError(data.format as DecodeError['format'], String(data.reason));
       break;
     case 'MissingNeutralFiltersError':
       err = new MissingNeutralFiltersError('', '');

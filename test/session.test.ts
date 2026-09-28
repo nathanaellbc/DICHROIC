@@ -12,6 +12,9 @@ import { buildChain } from '../src/engine/chain';
 import { RenderGraph } from '../src/engine/graph';
 import { Tap } from '../src/engine/taps';
 import { planTiles } from '../src/engine/tiling';
+import { decodeImage } from '../src/io';
+import { quantize } from '../src/io/encode';
+import type { ExportFormat } from '../src/session/session';
 
 /**
  * Gerbang ujung-ke-ujung lewat facade `Session` (Fase 2A Task 5): gambar
@@ -240,4 +243,39 @@ describe('Session: penerimaan rezim resolusi produksi', () => {
     },
     180_000,
   );
+});
+
+describe('Session: exportImage (rencana 2B Task 7)', () => {
+  it('PNG 8/16 dan TIFF 16 = quantize(render penuh), round-trip lewat decoder io/', async () => {
+    session.open(gradientImage(96, 64));
+    const full = await session.render('full');
+    for (const [format, bits] of [['png8', 8], ['png16', 16], ['tiff16', 16]] as const) {
+      const image = await decodeImage(await session.exportImage(format));
+      expect([image.width, image.height, image.source.bitDepth], format).toEqual([96, 64, bits]);
+      const q = quantize(full.rgb, bits);
+      const max = bits === 8 ? 255 : 65535;
+      let mismatch = 0;
+      for (let i = 0; i < 96 * 64; i += 1) {
+        for (let c = 0; c < 3; c += 1) if (image.rgba[i * 4 + c] !== Math.fround(q[i * 3 + c]! / max)) mismatch += 1;
+      }
+      expect(mismatch, format).toBe(0);
+    }
+  });
+
+  it('format tidak dikenal -> RangeError', async () => {
+    await expect(session.exportImage('jpeg' as ExportFormat)).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it('ekspor yang tersalip sebelum mulai diantrekan ulang, tidak gagal', async () => {
+    session.open(gradientImage(80, 48));
+    const running = session.render('preview');
+    const exported = session.exportImage('png8');
+    // Pratinjau ini menyalip render penuh milik ekspor; ekspor mengantre
+    // ulang dan ganti menyalip pratinjau itu.
+    const overtaken = session.render('preview').catch((e: unknown) => e);
+    await running;
+    const bytes = await exported;
+    expect((await decodeImage(bytes)).width).toBe(80);
+    expect(await overtaken).toBeInstanceOf(RenderSupersededError);
+  });
 });

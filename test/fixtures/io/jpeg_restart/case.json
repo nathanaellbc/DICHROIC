@@ -1,0 +1,8 @@
+{
+  "name": "jpeg_restart",
+  "format": "jpeg",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 8,
+  "oracle": "Pillow q90, 4:2:0, marker restart tiap 2 MCU"
+}

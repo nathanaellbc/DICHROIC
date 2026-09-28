@@ -1,0 +1,8 @@
+{
+  "name": "jpeg_444",
+  "format": "jpeg",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 8,
+  "oracle": "Pillow q95, tanpa subsampling chroma"
+}

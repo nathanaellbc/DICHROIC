@@ -1,0 +1,8 @@
+{
+  "name": "png_gray8",
+  "format": "png",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 8,
+  "oracle": "Pillow L 8-bit"
+}

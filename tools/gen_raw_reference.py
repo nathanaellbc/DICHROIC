@@ -8,6 +8,9 @@ RAW kamera -- lalu mendecodenya dengan rawpy memakai setelan hulu
     output_color=ACES, output_bps=16, no_auto_bright=True, gamma=(1, 1),
     use_camera_wb=True, dibagi 65535.
 
+Dua kasus: tanpa tag Orientation dan dengan Orientation 6 (putar 90°), untuk
+mengunci bahwa orientasi berkas dipakai seperti rawpy.
+
 Keluaran (`test/fixtures/raw/<case>/`): `input.dng`, `output.f32` (RGB f32
 ACES2065-1 linear, seperti hulu), `case.json`.
 
@@ -25,7 +28,7 @@ import numpy as np
 import rawpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_reference import _write_json_lf, _write_manifest  # noqa: E402
+from fixture_manifest import _write_json_lf, _write_manifest  # noqa: E402
 
 WIDTH, HEIGHT = 96, 64
 BLACK, WHITE = 512, 16383
@@ -59,7 +62,7 @@ def _mosaic(scene: np.ndarray) -> np.ndarray:
     return np.round(BLACK + cfa * (WHITE - BLACK) * 0.9).astype("<u2")
 
 
-def _write_dng(path: Path, raw: np.ndarray) -> None:
+def _write_dng(path: Path, raw: np.ndarray, orientation: int | None = None) -> None:
     h, w = raw.shape
     data = raw.tobytes()
     # (tag, type, values). Type: 1 BYTE, 2 ASCII, 3 SHORT, 4 LONG, 5 RATIONAL, 10 SRATIONAL.
@@ -93,6 +96,8 @@ def _write_dng(path: Path, raw: np.ndarray) -> None:
         (50728, 5, [(55, 100), (1, 1), (70, 100)]),  # AsShotNeutral
         (50778, 3, [21]),                   # CalibrationIlluminant1 = D65
     ]
+    if orientation is not None:
+        entries.append((274, 3, [orientation]))  # Orientation (EXIF/TIFF)
     entries.sort(key=lambda e: e[0])
     sizes = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 10: 8}
 
@@ -133,41 +138,49 @@ def _write_dng(path: Path, raw: np.ndarray) -> None:
     assert len(bytes(ifd)) == ifd_size
 
 
+# Kasus: nama -> Orientation TIFF (None = tag tidak ditulis). 6 = putar 90°
+# searah jarum jam; rawpy (user_flip bawaan) dan LibRaw sama-sama memakainya.
+CASES = {"synthetic_rggb": None, "synthetic_rggb_rot90": 6}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--manifest", action="store_true")
     args = parser.parse_args()
 
-    case_dir = args.out / "raw" / "synthetic_rggb"
-    case_dir.mkdir(parents=True, exist_ok=True)
-    dng = case_dir / "input.dng"
-    _write_dng(dng, _mosaic(_scene(WIDTH, HEIGHT)))
+    for name, orientation in CASES.items():
+        case_dir = args.out / "raw" / name
+        case_dir.mkdir(parents=True, exist_ok=True)
+        dng = case_dir / "input.dng"
+        _write_dng(dng, _mosaic(_scene(WIDTH, HEIGHT)), orientation)
 
-    with rawpy.imread(str(dng)) as raw:
-        rgb = raw.postprocess(
-            output_color=rawpy.ColorSpace.ACES,
-            output_bps=16,
-            no_auto_bright=True,
-            gamma=(1, 1),
-            use_camera_wb=True,
-        ).astype(np.float32) / np.float32(65535.0)
-        libraw_version = rawpy.libraw_version
+        with rawpy.imread(str(dng)) as raw:
+            rgb = raw.postprocess(
+                output_color=rawpy.ColorSpace.ACES,
+                output_bps=16,
+                no_auto_bright=True,
+                gamma=(1, 1),
+                use_camera_wb=True,
+            ).astype(np.float32) / np.float32(65535.0)
+            libraw_version = rawpy.libraw_version
 
-    (case_dir / "output.f32").write_bytes(np.ascontiguousarray(rgb, dtype="<f4").tobytes())
-    _write_json_lf(case_dir / "case.json", {
-        "name": "synthetic_rggb",
-        "width": int(rgb.shape[1]),
-        "height": int(rgb.shape[0]),
-        "libraw": ".".join(str(v) for v in libraw_version),
-        "rawpy": rawpy.__version__,
-        "settings": "output_color=ACES, output_bps=16, no_auto_bright=True, gamma=(1,1), use_camera_wb=True",
-    })
-    print(f"Wrote {case_dir} ({rgb.shape[1]}x{rgb.shape[0]}, LibRaw {libraw_version})")
+        (case_dir / "output.f32").write_bytes(np.ascontiguousarray(rgb, dtype="<f4").tobytes())
+        meta = {
+            "name": name,
+            "width": int(rgb.shape[1]),
+            "height": int(rgb.shape[0]),
+            "libraw": ".".join(str(v) for v in libraw_version),
+            "rawpy": rawpy.__version__,
+            "settings": "output_color=ACES, output_bps=16, no_auto_bright=True, gamma=(1,1), use_camera_wb=True",
+        }
+        if orientation is not None:
+            meta["orientation"] = orientation
+        _write_json_lf(case_dir / "case.json", meta)
+        print(f"Wrote {case_dir} ({rgb.shape[1]}x{rgb.shape[0]}, LibRaw {libraw_version})")
     if args.manifest:
         _write_manifest(args.out)
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -22,6 +22,7 @@ import { buildChain } from '../engine/chain';
 import { precomputeArenaData, uploadArenas } from '../host/spectral';
 import type { ArenaPlan } from '../host/spectral';
 import type { DecodedImage } from '../io/decoded';
+import { encodePng, encodeTiff16 } from '../io/encode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
 import { buildRenderPlan } from '../params/plan';
@@ -36,6 +37,10 @@ import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
 import type { ScaledImage } from './downscale';
 
 export type RenderQuality = 'full' | 'preview';
+
+/** Format ekspor gambar (spec Fase 2 §5): PNG 8/16-bit, TIFF 16-bit tak terkompresi. */
+export type ExportFormat = 'png8' | 'png16' | 'tiff16';
+export const EXPORT_FORMATS: readonly ExportFormat[] = ['png8', 'png16', 'tiff16'];
 
 export interface RenderResult {
   width: number;
@@ -293,6 +298,31 @@ export class Session {
       disabledEffects: plan.disabledEffects,
       version: DICHROIC_VERSION,
     });
+  }
+
+  /**
+   * Ekspor render penuh (rencana 2B Task 7). Lewat `render('full')`, jadi
+   * cache dipakai bila parameter dan gambar belum berubah, dan antrean
+   * terbaru-menang tetap berlaku. Ekspor yang tersalip render lain sebelum
+   * sempat mulai diantrekan ulang, bukan digagalkan: pengguna meminta berkas,
+   * bukan pratinjau yang boleh dibuang.
+   */
+  async exportImage(format: ExportFormat): Promise<Uint8Array> {
+    if (!EXPORT_FORMATS.includes(format)) {
+      throw new RangeError(`Format ekspor tidak dikenal: ${String(format)} (pilihan: ${EXPORT_FORMATS.join(', ')}).`);
+    }
+    for (;;) {
+      let result: RenderResult;
+      try {
+        result = await this.render('full');
+      } catch (e) {
+        if (e instanceof RenderSupersededError) continue;
+        throw e;
+      }
+      const { rgb, width, height } = result;
+      if (format === 'tiff16') return encodeTiff16(rgb, width, height);
+      return encodePng(rgb, width, height, format === 'png8' ? 8 : 16);
+    }
   }
 
   dispose(): void {

@@ -25,9 +25,8 @@
   },
   "dependencies": {
     "fast-png": "^8.0.0",
-    "jpeg-js": "^0.4.4",
+    "fflate": "^0.8.2",
     "libraw-wasm": "^1.6.0",
-    "parse-exr": "^1.0.2",
-    "utif2": "^4.1.0"
+    "parse-exr": "^1.0.2"
   }
 }

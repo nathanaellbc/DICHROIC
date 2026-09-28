@@ -1,0 +1,8 @@
+{
+  "name": "exr_decreasing_y",
+  "format": "exr",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "OIIO half RGB, lineOrder decreasingY"
+}

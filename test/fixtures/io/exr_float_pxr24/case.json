@@ -1,0 +1,8 @@
+{
+  "name": "exr_float_pxr24",
+  "format": "exr",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 32,
+  "oracle": "OIIO float RGB, PXR24 (lossy 24-bit; oracle = hasil decode OpenEXR)"
+}

@@ -22,7 +22,7 @@ import numpy as np
 from spektrafilm.utils.fast_gaussian_filter import fast_exponential_filter, fast_gaussian_filter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_reference import _write_json_lf, _write_manifest  # noqa: E402
+from fixture_manifest import _write_json_lf, _write_manifest  # noqa: E402
 
 # (nama, kind, sigma/decay per kanal, (tinggi, lebar), seed)
 CASES = [

@@ -1,0 +1,8 @@
+{
+  "name": "tiff_gray16",
+  "format": "tiff",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "tifffile gray 16-bit"
+}

@@ -5,23 +5,35 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang
+## Posisi sekarang (diperbarui 2026-09-28, akhir 2B)
 
-- **Branch:** `phase2/core` (belum digabung ke `main`).
-- **Suite:** 529 lulus + 1 dilewati (530) di 31 berkas; `tsc` dan `eslint`
-  bersih. Yang dilewati adalah cek batas lisensi arah balik ke `../web/src`,
-  yang memang tidak ada di repositori mandiri.
+- **Branch:** `claude/admiring-galileo-1vwlrk`, bercabang dari `main` setelah
+  PR #2 (2A + 2A.5 sudah digabung). Belum ada PR untuk 2B.
+- **Suite:** 842 test di 39 berkas; `tsc` dan `eslint` bersih. Semua test
+  non-GPU hijau, termasuk 309 test baru 2B. Sesi 2B berjalan di mesin TANPA
+  GPU: Dawn dijalankan di atas lavapipe (Mesa, Vulkan perangkat lunak), dan
+  di sana 39 gerbang parity GPU lama gagal karena presisi (self-test df64
+  `iirPrecisionOk = false`) -- sama persis sebelum dan sesudah 2B. Test GPU
+  yang bukan parity (antrean, cache, tiling paksa, `exportImage`) lulus.
+  **Konfirmasi suite penuh dua kali hijau di mesin ber-GPU sebelum merge.**
+- **Update 2026-09-28 (Windows, RTX 3060 Ti, Dawn/D3D12):** run pertama
+  gagal 11 test -- semuanya gerbang IIR, karena D3D12 meruntuhkan df64
+  (self-test 8,9e-5; D3D11 lulus 1,4e-7). Diperbaiki dengan penghalang
+  optimasi `opq` di `gaussian.wgsl` (spec §6a.1). Setelahnya suite penuh
+  **hijau dua kali**: 838 lulus, 4 dilewati (butuh toolchain hulu), 0 gagal.
+  Backend Vulkan tidak bisa dimuat Dawn di mesin ini (`vulkan-1.dll`
+  Windows Error 87), jadi tidak ikut diuji.
 
 | Sub-proyek | Status | Rencana |
 |---|---|---|
 | 2A tulang punggung (`Session`, `RenderParams`, `RenderPlan`, rantai produksi, `.cube`, RPC worker) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a-backbone.md` |
 | 2A.5 rezim resolusi produksi (blur IIR, apron dari sigma, self-test df64) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a5-production-regime.md` |
-| 2B `io/` (decode JPEG/PNG/TIFF/EXR/RAW, encode PNG/TIFF 16-bit) | **rencana selesai, Task 1 belum dimulai** | `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md` |
-| 2C batch parameter 1 | belum direncanakan (dirinci setelah 2B) | spec Fase 2 §6 |
+| 2B `io/` (decode JPEG/PNG/TIFF/EXR/RAW, encode PNG 8/16 + TIFF 16, `exportImage`, RPC `decode`) | **selesai** | `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md` (Status 2B) |
+| 2C batch parameter 1 | belum direncanakan; butuh toolchain hulu + GPU (lihat di bawah) | spec Fase 2 §6 |
 | UI | **titik henti**: minta dokumen desain dan panduan visual dari pemilik proyek dulu | — |
 
 Spec Fase 2: `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`
-(§6a.1 berisi angka terukur 2A.5 dan invarian tiling yang baru).
+(§5.1 berisi angka terukur 2B, ruling, dan keterbatasan; §6a.1 angka 2A.5).
 
 ## Cara kerja yang disepakati pemilik proyek
 
@@ -36,53 +48,50 @@ Spec Fase 2: `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`
   (skill executing-plans), satu commit per task, commit diakhiri baris
   `Co-Authored-By`.
 
-## Lanjut di 2B: temuan yang sudah diketahui
+## Ringkasan 2B (detail di spec §5.1)
 
-- **Fixture RAW sudah ada:** `test/fixtures/raw/synthetic_rggb/` (DNG
-  sintetis 96×64 RGGB dari `tools/gen_raw_reference.py`, didecode rawpy
-  dengan setelan hulu; LibRaw 0.22.1). Tidak perlu mengunduh RAW apa pun.
-- **`libraw-wasm` 1.6.0 mengabaikan `gamm`** dalam semua bentuk. Keluaran
-  selalu melewati kurva gamma dcraw bawaan (0,45; 4,5). Nilai linear
-  dipulihkan dengan membalik tabel `gamma_curve` dcraw yang sama persis.
-  Terukur 1,5e-5 (1 LSB 16-bit) terhadap rawpy; ambang rencana 2 LSB. Port
-  yang sudah diuji di probe:
+- JPEG, PNG, TIFF, EXR bit-identik terhadap Pillow / OIIO / tifffile (48
+  fixture + 100 berkas acak JPEG/TIFF). `jpeg-js` dan `utif2` dilepas: yang
+  pertama meleset 125/255 di tepi chroma 4:2:0, yang kedua mengembalikan
+  piksel nol diam-diam untuk kompresi tak dikenal. Penggantinya
+  `src/io/jpegDecoder.ts` (meniru libjpeg-turbo) dan `src/io/tiff.ts`.
+- EXR DWAA (lossy) punya gerbang sendiri ≤ 3 ULP half -- ruling yang bisa
+  dibalik pemilik proyek (tolak DWA).
+- RAW ≤ 1 LSB terhadap rawpy (gerbang 2 LSB), termasuk DNG ber-Orientation 6.
+  `gamm` sengaja tidak dikirim ke LibRaw (lihat §5.1).
+- Browser: `vite.config.ts` memasang COOP/COEP (wajib untuk pthread
+  `libraw-wasm`) dan mengecualikan `libraw-wasm` dari pra-bundling. Hosting
+  PWA wajib memasang header yang sama. Diverifikasi di Chromium headless.
+- Keterbatasan: ICC tidak dibaca/disematkan, orientasi EXIF JPEG/PNG/TIFF
+  tidak diterapkan, EXR multi-part/deep ditolak.
 
-  ```js
-  function gammaCurve(pwr, ts, mode, imax) {
-    const g = [pwr, ts, 0, 0, 0, 0]; const bnd = [0, 0];
-    bnd[g[1] >= 1 ? 1 : 0] = 1;
-    if (g[1] && (g[1] - 1) * (g[0] - 1) <= 0) {
-      for (let i = 0; i < 48; i++) { g[2] = (bnd[0] + bnd[1]) / 2;
-        if (g[0]) bnd[((Math.pow(g[2] / g[1], -g[0]) - 1) / g[0] - 1 / g[2] > -1) ? 1 : 0] = g[2];
-        else bnd[(g[2] / Math.exp(1 - 1 / g[2]) < g[1]) ? 1 : 0] = g[2]; }
-      g[3] = g[2] / g[1]; if (g[0]) g[4] = g[2] * (1 / g[0] - 1);
-    }
-    const curve = new Uint16Array(0x10000); mode--;
-    for (let i = 0; i < 0x10000; i++) { curve[i] = 0xffff; const r = i / imax;
-      if (r < 1) curve[i] = Math.min(0xffff, Math.trunc(0x10000 * (mode
-        ? (r < g[3] ? r * g[1] : (g[0] ? Math.pow(r, g[0]) * (1 + g[4]) - g[4] : Math.log(r) * g[2] + 1))
-        : 0))); }
-    return curve;
-  }
-  // curve = gammaCurve(0.45, 4.5, 2, 0x10000); invers: untuk tiap nilai e,
-  // ambil tengah rentang L dengan curve[L] === e; linear = L / 65535.
-  ```
+## Lingkungan sesi 2B (Linux, tanpa GPU)
 
-- **Setelan LibRaw** yang cocok dengan rawpy hulu: `{ outputColor: 6,
-  outputBps: 16, noAutoBright: true, useCameraWb: true }`. `noAutoBright` dan
-  `useCameraWb` terbukti dipatuhi.
-- **Node:** muat `node_modules/libraw-wasm/dist/libraw.js` langsung,
-  `(await factory({ wasmBinary })).LibRaw`, `new LibRaw()`, `open(bytes,
-  settings)`, `imageData()`. Wrapper `index.js` butuh Web Worker global dan
-  tidak jalan di Node.
-- **Browser:** modul memakai memori WASM `shared` (pthread), sehingga
-  halaman harus **cross-origin isolated** (header COOP/COEP). Ini perlu
-  diatur di dev server dan hosting (fase PWA).
-- Oracle tersedia di `.venv-ref`: Pillow 12.3, OpenImageIO 3.1.17 (termasuk
-  EXR), tifffile 2026.9.9, rawpy.
+- `.venv-ref` dibuat di `../upstream/.venv-ref` (sejajar repositori, meniru
+  tata letak `D:/Projects/upstream/`) berisi numpy, Pillow 12.3, tifffile,
+  imagecodecs, rawpy, OpenImageIO -- cukup untuk generator io/RAW. Paket
+  `spektrafilm` TIDAK terpasang, jadi `gen_reference.py` (tap parity) tidak
+  bisa dijalankan di sana.
+- Tanpa GPU, `sudo apt-get install mesa-vulkan-drivers` memberi adapter
+  lavapipe ke Dawn: berguna untuk test non-parity, tidak untuk gerbang
+  parity.
+
+## Kenapa 2C belum dimulai
+
+Setiap field 2C naik ke `verified` hanya lewat fixture baru dari
+`gen_reference.py` (butuh `spektrafilm` di `.venv-ref`) dan gerbang parity
+GPU yang lulus. Keduanya tidak tersedia di sesi 2B: paket hulu tidak
+terpasang, dan lavapipe sudah menggagalkan gerbang parity yang ada. Membuka
+field tanpa gerbang melanggar aturan "tidak ada parameter tanpa parity".
+Langkah berikutnya: di mesin ber-GPU dengan toolchain hulu, tulis rencana 2C
+dari spec §6 dan temuan di bawah, lalu eksekusi.
 
 ## Temuan yang harus dibawa ke 2C
 
+- `DecodedImage` dari 2B membawa `suggestedColorSpace` (label manifest) dan
+  `encoding` (`encoded`/`linear`). Begitu `inputColorSpace` terverifikasi,
+  UI bisa mengisinya dari saran ini (JPEG/PNG/TIFF int → `sRGB`, TIFF float
+  dan EXR → dari chromaticities / `Linear Rec.709`, RAW → `ACES2065-1`).
 - Filter netral enlarger hanya ter-bake untuk **satu** pasangan
   (`kodak_portra_400` / `kodak_portra_endura`, `manifest.printScan`). Membuka
   `film`/`paper` butuh bake tabel netral untuk semua pasangan
@@ -167,7 +176,7 @@ Setiap baris: keputusan — alasan — biaya bila salah.
 ```bash
 gh auth login
 gh repo clone nathanaellbc/DICHROIC
-cd DICHROIC && git checkout phase2/core
+cd DICHROIC && git checkout claude/admiring-galileo-1vwlrk   # atau main setelah 2B digabung
 npm ci
 npm test
 ```
@@ -179,10 +188,10 @@ baru, siapkan toolchain Python hulu sesuai `tools/setup_envs.md`
 jalur `D:/Projects/upstream/` bila berbeda. Tanpa toolchain itu seluruh test
 tetap jalan karena fixture sudah di-commit.
 
-Prompt untuk melanjutkan di Claude Code:
+Prompt untuk melanjutkan di Claude Code (mesin ber-GPU, toolchain hulu siap):
 
-> Lanjutkan Fase 2 DICHROIC di branch `phase2/core`. Baca `docs/HANDOFF.md`,
-> spec `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`, dan
-> rencana `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md`. Mulai
-> dari Task 1 rencana 2B, lanjut 2C, dan berhenti sebelum UI. Pakai skill yang
+> Lanjutkan Fase 2 DICHROIC. Baca `docs/HANDOFF.md` dan spec
+> `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md` (§5.1,
+> §6). Pastikan suite penuh hijau dua kali di mesin ini, lalu tulis rencana
+> 2C (batch parameter 1) dan eksekusi, berhenti sebelum UI. Pakai skill yang
 > relevan.

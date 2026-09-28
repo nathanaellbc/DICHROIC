@@ -8,6 +8,10 @@
 # the repo.
 test/fixtures/**/*.f32 binary
 test/fixtures/**/*.dng binary
+test/fixtures/**/*.jpg binary
+test/fixtures/**/*.png binary
+test/fixtures/**/*.tif binary
+test/fixtures/**/*.exr binary
 test/fixtures/**/*.json text eol=lf
 
 # public/data/ holds the baked web assets from tools/bake_web_assets.py

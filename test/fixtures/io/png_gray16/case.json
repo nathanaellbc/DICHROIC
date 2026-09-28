@@ -1,0 +1,8 @@
+{
+  "name": "png_gray16",
+  "format": "png",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "OIIO/libpng gray 16-bit"
+}

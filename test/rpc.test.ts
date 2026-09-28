@@ -9,7 +9,11 @@ import { UnverifiedParameterError } from '../src/params/registry';
 import { RenderSupersededError } from '../src/session/errors';
 import { BASELINE_RENDER_PARAMS } from '../src/params/renderParams';
 import type { RenderParams } from '../src/params/renderParams';
-import type { RenderResult } from '../src/session/session';
+import type { ExportFormat, RenderResult } from '../src/session/session';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { decodeImage, DecodeError } from '../src/io';
+import type { ServeOptions } from '../src/session/worker';
 
 /** Adaptor `MessagePort` Node ke bentuk DOM (`addEventListener` + `event.data`). */
 function domPort(port: NodeMessagePort): MessagePortLike {
@@ -27,13 +31,17 @@ afterEach(() => {
 
 let lastInit: unknown;
 
-async function connect(fake: SessionLike): Promise<SessionClient> {
+async function connect(fake: SessionLike, options?: ServeOptions): Promise<SessionClient> {
   const { port1, port2 } = new MessageChannel();
   ports.push(port1, port2);
-  serveSession(domPort(port2), async (init) => {
-    lastInit = init;
-    return fake;
-  });
+  serveSession(
+    domPort(port2),
+    async (init) => {
+      lastInit = init;
+      return fake;
+    },
+    options,
+  );
   return SessionClient.connect(domPort(port1), { assetsBaseUrl: '/data' });
 }
 
@@ -63,6 +71,10 @@ class FakeSession implements SessionLike {
   }
   async exportCube(size: number): Promise<string> {
     return `LUT_3D_SIZE ${size}\n`;
+  }
+  async exportImage(format: ExportFormat): Promise<Uint8Array> {
+    this.calls.push(['exportImage', [format]]);
+    return new TextEncoder().encode(format);
   }
   dispose() {
     this.calls.push(['dispose', []]);
@@ -124,6 +136,66 @@ describe('RPC Session', () => {
     expect(slow.quality).toBe('full');
     expect(fast.paramsVersion).toBe(1);
     expect(fast.quality).toBe('preview');
+  });
+});
+
+describe('RPC exportImage dan decode', () => {
+  it('exportImage meneruskan format dan mengembalikan Uint8Array', async () => {
+    const fake = new FakeSession();
+    const client = await connect(fake);
+    const bytes = await client.exportImage('tiff16');
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(bytes)).toBe('tiff16');
+    expect(fake.calls).toEqual([['exportImage', ['tiff16']]]);
+  });
+
+  it('decode di worker sama dengan decode langsung, dan tidak menunggu init', async () => {
+    const png = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_rgb16', 'input.png')));
+    const direct = await decodeImage(png, 'a.png');
+    const { port1, port2 } = new MessageChannel();
+    ports.push(port1, port2);
+    // Factory yang tidak pernah selesai: decode tetap harus dijawab.
+    serveSession(domPort(port2), () => new Promise<SessionLike>(() => {}));
+    void SessionClient.connect(domPort(port1), { assetsBaseUrl: '/data' });
+    // `connect` tidak pernah selesai, jadi decode dikirim lewat port mentah dengan id bebas.
+    const raw = domPort(port1);
+    const answer = new Promise<unknown>((resolve) => raw.addEventListener('message', (e) => {
+      const data = e.data as { id: number; result?: unknown };
+      if (data.id === 99) resolve(data.result);
+    }));
+    raw.postMessage({ id: 99, method: 'decode', args: [png.slice(), 'a.png'] });
+    const viaWorker = (await answer) as typeof direct;
+    expect(viaWorker.width).toBe(direct.width);
+    expect(viaWorker.source).toEqual(direct.source);
+    expect(Array.from(viaWorker.rgba)).toEqual(Array.from(direct.rgba));
+  });
+
+  it('decode lewat client mentransfer bytes dan memulihkan DecodeError', async () => {
+    const client = await connect(new FakeSession());
+    const png = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_rgb8', 'input.png')));
+    const image = await client.decode(png, 'x.png');
+    expect(png.byteLength).toBe(0); // ter-transfer
+    expect(image.source).toEqual({ format: 'png', bitDepth: 8, name: 'x.png' });
+    expect(image.rgba).toBeInstanceOf(Float32Array);
+
+    const broken = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_rgb8', 'input.png'))).subarray(0, 100);
+    const err = (await client.decode(broken.slice()).catch((e: unknown) => e)) as DecodeError;
+    expect(err).toBeInstanceOf(DecodeError);
+    expect(err.format).toBe('png');
+    expect(err.reason.length).toBeGreaterThan(0);
+  });
+
+  it('decoder bisa disuntik (mis. wasmBinary LibRaw di Node)', async () => {
+    const calls: Array<string | undefined> = [];
+    const client = await connect(new FakeSession(), {
+      decode: async (bytes, name) => {
+        calls.push(name);
+        return decodeImage(bytes, name);
+      },
+    });
+    const png = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_gray8', 'input.png')));
+    await client.decode(png, 'g.png');
+    expect(calls).toEqual(['g.png']);
   });
 });
 
