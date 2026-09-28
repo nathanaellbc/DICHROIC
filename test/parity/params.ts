@@ -164,8 +164,10 @@ export function measureAutoExposureEv(
  *     (`FLAG_GLARE_ACTIVE`, `scannerPost.wgsl`-only): menyala untuk
  *     `family: 'measured'`, padam untuk `'lut'` -- lih. `FLAG_GLARE_ACTIVE`
  *     (`src/engine/params.ts`) untuk alasan lengkap.
- *   - `slot2` — 0: sampel dari indeks lokal (bukan buffer tetangga
- *     resolusi-penuh) -- tidak ada tiling di gerbang Task 11.
+ *   - `slot2` — 0. `filmExposure.wgsl` tidak lagi membaca field ini
+ *     (review seluruh-branch agenda #5 -- cabang "buffer tetangga
+ *     resolusi-penuh" yang dulu di sini dihapus sebagai kode mati
+ *     berbahaya, bukan diaktifkan oleh tiling Task 19).
  *   - `activeOrigin*`/`tileOrigin*` — 0; `activeWidth/Height` — 0 (berarti
  *     "seluruh buffer", lih. `params.ts`).
  */
@@ -300,7 +302,13 @@ export function defaultCoreParams(
     // di atas.
     slot0: family === 'lut' ? 0 : 1,
     slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag,
-    slot2: 0, // indeks lokal, bukan buffer tetangga resolusi-penuh
+    // 0 -- tetap di CoreParams (kontrak Task 7), tapi filmExposure.wgsl TIDAK
+    // LAGI membaca ini (review seluruh-branch agenda #5): cabang
+    // "sampel dari buffer tetangga resolusi-penuh" yang dulu ada di sini
+    // dihapus, karena tidak pernah dibind buffer keduanya dan `slot2=1`
+    // tidak pernah disetel pemanggil manapun -- lih. komentar di
+    // filmExposure.wgsl dekat `src[index]` untuk rasional lengkap.
+    slot2: 0,
     // 0 -- push/pull mode 0 (tidak aktif). filmExposure.wgsl tidak membaca
     // ini, tapi curveDevelop.wgsl (Task 12) membaca `filmPushPullMode` untuk
     // memilih cabang `experimentalPushPullLogRaw`/`Gain` -- Python

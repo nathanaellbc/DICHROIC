@@ -240,18 +240,42 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   let index = absoluteGid.y * params.width + absoluteGid.x;
-  let tileGid = absoluteGid + vec2<u32>(params.tileOriginX, params.tileOriginY);
-  let fullWidth = max(params.fullWidth, max(params.width, 1u));
-  let fullHeight = max(params.fullHeight, max(params.height, 1u));
-  let sourceIndex = select(
-    index,
-    min(tileGid.y, fullHeight - 1u) * fullWidth + min(tileGid.x, fullWidth - 1u),
-    params.slot2 == 1u,
-  );
+
+  // Review seluruh-branch, agenda #5 (`docs/superpowers/plans/2026-09-11-
+  // dichroic-phase1-engine.md`): sampai commit ini, di sini ada cabang
+  // `select(index, tileGid berbasis fullWidth/fullHeight, params.slot2==1u)`
+  // -- port literal `_pad2`/"selektor source-index" hulu (spec §4.3,
+  // task-7-brief.md), didokumentasikan `test/parity/params.ts` sebagai
+  // "0: sampel dari indeks lokal (bukan buffer tetangga resolusi-penuh) --
+  // tidak ada tiling di gerbang Task 11". Diaudit di sini karena TIDAK ADA
+  // pemanggil TypeScript manapun (`filmExposure.ts`, atau CoreParams
+  // manapun yang `test/parity/params.ts` bangun) yang PERNAH menyetel
+  // `slot2=1` untuk tahap ini -- cabang itu 100% mati sejak ditulis.
+  // Bahaya diamnya BUKAN kosmetik: `src` di tahap ini SELALU buffer
+  // ping-pong LOKAL tile (`ctx.source`, `params.width x params.height`,
+  // TIDAK ADA buffer kedua berresolusi-penuh yang dibind di sini sama
+  // sekali -- lih. daftar binding di atas), sementara cabang mati itu
+  // menghitung indeks dengan STRIDE `fullWidth`/`fullHeight` (dimensi
+  // gambar PENUH, Task 19). Begitu Task 19 (tiling) ada dan `fullWidth !=
+  // params.width`, andai `slot2=1` disetel (bukan mustahil -- `slot2`
+  // adalah field publik `CoreParams`, dapat disetel pemanggil manapun),
+  // `sourceIndex` akan membaca piksel yang SALAH secara diam-diam dan
+  // deterministik (row-wrap ke stride yang beda dari buffer sebenarnya)
+  // untuk tile mana pun yang indeksnya kebetulan masih pas di dalam
+  // panjang buffer -- persis kelas bug yang agenda #5 minta diperiksa di
+  // kesembilan tahap ("penalaran guard 2 Task 9 diwarisi tahap dengan
+  // indeks sumber/tujuan BERBEDA"). Dihapus di sini (bukan diberi test
+  // yang mendorong cabang mati ini) karena satu-satunya perbaikan yang
+  // tidak menyimpang dari kontrak: cabang ini tidak bisa dibuat AMAN tanpa
+  // mem-bind buffer kedua yang tidak pernah ada. `slot2` TETAP di
+  // `CoreParams` (kontrak 26-field bersama delapan shader lain, Task 7) --
+  // hanya penggunaannya DI SINI yang dihapus. Nol perubahan perilaku:
+  // setiap pemanggil yang ada SELALU `slot2=0`, jadi `sourceIndex` SELALU
+  // `index` sampai perubahan ini.
 
   let exposure = exp2(params.filmExposureEv);
   let colorSpace = colorSpaceIndex();
-  let source = src[sourceIndex];
+  let source = src[index];
   let decoded = decodeInputRgb(source.rgb, colorSpace);
   let linearSrgb = multiplyMatrix3(0u, ARENA_INPUTTOSRGB_OFFSET, colorSpace, decoded);
   let referenceXyz = multiplyMatrix3(1u, ARENA_INPUTTOREFERENCEXYZ_OFFSET, colorSpace, decoded);

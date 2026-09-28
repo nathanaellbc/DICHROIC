@@ -67,8 +67,17 @@
  * slot2 (upstream `_pad2`):
  *   - Diffusion: nilai ter-pack `(downsampleScale << 16) | groupCount`,
  *     dibongkar lewat `groupCountFromPacked`/`downsampleScaleFromPacked`.
- *   - FilmExposure: `_pad2 == 1u` memilih pengambilan sampel dari buffer
- *     tetangga resolusi-penuh vs indeks lokal (selektor source-index).
+ *   - FilmExposure: TIDAK LAGI dibaca `filmExposure.wgsl` (review
+ *     seluruh-branch agenda #5, ../../docs/superpowers/plans/2026-09-11-
+ *     dichroic-phase1-engine.md) -- dulu `_pad2 == 1u` memilih pengambilan
+ *     sampel dari "buffer tetangga resolusi-penuh" (selektor source-index,
+ *     makna upstream), tapi cabang itu 100% mati (tidak ada pemanggil TS
+ *     yang pernah menyetel `slot2=1` untuk tahap ini) DAN berbahaya kalau
+ *     suatu hari disetel (`src` di tahap ini SELALU buffer ping-pong lokal
+ *     tile, tidak pernah ada buffer resolusi-penuh kedua yang dibind --
+ *     cabang itu akan diam-diam membaca piksel salah di bawah tiling Task
+ *     19). Dihapus dari WGSL; field tetap ada di struct (kontrak Task 7)
+ *     tapi FilmExposure tidak menafsirkannya lagi.
  *   - Halation: dinamai lokal `component` — selektor komponen spektral,
  *     terpisah dari `sigmaMode` (slot1) shader yang sama.
  *   - Dir, Grain, PrintScan, ScannerPost: tetap `_pad2`, tidak dibaca di
