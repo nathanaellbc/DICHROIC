@@ -1,3 +1,4 @@
+// @verifies grainEnabled glareEnabled -- keduanya MATI (keluarga <case>, deterministik)
 import { describe, it } from 'vitest';
 import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
 import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';

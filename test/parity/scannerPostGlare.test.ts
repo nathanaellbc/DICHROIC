@@ -1,3 +1,4 @@
+// @verifies grainEnabled glareEnabled -- keduanya HIDUP (keluarga <case>_stochastic)
 import { describe, it, expect } from 'vitest';
 import { RenderGraph } from '../../src/engine/graph';
 import { fullChain } from './chain';
