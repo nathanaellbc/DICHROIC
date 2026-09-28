@@ -160,7 +160,10 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
 | 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | `feb749e` |
 | 6b glare | `glarePercent`; kombinasi `grainEnabled` x `glareEnabled` | 5 statistik + 1 per piksel | `d6fbbc8` |
 | 7 grain + format | `grainAmount`, `grainSeed`, `filmFormat` | 10 statistik + 1 seed + 9 per piksel | `24208d9` |
-| 8 stock | `film` (16 negatif), `paper` (8) | 138/138 @1e-5 (23 pasangan x lut + measured) | (task ini) |
+| 8 stock | `film` (16 negatif), `paper` (8) | 138/138 @1e-5 (23 pasangan x lut + measured) | `283fc4e`, `86968dd` |
+| 9a colour space input | `inputColorSpace` (26), `inputCctfDecoding` | 150/150 @1e-5 | `b9bd804` |
+| 9b colour space keluaran | `outputColorSpace` (10 SDR) | 13/13 @1e-5 | `bdee9d2` |
+| 10 difusi | tetap `locked` (6 field) | evaluasi, lih. temuan | — |
 
 ### Temuan dan ruling
 
@@ -211,6 +214,57 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
   di-bake ke `manifest.neutralPrintFilters` (bake ulang: ketiga blob
   bit-identik, kunci manifest lama tidak berubah). Pasangan di luar database
   dan film reversal ditolak `validateStocks` (juga di `Session.setParams`).
+- **Colour space input:** tanpa decode ke-26 label sah (primaries kunci
+  colour identik dengan `matrix_space` OFX). Decode OFX identik dengan
+  `cctf_decoding` colour untuk 20 label; enam ditolak bila decode (Canon
+  Log2/Log3 -- colour 'Cinema Gamut' ber-CCTF lain --, Linear Rec.709, P3-D65
+  Gamma 2.2, Rec.709 Gamma 2.2/2.4). Decode kini flag independen (bit 4
+  `slot1`), bukan `colorTransferKinds` seperti OFX.
+- **Auto-exposure Python bekerja di ruang TER-ENCODE** (`image * 2**ev`
+  sebelum `rgb_to_raw` men-decode), sedangkan EV kompensasi dikalikan pada raw.
+  Tanpa decode keduanya setara (linear); dengan decode, EV auto dibawa
+  `frame.inputDecodeScale`. Uji negatif: EV di ruang raw meleset sampai 11 di
+  `log_e_film`. Metering host kini men-decode dengan LUT yang sama.
+- **Colour space keluaran:** 10 label SDR yang encode OFX-nya identik dengan
+  `cctf_encoding` colour (sRGB, Display P3, ProPhoto, Adobe RGB, DCI-P3,
+  P3-D65 Gamma 2.6, dan empat ruang linear). Default OFX "Rec.709 Gamma 2.4"
+  TIDAK termasuk: colour BT.709 memakai OETF. Matriks, whitepoint, tabel
+  `C_max` CAM16, dan encode kini per ruang (manifest `outputColorSpaces`);
+  CAM16 sRGB untuk semua ruang gagal 9/10 kasus lut.
+- **Difusi tetap `locked`** (spec §6: field yang butuh kerja jauh lebih besar
+  dicatat, batch tidak ditahan). PSF Python = jumlah eksponensial radial 2D
+  `exp(-r/lambda)` (TIDAK separable, jadi primitif IIR Gaussian tidak berlaku),
+  diterapkan `fftconvolve` pada radius `8 * lambda_max` yang di-clamp ke
+  `min(h, w) // 2 - 1`. Radius terukur (35 mm, 3:2): glimmerglass 153/305/892
+  px, black_pro_mist 223/445/1303 px, pro_mist dan cinebloom 340/681/1999 px
+  pada 1024/2048/6000 px -- 94 ribu sampai 16 juta tap per piksel. Butuh
+  konvolusi FFT 2D di GPU pada frame penuh (radius mendekati setengah gambar,
+  jadi tiling tidak menolong), dengan padding reflect dan PSF ternormalisasi
+  pada grid terpotong persis Python. Sub-proyek tersendiri.
 - Kinerja: kunci arena menyertakan filter C/M/Y, jadi mengubah filter
   memra-hitung ulang arena (termasuk tabel Hanatos). Kandidat optimasi saat UI:
   pindahkan `printFilteredIlluminant` ke nilai per render.
+
+### Registri akhir batch 1
+
+`verified` (21): `film`, `paper`, `inputColorSpace`, `inputCctfDecoding`,
+`outputColorSpace`, `autoExposure`, `filmExposureEv`, `printExposureEv`,
+`filmPushPullStops`, `filterC`, `filterMShift`, `filterYShift`,
+`halationEnabled`, `halationAmount`, `grainEnabled`, `grainAmount`,
+`grainSeed`, `filmFormat`, `glareEnabled`, `glarePercent`,
+`scannerUnsharpAmount`.
+
+`locked` (7): `rgbToRawMethod` (OFX `Hanatos2026` tanpa oracle Python),
+`cameraDiffusionEnabled`, `cameraDiffusionFamily`, `cameraDiffusionStrength`,
+`printDiffusionEnabled`, `printDiffusionFamily`, `printDiffusionStrength`.
+
+Nilai yang divalidasi di luar registri (butuh aset): `validateStocks`
+(negatif saja, pasangan di database), `validateInputColorSpace`,
+`validateOutputColorSpace` (`src/params/plan.ts`).
+
+### Verifikasi akhir
+
+Suite penuh dua kali berurutan hijau (2026-09-29, RTX 3060 Ti, Dawn/D3D12):
+51 berkas, 2457 lulus, 2 dilewati (uji -0 registri: tidak ada lagi field
+`locked` numerik berbaseline 0; batas lisensi yang butuh sumber web hulu),
+0 gagal, ~260 s per run. `tsc` dan `eslint` bersih.
