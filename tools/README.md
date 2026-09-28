@@ -645,3 +645,30 @@ LibRaw 0.22.1, di `../upstream/.venv-ref` di samping repositori; fixture RAW
 `test/io/encode.test.ts` mencari venv lewat `DICHROIC_REF_PYTHON`, atau
 `../upstream/.venv-ref/{bin/python,Scripts/python.exe}`; tanpa itu, test baca
 balik pihak ketiga dilewati dengan alasan tertulis di nama test.
+
+## Fase 2C — keluarga `param/` dan lingkungan Windows
+
+Toolchain disiapkan ulang pada 2026-09-28 di Windows (RTX 3060 Ti) di
+`../upstream/` sejajar repositori, bukan `D:/Projects/upstream/`: commit hulu
+sama (`3bb2c2d` / `86476af`), Python 3.13.15, dan versi paket persis daftar
+Step 4 di atas plus `Pillow==12.3.0 tifffile==2026.3.3 imagecodecs`. Bukti
+kesetaraan: `gen_reference.py --out <tmp>` membangkitkan ulang 181 dari 190
+berkas parity bit-identik, termasuk SEMUA tap deterministik. Sembilan sisanya
+adalah tap stokastik (grain/glare), yang berubah antar-run di mesin yang sama
+(RNG hulu tidak di-seed) dan memang digerbangi secara statistik.
+
+```bash
+U=../upstream
+SPEKTRAFILM_PY=$U/spektrafilm SPEKTRAFILM_OFX=$U/spektrafilm-ofx \
+  $U/.venv-ref/Scripts/python.exe tools/gen_reference.py \
+  --out test/fixtures --param-case <nama> --manifest
+```
+
+`--param-case` (`all` untuk semuanya) membangkitkan `test/fixtures/param/<nama>/`
+dari tabel `tools/param_cases.py`. Tiap kasus punya `input.f32` sendiri, keenam
+tap, dan `case.json` yang mencatat `renderParams` (patch TS yang dibaca
+`test/parity/planRun.ts` dan diteruskan ke `buildRenderPlan`) serta
+`pythonOverrides` (padanan Python yang dijalankan generator). Kasus kendali
+`baseline_gray_ramp`, `baseline_gray_ramp_lut`, `baseline_hard_edge_px6um`
+bit-identik dengan `gray_ramp`, `gray_ramp_lut`, `hard_edge_px6um` untuk
+keenam tap.

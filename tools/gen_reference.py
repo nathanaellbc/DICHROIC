@@ -544,7 +544,74 @@ def _generate_pixel_regime_case(image: np.ndarray, case_dir: Path, name: str, fi
     print(f"Wrote {case_dir} (film_format_mm={film_format_mm})")
 
 
+# Fase 2C: keluarga `param/`. Tabel kasus di `tools/param_cases.py`.
+PARAM_IMAGES = {
+    **CASES,
+    "grain_dense_patch": grain_dense_patch,
+    "identity_lattice_17": identity_lattice_17,
+}
+
+
+def _build_param_case_params(case):
+    raw = init_params(case.film, case.print_stock)
+    if case.family == "lut":
+        raw.debug.lut_mode = True
+    elif case.family == "deterministic":
+        raw.debug.deactivate_stochastic_effects = True
+    elif case.family != "stochastic":
+        raise ValueError(f"keluarga tidak dikenal: {case.family}")
+    if case.film_format_mm is not None:
+        raw.camera.film_format_mm = case.film_format_mm
+    if case.pre is not None:
+        case.pre(raw)
+    params = digest_params(raw)
+    if case.post is not None:
+        case.post(params)
+    assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
+    if case.family != "stochastic":
+        assert not params.film_render.grain.active and not params.print_render.glare.active
+    return params
+
+
+def _generate_param_case(name: str, case_dir: Path) -> None:
+    """Keluarga `param/<name>` (Fase 2C): input.f32 sendiri, semua tap, dan
+    case.json yang mencatat patch `RenderParams` beserta padanan Python-nya."""
+    from param_cases import PARAM_CASES
+
+    case = PARAM_CASES[name]
+    image = PARAM_IMAGES[case.image]()
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
+    written = []
+    for tap in TAPS:
+        params = _build_param_case_params(case)
+        result = SimulationPipeline(params).process(image, collect=tap)
+        arr = np.ascontiguousarray(result, dtype="<f4")
+        (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
+        written.append({"tap": tap, "channels": int(arr.shape[2])})
+    meta = {
+        "name": f"param/{name}",
+        "height": int(image.shape[0]),
+        "width": int(image.shape[1]),
+        "family": case.family,
+        "stochastic": case.family == "stochastic",
+        "film": case.film,
+        "print": case.print_stock,
+        "renderParams": case.render_params,
+        "pythonOverrides": list(case.python_overrides),
+        "taps": written,
+    }
+    if case.family == "lut":
+        meta["lutMode"] = True
+    if case.film_format_mm is not None:
+        meta["filmFormatMm"] = case.film_format_mm
+    _write_json_lf(case_dir / "case.json", meta)
+    print(f"Wrote {case_dir} (family={case.family})")
+
+
 def main() -> int:
+    from param_cases import PARAM_CASES
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--case", choices=sorted(CASES), action="append")
@@ -588,6 +655,11 @@ def main() -> int:
              "pixel sizes (IIR regime of fast_gaussian_filter).",
     )
     parser.add_argument(
+        "--param-case", choices=[*sorted(PARAM_CASES), "all"], action="append",
+        help="Regenerate Fase 2C `param/<name>` fixtures (tools/param_cases.py). "
+             "Use --param-case all for every entry.",
+    )
+    parser.add_argument(
         "--manifest", action="store_true",
         help="Also (re)write <out>/manifest.json: a sha256 of every file "
              "currently under --out, checked by fixtures.test.ts. Scans "
@@ -598,7 +670,7 @@ def main() -> int:
 
     ran_anything_case_specific = bool(
         args.case or args.diffusion_case or args.diffusion_print_case or args.grain_dense_case
-        or args.lattice_case or args.pixel_regime_case
+        or args.lattice_case or args.pixel_regime_case or args.param_case
     )
 
     names = args.case or (sorted(CASES) if not ran_anything_case_specific else [])
@@ -643,6 +715,12 @@ def main() -> int:
         image = PIXEL_REGIME_CASES[name]()
         for suffix, film_format_mm in PIXEL_REGIME_FILM_FORMAT_MM.items():
             _generate_pixel_regime_case(image, args.out / f"{name}_{suffix}", name, film_format_mm)
+
+    param_names = args.param_case or ([] if ran_anything_case_specific else ["all"])
+    if "all" in param_names:
+        param_names = sorted(PARAM_CASES)
+    for name in param_names:
+        _generate_param_case(name, args.out / "param" / name)
 
     if args.manifest:
         _write_manifest(args.out)
