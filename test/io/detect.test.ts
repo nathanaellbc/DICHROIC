@@ -96,7 +96,8 @@ describe('detectFormat: RAW berbasis TIFF', () => {
 
 describe('decodeImage', () => {
   it('byte acak -> DecodeError("unknown")', async () => {
-    const error = await decodeImage(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])).catch((e: unknown) => e);
+    const wasmBinary = new Uint8Array(readFileSync(join('node_modules', 'libraw-wasm', 'dist', 'libraw.wasm')));
+    const error = await decodeImage(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), undefined, { raw: { wasmBinary } }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(DecodeError);
     expect((error as DecodeError).format).toBe('unknown');
   });

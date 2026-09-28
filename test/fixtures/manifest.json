@@ -357,5 +357,8 @@
   "log_gray_ramp_stochastic/rgb_pre.f32": "d141984444e29e50078f19da32fd3cb5e304e2d866b9f9f8143de6188db2d1ed",
   "raw/synthetic_rggb/case.json": "e3419fc8fd58c05ed51708d859550fb6301b2d6224f4e3751d6d73cf2f07df81",
   "raw/synthetic_rggb/input.dng": "57d0a258613982c6de4428344cedd29bcfdadeb6795acd2e5677e5900b93cbf6",
-  "raw/synthetic_rggb/output.f32": "539c3d67865866a28495bc51213e30ec5f29c5c77c1fd74be944808ccd657275"
+  "raw/synthetic_rggb/output.f32": "539c3d67865866a28495bc51213e30ec5f29c5c77c1fd74be944808ccd657275",
+  "raw/synthetic_rggb_rot90/case.json": "ab6d5bc9666fef8f15ba63640fae70387c348cfec57230e43e08448f6b44d9d1",
+  "raw/synthetic_rggb_rot90/input.dng": "62ab1e9ae8e25a7715613615d11927e2eb6c42ffac7b913af553b7b22f2760cc",
+  "raw/synthetic_rggb_rot90/output.f32": "4381bbff50602271bd4ca32cd293bd720f8ce55e52e87c4ed8b016dee995c38f"
 }
