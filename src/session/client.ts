@@ -36,9 +36,23 @@ export class SessionClient {
 
   /** Sambungkan dan inisialisasi `Session` di worker (memuat aset, mengakuisisi device). */
   static async connect(port: MessagePortLike, init: SessionInit): Promise<SessionClient> {
-    const client = new SessionClient(port);
-    await client.call('init', [init]);
+    const client = SessionClient.attach(port);
+    await client.init(init);
     return client;
+  }
+
+  /**
+   * Sambungkan tanpa menunggu `init`: `decode` sudah bisa dipakai selagi
+   * `Session.create` (aset, device, self-test) masih berjalan -- UI memakainya
+   * agar berkas pertama didekode bersamaan dengan persiapan engine.
+   */
+  static attach(port: MessagePortLike): SessionClient {
+    return new SessionClient(port);
+  }
+
+  /** Inisialisasi `Session` di worker; sekali per client. */
+  init(init: SessionInit): Promise<void> {
+    return this.call('init', [init]) as Promise<void>;
   }
 
   /**

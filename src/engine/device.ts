@@ -1,3 +1,4 @@
+import { importDawn } from './dawn';
 export class WebGPUUnavailableError extends Error {
   constructor(reason: string) {
     super(
@@ -88,7 +89,7 @@ export async function getNavigatorGpu(): Promise<GPU> {
   // test, jadi berkas kedua yang mengakuisisi device di worker yang sama
   // memanggil `create()` untuk kedua kalinya. Memoisasi ini membuat kedua sisi
   // (browser dan Node) punya semantik yang sama: satu instance GPU per proses.
-  dawnGpu ??= import('webgpu').then((mod) => (mod as { create(flags: string[]): GPU }).create([]));
+  dawnGpu ??= importDawn().then((mod) => (mod as { create(flags: string[]): GPU }).create([]));
   return dawnGpu;
 }
 

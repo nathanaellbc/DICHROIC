@@ -19,11 +19,13 @@
  * kedua namespace ini untuk membuat buffer sendiri, bukan sesudah --
  * supaya tidak ada duplikasi kedelapan/kesembilan untuk dirapikan nanti.
  */
+import { importDawn } from './dawn';
+
 export const gpuBufferUsage: typeof GPUBufferUsage =
   typeof GPUBufferUsage !== 'undefined'
     ? GPUBufferUsage
     : (
-        (await import('webgpu')) as unknown as {
+        (await importDawn()) as {
           globals: { GPUBufferUsage: typeof GPUBufferUsage };
         }
       ).globals.GPUBufferUsage;
@@ -32,7 +34,7 @@ export const gpuMapMode: typeof GPUMapMode =
   typeof GPUMapMode !== 'undefined'
     ? GPUMapMode
     : (
-        (await import('webgpu')) as unknown as {
+        (await importDawn()) as {
           globals: { GPUMapMode: typeof GPUMapMode };
         }
       ).globals.GPUMapMode;
