@@ -185,6 +185,7 @@ export function buildRenderPlan(
 ): RenderPlan {
   validateRenderParams(params);
   validateStocks(bundle, params.film, params.paper);
+  validateOutputColorSpace(bundle, params.outputColorSpace);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
@@ -223,10 +224,10 @@ export function buildRenderPlan(
 
   return {
     core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
-    arenaKey: `${params.film}::print=${params.paper}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
+    arenaKey: `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: {
       stockId: params.film,
-      printScan: { printStockId: params.paper, enlargerFilters },
+      printScan: { printStockId: params.paper, enlargerFilters, outputColorSpace: params.outputColorSpace },
     },
     chain: { family, grain: grainActive },
     overlap,
@@ -268,6 +269,23 @@ export function validateInputColorSpace(bundle: AssetBundle, label: string, deco
     );
   }
   return index;
+}
+
+/**
+ * Colour space keluaran harus ada di `manifest.outputColorSpaces`: label SDR
+ * yang encode OFX-nya identik dengan `cctf_encoding` colour (10 dari 26;
+ * mis. "Rec.709 Gamma 2.4", default OFX, TIDAK -- colour BT.709 memakai OETF).
+ */
+export function validateOutputColorSpace(bundle: AssetBundle, label: string): void {
+  const supported = Object.keys(bundle.manifest.outputColorSpaces);
+  if (!supported.includes(label)) {
+    throw new UnverifiedParameterError(
+      'outputColorSpace',
+      label,
+      BASELINE_RENDER_PARAMS.outputColorSpace,
+      `hanya ${supported.join(', ')} yang punya padanan colour-science`,
+    );
+  }
 }
 
 function inputDecoder(bundle: AssetBundle, colorSpace: number): (value: number) => number {

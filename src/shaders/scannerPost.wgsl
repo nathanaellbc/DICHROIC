@@ -553,20 +553,24 @@ const kMatrixInverse16 = mat3x3<f32>(
   -1.01125463, 0.62144744, -0.03412294,
   0.14918678, -0.00897399, 1.04996444,
 );
-// `colour.RGB_COLOURSPACES['sRGB'].matrix_RGB_to_XYZ`/`matrix_XYZ_to_RGB`
-// -- konstanta TERBIT independen, BUKAN sepasang invers (lih. blok komentar
-// berkas). WGSL `mat3x3` kolom-mayor: baris matriks Python jadi KOLOM di
-// sini (pola sama dengan `kMatrix16` di atas).
-const kSrgbRgbToXyz = mat3x3<f32>(
-  0.4124, 0.2126, 0.0193,
-  0.3576, 0.7152, 0.1192,
-  0.1805, 0.0722, 0.9505,
-);
-const kSrgbXyzToRgb = mat3x3<f32>(
-  3.2406, -0.9689, 0.0557,
-  -1.5372, 1.8758, -0.2040,
-  -0.4986, 0.0415, 1.0570,
-);
+// `colour.RGB_COLOURSPACES[output].matrix_RGB_to_XYZ`/`matrix_XYZ_to_RGB`
+// APA ADANYA (untuk sRGB: konstanta TERBIT independen, BUKAN sepasang invers
+// -- lih. blok komentar berkas). Fase 2C Task 9: dibaca dari arena dynamic
+// (`scannerOutput*`, baris-mayor) per colour space keluaran; dulu konstanta
+// sRGB di sini. WGSL `mat3x3` kolom-mayor: baris jadi KOLOM.
+fn outputMatrix(base: u32) -> mat3x3<f32> {
+  return mat3x3<f32>(
+    vec3<f32>(dynamicArena[base], dynamicArena[base + 3u], dynamicArena[base + 6u]),
+    vec3<f32>(dynamicArena[base + 1u], dynamicArena[base + 4u], dynamicArena[base + 7u]),
+    vec3<f32>(dynamicArena[base + 2u], dynamicArena[base + 5u], dynamicArena[base + 8u]),
+  );
+}
+fn outputRgbToXyz() -> mat3x3<f32> {
+  return outputMatrix(ARENA_SCANNEROUTPUTRGBTOXYZ_OFFSET);
+}
+fn outputXyzToRgb() -> mat3x3<f32> {
+  return outputMatrix(ARENA_SCANNEROUTPUTXYZTORGB_OFFSET);
+}
 
 const kSurroundC: f32 = 0.69;
 const kSurroundNc: f32 = 1.0;
@@ -747,7 +751,7 @@ fn cmaxLookup(Jp: f32, h: f32) -> f32 {
 // `OutputGamutCompressSpec` default dan probe host langsung (kwargs
 // SUNGGUHAN yang `compress_rgb` teruskan), bukan ditebak.
 fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
-  let xyz = kSrgbRgbToXyz * rgbLinear;
+  let xyz = outputRgbToXyz() * rgbLinear;
   var jab = xyzToCam16Ucs(xyz, vc);
   // `_compress_lightness`: knee satu-sisi pada Jp, dinormalisasi `L_white`
   // -- `_cam16ucs_white_Jp` TERBUKTI ALJABAR persis 100.0 untuk SEMBARANG
@@ -764,7 +768,7 @@ fn compressRgbCam16Ucs(rgbLinear: vec3<f32>, vc: Cam16Viewing) -> vec3<f32> {
   let bpNew = CpNew * sinAccurate(hp);
 
   let xyzNew = cam16UcsToXyz(jab.x, apNew, bpNew, vc);
-  return kSrgbXyzToRgb * xyzNew;
+  return outputXyzToRgb() * xyzNew;
 }
 
 // `_apply_cctf_encoding` (`colour.RGB_to_RGB(rgb, cs, cs,
@@ -778,10 +782,31 @@ fn srgbEncode(v: f32) -> f32 {
   return 1.055 * spow(v, 1.0 / 2.4) - 0.055;
 }
 
+// Fase 2C Task 9: `cctf_encoding` colour space keluaran, jenis dari
+// `scannerOutputEncoding` (lih. `bake_web_assets.py::_python_output_color_spaces`,
+// dideteksi numerik): 0 linear, 1 sRGB (IEC 61966-2-1), 2 ROMM (ProPhoto:
+// `16v` di bawah 1/512, `v**(1/1.8)`), 3 gamma `v**(1/g)`.
+fn outputEncode(v: f32) -> f32 {
+  let kind = u32(dynamicArena[ARENA_SCANNEROUTPUTENCODING_OFFSET]);
+  if (kind == 1u) {
+    return srgbEncode(v);
+  }
+  if (kind == 2u) {
+    if (v < 1.0 / 512.0) {
+      return 16.0 * v;
+    }
+    return spow(v, 1.0 / 1.8);
+  }
+  if (kind == 3u) {
+    return spow(v, 1.0 / dynamicArena[ARENA_SCANNEROUTPUTENCODING_OFFSET + 1u]);
+  }
+  return v;
+}
+
 fn applyCctfEncoding(rgbCompressed: vec3<f32>) -> vec3<f32> {
-  let xyz = kSrgbRgbToXyz * rgbCompressed;
-  let rgb2 = kSrgbXyzToRgb * xyz;
-  return vec3<f32>(srgbEncode(rgb2.x), srgbEncode(rgb2.y), srgbEncode(rgb2.z));
+  let xyz = outputRgbToXyz() * rgbCompressed;
+  let rgb2 = outputXyzToRgb() * xyz;
+  return vec3<f32>(outputEncode(rgb2.x), outputEncode(rgb2.y), outputEncode(rgb2.z));
 }
 
 // Batas aktif SAMA di keempat entry point di bawah (`scanPreUnsharp`,

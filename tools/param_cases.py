@@ -462,3 +462,35 @@ PARAM_CASES["cs_acescg_auto"] = ParamCase(
     python_overrides=("io.input_color_space = 'ACEScg'", "io.input_cctf_decoding = False"),
     pre=_input_cs("ACEScg", False),
 )
+
+# Task 9: colour space KELUARAN -> `io.output_color_space` (kunci colour,
+# `manifest.outputColorSpaces`), `output_cctf_encoding=True` default. Hanya
+# label SDR yang encode OFX-nya identik dengan cctf_encoding colour.
+OUTPUT_COLOR_SPACES = (
+    ("ACES2065-1", "aces2065_1", "ACES2065-1"),
+    ("ACEScg", "acescg", "ACEScg"),
+    ("Linear Rec.2020", "lin_rec2020", "Linear Rec.2020"),
+    ("Linear P3-D65", "lin_p3d65", "Linear P3-D65"),
+    ("sRGB", "srgb", "sRGB"),
+    ("Display P3", "display_p3", "Display P3"),
+    ("ProPhoto RGB", "prophoto_rgb", "ProPhoto RGB"),
+    ("Adobe RGB (1998)", "adobe_rgb_1998", "Adobe RGB (1998)"),
+    ("DCI-P3", "dci_p3", "DCI-P3"),
+    ("P3-D65 Gamma 2.6", "p3d65_gamma26", "P3-D65"),
+)
+
+for _label, _slug, _key in OUTPUT_COLOR_SPACES:
+    PARAM_CASES[f"out_{_slug}_lut"] = ParamCase(
+        image="color_patches", family="lut",
+        render_params={"outputColorSpace": _label},
+        python_overrides=(f"io.output_color_space = {_key!r}",),
+        pre=lambda p, k=_key: setattr(p.io, "output_color_space", k),
+    )
+for _label, _slug, _key in (("Display P3", "display_p3", "Display P3"), ("ProPhoto RGB", "prophoto_rgb", "ProPhoto RGB"),
+                            ("ACEScg", "acescg", "ACEScg")):
+    PARAM_CASES[f"out_{_slug}"] = ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"outputColorSpace": _label},
+        python_overrides=(f"io.output_color_space = {_key!r}",),
+        pre=lambda p, k=_key: setattr(p.io, "output_color_space", k),
+    )

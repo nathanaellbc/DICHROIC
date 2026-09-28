@@ -228,12 +228,28 @@ export interface NeutralPrintFilters {
   table: Record<string, Record<string, [number, number, number]>>;
 }
 
+/**
+ * Fase 2C Task 9 -- colour space KELUARAN dari colour-science (yang
+ * `ScanningStage` Python pakai), per label manifest. Hanya label SDR yang
+ * encode OFX-nya identik dengan `cctf_encoding` colour -- lih.
+ * `tools/bake_web_assets.py::_python_output_color_spaces`. Matriks baris-mayor.
+ */
+export interface OutputColorSpaceSpec {
+  key: string;
+  rgbToXyz: number[];
+  xyzToRgb: number[];
+  whitepointXyz: [number, number, number];
+  encoding: 'linear' | 'srgb' | 'romm' | 'gamma';
+  gamma: number | null;
+}
+
 export interface Manifest {
   hanatos: HanatosDims;
   colorSpaces: ColorSpaces;
   counts: Counts;
   printScan: PrintScanDefaults;
   neutralPrintFilters: NeutralPrintFilters;
+  outputColorSpaces: Record<string, OutputColorSpaceSpec>;
   stocks: StockEntry[];
   static: Record<StaticTableName, BlobRef>;
 }

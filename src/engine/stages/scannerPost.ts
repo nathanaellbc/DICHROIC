@@ -313,6 +313,8 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
         entries: [
           { binding: 1, resource: { buffer: ctx.dest } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },
+          // Fase 2C Task 9: `applyCctfEncoding` membaca matriks/encode keluaran dari arena dynamic.
+          { binding: 4, resource: { buffer: arenas.dynamic.buffer } },
           { binding: 8, resource: { buffer: preUnsharp } },
           { binding: 10, resource: { buffer: unsharpBlurred } },
           { binding: 12, resource: { buffer: scannerFrame } },

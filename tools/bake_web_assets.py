@@ -268,6 +268,64 @@ def _py_density_spectral_midgray(stock_id: str, *, is_film: bool) -> list | None
     return [float(v) for v in np.asarray(density_spectral_midgray).reshape(-1)]
 
 
+def _python_output_color_spaces() -> dict:
+    """Fase 2C Task 9: spesifikasi colour space KELUARAN per label manifest,
+    langsung dari colour-science (yang `ScanningStage` Python pakai):
+    kunci colour (label itu sendiri bila ada, selain itu `matrix_space` OFX),
+    `matrix_RGB_to_XYZ`/`matrix_XYZ_to_RGB` APA ADANYA (untuk sRGB keduanya
+    konstanta terbit yang dibulatkan independen -- `RGB_to_RGB(cs, cs)` dan
+    `compress_rgb` memakainya, bukan invers numerik), whitepoint XYZ (Y=1,
+    `_output_cs_whitepoint_xyz`), dan jenis `cctf_encoding` yang dideteksi
+    NUMERIK: `srgb` (IEC 61966-2-1), `gamma` (v**(1/g)), `romm` (ProPhoto),
+    `linear`. Label yang encode-nya bukan salah satu itu (log kamera, OETF
+    BT.709, ACEScc/ACEScct) tidak dimasukkan -- keluaran SDR saja.
+    """
+    import colour
+
+    keys = set(colour.RGB_COLOURSPACES.keys())
+    v = np.linspace(0.0, 1.0, 4001)
+
+    def srgb(x):
+        return np.where(x <= 0.0031308, 12.92 * x, 1.055 * np.power(x, 1 / 2.4) - 0.055)
+
+    def romm(x):
+        return np.where(x < 1 / 512, 16 * x, np.power(x, 1 / 1.8))
+
+    candidates = [("linear", None, lambda x: x), ("srgb", None, srgb), ("romm", None, romm)]
+    candidates += [("gamma", g, (lambda g: lambda x: np.power(x, 1 / g))(g)) for g in (2.19921875, 2.2, 2.4, 2.6)]
+
+    out: dict[str, dict] = {}
+    for space in gpc.COLOR_SPACES:
+        label, matrix_space = space["label"], space["matrix_space"]
+        key = label if label in keys else matrix_space
+        cs = colour.RGB_COLOURSPACES[key]
+        encoded = np.asarray(cs.cctf_encoding(v), dtype=np.float64)
+        match = next(
+            ((kind, g) for kind, g, fn in candidates if np.max(np.abs(fn(v) - encoded)) < 1e-12),
+            None,
+        )
+        if match is None:
+            continue
+        # Label harus BERARTI encode yang sama: encode OFX label (transfer 0 =
+        # identitas) identik dengan cctf_encoding colour. Menyingkirkan mis.
+        # "Canon Log2 CinemaGamut D55" (colour 'Cinema Gamut' linear) dan
+        # "P3-D65 Gamma 2.2" (colour 'P3-D65' gamma 2.6).
+        ofx_encoded = v if space["transfer"] == 0 else np.array([space["encode"](x) for x in v], dtype=np.float64)
+        if np.max(np.abs(ofx_encoded - encoded)) > 1e-9:
+            continue
+        kind, gamma = match
+        wp = np.asarray(cs.whitepoint, dtype=np.float64)
+        out[label] = {
+            "key": key,
+            "rgbToXyz": [float(x) for x in np.asarray(cs.matrix_RGB_to_XYZ, dtype=np.float64).reshape(-1)],
+            "xyzToRgb": [float(x) for x in np.asarray(cs.matrix_XYZ_to_RGB, dtype=np.float64).reshape(-1)],
+            "whitepointXyz": [float(wp[0] / wp[1]), 1.0, float((1 - wp[0] - wp[1]) / wp[1])],
+            "encoding": kind,
+            "gamma": gamma,
+        }
+    return out
+
+
 def _python_neutral_print_filters() -> dict:
     """Fase 2C Task 8: tabel filter netral enlarger (Kodak CC, C/M/Y) SEMUA
     pasangan (print, film) untuk illuminant `TH-KG3`, persis database yang
@@ -674,6 +732,8 @@ def main() -> int:
         "printScan": _default_enlarger_neutral_filters(),
         # Fase 2C Task 8 -- see `_python_neutral_print_filters`.
         "neutralPrintFilters": _python_neutral_print_filters(),
+        # Fase 2C Task 9 -- see `_python_output_color_spaces`.
+        "outputColorSpaces": _python_output_color_spaces(),
         "stocks": stock_entries,
         "static": static_entries,
     }

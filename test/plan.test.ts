@@ -112,7 +112,7 @@ describe('buildRenderPlan -> arena dan apron', () => {
       yFilterNeutral: bundle.manifest.printScan.neutralFilterY,
       yFilterShift: 0,
     });
-    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::c=0::m=0::y=0');
+    expect(plan.arenaKey).toBe('kodak_portra_400::print=kodak_portra_endura::out=sRGB::c=0::m=0::y=0');
   });
 
   it('apron dari sigma sebenarnya: halation + DIR (spatialRadius.ts) + grain 64 + unsharp 256', () => {

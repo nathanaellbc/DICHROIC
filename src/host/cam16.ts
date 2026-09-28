@@ -66,7 +66,7 @@ function invert3x3(m: number[]): number[] {
 
 const MATRIX_INVERSE_16 = invert3x3(MATRIX_16);
 
-function matVec(m: number[], v: readonly [number, number, number]): [number, number, number] {
+function matVec(m: readonly number[], v: readonly [number, number, number]): [number, number, number] {
   return [
     m[0]! * v[0] + m[1]! * v[1] + m[2]! * v[2],
     m[3]! * v[0] + m[4]! * v[1] + m[5]! * v[2],
@@ -339,7 +339,10 @@ const CMAX_JP_MAX = 110.0;
  * -- lih. docstring di atas untuk kenapa itu penting persis di sini juga:
  * uji in-gamut bisection ini yang menentukan seluruh bentuk tabel).
  */
-export function buildCam16UcsGamutTable(vc: Cam16ViewingConstants): Float32Array {
+export function buildCam16UcsGamutTable(
+  vc: Cam16ViewingConstants,
+  xyzToRgb: readonly number[] = SRGB_MATRIX_XYZ_TO_RGB,
+): Float32Array {
   const table = new Float32Array(CMAX_TABLE_N_L * CMAX_TABLE_N_H);
   const hStep = (2 * Math.PI) / CMAX_TABLE_N_H;
   for (let li = 0; li < CMAX_TABLE_N_L; li += 1) {
@@ -353,7 +356,7 @@ export function buildCam16UcsGamutTable(vc: Cam16ViewingConstants): Float32Array
       for (let step = 0; step < CMAX_TABLE_N_BISECT; step += 1) {
         const mid = (lo + hi_) * 0.5;
         const xyz = cam16UcsToXyz(Jp, mid * cosH, mid * sinH, vc);
-        const rgb = matVec(SRGB_MATRIX_XYZ_TO_RGB, xyz);
+        const rgb = matVec(xyzToRgb, xyz);
         const inGamut = rgb.every((v) => v >= -1e-6 && v <= 1 + 1e-6);
         if (inGamut) lo = mid;
         else hi_ = mid;
@@ -378,8 +381,12 @@ export interface ScannerCam16Static {
   cmaxTable: Float32Array;
 }
 
-export function buildScannerCam16Static(): ScannerCam16Static {
-  const viewing = computeViewingConstants(SRGB_WHITEPOINT_XYZ);
-  const cmaxTable = buildCam16UcsGamutTable(viewing);
+export function buildScannerCam16Static(
+  whitepointXyz: readonly [number, number, number] = SRGB_WHITEPOINT_XYZ,
+  xyzToRgb: readonly number[] = SRGB_MATRIX_XYZ_TO_RGB,
+): ScannerCam16Static {
+  // Fase 2C Task 9: whitepoint dan matriks keluaran per colour space (default sRGB).
+  const viewing = computeViewingConstants(whitepointXyz);
+  const cmaxTable = buildCam16UcsGamutTable(viewing, xyzToRgb);
   return { viewing, cmaxTable };
 }

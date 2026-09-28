@@ -713,6 +713,7 @@ function addPrintScanDynamicData(
   filmStockId: string,
   printStockId: string,
   enlargerFilters: EnlargerFilterState,
+  outputColorSpace: string,
 ): void {
   const printLogSensitivity = bundle.stockField(printStockId, 'logSensitivity');
   const printLogExposureField = bundle.stockField(printStockId, 'logExposure');
@@ -771,7 +772,7 @@ function addPrintScanDynamicData(
   dynamicBuilder.add('printCurveExposure', makePackedCurveExposure(printLogExposureField));
   dynamicBuilder.add('printDensityCurvesMorphed', printDensityCurvesMorphed);
 
-  addScannerPostDynamicData(dynamicBuilder, bundle, printStockId);
+  addScannerPostDynamicData(dynamicBuilder, bundle, printStockId, outputColorSpace);
 }
 
 /**
@@ -817,6 +818,7 @@ function addScannerPostDynamicData(
   dynamicBuilder: ArenaBuilder,
   bundle: AssetBundle,
   printStockId: string,
+  outputColorSpace: string,
 ): void {
   const channelDensity = bundle.stockField(printStockId, 'channelDensity');
   const baseDensity = bundle.stockField(printStockId, 'baseDensity');
@@ -829,9 +831,11 @@ function addScannerPostDynamicData(
   }
   const wavelengthCount = bundle.stockEntry(printStockId).wavelengthCount;
 
-  const srgbIndex = bundle.manifest.colorSpaces.labels.indexOf('sRGB');
-  if (srgbIndex < 0) throw new Error("colorSpaces.labels tidak punya 'sRGB'");
-  const scanToOutputRgbSrgb = scanToOutputRgb.slice(srgbIndex * 9, srgbIndex * 9 + 9);
+  // Fase 2C Task 9: colour space keluaran dari colour-science (manifest).
+  const output = bundle.manifest.outputColorSpaces[outputColorSpace];
+  const outputIndex = bundle.manifest.colorSpaces.labels.indexOf(outputColorSpace);
+  if (!output || outputIndex < 0) throw new Error(`Colour space keluaran '${outputColorSpace}' tidak ada di manifest`);
+  const scanToOutputRgbSelected = scanToOutputRgb.slice(outputIndex * 9, outputIndex * 9 + 9);
 
   const cmfs = bundle.staticTable('standardObserverCmfs');
   // `normalization = sum(scan_illuminant * STANDARD_OBSERVER_CMFS[:,1])`
@@ -864,7 +868,14 @@ function addScannerPostDynamicData(
   dynamicBuilder.add('scannerIlluminant', scanIlluminant.slice());
   dynamicBuilder.add('scannerWavelengthCount', Float32Array.of(wavelengthCount));
   dynamicBuilder.add('scannerNormalization', Float32Array.of(normalization));
-  dynamicBuilder.add('scannerToOutputRgb', Float32Array.from(scanToOutputRgbSrgb));
+  dynamicBuilder.add('scannerToOutputRgb', Float32Array.from(scanToOutputRgbSelected));
+  // `compress_rgb` dan `_apply_cctf_encoding` (`RGB_to_RGB(cs, cs)`) memakai
+  // pasangan matriks colour APA ADANYA (baris-mayor), plus jenis encode:
+  // [0 linear | 1 srgb | 2 romm | 3 gamma, gamma].
+  dynamicBuilder.add('scannerOutputRgbToXyz', Float32Array.from(output.rgbToXyz));
+  dynamicBuilder.add('scannerOutputXyzToRgb', Float32Array.from(output.xyzToRgb));
+  const encodingCode = { linear: 0, srgb: 1, romm: 2, gamma: 3 }[output.encoding];
+  dynamicBuilder.add('scannerOutputEncoding', Float32Array.of(encodingCode, output.gamma ?? 1));
   dynamicBuilder.add('scannerIlluminantXyz', Float32Array.from(illuminantXyz));
 
   // Konstanta CAM16 (`compress_rgb`, `output_color_space="sRGB"`) -- lih.
@@ -873,7 +884,7 @@ function addScannerPostDynamicData(
   // beban CPU host yang SAMA jenisnya dengan `hanatosRawResponse` di atas,
   // WAJIB selesai di sini (sebelum `acquireDevice()`), bukan disebar ke
   // WGSL per piksel (lih. CATATAN LINGKUNGAN modul ini).
-  const cam16 = buildScannerCam16Static();
+  const cam16 = buildScannerCam16Static(output.whitepointXyz, output.xyzToRgb);
   dynamicBuilder.add(
     'scannerCam16Viewing',
     Float32Array.of(
@@ -1074,6 +1085,11 @@ export interface ArenaPlan {
 export interface PrintScanArenaOptions {
   printStockId: string;
   enlargerFilters: EnlargerFilterState;
+  /**
+   * Fase 2C Task 9: label colour space KELUARAN (`manifest.outputColorSpaces`,
+   * `io.output_color_space` Python). Baku "sRGB".
+   */
+  outputColorSpace?: string;
 }
 
 export function precomputeArenaData(
@@ -1350,7 +1366,14 @@ export function precomputeArenaData(
   // DIFFERENT stock (`printScan.printStockId`) than the `stockId` this
   // whole function was called for.
   if (printScan) {
-    addPrintScanDynamicData(dynamicBuilder, bundle, stockId, printScan.printStockId, printScan.enlargerFilters);
+    addPrintScanDynamicData(
+      dynamicBuilder,
+      bundle,
+      stockId,
+      printScan.printStockId,
+      printScan.enlargerFilters,
+      printScan.outputColorSpace ?? 'sRGB',
+    );
   }
 
   // --- arena frameState: kosong untuk Task 11 (lih. dokumentasi modul) ---
