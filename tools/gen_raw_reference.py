@@ -25,7 +25,7 @@ import numpy as np
 import rawpy
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_reference import _write_json_lf, _write_manifest  # noqa: E402
+from fixture_manifest import _write_json_lf, _write_manifest  # noqa: E402
 
 WIDTH, HEIGHT = 96, 64
 BLACK, WHITE = 512, 16383
