@@ -98,4 +98,30 @@ export function encodeTiff16(rgb: Float32Array, width: number, height: number): 
 
 ## Status 2B
 
-(diisi di Task 8)
+**Selesai 2026-09-28** di branch `claude/admiring-galileo-1vwlrk` (dari `main`
+setelah PR #2). Angka terukur, ruling, dan keterbatasan: spec Fase 2 §5.1.
+
+| Task | Commit | Hasil |
+|---|---|---|
+| 1 deteksi, `DecodeError`, `decodeImage` | `ccf4e09` | magic bytes + RAW berbasis TIFF (DNGVersion, CR2, CFA/LinearRaw, kompresi vendor) |
+| — | `ab5f70b` | helper manifest dipisah ke `tools/fixture_manifest.py` (generator io/RAW tidak butuh spektrafilm) |
+| 2 JPEG dan PNG | `ce776f6` | 7 + 9 fixture bit-identik; `jpeg-js` diganti decoder sendiri (terukur 125/255) |
+| 3 TIFF | `929929e` | 17 fixture bit-identik; `utif2` diganti pembaca sendiri |
+| 4 EXR | `f4bc407` | 15 fixture bit-identik; DWAA ≤ 3 ULP half (gerbang terpisah) |
+| 5 RAW | `ea31477`, `8e26521` | ≤ 1 LSB vs rawpy, termasuk Orientation 6; COOP/COEP di Vite; smoke Chromium |
+| 6 encoder | `65ffd40` | round-trip bit-identik lewat decoder kita dan Pillow/OIIO/tifffile |
+| 7 `exportImage`, RPC `decode` | `0eace92` | ekspor diantrekan ulang bila tersalip; `decode` tanpa `init`, transfer tanpa salinan |
+| 8 penutup | (commit ini) | spec §5.1, `tools/README.md`, `docs/HANDOFF.md` |
+
+Review Focus: #1 berkas terpotong → `DecodeError` per format (semua fixture
+diuji dipotong dua kali); #2 PNG/TIFF 16-bit BE dan gray/RGBA ter-pin; #3 EXR
+kanal/kompresi tak didukung → `DecodeError` jelas (Y saja kini didukung sebagai
+grayscale, lihat §5.1); #4 orientasi RAW ter-pin dengan DNG Orientation 6;
+#5 clamp/NaN ter-pin di `quantize`.
+
+Suite: seluruh test non-GPU hijau (tsc, eslint bersih). Mesin sesi ini tidak
+punya GPU; di lavapipe (Mesa, software Vulkan) gerbang parity GPU lama gagal
+karena presisi (self-test df64 melaporkan `iirPrecisionOk = false`), sama
+seperti sebelum 2B -- bukan regresi 2B, dan test GPU yang bukan parity
+(antrean, cache, tiling, `exportImage`) lulus. Suite penuh dua kali hijau
+harus dikonfirmasi ulang di mesin ber-GPU.

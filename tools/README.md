@@ -615,3 +615,33 @@ agar citra 64 px mencapai ukuran piksel foto sungguhan (teknik Task 16b):
 
 Semua tap, `input.f32` di tiap direktori, dan `case.json` mencatat
 `filmFormatMm`. Manifest hanya bertambah 32 entri.
+
+## Fase 2B: generator oracle `io/`
+
+Generator yang **tidak** butuh `spektrafilm` mengimpor penulis fixture
+bersama dari `tools/fixture_manifest.py` (hanya stdlib), jadi bisa jalan di
+venv biasa:
+
+| Skrip | Menulis | Oracle |
+|---|---|---|
+| `gen_io_reference.py` | `test/fixtures/io/<case>/` (`input.*`, `expected.f32`, `case.json`) dan `test/fixtures/io_invalid/*` | Pillow (JPEG, PNG 8-bit), OpenImageIO (PNG 16-bit, EXR), tifffile (TIFF) |
+| `gen_raw_reference.py` | `test/fixtures/raw/<case>/` (`input.dng`, `output.f32`, `case.json`) | rawpy (LibRaw) dengan setelan hulu `as_shot` |
+| `read_image_oracle.py` | tidak menulis fixture; dipanggil `test/io/encode.test.ts` | Pillow / OpenImageIO / tifffile membaca balik keluaran encoder kita |
+
+Paket di luar daftar Step 4: `pillow tifffile imagecodecs` (imagecodecs
+menyediakan penulis LZW/Deflate/PackBits untuk tifffile).
+
+```bash
+.venv-ref/bin/python tools/gen_io_reference.py --out test/fixtures --manifest
+.venv-ref/bin/python tools/gen_raw_reference.py --out test/fixtures --manifest
+```
+
+Keduanya deterministik (tiga run berturut-turut, manifest sama; `DateTime`
+otomatis OpenImageIO dipaku). Fixture 2B dibangkitkan di Linux (Python 3.12)
+dengan Pillow 12.3.0, OpenImageIO 3.1.17, tifffile 2026.3.3, rawpy 0.27.1 /
+LibRaw 0.22.1, di `../upstream/.venv-ref` di samping repositori; fixture RAW
+`synthetic_rggb` yang sudah ada terbangkitkan ulang bit-identik di sana.
+
+`test/io/encode.test.ts` mencari venv lewat `DICHROIC_REF_PYTHON`, atau
+`../upstream/.venv-ref/{bin/python,Scripts/python.exe}`; tanpa itu, test baca
+balik pihak ketiga dilewati dengan alasan tertulis di nama test.

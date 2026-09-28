@@ -249,10 +249,10 @@ interface DecodedImage {
 
 | Format | Pustaka | Keluaran | Saran colour space |
 |---|---|---|---|
-| JPEG | `jpeg-js` (BSD-3) | 8-bit → `[0,1]` ter-encode | `sRGB` |
-| PNG | `fast-png` (MIT) | 8/16-bit → `[0,1]` ter-encode | `sRGB` |
-| TIFF | `utif2` (MIT) | 8/16-bit int → ter-encode; 32-bit float → linear | `sRGB` untuk int, `Linear Rec.709` untuk float |
-| EXR | `parse-exr` (MIT) | half/float → linear | dari atribut `chromaticities` bila ada; selain itu `Linear Rec.709` |
+| JPEG | decoder sendiri meniru libjpeg-turbo (`jpegDecoder.ts`; semula `jpeg-js`, lihat §5.1) | 8-bit → `[0,1]` ter-encode | `sRGB` |
+| PNG | `fast-png` (MIT) | 1/2/4/8/16-bit, gray/RGB(A)/palet → `[0,1]` ter-encode | `sRGB` |
+| TIFF | pembaca sendiri (`tiff.ts`) + `fflate` (MIT) untuk Deflate (semula `utif2`, lihat §5.1) | 8/16/32-bit int → ter-encode; float 16/32/64 → linear | `sRGB` untuk int, `Linear Rec.709` untuk float |
+| EXR | `parse-exr` (MIT) dengan pagar (`exr.ts`) | half/float → linear | dari atribut `chromaticities` (AP0, AP1, Rec.709, Rec.2020, P3-D65) bila ada; selain itu `Linear Rec.709` |
 | RAW | `libraw-wasm` (ISC; LibRaw LGPL-2.1/CDDL) | setelan rawpy §2.5 → linear | `ACES2065-1` |
 
 Semua decoder murni JS/WASM, jadi bisa diuji di Node tanpa DOM. Profil ICC
@@ -279,6 +279,88 @@ penulis baseline sendiri (sekitar 100 baris, tanpa dependensi). Nilai
   sama persis (misalnya `output_color=ACES` tidak diekspos), itu dicatat dan
   diganti oleh build LibRaw-WASM sendiri. Ambang tidak dilonggarkan untuk
   menutupinya.
+
+### 5.1 Hasil (2026-09-28, selesai)
+
+Rencana: `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md`. Oracle:
+Pillow 12.3 (libjpeg-turbo), OpenImageIO 3.1.17 (OpenEXR, libpng), tifffile
+2026.3, rawpy 0.27.1 (LibRaw 0.22.1). Fixture dibangkitkan
+`tools/gen_io_reference.py` dan `tools/gen_raw_reference.py`, deterministik
+(tiga run berturut-turut, manifest sama).
+
+| Format | Fixture | Terukur | Gerbang |
+|---|---|---|---|
+| JPEG | 7 (baseline q90 4:2:0, progresif, gray, progresif gray, 4:4:4, 4:2:2, restart) | bit-identik; juga 60 JPEG acak (1×1..259×199, q5..100, semua subsampling, progresif, optimize, restart) | bit-identik |
+| PNG | 9 (RGB8, RGBA8, gray8, gray1, palet 8-bit, palet 2-bit, RGB16, gray16) | bit-identik | bit-identik |
+| TIFF | 17 (8/16-bit LE/BE, float16/32 LE/BE, LZW, LZW+predictor 16-bit, Deflate, Deflate+predictor BE, predictor floating-point LE/BE, PackBits, tile, planar, gray16, RGBA16) | bit-identik; juga 40 TIFF acak sampai 400×300 | bit-identik |
+| EXR | 15 (half none/RLE/ZIPS/ZIP/PIZ, float RGBA ZIP, float PXR24, tile, decreasingY, data window, Y saja, AP0, AP1, Rec.2020) | bit-identik | bit-identik |
+| EXR DWAA | 1 (lossy, di luar rencana) | ≤ 3 ULP half (1440 identik, 1896 × 1, 561 × 2, 18 × 3 dari 3915) | ≤ 3 ULP half |
+| RAW | 2 DNG sintetis (tanpa Orientation, Orientation 6) | ≤ 1 LSB 16-bit (1,53e-5), 59 % nilai identik | ≤ 2 LSB (3,1e-5) |
+| Encoder | PNG 8/16, TIFF 16 | round-trip bit-identik lewat decoder `io/` dan lewat Pillow / OIIO-libpng / tifffile | bit-identik |
+
+Ruling yang diambil (keputusan — alasan — biaya bila salah):
+
+- **JPEG: `jpeg-js` diganti decoder sendiri yang meniru libjpeg-turbo** (IDCT
+  islow, upsampling chroma fancy h2v1/h1v2/h2v2 dengan replikasi tepi
+  `jdmainct`, YCbCr titik tetap) — `jpeg-js` terukur meleset **125/255** di tepi
+  chroma 4:2:0 (upsampling nearest-neighbour; juga IDCT poppler dan konversi
+  warna float): gambar yang berbeda dari yang dilihat pengguna di browser,
+  bukan derau pembulatan. Target rencana ≤ 2/255 tidak dilonggarkan; decodernya
+  yang diganti — sekitar 840 baris untuk dirawat; aritmetika, lossless,
+  12-bit, dan CMYK/YCCK ditolak `DecodeError`. 24 MP ≈ 1 s di Node.
+- **TIFF: `utif2` diganti pembaca sendiri** — `utif2` mengembalikan piksel nol
+  tanpa galat untuk kompresi tak dikenal, tidak membalik byte float
+  big-endian, hanya me-log planar 2, dan mencetak `console.log` untuk berkas
+  ber-tile: semuanya gambar salah yang diam-diam — sekitar 400 baris.
+  JPEG-in-TIFF, BigTIFF, CMYK/YCbCr/Lab ditolak jelas.
+- **EXR: `parse-exr` dipertahankan dengan pagar** — ia menulis baris terbalik
+  (konvensi tekstur three.js; dibalik), menempatkan chunk `decreasingY`
+  menurut urutan berkas (disusun ulang dari y chunk sebelum parsing),
+  mengambil satu tipe piksel untuk semua kanal (campuran half/float ditolak),
+  dan mengembalikan Y saja dari berkas luminance-chroma (ditolak). Kanal
+  ber-layer (`diffuse.R`) ditolak dengan daftar kanal. Y saja disebar ke RGB
+  (grayscale sah; Review Focus #3 rencana menyebut "hanya Y" sebagai kanal
+  hilang — yang ditolak kini luminance-chroma dan kanal tanpa R/G/B/Y).
+- **EXR DWAA/DWAB didukung dengan gerbang terpisah ≤ 3 ULP half** — lossy,
+  tidak ada di rencana, dan `parse-exr` punya implementasi DCT DWA sendiri;
+  menolaknya berarti menolak berkas yang umum di pipeline VFX. Gerbang
+  bit-identik kasus lain tidak disentuh — bila pemilik proyek lebih suka
+  menolak DWA, cukup lempar `DecodeError` di `exr.ts`.
+- **RAW: `gamm` tidak dikirim ke LibRaw** (rencana menyebut `gamm: [1, 1]`
+  "demi masa depan") — bila binding kelak menghormatinya, keluaran linear
+  akan dibalik dua kali tanpa galat. Tanpa `gamm`, LibRaw selalu memakai kurva
+  bawaannya (0,45; 4,5; `imax = 0x10000` karena `no_auto_bright`), yang
+  dibalik tabel `gamma_curve` yang sama persis.
+- **RAW: format yang tidak dikenali magic bytes tetap dicoba LibRaw** sebelum
+  `DecodeError('unknown')` — LibRaw mengenali jauh lebih banyak RAW daripada
+  `detect.ts`.
+- **RAW berbasis TIFF dikenali dari DNGVersion, header CR2, atau IFD/SubIFD
+  ber-photometric CFA/LinearRaw atau berkompresi vendor**, bukan dari tag
+  `Make` saja (rencana) — TIFF biasa buatan kamera/scanner juga membawa
+  `Make`.
+- **`Session.exportImage` mengantre ulang ekspor yang tersalip** sebelum mulai,
+  alih-alih menolaknya dengan `RenderSupersededError` — pengguna meminta
+  berkas, bukan pratinjau yang boleh dibuang; akibatnya pratinjau yang sedang
+  menunggu justru yang tersalip.
+- **RPC `decode` tidak butuh `init`** dan hasilnya ditransfer tanpa salinan —
+  decode berkas besar dan kompilasi shader `Session.create` berjalan
+  bersamaan; gambar RAW 24 MP = 384 MB f32 RGBA.
+
+**Browser dan COOP/COEP.** `libraw-wasm` memakai memori WASM bersama
+(pthread), jadi halaman harus cross-origin isolated. `vite.config.ts` kini
+memasang `Cross-Origin-Opener-Policy: same-origin` dan
+`Cross-Origin-Embedder-Policy: require-corp` untuk dev dan preview, dan
+mengecualikan `libraw-wasm` dari pra-bundling. Hosting (fase PWA) wajib
+memasang header yang sama. Tanpa isolasi, `decodeRaw` melempar alasan yang
+menyebut COOP/COEP. Diverifikasi di Chromium headless lewat Vite: kelima
+format ter-decode, baik di halaman maupun lewat RPC `decode` di worker
+`Session` (pthread LibRaw bersarang di worker itu).
+
+**Keterbatasan yang tercatat** (bukan disembunyikan): profil ICC tidak dibaca
+(dan tidak disematkan saat ekspor), tag orientasi EXIF/TIFF tidak diterapkan
+pada JPEG/PNG/TIFF (RAW memakai orientasi berkas), EXR multi-part/deep dan
+mipmap selain level 0 tidak didukung, halaman TIFF selain IFD pertama
+diabaikan.
 
 ---
 
