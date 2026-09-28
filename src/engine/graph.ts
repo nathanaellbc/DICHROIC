@@ -349,6 +349,44 @@ export class RenderGraph {
     const { device } = this.engine;
     const bytes = input.byteLength;
 
+    // Review seluruh-branch, agenda #1 (`docs/superpowers/plans/2026-09-11-
+    // dichroic-phase1-engine.md`): `front`/`back` dialokasikan ulang di
+    // SINI, sekali per panggilan `runSingleBuffer` -- sejak Task 19 itu
+    // berarti SEKALI PER TILE (`runTiled` memanggil ini satu kali per
+    // `TileSpec`), bukan sekali per frame seperti sebelum tiling ada. Task 9
+    // menunda "apakah ini perlu dikolam seperti `StageContext.scratch()`" ke
+    // titik ini, dengan alasan "Dawn di sini rapuh terhadap pola alokasi".
+    //
+    // DIUKUR di sini sebelum diputuskan (sesi ini), bukan diasumsikan:
+    //   - Biaya create+destroy TERISOLASI sepasang buffer seukuran ini
+    //     (64x64x4x4 byte): ~0,059 ms/pasang (256 pasang, 15,15 ms total).
+    //   - Render 4-tile (hard_edge, fullChain, geometri "Task 19" gerbang
+    //     bit-identik di atas): rata-rata 37-40 ms per render (5 run),
+    //     8 alokasi ping-pong/run (2/tile) dari 216 alokasi buffer TOTAL
+    //     per run (~3,7%) -- kontribusi ping-pong terisolasi ke waktu
+    //     dinding: ~0,24 ms dari ~38 ms (~0,6%).
+    //   - Render 64-tile (8x8, geometri yang SAMA diperkecil overlap-nya):
+    //     440 ms total, 128 alokasi ping-pong (2/tile) -- kontribusi
+    //     terisolasi ~3,8 ms dari 440 ms (~0,9%). Keluaran tetap finite,
+    //     TIDAK ADA crash pada 64 tile (16x tile count gerbang bit-identik
+    //     di atas).
+    //   - Kerapuhan Dawn yang didokumentasikan di proyek ini
+    //     (`src/host/spectral.ts`, CATATAN LINGKUNGAN) SUDAH menyingkirkan
+    //     "tekanan alokasi" secara eksplisit sebagai tersangka pada segfault
+    //     yang ditemukan Task 11 -- itu kerja float CPU SETELAH device hidup,
+    //     TERBUKTI bukan soal create/destroy buffer sama sekali (400 MB
+    //     Float32Array dialokasikan+dibuang dengan device hidup, lolos).
+    //
+    // KEPUTUSAN: TIDAK dikolam. Kontribusi terukur create/destroy ke waktu
+    // dinding total berada di bawah 1% pada kedua skala yang diuji, dan
+    // tidak ada indikasi ketidakstabilan pada 64 tile. Mengolam `front`/
+    // `back` (menambah state lifecycle -- ukuran per-tile BERBEDA per tile
+    // pada tiling non-seragam, jadi kolam butuh logika resize/reuse yang
+    // `StageContext.scratch()` sudah punya untuk KASUS LAIN) akan menambah
+    // kerumitan tanpa manfaat terukur -- persis "jangan ubah kode tanpa
+    // alasan terukur" yang aturan proyek ini minta. Ukur ulang di sini kalau
+    // profil produksi sungguhan (bukan fixture test) suatu hari menunjukkan
+    // gambaran berbeda.
     let front = device.createBuffer({ label: 'ping', size: bytes, usage: PING_PONG_USAGE });
     let back = device.createBuffer({ label: 'pong', size: bytes, usage: PING_PONG_USAGE });
     // `input.buffer` bertipe `ArrayBufferLike` (bisa `SharedArrayBuffer`) di
