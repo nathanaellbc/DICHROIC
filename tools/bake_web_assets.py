@@ -442,10 +442,16 @@ def pack_stock(writer: _BlobWriter, stock_id: str, *, is_film: bool, shared_inpu
     fields["densityCurveLayers"] = writer.write(gpc._numeric_layers(profile, "density_curves_layers"))
     # _density_curve_layer_maxima(profile) -- :1033
     fields["densityCurveLayerMaxima"] = writer.write(gpc._density_curve_layer_maxima(profile))
-    # halation_preset["strength"] / ["sigma_h"] -- :1050-1051
+    # halation_preset["strength"] / ["sigma_h"] -- :1050-1051. OFX-sourced
+    # (`halation_preset` derives from `info` above, which is `profile["info"]`
+    # as loaded from OFX's own JSON) -- review seluruh-branch agenda #2:
+    # `tools/verify_profile_agreement.py` re-verifies this against Python's
+    # own `_apply_halation_preset` runtime resolution on every run, closing
+    # the "verified once, by hand" gap task-14-report.md left open.
     fields["halationStrength"] = writer.write([float(v) for v in halation_preset["strength"]])
     fields["halationFirstSigmaUm"] = writer.write([float(v) for v in halation_preset["sigma_h"]])
-    # dir_couplers[...] -- :1052-1055
+    # dir_couplers[...] -- :1052-1055. Also OFX-sourced and also re-verified
+    # by `tools/verify_profile_agreement.py` (same script, same reasoning).
     fields["dirGammaSameLayerRgb"] = writer.write([float(v) for v in dir_couplers["same_layer_rgb"]])
     fields["dirGammaRToGb"] = writer.write([float(v) for v in dir_couplers["r_to_gb"]])
     fields["dirGammaGToRb"] = writer.write([float(v) for v in dir_couplers["g_to_rb"]])

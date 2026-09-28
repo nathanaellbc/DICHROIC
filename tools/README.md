@@ -537,3 +537,42 @@ Proved it actually bites, two different ways, then restored:
 
 Restored `params.ts` (`git checkout src/engine/params.ts`) after each and
 confirmed `17 checks: ALL PASS` / exit `0` again.
+
+## Review seluruh-branch agenda #2: `verify_profile_agreement.py`
+
+`compare_cpp.py` proves "our bake == OFX's C++ literal" — it never proves
+"and OFX's literal == Python's own runtime". Two fields drifted silently on
+exactly that gap before (`inputToReferenceXyz` CAT02-vs-CAT16 Task 11,
+`density_curves` Task 12), and `halationStrength`/`halationFirstSigmaUm` were
+verified byte-identical to Python's runtime exactly once, by hand
+(task-14-report.md), with nothing to catch it drifting since. Inventory of
+which per-stock fields are OFX-sourced (and which of those this script
+covers vs. exempts, with reasons) is in `verify_profile_agreement.py`'s own
+module docstring — not duplicated here.
+
+```bash
+SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
+SPEKTRAFILM_PY=D:/Projects/upstream/spektrafilm \
+  D:/Projects/upstream/.venv-ref/Scripts/python.exe \
+  spektra/tools/verify_profile_agreement.py
+```
+
+Needs the REFERENCE venv (`.venv-ref`), not `.venv-bake` — the halation/
+DIR-coupler checks call `digest_params`/`init_params` from the real
+`spektrafilm` package, same requirement as `bake_web_assets.py` itself.
+
+Ran clean, this session:
+
+```
+352 checks: ALL PASS
+$ echo $?
+0
+```
+
+352 = 28 stocks × 8 raw `data` keys + 28 stocks × 1 `info`-dict check + 20
+film stocks × (2 halation + 4 DIR-coupler) checks. Zero drift found on any
+of the three categories this script covers — the "verified once, by hand"
+claims for halation and DIR-coupler defaults, and the "every other field
+confirmed byte-identical" claim from `_py_density_curve_data`'s docstring
+(`bake_web_assets.py`), are both re-verified mechanically here, not just
+trusted from prose.
