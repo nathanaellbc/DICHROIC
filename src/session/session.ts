@@ -15,6 +15,7 @@
 import { acquireDevice } from '../engine/device';
 import type { EngineDevice } from '../engine/device';
 import { RenderGraph } from '../engine/graph';
+import { runPrecisionSelfTest } from '../engine/precisionSelfTest';
 import { Tap } from '../engine/taps';
 import type { Arenas } from '../engine/arena';
 import { buildChain } from '../engine/chain';
@@ -44,6 +45,17 @@ export interface RenderResult {
   quality: RenderQuality;
   /** Versi parameter saat render dimulai; UI membuang hasil yang versinya basi. */
   paramsVersion: number;
+}
+
+/**
+ * Diagnostik perangkat (spec Fase 2 §6a.1). `iirPrecisionOk = false` berarti
+ * backend shader meruntuhkan aritmetika df64 blur IIR (reasosiasi
+ * fast-math): render tetap berjalan, tapi halation/DIR bisa meleset ~1e-3 dari
+ * referensi. UI sebaiknya memperingatkan pengguna.
+ */
+export interface SessionDiagnostics {
+  iirPrecisionOk: boolean;
+  iirMaxAbsError: number;
 }
 
 export interface ArenaProvider {
@@ -121,6 +133,7 @@ export class Session {
     private readonly arenas: ArenaProvider,
     private readonly ownedArenas: OwnedArenaProvider | undefined,
     private readonly previewMaxLongEdge: number,
+    readonly diagnostics: Readonly<SessionDiagnostics>,
   ) {}
 
   static async create(opts: SessionOptions): Promise<Session> {
@@ -137,12 +150,14 @@ export class Session {
       owned.precompute(baseline.key, baseline.inputs);
     }
     engine ??= await acquireDevice();
+    const selfTest = await runPrecisionSelfTest(engine.device);
     return new Session(
       engine,
       bundle,
       opts.arenaProvider ?? owned!,
       owned,
       opts.previewMaxLongEdge ?? PREVIEW_MAX_LONG_EDGE,
+      Object.freeze({ iirPrecisionOk: selfTest.ok, iirMaxAbsError: selfTest.maxAbsError }),
     );
   }
 
@@ -153,6 +168,11 @@ export class Session {
   /** Naik setiap `setParams` yang diterima. */
   get paramsVersion(): number {
     return this.#paramsVersion;
+  }
+
+  /** Bentuk method `diagnostics` untuk RPC. */
+  getDiagnostics(): SessionDiagnostics {
+    return { ...this.diagnostics };
   }
 
   /** Salinan parameter saat ini (bentuk method untuk RPC). */

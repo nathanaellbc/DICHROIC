@@ -58,6 +58,9 @@ class FakeSession implements SessionLike {
     this.lastRgb = Float32Array.of(delay, 0.5, 0.25);
     return { width: 1, height: 1, rgb: this.lastRgb, quality, paramsVersion: delay };
   }
+  getDiagnostics() {
+    return { iirPrecisionOk: false, iirMaxAbsError: 3e-4 };
+  }
   async exportCube(size: number): Promise<string> {
     return `LUT_3D_SIZE ${size}\n`;
   }
@@ -74,6 +77,7 @@ describe('RPC Session', () => {
     expect(fake.calls).toEqual([['setParams', [{ grainEnabled: false, glareEnabled: false }]]]);
     expect(await client.getParams()).toEqual(BASELINE_RENDER_PARAMS);
     expect(await client.exportCube(33)).toBe('LUT_3D_SIZE 33\n');
+    expect(await client.getDiagnostics()).toEqual({ iirPrecisionOk: false, iirMaxAbsError: 3e-4 });
   });
 
   it('mengirim init (URL aset) ke factory sebelum panggilan pertama', async () => {

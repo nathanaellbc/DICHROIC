@@ -316,8 +316,10 @@ Tujuan: setiap tahap spasial benar di ukuran piksel foto sungguhan
   hi+lo f32, two-sum Knuth dan two-prod dengan split Dekker, tidak
   bergantung `fma`). **Risiko portabilitas terbuka:** compiler yang
   melakukan reasosiasi fast-math akan meruntuhkan df64 ke presisi f32
-  polos. Mitigasi yang direkomendasikan sebelum rilis: self-test runtime
-  kecil saat `Session.create`.
+  polos. Mitigasi (sudah diterapkan): `Session.create` menjalankan self-test
+  kecil (blur σ 2/9/25 di GPU dibandingkan referensi CPU f64 yang digerbangi
+  terhadap Python, ambang 1e-5) dan melaporkannya lewat
+  `Session.diagnostics.iirPrecisionOk`, supaya UI bisa memperingatkan.
 - **Halation dan DIR** memakai primitif ini. Gerbang rezim produksi
   (`hard_edge`/`impulse_highlight` di 6,25 dan 31,25 µm/px) lulus
   `log_e_film`, `cmy_film`, dan `rgb_out` di ambang 1e-5. FIR lama meleset

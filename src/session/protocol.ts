@@ -7,13 +7,14 @@
 
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
-import type { RenderQuality, RenderResult } from './session';
+import type { RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
   setParams(patch: Partial<RenderParams>): void;
   getParams(): RenderParams;
+  getDiagnostics(): SessionDiagnostics;
   render(quality: RenderQuality): Promise<RenderResult>;
   exportCube(size: number): Promise<string>;
   dispose(): void;

@@ -15,7 +15,7 @@ import type { RenderParams } from '../params/renderParams';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { RenderQuality, RenderResult } from './session';
+import type { RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 export class SessionClient {
   #nextId = 1;
@@ -51,6 +51,10 @@ export class SessionClient {
 
   getParams(): Promise<RenderParams> {
     return this.call('getParams', []) as Promise<RenderParams>;
+  }
+
+  getDiagnostics(): Promise<SessionDiagnostics> {
+    return this.call('getDiagnostics', []) as Promise<SessionDiagnostics>;
   }
 
   render(quality: RenderQuality): Promise<RenderResult> {

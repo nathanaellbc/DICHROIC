@@ -78,6 +78,11 @@ describe('Session: urutan pemakaian', () => {
     await expect(fresh.render('full')).rejects.toBeInstanceOf(SessionStateError);
   });
 
+  it('menjalankan self-test presisi IIR saat create dan melaporkannya', () => {
+    expect(session.diagnostics.iirPrecisionOk).toBe(true);
+    expect(session.diagnostics.iirMaxAbsError).toBeLessThanOrEqual(1e-6);
+  });
+
   it('setParams dengan field locked ditolak dan parameter tidak berubah', () => {
     expect(() => session.setParams({ filmExposureEv: 2 })).toThrow(UnverifiedParameterError);
     expect(session.params.filmExposureEv).toBe(0);
