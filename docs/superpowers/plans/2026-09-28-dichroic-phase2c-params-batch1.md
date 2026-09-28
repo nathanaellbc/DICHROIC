@@ -1,0 +1,150 @@
+# DICHROIC Fase 2C — Batch parameter 1: Rencana Implementasi
+
+> Eksekusi inline (executing-plans), satu commit per task, commit diakhiri
+> baris `Co-Authored-By`. Checkbox (`- [ ]`) untuk pelacakan.
+
+**Goal:** Menaikkan field `RenderParams` batch 1 (spec Fase 2 §6) dari
+`locked` ke `verified`, masing-masing lewat fixture Python baru dan gerbang
+parity dengan ambang yang sudah ada. Field yang ternyata butuh perubahan
+struktur besar tetap `locked` dan dicatat sebagai temuan.
+
+**Architecture:** Satu keluarga fixture baru, `param/<nama>`, dibangkitkan
+`tools/gen_reference.py --param-case`. Setiap kasus mencatat di `case.json`
+patch `RenderParams` (sisi TS) dan override Python yang menjadi padanannya.
+Gerbangnya lewat **jalur produksi**: `buildRenderPlan(patch)` →
+`precomputeArenaData(plan.arenaInputs)` → `buildChain(plan.chain)` →
+`graph.run(plan.core, { frame: plan.frame })`. Jadi pemetaan field → engine
+yang dibuktikan adalah pemetaan yang dipakai `Session`, bukan salinan di test.
+
+**Tech Stack:** toolchain hulu di `../upstream` (spektrafilm `3bb2c2d`,
+spektrafilm-ofx `86476af`, Python 3.13, versi paket `tools/README.md`).
+
+**Spec:** `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md` §6.
+
+## Global Constraints
+
+- Ambang tidak dilonggarkan: tap deterministik ≤ 1e-5 per piksel (rezim IIR
+  sama dengan 2A.5), gerbang stokastik memakai momen/spektrum seperti Gate B.
+- Field naik ke `verified` hanya bila setiap test yang menyebutnya lewat
+  `@verifies <field>` hijau. `renderParams.test.ts` menjaga penandanya.
+- Fixture lama tidak disentuh; manifest hanya bertambah.
+- Semua arena untuk satu berkas test dipra-hitung SEBELUM `acquireDevice`
+  (CATATAN LINGKUNGAN `src/host/spectral.ts`).
+- Fixture kecil (≤ 64 px); rezim resolusi produksi lewat `film_format_mm`
+  kecil seperti 2A.5.
+
+## Temuan awal yang membentuk urutan task
+
+1. **`filmExposureEv` menyeret cabang `_comp`.** Default Python
+   (`print_exposure_compensation=True`, `normalize_print_exposure=True`)
+   memakai `factor_midgray_comp`, dari midgray `0.184 * 2**exposure_compensation_ev`
+   (`filming.py::_compute_density_spectral_midgray_to_balance_print`). Pada
+   ev = 0 nilainya sama dengan `factor_midgray`, sehingga gerbang lama lulus.
+   Hanya EV kompensasi yang masuk, bukan EV auto-exposure.
+2. **Push/pull `Standard`** di OFX hanya mengalikan gamma kurva film dengan
+   `filmPushPullGamma(stops)` (`SpektraVulkanRenderer.cpp:2034`). Padanan
+   Python: `film_render.density_curve_gamma`. Gamma itu juga dipakai
+   `develop_simple` untuk midgray print.
+3. **`grainAmount`** OFX: `base + (grained - base) * amount` di ruang densitas
+   (`SpektraGrain.comp::applyGrainControls`, saturasi 1). Python tidak punya
+   field ini. Oracle: `cmy_film` tanpa grain dan dengan grain dicampur di
+   generator, lalu diinjeksi lewat `taps.inject = cmy_film` untuk tap hilir.
+4. **Colour space.** Oracle Python hanya ada untuk label yang juga kunci
+   `colour.RGB_COLOURSPACES`. Label log kamera (LogC4, S-Log3, …) tidak punya
+   padanan Python dan tetap ditolak.
+5. **Filter netral enlarger** ter-bake untuk satu pasangan saja. Membuka
+   `film`/`paper` butuh tabel netral untuk setiap pasangan negatif × print.
+
+---
+
+### Task 1: Harness keluarga `param/`
+
+**Files:** Modify `tools/gen_reference.py`, `tools/README.md`; Create
+`test/parity/planRun.ts`, `test/parity/paramCases.ts`; Test
+`test/parity/paramHarness.test.ts`.
+
+- `gen_reference.py --param-case <nama>`: kasus = (citra, keluarga
+  `deterministic|stochastic|lut`, `film`, `print`, fungsi override Python,
+  patch `RenderParams`). `case.json` mencatat `renderParams`, `pythonOverrides`
+  (teks, untuk dibaca manusia), `family`, `filmFormatMm`.
+- `planRun.ts`: `prepareParamCases(names)` memuat aset dan memra-hitung arena
+  semua kasus sebelum device; `runParamParity(name, tap, tolerance)` menjalankan
+  jalur produksi di atas dan membandingkan.
+- Gerbang harness: kasus `param/baseline_*` (patch kosong, tiga keluarga)
+  identik dengan fixture lama yang setara (bit-identik terhadap berkas `.f32`
+  lama untuk tap deterministik).
+
+### Task 2: Exposure — `filmExposureEv`, `autoExposure`, `printExposureEv`
+
+**Files:** `src/host/spectral.ts` (`addPrintScanDynamicData`), `src/params/plan.ts`,
+`src/shaders/printScan.wgsl` bila perlu; fixture `param/exposure_*`.
+
+- Implementasi `factor_midgray_comp` (midgray `0.184 * 2**filmExposureEv`) dan
+  `print_exposure = 2**printExposureEv` di `printExposureScale`.
+- Kasus: ev ∈ {−1.5, +2}, `autoExposure=false` (± ev), `printExposureEv` ∈ {−1, +0.7};
+  keluarga deterministik dan `lut`. Gerbang tap `log_e_film`, `log_e_print`, `rgb_out`.
+
+### Task 3: Enlarger — `filterMShift`, `filterYShift`, `filterC`
+
+- Python: `m_filter_shift`, `y_filter_shift`; `filterC` OFX dipetakan setelah
+  membaca `SpektraVulkanRenderer.cpp:1030-1060` (tambah ke `c_filter_neutral`?).
+- Kasus: shift ±10/±20, `filterC` 15. Gerbang `log_e_print`, `rgb_out`.
+
+### Task 4: Push/pull `Standard` — `filmPushPullStops`
+
+- `filmGamma = filmPushPullGamma(stops)`; Python `density_curve_gamma` sama.
+  Periksa `curveDevelop.wgsl` membaca `filmGamma` dan `develop_simple` midgray.
+- Kasus: stops ∈ {−1, +1, +2}. Gerbang `cmy_film`, `rgb_out`.
+
+### Task 5: Halation — `halationEnabled`, `halationAmount`
+
+- `halation.wgsl` `kHalationAmount` jadi frame float; `halationEnabled=false`
+  berarti tahap halation hanya menutup `log10`.
+- Kasus: amount ∈ {0.4, 2.5}, enabled=false; rezim FIR (35 mm) dan IIR (px6um).
+  Gerbang `log_e_film`, `rgb_out`.
+
+### Task 6: Scanner — `scannerUnsharpAmount`, `glarePercent`
+
+- Unsharp deterministik (keluarga `<case>`): amount ∈ {0, 1.5}. Gerbang `rgb_out`.
+- Glare stokastik: percent ∈ {0, 0.1}; gerbang statistik seperti
+  `scannerPostGlare.test.ts`.
+
+### Task 7: Grain — `grainAmount`, `filmFormat`, `grainSeed`
+
+- `grainAmount`: temuan 3. Gerbang statistik (momen, spektrum daya) di
+  `cmy_film` dan `rgb_out`.
+- `filmFormat`: kasus deterministik untuk tiap format lewat halation/DIR
+  (ukuran piksel), dan satu kasus grain statistik.
+- `grainSeed`: dua seed berbeda memberi realisasi berbeda dengan statistik
+  yang sama-sama lulus Gate B.
+
+### Task 8: Stock — `film`, `paper`
+
+- Bake tabel filter netral semua pasangan negatif × print (illuminant
+  TH-KG3) lewat `apply_database_neutral_print_filters` hulu ke aset; `resolveEnlargerFilters`
+  membaca tabel.
+- Kasus: setiap negatif dengan `kodak_portra_endura`, dan `kodak_portra_400`
+  dengan setiap print; keluarga `lut` (`rgb_out`) plus satu measured per stock.
+  Reversal tetap ditolak (batch 2).
+
+### Task 9: Colour space — `inputColorSpace`, `inputCctfDecoding`, `outputColorSpace`
+
+- `decodeInputRgb` memakai LUT decode bila flag `inputCctfDecoding` (bit baru
+  `slot1` FilmExposure) menyala.
+- Subset label yang punya kunci `colour.RGB_COLOURSPACES`; sisanya tetap ditolak
+  dengan pesan yang menyebut alasannya.
+- Gerbang `rgb_pre`/`log_e_film` (input) dan `rgb_out` (output).
+
+### Task 10: Difusi — evaluasi
+
+- Prasyarat: PSF per ukuran gambar (spec §2.3). Bila butuh konvolusi FFT di
+  GPU untuk radius produksi, field tetap `locked` dan temuan dicatat dengan
+  ukuran kerja.
+
+### Task 11: Penutup
+
+- Registri akhir, spec §6.1 (hasil), `HANDOFF.md`, suite penuh dua kali hijau.
+
+## Status 2C
+
+(diisi saat eksekusi)
