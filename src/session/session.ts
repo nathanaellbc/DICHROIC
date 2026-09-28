@@ -28,7 +28,9 @@ import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
 import type { RenderParams } from '../params/renderParams';
 import { loadAssets } from '../profiles/load';
 import type { AssetBundle } from '../profiles/load';
-import { SessionStateError } from './errors';
+import { RenderSupersededError, SessionStateError } from './errors';
+import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
+import type { ScaledImage } from './downscale';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -52,6 +54,11 @@ export interface SessionOptions {
   bundle?: AssetBundle;
   /** Pemilik arena. Arena dari provider suntikan TIDAK dihancurkan `dispose()`. */
   arenaProvider?: ArenaProvider;
+  /**
+   * Sisi terpanjang render pratinjau (default `PREVIEW_MAX_LONG_EDGE`, 1024).
+   * UI boleh menurunkannya di perangkat lemah; render penuh tidak terpengaruh.
+   */
+  previewMaxLongEdge?: number;
 }
 
 /** Provider bawaan: pra-hitung -> unggah, di-cache per kunci, dihancurkan saat dispose. */
@@ -96,7 +103,14 @@ export class Session {
   #params: RenderParams = { ...BASELINE_RENDER_PARAMS };
   #paramsVersion = 0;
   #image: DecodedImage | undefined;
+  #imageId = 0;
+  #preview: { imageId: number; image: ScaledImage } | undefined;
   #disposed = false;
+  /** Antrean terbaru-menang: paling banyak satu render berjalan dan satu menunggu. */
+  #busy = false;
+  #pending: PendingRender | undefined;
+  /** Satu hasil terakhir per kualitas. */
+  readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
   private readonly graphs = new Map<string, RenderGraph>();
 
   private constructor(
@@ -104,6 +118,7 @@ export class Session {
     private readonly bundle: AssetBundle,
     private readonly arenas: ArenaProvider,
     private readonly ownedArenas: OwnedArenaProvider | undefined,
+    private readonly previewMaxLongEdge: number,
   ) {}
 
   static async create(opts: SessionOptions): Promise<Session> {
@@ -120,11 +135,22 @@ export class Session {
       owned.precompute(baseline.key, baseline.inputs);
     }
     engine ??= await acquireDevice();
-    return new Session(engine, bundle, opts.arenaProvider ?? owned!, owned);
+    return new Session(
+      engine,
+      bundle,
+      opts.arenaProvider ?? owned!,
+      owned,
+      opts.previewMaxLongEdge ?? PREVIEW_MAX_LONG_EDGE,
+    );
   }
 
   get params(): Readonly<RenderParams> {
     return this.#params;
+  }
+
+  /** Naik setiap `setParams` yang diterima. */
+  get paramsVersion(): number {
+    return this.#paramsVersion;
   }
 
   /** Salinan parameter saat ini (bentuk method untuk RPC). */
@@ -141,6 +167,9 @@ export class Session {
       );
     }
     this.#image = image;
+    this.#imageId += 1;
+    this.#preview = undefined;
+    this.#cache.clear();
   }
 
   /** Validasi segera dan atomik: patch yang ditolak tidak mengubah apa pun. */
@@ -150,22 +179,85 @@ export class Session {
     this.#paramsVersion += 1;
   }
 
-  async render(quality: RenderQuality): Promise<RenderResult> {
-    this.assertAlive();
-    const image = this.#image;
-    if (!image) throw new SessionStateError('render() sebelum open(): belum ada gambar.');
-    const paramsVersion = this.#paramsVersion;
-    const rgb = await this.renderFrame(
-      { width: image.width, height: image.height, rgba: image.rgba },
-      this.#params,
-      'image',
-    );
-    return { width: image.width, height: image.height, rgb, quality, paramsVersion };
+  /**
+   * Antrean terbaru-menang (spec Fase 2 §4.4): bila tidak ada render
+   * berjalan, permintaan langsung mulai (parameter dibaca SAAT MULAI). Bila
+   * ada, permintaan menunggu di satu slot; permintaan berikutnya menolak
+   * yang menunggu dengan `RenderSupersededError` lalu menggantikannya. Render
+   * yang sedang berjalan selalu diselesaikan -- hasilnya membawa
+   * `paramsVersion` saat ia mulai, supaya UI bisa membuangnya bila basi.
+   */
+  render(quality: RenderQuality): Promise<RenderResult> {
+    try {
+      this.assertAlive();
+      if (!this.#image) throw new SessionStateError('render() sebelum open(): belum ada gambar.');
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    const hit = this.#cache.get(quality);
+    if (hit && hit.key === this.cacheKey(quality)) return Promise.resolve(hit.result);
+
+    return new Promise<RenderResult>((resolve, reject) => {
+      const job: PendingRender = {
+        start: () => {
+          this.execute(quality).then(resolve, reject);
+        },
+        reject,
+      };
+      if (!this.#busy) {
+        this.#busy = true;
+        job.start();
+      } else {
+        this.#pending?.reject(new RenderSupersededError());
+        this.#pending = job;
+      }
+    });
+  }
+
+  private async execute(quality: RenderQuality): Promise<RenderResult> {
+    try {
+      this.assertAlive();
+      const image = this.#image!;
+      const params = this.#params;
+      const paramsVersion = this.#paramsVersion;
+      const key = this.cacheKey(quality);
+      const frame = quality === 'preview' ? this.previewImage() : image;
+      const rgb = await this.renderFrame(frame, params, 'image');
+      const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
+      if (!this.#disposed) this.#cache.set(quality, { key, result });
+      return result;
+    } finally {
+      this.#busy = false;
+      const next = this.#pending;
+      this.#pending = undefined;
+      if (next) {
+        this.#busy = true;
+        next.start();
+      }
+    }
+  }
+
+  private previewImage(): ScaledImage {
+    if (this.#preview?.imageId !== this.#imageId) {
+      const image = this.#image!;
+      this.#preview = {
+        imageId: this.#imageId,
+        image: boxDownscale(image.rgba, image.width, image.height, this.previewMaxLongEdge),
+      };
+    }
+    return this.#preview.image;
+  }
+
+  private cacheKey(quality: RenderQuality): string {
+    return `${this.#imageId}|${quality}|${JSON.stringify(this.#params)}`;
   }
 
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#pending?.reject(new SessionStateError('Session di-dispose() sebelum render ini dimulai.'));
+    this.#pending = undefined;
+    this.#cache.clear();
     for (const graph of this.graphs.values()) graph.dispose();
     this.graphs.clear();
     this.ownedArenas?.destroy();
@@ -202,6 +294,11 @@ export class Session {
   private assertAlive(): void {
     if (this.#disposed) throw new SessionStateError('Session sudah di-dispose().');
   }
+}
+
+interface PendingRender {
+  start(): void;
+  reject(reason: unknown): void;
 }
 
 function baselineArenaInputs(bundle: AssetBundle): { key: string; inputs: ArenaInputs } {
