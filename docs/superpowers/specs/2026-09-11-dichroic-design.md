@@ -602,6 +602,57 @@ sebagai PLAFON sehingga regresi glare di masa depan memerahkannya. Sampai itu
 ada, test-nya dibiarkan MERAH — merah yang jujur lebih bernilai daripada hijau
 yang argumennya tidak bisa dipertahankan.
 
+#### 6.5.1b Keputusan tercatat: gerbang statistik, bukan fixture ter-seed (agenda #7)
+
+Review seluruh-branch (`docs/superpowers/plans/2026-09-11-dichroic-phase1-
+engine.md`, "Agenda review seluruh-branch") menunda pertanyaan ini di Task 11:
+apakah ketidak-reproduksi-an fixture `_stochastic` harus diselesaikan dengan
+gerbang STATISTIK (bandingkan momen/spektrum, bukan piksel), atau dengan
+fixture yang di-SEED ulang supaya deterministik? Jawabannya sudah terjawab
+lewat implementasi, tapi belum pernah dicatat sebagai KEPUTUSAN eksplisit —
+dicatat di sini, bukan dibiarkan sebagai sesuatu yang "kebetulan terjadi".
+
+**Keputusan: gerbang statistik. Fixture ter-seed ditolak, dan sudah TIDAK
+mungkin lagi setelah Task 3.** Alasannya struktural, bukan preferensi:
+`add_glare` (`spektrafilm/model/glare.py`) menarik derau lognormal lewat
+kernel numba `@njit(parallel=True)` yang memanggil `np.random.randn()` di
+dalam `prange` — keadaan RNG paralel numba TERPISAH dari `numpy.random` dan
+tidak dapat di-seed lewat field params manapun. Fixture Python `rgb_out`
+keluarga `_stochastic` **tidak reproducible antar-run Python sendiri**
+(dibuktikan Task 3, §6.3 di atas) — tidak ada seed yang bisa dipasang di sisi
+Python untuk membuatnya deterministik, jadi "fixture ter-seed" bukan opsi
+yang tersedia sama sekali, terlepas dari opsi mana yang lebih disukai di sisi
+WGSL kita.
+
+**Dua penerapan konkret, keduanya sudah berjalan sebelum keputusan ini
+dicatat:**
+
+1. **Grain (Task 16), gerbang STATISTIK pada tap yang REPRODUCIBLE.**
+   `grain.test.ts` menggerbangi `cmy_film` (bukan `rgb_out`) keluarga
+   `_stochastic` — Task 3 membuktikan EMPIRIS bahwa dari seluruh keluarga
+   `_stochastic`, tepat lima `rgb_out.f32` berubah antar-rerun Python dan
+   TIDAK SATU PUN `cmy_film.f32` (glare hanya menyentuh `rgb_out`, grain
+   menyentuh `cmy_film`). Metode gerbang: `moments()` (mean, varians, spektrum
+   daya radial) dengan ambang 1e-4/2%/5%, BUKAN piksel-demi-piksel — RNG WGSL
+   di sini adalah ALGORITMA BERBEDA dari numba/scipy Python, jadi dua
+   implementasi yang sama-sama benar menghasilkan realisasi butir berbeda
+   pada piksel yang sama dengan statistik yang sama.
+2. **Glare/Gate B (Task 18e), gerbang STATISTIK dengan ambang terikat sebaran
+   TERUKUR, pada tap yang TIDAK reproducible.** `rgb_out` keluarga
+   `_stochastic` tidak punya jalan lain — Gate B (`scannerPostGlare.test.ts`)
+   membandingkan rata-rata N-salt (draw kami, di-reseed lewat
+   `params.tileOriginX/Y`) terhadap PUSAT distribusi Python yang diukur
+   (n=26, di-bake sebagai konstanta terukur — lih. §6.5.1a), dengan toleransi
+   yang mengunci bias 2,55e-5 terukur sebagai PLAFON. Ini persis §6.5.1:
+   ambang statistik diikat ke sebaran oracle-nya sendiri yang TERUKUR, bukan
+   ke konstanta yang ditebak.
+
+**Kesimpulan:** setiap tap stokastik di repo ini SUDAH digerbangi secara
+statistik, dan pilihan itu bukan kebetulan — ia satu-satunya opsi yang
+konsisten dengan sifat oracle Python (RNG paralel numba yang tidak bisa
+di-seed) dan dengan aturan §6.5.1 (ambang statistik terikat sebaran terukur).
+Tidak ada utang tersisa dari pertanyaan Task 11 ini.
+
 #### 6.5.2 Lubang cakupan: keluarga `measured` tak tergerbangi setelah `cmy_film`
 
 Diaudit setelah Gate B gagal. Gerbang deterministik yang ada per keluarga:
