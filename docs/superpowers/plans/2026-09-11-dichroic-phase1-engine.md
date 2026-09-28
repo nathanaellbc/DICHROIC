@@ -1,5 +1,17 @@
 # DICHROIC Fase 1 — Engine Terverifikasi: Rencana Implementasi
 
+> **Catatan pindah repo (2026-09-28).** Dokumen ini ditulis saat DICHROIC masih
+> berupa folder `spektra/` di dalam repositori EMULSION. Proyek ini sekarang
+> berdiri sendiri di `D:\Projects\DICHROIC`, dengan seluruh riwayat git-nya
+> dibawa (`git filter-repo`, `spektra/` dinaikkan menjadi root). Baca setiap
+> rujukan `spektra/<path>` di bawah sebagai `<path>` dari root repo ini —
+> `spektra/src/...` menjadi `src/...`, `spektra/tools/...` menjadi `tools/...`.
+> Rujukan ke `web/` menunjuk EMULSION, yang kini repositori terpisah. Isinya
+> sengaja tidak diganti massal: ini catatan sejarah keputusan, dan setiap SHA
+> commit di dalamnya ditulis ulang oleh `filter-repo`, jadi SHA lama tidak lagi
+> cocok dengan riwayat repo ini — cari pesan commit-nya, bukan SHA-nya.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Membangun engine WebGPU headless di `spektra/` yang menjalankan sembilan tahap pipeline film spektral SpektraFilm dan cocok dengan implementasi referensi Python pada setiap tap kanonis, dalam ambang yang ditetapkan.

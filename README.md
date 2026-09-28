@@ -15,8 +15,8 @@ DICHROIC is a **derivative work** of SpektraFilm by Andrea Volpato:
 
 The physical model, tap topology, and profile-curve generation this
 project reimplements in WebGPU/TypeScript are ported from those two
-upstream repositories. See `spektra/tools/README.md` and
-`spektra/tools/setup_envs.md` in this repository for the exact upstream
+upstream repositories. See `tools/README.md` and
+`tools/setup_envs.md` in this repository for the exact upstream
 commits verified against during Phase 1.
 
 ## Licence
@@ -31,34 +31,25 @@ applies to this port (e.g. the OpenFX SDK and its vendored headers are
 part of the native OFX plugin, not the WebGPU port), but the file is
 included in full and unmodified so nothing is silently dropped.
 
-## `web/` (EMULSION) is a separate project
+## Relationship to EMULSION
 
-The `web/` directory at the root of this repository is **EMULSION**, a
-separate, unrelated project with its own licence. EMULSION is **not**
-covered by DICHROIC's GPL-3.0-or-later licence, and DICHROIC's GPL-3.0
-does not extend to it. The two projects intentionally do not share a
-dependency graph: `spektra/` has its own `package.json`.
+DICHROIC began inside the EMULSION repository as a `spektra/` folder beside
+EMULSION's `web/` app, and moved to its own repository on 2026-09-28 with its
+full history preserved (`git filter-repo`, `spektra/` promoted to the root).
 
-The boundary is enforced in both directions, by different mechanisms,
-because only `spektra/`'s own tooling can reach both trees:
+EMULSION is a separate project with its own licence. It is **not** covered by
+DICHROIC's GPL-3.0-or-later licence, and DICHROIC's GPL-3.0 does not extend to
+it. Living in separate repositories is now the primary boundary between them,
+and it is stronger than the one this project used to rely on: neither can
+reach the other's files through a relative path.
 
-- **`spektra/` importing `web/`** — blocked twice: by the `no-restricted-imports`
-  ESLint rule in `spektra/eslint.config.js` (`npm run lint`, which runs
-  `eslint src test` inside `spektra/`), and by the first check in
-  `spektra/test/boundary.test.ts`, which scans every `.ts`/`.tsx` file under
-  `spektra/src` for any import/export form that references `web/`.
-- **`web/` importing `spektra/`** — the more dangerous direction, since it
-  would pull GPL-3.0 code into non-GPL EMULSION. There is no ESLint
-  coverage for it (`spektra`'s `lint` script only lints inside `spektra/`,
-  and `web/` has its own separate lint config this project does not touch).
-  It is enforced by the second check in `spektra/test/boundary.test.ts`,
-  which reads (read-only — it never modifies `web/` or its config) every
-  `.ts`/`.tsx` file under `../web/src` and fails if any of them reference
-  `spektra`.
-
-Both checks in `boundary.test.ts` catch static `import ... from '...'`,
-side-effect `import '...'`, dynamic `import('...')`, and re-export
-`export ... from '...'` — not just the first form.
+The old in-repo guards remain as a second line of defence against DICHROIC
+ever importing EMULSION code: the `no-restricted-imports` rule in
+`eslint.config.js`, and the first check in `test/boundary.test.ts`, which scans
+every `.ts`/`.tsx` file under `src/` for any import or export form that
+references `web/`. The second check in that file — the reverse direction,
+reading `../web/src` — skips itself automatically when that directory does not
+exist, which is the normal state for this standalone repository.
 
 ## Third-party notices (upstream `spektrafilm-ofx`, verbatim copy)
 

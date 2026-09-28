@@ -73,7 +73,7 @@ terdeklarasi -- kontrak keluar-kode yang sama dengan `compare_cpp.py`.
 Cara pakai:
 
     D:/Projects/upstream/.venv-ref/Scripts/python.exe \\
-      spektra/tools/verify_profile_agreement.py
+      tools/verify_profile_agreement.py
 
 Butuh venv REFERENSI (`.venv-ref`), bukan `.venv-bake` -- pemeriksaan
 halation/DIR-coupler memanggil `digest_params`/`init_params` sungguhan dari

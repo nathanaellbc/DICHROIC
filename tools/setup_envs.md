@@ -65,7 +65,7 @@ See `tools/README.md`, "Deviation 2", for why.
 ## 5. Smoke test
 
 ```bash
-D:/Projects/upstream/.venv-ref/Scripts/python spektra/tools/smoke_upstream.py
+D:/Projects/upstream/.venv-ref/Scripts/python tools/smoke_upstream.py
 ```
 
 Expect `OK: cmy_film shape=(16, 32, 3) min=... max=...` and exit code 0.

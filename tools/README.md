@@ -141,7 +141,7 @@ The brief's `smoke_upstream.py` assumed:
    `collect=Tap.CMY_FILM` exits early at that tap, same behavior the brief
    wanted from `.run(...)`.
 
-`spektra/tools/smoke_upstream.py` was written against the **real** API:
+`tools/smoke_upstream.py` was written against the **real** API:
 
 ```python
 params = digest_params(init_params())
@@ -374,9 +374,9 @@ regression." Since Step 5 is the *only* check that this emitter didn't
 silently diverge from upstream's own derivation, that check needs to be
 re-runnable, not just a one-time transcript in a report.
 
-`spektra/tools/compare_cpp.py` is that script now, committed to the
+`tools/compare_cpp.py` is that script now, committed to the
 repo. It is not wired into CI (CI has no Python — by design, matching
-`spektra/tools/README.md`'s framing of the bake tools as one-time,
+`tools/README.md`'s framing of the bake tools as one-time,
 locally-run generators, not a build step), but it's a real, documented,
 re-runnable command:
 
@@ -388,18 +388,18 @@ D:/Projects/upstream/.venv-bake/Scripts/python \
   --hanatos-output /tmp/SpektraHanatos2025Spectra.f32 \
   --output-gamut-compression-output /tmp/SpektraOutputGamutCompression.f32
 
-# 2. Bake (or reuse the already-committed) spektra/public/data/:
+# 2. Bake (or reuse the already-committed) public/data/:
 D:/Projects/upstream/.venv-bake/Scripts/python \
-  spektra/tools/bake_web_assets.py --out spektra/public/data
+  tools/bake_web_assets.py --out public/data
 
 # 3. Compare:
 D:/Projects/upstream/.venv-bake/Scripts/python \
-  spektra/tools/compare_cpp.py \
+  tools/compare_cpp.py \
   --cpp /tmp/SpektraGeneratedProfileCurves.cpp \
   --gamut-bin /tmp/SpektraOutputGamutCompression.f32
 ```
 
-`--data` defaults to `spektra/public/data` (relative to the script's own
+`--data` defaults to `public/data` (relative to the script's own
 location, so it works regardless of the caller's cwd); `--gamut-bin` is
 optional since `outputGamutCompression` has no C++ literal to compare
 against (confirmed: `generate_profile_curves.py` never emits it as a
@@ -419,7 +419,7 @@ rots):
 
 ```
 $ SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
-  D:/Projects/upstream/.venv-bake/Scripts/python.exe spektra/tools/compare_cpp.py \
+  D:/Projects/upstream/.venv-bake/Scripts/python.exe tools/compare_cpp.py \
   --cpp /tmp/spektra-task4-probe2/SpektraGeneratedProfileCurves.cpp \
   --gamut-bin /tmp/spektra-task4-probe2/SpektraOutputGamutCompression.f32
 ...
@@ -453,7 +453,7 @@ no code — removed rather than wired up to a use that doesn't exist.
 
 ## Task 7: `compare_params.py` — independent check for `CoreParams` field order
 
-`spektra/src/engine/params.ts` ports upstream's 26-scalar `CoreParams`
+`src/engine/params.ts` ports upstream's 26-scalar `CoreParams`
 push-constant block to a WGSL uniform struct. Its compile-time
 exhaustiveness guard catches the `CoreParams` interface gaining a field
 that never made it into the internal `FIELDS` array — but nothing bound
@@ -465,7 +465,7 @@ would read shifted values — with `npm test` staying green throughout,
 because the test would only be checking the implementation against
 itself.
 
-`spektra/tools/compare_params.py` is the independent check, same pattern
+`tools/compare_params.py` is the independent check, same pattern
 as `compare_cpp.py` above: read ground truth straight from the upstream
 repo, compare, exit non-zero on any mismatch. Not wired into `npm test`
 (no Node access to the upstream checkout) or CI (no Python, and CI has no
@@ -502,7 +502,7 @@ It checks, in order:
 
 ```bash
 SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
-  python3 spektra/tools/compare_params.py
+  python3 tools/compare_params.py
 ```
 
 **Exit code is the signal**: `0` when all checks pass, `1` when any
@@ -514,7 +514,7 @@ only does regex text parsing.
 Ran clean:
 
 ```
-$ SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx python3 spektra/tools/compare_params.py
+$ SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx python3 tools/compare_params.py
 ...
 17 checks: ALL PASS
 $ echo $?
@@ -554,7 +554,7 @@ module docstring — not duplicated here.
 SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \
 SPEKTRAFILM_PY=D:/Projects/upstream/spektrafilm \
   D:/Projects/upstream/.venv-ref/Scripts/python.exe \
-  spektra/tools/verify_profile_agreement.py
+  tools/verify_profile_agreement.py
 ```
 
 Needs the REFERENCE venv (`.venv-ref`), not `.venv-bake` — the halation/

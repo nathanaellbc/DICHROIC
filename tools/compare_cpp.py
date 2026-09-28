@@ -17,13 +17,13 @@ Cara pakai:
       --hanatos-output /tmp/SpektraHanatos2025Spectra.f32 \\
       --output-gamut-compression-output /tmp/SpektraOutputGamutCompression.f32
 
-    # 2. Bangkitkan (atau pakai yang sudah ada di) spektra/public/data/:
+    # 2. Bangkitkan (atau pakai yang sudah ada di) public/data/:
     D:/Projects/upstream/.venv-bake/Scripts/python \\
-      spektra/tools/bake_web_assets.py --out spektra/public/data
+      tools/bake_web_assets.py --out public/data
 
     # 3. Bandingkan:
     D:/Projects/upstream/.venv-bake/Scripts/python \\
-      spektra/tools/compare_cpp.py \\
+      tools/compare_cpp.py \\
       --cpp /tmp/SpektraGeneratedProfileCurves.cpp \\
       --gamut-bin /tmp/SpektraOutputGamutCompression.f32
 
@@ -279,7 +279,7 @@ class Comparison:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cpp", type=Path, required=True, help="Path to a freshly regenerated SpektraGeneratedProfileCurves.cpp")
-    parser.add_argument("--data", type=Path, default=SPEKTRA_ROOT / "public" / "data", help="Baked asset directory (default: spektra/public/data)")
+    parser.add_argument("--data", type=Path, default=SPEKTRA_ROOT / "public" / "data", help="Baked asset directory (default: public/data)")
     parser.add_argument("--gamut-bin", type=Path, default=None, help="Path to upstream's own SpektraOutputGamutCompression.f32 sibling (optional; no C++ literal exists for this table, see main())")
     args = parser.parse_args()
 

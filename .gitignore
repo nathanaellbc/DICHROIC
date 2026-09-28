@@ -1,3 +1,14 @@
+# Dependensi dan hasil build.
+node_modules/
+dist/
+*.tsbuildinfo
 
 # Bytecode Python dari tools/ (bake_web_assets, gen_reference, compare_cpp).
 __pycache__/
+
+# Ledger dan laporan per-tugas subagent-driven development. Catatan kerja,
+# bukan sumber — dulu diabaikan oleh .gitignore EMULSION, sekarang di sini.
+.superpowers/
+
+# Pengaturan Claude Code lokal per-mesin.
+.claude/settings.local.json

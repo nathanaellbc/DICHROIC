@@ -317,7 +317,7 @@ def _write_json_lf(path: Path, obj, *, sort_keys: bool = False) -> None:
     the content is identical. Building the string with '\\n' and writing it
     as bytes bypasses newline translation entirely, matching the discipline
     already established in tools/gen_reference.py for Task 3's fixture
-    manifest, and enforced from git's side by spektra/.gitattributes
+    manifest, and enforced from git's side by .gitattributes
     (`text eol=lf` over public/data/*.json).
     """
     path.write_bytes(

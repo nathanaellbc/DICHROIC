@@ -43,7 +43,7 @@ Yang diperiksa:
 Cara pakai:
 
     SPEKTRAFILM_OFX=D:/Projects/upstream/spektrafilm-ofx \\
-      python3 spektra/tools/compare_params.py
+      python3 tools/compare_params.py
 
 Keluar dengan kode 0 kalau semua pemeriksaan cocok, 1 kalau ada yang tidak
 (nama field yang menyimpang disebutkan di baris FAIL-nya), 2 kalau
@@ -195,7 +195,7 @@ def main() -> int:
         "--params-ts",
         type=Path,
         default=DEFAULT_PARAMS_TS,
-        help="Path ke params.ts (default: spektra/src/engine/params.ts)",
+        help="Path ke params.ts (default: src/engine/params.ts)",
     )
     args = parser.parse_args()
 
