@@ -47,148 +47,29 @@
 // Empat storage buffer pixel (0,1,2,3) + stockArena (5) + frameFloats (6)
 // = 6 storage buffer, di bawah batas 8.
 
+// FASE 2A.5: semua blur (scatter core, ekor eksponensial, tiga bounce) kini
+// dijalankan primitif bersama `GaussianBlur` (`src/engine/gaussian.ts`,
+// `gaussian.wgsl`) -- port `fast_gaussian_filter` hulu termasuk jalur IIR
+// Young-van Vliet untuk sigma >= 3 px. FIR sendiri yang dulu ada di sini
+// (radius ceil(3*sigma), batas clamp, gaya OFX) cocok dengan Python HANYA di
+// ukuran piksel fixture Fase 1 (~550 um, sigma << 1 px); di 6 um/px ia
+// meleset sampai 3e-2 pada log_e_film (`test/parity/regime.test.ts`).
+// Berkas ini tinggal operasi kombinasi per piksel.
+
 @group(0) @binding(0) var<storage, read> pairASrc: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> pairADst: array<vec4<f32>>;
 @group(0) @binding(2) var<storage, read> pairBSrc: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read_write> pairBDst: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> params: CoreParams;
 @group(0) @binding(5) var<storage, read> stockArena: array<f32>;
-@group(0) @binding(6) var<storage, read> frameFloats: array<f32>;
 
 const kLog10E: f32 = 0.4342944819032518;
 
-const kOpClear: u32 = 0u;
-const kOpBlurX: u32 = 1u;
-const kOpBlurYStore: u32 = 2u;
-const kOpBlurYAccumulate: u32 = 3u;
 const kOpScatterResolve: u32 = 4u;
 const kOpBounceResolveLog: u32 = 5u;
-const kOpRawToLog: u32 = 6u;
 
-const kSigmaScatterCore: u32 = 0u;
-const kSigmaScatterTail: u32 = 1u;
-const kSigmaBounce: u32 = 2u;
-
-// `frameFloats[kFrameFilmPixelSizeUm]` -- seluruh larik hanya berisi satu
-// elemen di port ini (lih. dokumentasi binding di atas), beda dari GLSL
-// hulu yang berbagi satu larik besar lintas banyak shader.
-const kFrameFilmPixelSizeUm: u32 = 0u;
-
-// Knob "amount/scale" HalationParams -- SEMUANYA 1.0 default, tidak pernah
-// disentuh `_apply_halation_preset` maupun `gen_reference.py`. Lih. blok
-// komentar modul di atas.
 const kScatterAmount: f32 = 1.0;
-const kScatterSpatialScale: f32 = 1.0;
 const kHalationAmount: f32 = 1.0;
-const kHalationSpatialScale: f32 = 1.0;
-
-fn pixelSizeUm() -> f32 {
-  return max(frameFloats[kFrameFilmPixelSizeUm], 1.0e-6);
-}
-
-fn safeIndex(index: i32, size: u32) -> u32 {
-  if (size <= 1u) {
-    return 0u;
-  }
-  return u32(clamp(index, 0, i32(size) - 1));
-}
-
-fn sampleRaw(x: i32, y: i32) -> vec4<f32> {
-  let sx = safeIndex(x, params.width);
-  let sy = safeIndex(y, params.height);
-  return pairASrc[sy * params.width + sx];
-}
-
-fn max3(v: vec3<f32>) -> f32 {
-  return max(max(v.r, v.g), v.b);
-}
-
-// Amplitudo `_EXPONENTIAL_GAUSSIAN_FITS[3]` Python (fast_gaussian_filter.py)
-// -- juga dipakai sebagai bobot bounce (lih. cabang sigmaMode di bawah).
-fn scatterTailWeight(component: u32) -> f32 {
-  if (component == 0u) { return 0.1633; }
-  if (component == 1u) { return 0.6496; }
-  return 0.1870;
-}
-
-fn sigmaForMode() -> vec3<f32> {
-  let pxUm = pixelSizeUm();
-  if (params.slot1 == kSigmaScatterCore) {
-    return vec3<f32>(2.2, 2.0, 1.6) * kScatterSpatialScale / pxUm;
-  }
-  if (params.slot1 == kSigmaScatterTail) {
-    var ratio: f32 = 2.7684;
-    if (params.slot2 == 0u) { ratio = 0.5360; }
-    else if (params.slot2 == 1u) { ratio = 1.5236; }
-    return vec3<f32>(9.3, 9.7, 9.1) * ratio * kScatterSpatialScale / pxUm;
-  }
-  let o = ARENA_HALATIONFIRSTSIGMAUM_OFFSET;
-  let firstSigma = max(
-    vec3<f32>(stockArena[o], stockArena[o + 1u], stockArena[o + 2u]),
-    vec3<f32>(1.0e-6),
-  );
-  return firstSigma * kHalationSpatialScale * sqrt(f32(params.slot2 + 1u)) / pxUm;
-}
-
-// Gaussian FIR terpotong, sama persis dengan `gaussianSampleX`/Y GLSL:
-// radius = min(ceil(3*maxSigma), 256), bobot lewat rekursi
-// exp(-0.5/sigma^2) * exp(-1/sigma^2)^n alih-alih memanggil exp() per
-// offset. Untuk sigma sekecil test fixture Task 14 (pixel_size_um besar,
-// sigma mikron << 1 piksel), `weight` untuk offset != 0 underflow ke 0.0
-// f32 -- itu SAMA dengan kernel radius-0 (identitas) Python
-// (`_gaussian_kernel_1d`, radius = int(3*sigma+0.5) = 0 untuk sigma
-// sekecil ini), dibuktikan numerik di task-14-report.md.
-fn gaussianSampleX(gid: vec2<u32>, sigma: vec3<f32>) -> vec4<f32> {
-  let maxSigma = max3(sigma);
-  let x = i32(gid.x);
-  let y = i32(gid.y);
-  if (maxSigma <= 1.0e-4) {
-    return sampleRaw(x, y);
-  }
-  let radius = min(i32(ceil(3.0 * maxSigma)), 256);
-  let safeSigma = max(sigma, vec3<f32>(1.0e-6));
-  let invSigma2 = 1.0 / max(safeSigma * safeSigma, vec3<f32>(1.0e-8));
-  var weight = exp(-0.5 * invSigma2);
-  var ratio = exp(-1.5 * invSigma2);
-  let ratioStep = exp(-invSigma2);
-  var value = sampleRaw(x, y);
-  var weightSum = vec3<f32>(1.0);
-  for (var offset: i32 = 1; offset <= radius; offset = offset + 1) {
-    let samplePair = sampleRaw(x - offset, y) + sampleRaw(x + offset, y);
-    value = vec4<f32>(value.rgb + samplePair.rgb * weight, value.a + samplePair.a);
-    weightSum += 2.0 * weight;
-    weight *= ratio;
-    ratio *= ratioStep;
-  }
-  value = vec4<f32>(value.rgb / max(weightSum, vec3<f32>(1.0e-8)), value.a / f32(radius * 2 + 1));
-  return value;
-}
-
-fn gaussianSampleY(gid: vec2<u32>, sigma: vec3<f32>) -> vec4<f32> {
-  let maxSigma = max3(sigma);
-  let x = i32(gid.x);
-  let y = i32(gid.y);
-  if (maxSigma <= 1.0e-4) {
-    return sampleRaw(x, y);
-  }
-  let radius = min(i32(ceil(3.0 * maxSigma)), 256);
-  let safeSigma = max(sigma, vec3<f32>(1.0e-6));
-  let invSigma2 = 1.0 / max(safeSigma * safeSigma, vec3<f32>(1.0e-8));
-  var weight = exp(-0.5 * invSigma2);
-  var ratio = exp(-1.5 * invSigma2);
-  let ratioStep = exp(-invSigma2);
-  var value = sampleRaw(x, y);
-  var weightSum = vec3<f32>(1.0);
-  for (var offset: i32 = 1; offset <= radius; offset = offset + 1) {
-    let samplePair = sampleRaw(x, y - offset) + sampleRaw(x, y + offset);
-    value = vec4<f32>(value.rgb + samplePair.rgb * weight, value.a + samplePair.a);
-    weightSum += 2.0 * weight;
-    weight *= ratio;
-    ratio *= ratioStep;
-  }
-  value = vec4<f32>(value.rgb / max(weightSum, vec3<f32>(1.0e-8)), value.a / f32(radius * 2 + 1));
-  return value;
-}
 
 @compute @workgroup_size(32, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -203,30 +84,9 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let index = localGid.y * params.width + localGid.x;
 
-  if (params.slot0 == kOpClear) {
-    pairADst[index] = vec4<f32>(0.0, 0.0, 0.0, pairASrc[index].a);
-    return;
-  }
-  if (params.slot0 == kOpBlurX) {
-    pairADst[index] = gaussianSampleX(localGid, sigmaForMode());
-    return;
-  }
-  if (params.slot0 == kOpBlurYStore) {
-    pairADst[index] = gaussianSampleY(localGid, sigmaForMode());
-    return;
-  }
-  if (params.slot0 == kOpBlurYAccumulate) {
-    let blurred = gaussianSampleY(localGid, sigmaForMode());
-    var weight: f32;
-    if (params.slot1 == kSigmaBounce) {
-      weight = pow(0.5, f32(params.slot2)) / 1.75;
-    } else {
-      weight = scatterTailWeight(params.slot2);
-    }
-    pairADst[index] = vec4<f32>(pairADst[index].rgb + weight * blurred.rgb, blurred.a);
-    return;
-  }
   if (params.slot0 == kOpScatterResolve) {
+    // `apply_halation_um` langkah 1: scattered = (1-w_s)*core + w_s*tail;
+    // raw = (1-s)*raw + s*scattered. pairADst = core, pairBSrc = tail.
     let raw = pairASrc[index];
     let tailMix = vec3<f32>(0.78, 0.65, 0.67); // scatter_tail_weight (w_s)
     let scattered = (vec3<f32>(1.0) - tailMix) * pairADst[index].rgb + tailMix * pairBSrc[index].rgb;
@@ -235,17 +95,15 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
   if (params.slot0 == kOpBounceResolveLog) {
+    // Langkah 2 + renormalisasi + log10 (halation menutup log_e_film untuk
+    // keluarga measured). pairASrc = raw setelah scatter, pairADst = jumlah
+    // bounce berbobot.
     let raw = pairASrc[index];
     let o = ARENA_HALATIONSTRENGTH_OFFSET;
     let amount = max(vec3<f32>(stockArena[o], stockArena[o + 1u], stockArena[o + 2u]), vec3<f32>(0.0))
       * max(kHalationAmount, 0.0);
     let resolved = (raw.rgb + amount * pairADst[index].rgb) / (vec3<f32>(1.0) + amount);
     pairBDst[index] = vec4<f32>(log(max(resolved, vec3<f32>(0.0)) + vec3<f32>(1.0e-10)) * kLog10E, raw.a);
-    return;
-  }
-  if (params.slot0 == kOpRawToLog) {
-    let raw = pairASrc[index];
-    pairBDst[index] = vec4<f32>(log(max(raw.rgb, vec3<f32>(0.0)) + vec3<f32>(1.0e-10)) * kLog10E, raw.a);
     return;
   }
 }

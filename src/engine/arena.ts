@@ -69,6 +69,13 @@ export interface Arena {
   /** Satu baris `const ARENA_<NAMA>_OFFSET: u32 = <n>u;` per entri. */
   wgslConstants(): string;
   /**
+   * Salinan HOST satu entri (Fase 2A.5): tahap yang menghitung parameter
+   * dispatch di host (sigma halation/DIR untuk `GaussianBlur`) membacanya di
+   * sini, bukan menyalin ulang tabel stock. Tetap sah setelah `destroy()`.
+   * Melempar untuk nama yang tidak ada.
+   */
+  values(name: string): Float32Array;
+  /**
    * Menghancurkan buffer GPU. Idempoten (destroy() kedua adalah no-op,
    * konsisten dengan `GPUBuffer.destroy()` sendiri) — TAPI setelah dipanggil,
    * mengakses `.buffer` melempar galat yang jelas alih-alih diam-diam
@@ -315,7 +322,7 @@ export class ArenaBuilder {
     }
     Object.freeze(entries);
 
-    return new ArenaImpl(buffer, entries, totalFloats, label);
+    return new ArenaImpl(buffer, entries, totalFloats, label, combined);
   }
 }
 
@@ -331,13 +338,16 @@ class ArenaImpl implements Arena {
   readonly entries: Record<string, ArenaEntry>;
   readonly totalFloats: number;
   private readonly label: string;
+  readonly #host: Float32Array;
 
   constructor(
     buffer: GPUBuffer,
     entries: Record<string, ArenaEntry>,
     totalFloats: number,
     label: string,
+    host: Float32Array,
   ) {
+    this.#host = host;
     this.#buffer = buffer;
     this.entries = entries;
     this.totalFloats = totalFloats;
@@ -366,6 +376,12 @@ class ArenaImpl implements Arena {
     return Object.values(this.entries)
       .map((e) => `const ARENA_${canonicalConstantName(e.name)}_OFFSET: u32 = ${e.offsetFloats}u;`)
       .join('\n');
+  }
+
+  values(name: string): Float32Array {
+    const entry = this.entries[name];
+    if (!entry) throw new Error(`Entri '${name}' tidak ada di arena '${this.label}'.`);
+    return this.#host.slice(entry.offsetFloats, entry.offsetFloats + entry.lengthFloats);
   }
 
   destroy(): void {

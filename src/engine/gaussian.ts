@@ -63,6 +63,35 @@ export interface ExponentialArgs extends Omit<BlurArgs, 'sigma'> {
   decay: Vec3;
 }
 
+/**
+ * Rektangel data SAH untuk blur di satu tahap: active rect tahap itu (lih.
+ * `CoreParams.active*`; 0 = seluruh buffer) digelembungkan `radius` px dan
+ * diklip ke buffer. Di bawah tiling dengan apron menyusut (`RenderGraph`
+ * `shrinkApron`), di luar rect ini buffer bisa berisi data basi dari tahap
+ * sebelumnya; rekursi IIR membaca satu baris penuh, jadi batasnya WAJIB rect
+ * ini, bukan buffer. Untuk render full-frame hasilnya seluruh buffer.
+ */
+export function validInputRect(
+  params: {
+    width: number;
+    height: number;
+    activeOriginX: number;
+    activeOriginY: number;
+    activeWidth: number;
+    activeHeight: number;
+  },
+  radius: number,
+): BlurRect {
+  if (params.activeWidth === 0 || params.activeHeight === 0) {
+    return { x: 0, y: 0, width: params.width, height: params.height };
+  }
+  const x0 = Math.max(0, params.activeOriginX - radius);
+  const y0 = Math.max(0, params.activeOriginY - radius);
+  const x1 = Math.min(params.width, params.activeOriginX + params.activeWidth + radius);
+  const y1 = Math.min(params.height, params.activeOriginY + params.activeHeight + radius);
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
 /** Port `_yvv_coeffs`: [B, b1/b0, b2/b0, b3/b0]. */
 export function yvvCoefficients(sigma: number): [number, number, number, number] {
   const q = sigma >= 2.5 ? 0.98711 * sigma - 0.9633 : 3.97156 - 4.14554 * Math.sqrt(1 - 0.26891 * sigma);
@@ -98,8 +127,24 @@ function pathFor(sigma: number): Path {
   return sigma >= SMALL_SIGMA_MAX ? 'iir' : 'fir';
 }
 
+const shared = new WeakMap<GPUDevice, GaussianBlur>();
+
 export class GaussianBlur {
   private readonly pipeline: GPUComputePipeline;
+
+  /**
+   * Satu instance per device: kompilasi shader df64 ini mahal (terukur ~1-3 s
+   * di Dawn/D3D12), dan halation/DIR membangun tahapnya ulang per rantai.
+   * Instance tidak menyimpan keadaan per render, jadi aman dibagi.
+   */
+  static shared(device: GPUDevice): GaussianBlur {
+    let blur = shared.get(device);
+    if (!blur) {
+      blur = new GaussianBlur(device);
+      shared.set(device, blur);
+    }
+    return blur;
+  }
 
   constructor(private readonly device: GPUDevice) {
     const module = device.createShaderModule({ label: 'gaussian', code: source });
@@ -158,6 +203,25 @@ export class GaussianBlur {
       this.pass(encoder, { ...base, op: OP_IIR_H, mask: iirMask, src: args.src, dst: args.dst });
       this.pass(encoder, { ...base, op: OP_IIR_V, mask: iirMask, src: args.src, dst: args.dst });
     }
+  }
+
+  /** `dst = (first ? 0 : dst) + amplitude * src` (rgb); alpha dari `src`. */
+  encodeScaleAdd(
+    encoder: GPUCommandEncoder,
+    args: Omit<BlurArgs, 'sigma' | 'truncate'> & { amplitude: number; first: boolean },
+  ): void {
+    this.pass(encoder, {
+      args: { ...args, sigma: [0, 0, 0] },
+      weights: undefined,
+      radius: [0, 0, 0],
+      iir: { B: [0, 0, 0], b1: [0, 0, 0], b2: [0, 0, 0], b3: [0, 0, 0] },
+      op: OP_SCALE_ADD,
+      mask: 0b111,
+      src: args.src,
+      dst: args.dst,
+      amplitude: args.amplitude,
+      first: args.first,
+    });
   }
 
   /**

@@ -38,6 +38,20 @@ describe('ArenaBuilder', () => {
     arena.destroy();
   });
 
+  it('values(name) mengembalikan salinan host entri, juga setelah destroy', async () => {
+    // Fase 2A.5: halation/DIR menghitung sigma (px) di host dari nilai stock
+    // (mis. halationFirstSigmaUm) untuk primitif GaussianBlur.
+    const { device } = await acquireDevice();
+    const builder = new ArenaBuilder();
+    builder.add('a', Float32Array.of(1, 2));
+    builder.add('b', Float32Array.of(3, 4, 5));
+    const arena = builder.build(device, 'stock');
+    expect(Array.from(arena.values('b'))).toEqual([3, 4, 5]);
+    arena.destroy();
+    expect(Array.from(arena.values('a'))).toEqual([1, 2]);
+    expect(() => arena.values('nope')).toThrow(/tidak ada/);
+  });
+
   it('memancarkan konstanta offset WGSL', async () => {
     const { device } = await acquireDevice();
     const builder = new ArenaBuilder();
