@@ -50,3 +50,19 @@ describe('format tak dikenal', () => {
     expect(error.reason).toMatch(/LibRaw/);
   });
 });
+
+describe('browser tanpa cross-origin isolation', () => {
+  it('DecodeError("raw") yang menyebut COOP/COEP', async () => {
+    const g = globalThis as { crossOriginIsolated?: boolean };
+    g.crossOriginIsolated = false;
+    try {
+      const data = new Uint8Array(readFileSync(join(RAW_DIR, 'synthetic_rggb', 'input.dng')));
+      const error = (await decodeImage(data, undefined, options).catch((e: unknown) => e)) as DecodeError;
+      expect(error).toBeInstanceOf(DecodeError);
+      expect(error.format).toBe('raw');
+      expect(error.reason).toMatch(/COOP/);
+    } finally {
+      delete g.crossOriginIsolated;
+    }
+  });
+});

@@ -65,6 +65,12 @@ function linearFromEncoded(): Float64Array {
 }
 
 export async function decodeRaw(bytes: Uint8Array, name?: string, options: RawDecodeOptions = {}): Promise<DecodedImage> {
+  // Di Node `crossOriginIsolated` tidak ada (undefined); di browser `false`
+  // berarti memori WASM bersama tidak tersedia dan LibRaw gagal dengan pesan
+  // yang tidak menyebut penyebabnya.
+  if ((globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated === false) {
+    throw new Error('RAW butuh halaman cross-origin isolated (header COOP same-origin + COEP require-corp)');
+  }
   const libraw = await loadLibRaw(options.wasmBinary);
   const instance = new libraw.LibRaw();
   lastLibRawMessage = '';
