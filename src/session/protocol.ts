@@ -7,7 +7,7 @@
 
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
-import type { RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
@@ -17,6 +17,7 @@ export interface SessionLike {
   getDiagnostics(): SessionDiagnostics;
   render(quality: RenderQuality): Promise<RenderResult>;
   exportCube(size: number): Promise<string>;
+  exportImage(format: ExportFormat): Promise<Uint8Array>;
   dispose(): void;
 }
 
@@ -26,8 +27,14 @@ export interface SessionInit {
   assetsBaseUrl: string;
 }
 
+/**
+ * `decode` dilayani worker tanpa `Session` (boleh sebelum `init` selesai):
+ * decode berkas besar dan kompilasi shader `Session.create` bisa berjalan
+ * bersamaan, dan thread UI tidak pernah menyentuh decoder.
+ */
 export type RpcRequest =
   | { id: number; method: 'init'; args: [SessionInit] }
+  | { id: number; method: 'decode'; args: [Uint8Array, string | undefined] }
   | { id: number; method: SessionMethod; args: unknown[] };
 
 export interface RpcError {
