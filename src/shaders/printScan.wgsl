@@ -83,29 +83,36 @@ fn log10Vec3(v: vec3<f32>) -> vec3<f32> {
 // expose -- tap log_e_print. Port PrintingStage.expose()/_film_cmy_to_print_log_raw.
 // ============================================================================
 
-// Port `compute_density_spectral` (`model/develop.py`), satu piksel satu
-// wavelength: `sum_c(cmy[c] * channel_density[wl,c]) + base_density[wl]`.
-// `channelDensity`/`baseDensity` FILM stock BISA mengandung NaN pada
-// beberapa (wl) -- TIDAK di-nan_to_num di sini, sama seperti Python
-// (`compute_density_spectral` sendiri tidak menyaring NaN; penyaringan
-// terjadi SETELAH transmittance dihitung, lih. `densityToLight` di bawah).
-fn computeDensitySpectral(cmy: vec3<f32>, wl: u32) -> f32 {
-  let o = ARENA_CHANNELDENSITY_OFFSET + wl * 3u;
-  return cmy.r * filmStockArena[o] + cmy.g * filmStockArena[o + 1u] + cmy.b * filmStockArena[o + 2u]
-    + filmStockArena[ARENA_BASEDENSITY_OFFSET + wl];
+// NaN dideteksi dari POLA BIT nilai yang baru dibaca dari arena, bukan dengan
+// `x != x`: WGSL mengizinkan compiler menganggap float tidak pernah NaN
+// (fast-math), dan lavapipe maupun SwiftShader memang melipat `x != x` jadi
+// `false`. NaN lalu merambat, eksposur print runtuh ke ~0 (`log_e_print` ~ -10)
+// dan gambar keluar hitam -- hanya backend yang kebetulan tidak melipatnya
+// (D3D12/NVIDIA) yang lolos gerbang. Operasi integer pada nilai hasil load
+// tidak bisa dilipat dengan asumsi itu; aritmetika tidak pernah menyentuh NaN.
+fn isNanBits(x: f32) -> bool {
+  return (bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u;
 }
 
-// Port `density_to_light` (`utils/conversions.py`): `transmitted = 10**(-density) * light`,
-// lalu NaN -> 0. `transmitted != transmitted` adalah idiom standar deteksi
-// NaN IEEE754 (NaN tidak pernah sama dengan dirinya sendiri) -- WGSL tidak
-// punya `isnan()` yang dijamin lintas backend, idiom ini tidak bergantung
-// pada fungsi bawaan apa pun.
-fn densityToLight(density: f32, lightAtWavelength: f32) -> f32 {
-  var transmitted = pow(10.0, -density) * lightAtWavelength;
-  if (transmitted != transmitted) {
-    transmitted = 0.0;
+// Port `compute_density_spectral` (`model/develop.py`) + `density_to_light`
+// (`utils/conversions.py`) untuk satu piksel satu wavelength:
+// `sum_c(cmy[c] * channel_density[wl,c]) + base_density[wl]`, lalu
+// `10**(-density) * light` dengan NaN -> 0. `channelDensity`/`baseDensity`
+// FILM stock BISA mengandung NaN pada beberapa wl; di Python densitasnya
+// jadi NaN (NaN * 0 tetap NaN) dan transmittance-nya dinolkan -- setara
+// dengan mengembalikan 0 untuk wl itu, yang dilakukan di sini tanpa pernah
+// menghitung dengan NaN.
+fn spectralLight(cmy: vec3<f32>, wl: u32, lightAtWavelength: f32) -> f32 {
+  let o = ARENA_CHANNELDENSITY_OFFSET + wl * 3u;
+  let c0 = filmStockArena[o];
+  let c1 = filmStockArena[o + 1u];
+  let c2 = filmStockArena[o + 2u];
+  let base = filmStockArena[ARENA_BASEDENSITY_OFFSET + wl];
+  if (isNanBits(c0) || isNanBits(c1) || isNanBits(c2) || isNanBits(base)) {
+    return 0.0;
   }
-  return transmitted;
+  let density = cmy.r * c0 + cmy.g * c1 + cmy.b * c2 + base;
+  return pow(10.0, -density) * lightAtWavelength;
 }
 
 @compute @workgroup_size(32, 8, 1)
@@ -129,9 +136,8 @@ fn expose(@builtin(global_invocation_id) gid: vec3<u32>) {
   // dikontraksikan terhadap `10**log_sensitivity` PRINT stock.
   var raw = vec3<f32>(0.0);
   for (var wl: u32 = 0u; wl < wavelengthCount; wl = wl + 1u) {
-    let densitySpectral = computeDensitySpectral(cmy.rgb, wl);
     let illuminantAtWavelength = dynamicArena[ARENA_PRINTFILTEREDILLUMINANT_OFFSET + wl];
-    let light = densityToLight(densitySpectral, illuminantAtWavelength);
+    let light = spectralLight(cmy.rgb, wl, illuminantAtWavelength);
     let so = ARENA_PRINTLINEARSENSITIVITY_OFFSET + wl * 3u;
     raw += light * vec3<f32>(
       dynamicArena[so], dynamicArena[so + 1u], dynamicArena[so + 2u],
