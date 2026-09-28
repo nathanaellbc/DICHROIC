@@ -208,6 +208,25 @@ sampler, tekstur, `barrier()`, memori `shared`, operasi atomik, subgroup, tipe
 64-bit, atau `#extension` apa pun. Ia murni storage-buffer in/out — kandidat
 port sebaik yang realistis bisa diharapkan.
 
+**Keputusan tercatat (review seluruh-branch, agenda #6).** `ArenaBuilder`/
+`Arena` (`src/engine/arena.ts`) mengekspos tiga hal di luar antarmuka literal
+`task-8-brief.md` (`build(device, label): Arena` dengan `Arena` yang hanya
+membawa `buffer`/`entries`/`wgslConstants()`): `Arena.totalFloats`,
+`ArenaOverflowError` (kelas galat khusus, bukan `Error` generik), dan
+`assertWithinStorageBufferLimit` (fungsi angka murni yang diekspor, dapat
+diuji tanpa device sungguhan). Ketiganya beralasan tertulis di modul itu
+sendiri (lih. komentar `totalFloats`/`assertWithinStorageBufferLimit`/
+`ArenaOverflowError` di `arena.ts`) dan telah dipakai luas sejak Task 8 —
+`totalFloats` oleh test yang membuktikan "panjang total cocok dengan buffer"
+tanpa menebak dari `entries`, `ArenaOverflowError` oleh pemanggil yang perlu
+`instanceof` untuk membedakan "arena kelebihan muat" dari bug lain,
+`assertWithinStorageBufferLimit` oleh test limit kecil tanpa perlu
+mengalokasikan data sungguhan sebesar `maxStorageBufferBindingSize` device
+nyata (2 GiB). **Diterima secara eksplisit** — bukan dibiarkan menggantung
+sebagai penyimpangan tak terucap dari brief: ketiganya adalah pertumbuhan
+antarmuka yang beralasan dan dipakai, PERSIS jenis yang review ini ada untuk
+membedakan dari kode yang menyimpang tanpa alasan.
+
 ### 4.3.1 Batas yang terukur
 
 Diukur di Task 6, bukan diasumsikan.
