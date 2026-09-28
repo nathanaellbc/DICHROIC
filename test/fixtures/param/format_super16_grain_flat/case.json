@@ -1,0 +1,145 @@
+{
+  "name": "param/format_super16_grain_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "filmFormat": "super16",
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "camera.film_format_mm = 12.52",
+    "print_render.glare.percent = 0.0"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "cmy_film": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.7040360348794137,
+        0.0
+      ],
+      "variance": [
+        5.588920830676809e-07,
+        0.0
+      ],
+      "lag1": [
+        0.5088130054265669,
+        0.0
+      ],
+      "radialPower": [
+        [
+          4.670894623691056e-07,
+          0.0
+        ],
+        [
+          6.298719212656318e-07,
+          0.0
+        ],
+        [
+          5.081358754202792e-07,
+          0.0
+        ],
+        [
+          5.450953405879663e-07,
+          0.0
+        ],
+        [
+          5.410249795795776e-07,
+          0.0
+        ],
+        [
+          5.220931227303164e-07,
+          0.0
+        ],
+        [
+          4.730353727657712e-07,
+          0.0
+        ],
+        [
+          6.169869530532869e-07,
+          0.0
+        ]
+      ]
+    },
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.4589197101255095,
+        0.0
+      ],
+      "variance": [
+        1.048665981863202e-06,
+        0.0
+      ],
+      "lag1": [
+        0.4129232781760943,
+        0.0
+      ],
+      "radialPower": [
+        [
+          1.035671880760125e-06,
+          0.0
+        ],
+        [
+          1.1075076301337358e-06,
+          0.0
+        ],
+        [
+          9.367659120767415e-07,
+          0.0
+        ],
+        [
+          9.901891491724057e-07,
+          0.0
+        ],
+        [
+          1.0812248677996472e-06,
+          0.0
+        ],
+        [
+          9.938226698105473e-07,
+          0.0
+        ],
+        [
+          9.705897460341248e-07,
+          0.0
+        ],
+        [
+          1.1134176521922736e-06,
+          0.0
+        ]
+      ]
+    }
+  }
+}

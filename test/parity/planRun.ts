@@ -20,6 +20,7 @@ import { acquireDevice } from '../../src/engine/device';
 import type { EngineDevice } from '../../src/engine/device';
 import { RenderGraph } from '../../src/engine/graph';
 import type { Arenas } from '../../src/engine/arena';
+import type { FrameParams } from '../../src/engine/graph';
 import { buildChain } from '../../src/engine/chain';
 import type { TapName } from '../../src/engine/taps';
 import { precomputeArenaData, uploadArenas } from '../../src/host/spectral';
@@ -83,6 +84,7 @@ let enginePromise: Promise<EngineDevice> | undefined;
 const prepared = new Map<string, Prepared>();
 const pendingArenas = new Map<string, ArenaPlan>();
 const arenas = new Map<string, Arenas>();
+const graphs = new Map<string, RenderGraph>();
 
 export function planForCase(bundle: AssetBundle, name: string): Prepared {
   const meta = loadParamCase(name);
@@ -123,17 +125,31 @@ export async function prepareParamCases(names: string[]): Promise<void> {
   pendingArenas.clear();
 }
 
-/** Render `tap` untuk kasus lewat jalur produksi; keluaran RGBA. */
-export async function renderParamCase(name: string, tap: TapName): Promise<{ rgba: Float32Array; meta: ParamCaseMeta }> {
+/**
+ * Render `tap` untuk kasus lewat jalur produksi; keluaran RGBA. `frame`
+ * menimpa sebagian `plan.frame` (mis. `grainSeed` untuk mengukur sebaran
+ * realisasi engine) -- dipakai HANYA oleh gerbang statistik.
+ */
+export async function renderParamCase(
+  name: string,
+  tap: TapName,
+  frame?: Partial<FrameParams>,
+): Promise<{ rgba: Float32Array; meta: ParamCaseMeta }> {
   const p = prepared.get(name);
   if (!p || !enginePromise) throw new Error(`Kasus "${name}" belum disiapkan lewat prepareParamCases.`);
   const engine = await enginePromise;
-  const graph = new RenderGraph(engine);
-  for (const stage of buildChain(engine.device, arenas.get(p.plan.arenaKey)!, p.plan.chain)) graph.addStage(stage);
+  // Satu graf per kasus: kompilasi shader dibayar sekali, bukan per render
+  // (gerbang statistik merender 8 seed).
+  let graph = graphs.get(name);
+  if (!graph) {
+    graph = new RenderGraph(engine);
+    for (const stage of buildChain(engine.device, arenas.get(p.plan.arenaKey)!, p.plan.chain)) graph.addStage(stage);
+    graphs.set(name, graph);
+  }
   const rgba = await graph.run(p.input, p.plan.core, tap, {
     maxBufferBytes: engine.maxStorageBufferBindingSize,
     overlap: p.plan.overlap,
-    frame: p.plan.frame,
+    frame: { ...p.plan.frame, ...frame },
   });
   return { rgba, meta: p.meta };
 }
@@ -146,41 +162,69 @@ interface StatSummary {
   lag1: [number, number];
 }
 
+/** Jumlah seed engine untuk mengukur sebaran realisasi grain. */
+const ENGINE_SEEDS = 8;
+
 /**
- * Gerbang statistik keluarga `stochastic` (Fase 2C): satu realisasi engine
- * dibandingkan dengan PUSAT distribusi `realizations` realisasi Python
- * (`case.json` `pythonStats`, spec §6.5.1 "ambang terikat sebaran terukur"):
+ * Gerbang statistik keluarga `stochastic` (Fase 2C), spec §6.5.1 "ambang
+ * terikat sebaran terukur". Momen: mean, varians, dan autokorelasi lag-1
+ * kanal hijau.
  *
- *   |engine - mu| <= 4 * sd * sqrt(1 + 1/K) + lantai
+ * Dua sumber keacakan diperlakukan berbeda karena sebarannya terukur di
+ * tempat berbeda:
  *
- * `sd` adalah sebaran realisasi TUNGGAL Python; engine juga satu realisasi,
- * dan pusat Python rata-rata K. Lantai menutup bagian yang tidak tercermin di
- * `sd`: grain hulu identik antar-realisasi dalam satu proses (sd grain 0,
- * diukur), sementara RNG engine algoritma lain -- jadi bila grain hidup
- * lantainya konstanta Gate B (mean 1e-4, varians 2%), bila mati ambang per
- * piksel (mean 1e-5). Lag-1 (struktur spasial derau) lantai 0.02.
+ * - Glare: RNG hulu tidak di-seed, jadi `pythonStats` (K realisasi) memberi
+ *   pusat `mu` dan sebaran `sd_py` satu realisasi.
+ * - Grain: hulu memakai seed TETAP -- K realisasi Python identik (sd 0,
+ *   diukur), jadi fixture adalah SATU realisasi grain. Sebaran satu
+ *   realisasi diukur dari ENGINE lewat `grainSeed` (seed dasar kasus + 0..7),
+ *   dan rata-rata 8 seed dibandingkan dengan realisasi Python itu (preseden:
+ *   "rata-rata 16 salt" Gate B, `scannerPostGlare.test.ts`).
+ *
+ *   |engine - mu| <= 4 * sqrt(sd_e^2 * (1 + 1/Ke) + sd_py^2 * (1 + 1/K)) + lantai
+ *
+ * dengan `engine` rata-rata Ke seed (grain hidup) atau satu realisasi
+ * (grain mati, sd_e = 0, Ke = 1 dianggap tak berhingga). Lantai = derau f32
+ * deterministik: mean 1e-5 (ambang per piksel), varians 1e-12, lag-1 1e-3.
  */
 export async function runParamStatParity(name: string, tap: TapName): Promise<void> {
-  const { rgba, meta } = await renderParamCase(name, tap);
-  const stats = (meta as ParamCaseMeta & { pythonStats?: Record<string, StatSummary> }).pythonStats?.[tap];
+  const meta = loadParamCase(name) as ParamCaseMeta & { pythonStats?: Record<string, StatSummary> };
+  const stats = meta.pythonStats?.[tap];
   if (meta.family !== 'stochastic' || !stats) {
     throw new Error(`runParamStatParity: "${name}" tidak punya pythonStats untuk ${tap}.`);
   }
-  const grain = paramCaseRenderParams(meta).grainEnabled;
-  const got = momentsBinned(rgba, meta.width, meta.height, stats.bins);
-  const lag1 = lag1Correlation(rgba, meta.width, meta.height);
-  const k = Math.sqrt(1 + 1 / stats.realizations);
-  const check = (label: string, value: number, [mu, sd]: [number, number], floor: number) => {
-    const tolerance = 4 * sd * k + floor;
+  const params = paramCaseRenderParams(meta);
+  const seeds = params.grainEnabled ? ENGINE_SEEDS : 1;
+  const samples: Array<{ mean: number; variance: number; lag1: number }> = [];
+  for (let i = 0; i < seeds; i += 1) {
+    const { rgba } = await renderParamCase(name, tap, { grainSeed: params.grainSeed + i });
+    const m = momentsBinned(rgba, meta.width, meta.height, stats.bins);
+    samples.push({ mean: m.mean, variance: m.variance, lag1: lag1Correlation(rgba, meta.width, meta.height) });
+  }
+  const summarize = (key: 'mean' | 'variance' | 'lag1'): [number, number] => {
+    const values = samples.map((s) => s[key]);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    if (values.length < 2) return [avg, 0];
+    const sd = Math.sqrt(values.reduce((a, b) => a + (b - avg) ** 2, 0) / (values.length - 1));
+    return [avg, sd];
+  };
+  const check = (key: 'mean' | 'variance' | 'lag1', floor: number) => {
+    const [value, sdEngine] = summarize(key);
+    const [mu, sdPython] = stats[key];
+    const spread = Math.sqrt(
+      sdEngine ** 2 * (1 + 1 / seeds) * (seeds > 1 ? 1 : 0) + sdPython ** 2 * (1 + 1 / stats.realizations),
+    );
+    const tolerance = 4 * spread + floor;
     expect(
       Math.abs(value - mu),
-      `${tap} / param/${name}: ${label} ${value.toExponential(4)} vs Python ${mu.toExponential(4)} ` +
-        `(sd ${sd.toExponential(2)}, ambang ${tolerance.toExponential(2)})`,
+      `${tap} / param/${name}: ${key} ${value.toExponential(4)} vs Python ${mu.toExponential(4)} ` +
+        `(sd engine ${sdEngine.toExponential(2)} x${seeds}, sd Python ${sdPython.toExponential(2)}, ` +
+        `ambang ${tolerance.toExponential(2)})`,
     ).toBeLessThanOrEqual(tolerance);
   };
-  check('mean', got.mean, stats.mean, grain ? 1e-4 : 1e-5);
-  check('variance', got.variance, stats.variance, 0.02 * stats.variance[0]);
-  check('lag1', lag1, stats.lag1, 0.02);
+  check('mean', 1e-5);
+  check('variance', 1e-12);
+  check('lag1', 1e-3);
 }
 
 /** Gerbang per piksel untuk kasus deterministik/`lut`. */

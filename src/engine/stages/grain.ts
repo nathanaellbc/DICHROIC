@@ -154,13 +154,18 @@ export function createGrainStage(
       // Fase 2A.5: format film dari `ctx.frame` (dulu argumen `filmFormatMm`).
       const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
 
+      // [pixel_size_um, grainSeed (Fase 2C), grainAmount (Fase 2C)] -- lih. `kFrame*` grain.wgsl.
       const frameFloatsBuffer = ctx.device.createBuffer({
         label: 'grain:frameFloats',
-        size: 4,
+        size: 12,
         usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST,
         mappedAtCreation: true,
       });
-      new Float32Array(frameFloatsBuffer.getMappedRange()).set([pixelSizeUm]);
+      new Float32Array(frameFloatsBuffer.getMappedRange()).set([
+        pixelSizeUm,
+        ctx.frame.grainSeed ?? 1,
+        ctx.frame.grainAmount ?? 1,
+      ]);
       frameFloatsBuffer.unmap();
 
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
@@ -299,11 +304,14 @@ export function createGrainStage(
         fullGroupsY,
       );
 
-      // blurY (LAMA, tidak berubah): 11 blurXOut(read) / 12 dst(write) / 2 params
+      // blurY: 11 blurXOut(read) / 12 dst(write) / 2 params, plus (Fase 2C,
+      // `applyGrainControls`) 0 src = densitas sebelum grain / 4 frameFloats.
       dispatch(
         'grain:blurY',
         blurYPipeline,
         [
+          { binding: 0, resource: { buffer: ctx.source } },
+          { binding: 4, resource: { buffer: frameFloatsBuffer } },
           { binding: 11, resource: { buffer: blurXOut } },
           { binding: 12, resource: { buffer: ctx.dest } },
           { binding: 2, resource: { buffer: ctx.paramsBuffer } },

@@ -40,9 +40,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   // `<case>_stochastic` (keduanya hidup, `grain.test.ts`,
   // `scannerPostGlare.test.ts`) -- lih. aturan kombinasi di bawah.
   grainEnabled: 'verified',
-  grainAmount: 'locked',
-  grainSeed: 'locked',
-  filmFormat: 'locked',
+  // Fase 2C Task 7: param/grain_*, format_* (`test/parity/grainParams.test.ts`).
+  grainAmount: 'verified',
+  grainSeed: 'verified',
+  filmFormat: 'verified',
   cameraDiffusionEnabled: 'locked',
   cameraDiffusionFamily: 'locked',
   cameraDiffusionStrength: 'locked',

@@ -1,0 +1,145 @@
+{
+  "name": "param/grain_seed42_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "grainSeed": 42,
+    "glarePercent": 0.0
+  },
+  "pythonOverrides": [
+    "print_render.glare.percent = 0.0",
+    "(Python: seed grain tetap, tanpa padanan grainSeed)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "cmy_film": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.7040539267842665,
+        0.0
+      ],
+      "variance": [
+        6.813945046268212e-08,
+        0.0
+      ],
+      "lag1": [
+        0.5074505144850138,
+        0.0
+      ],
+      "radialPower": [
+        [
+          7.860388656306009e-08,
+          0.0
+        ],
+        [
+          5.193773897412611e-08,
+          0.0
+        ],
+        [
+          6.16225403909293e-08,
+          0.0
+        ],
+        [
+          6.227896058947502e-08,
+          0.0
+        ],
+        [
+          6.42644896081873e-08,
+          0.0
+        ],
+        [
+          6.599133206265213e-08,
+          0.0
+        ],
+        [
+          6.403726931387876e-08,
+          0.0
+        ],
+        [
+          7.495846224302026e-08,
+          0.0
+        ]
+      ]
+    },
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 4,
+      "mean": [
+        0.4589474968739631,
+        0.0
+      ],
+      "variance": [
+        1.293295727216691e-07,
+        0.0
+      ],
+      "lag1": [
+        0.40912153604468654,
+        0.0
+      ],
+      "radialPower": [
+        [
+          1.5264407913136295e-07,
+          0.0
+        ],
+        [
+          9.950750923962886e-08,
+          0.0
+        ],
+        [
+          1.1110134085058473e-07,
+          0.0
+        ],
+        [
+          1.2041929022016695e-07,
+          0.0
+        ],
+        [
+          1.28903322152531e-07,
+          0.0
+        ],
+        [
+          1.2292018584954647e-07,
+          0.0
+        ],
+        [
+          1.2469425849702477e-07,
+          0.0
+        ],
+        [
+          1.400903139833178e-07,
+          0.0
+        ]
+      ]
+    }
+  }
+}

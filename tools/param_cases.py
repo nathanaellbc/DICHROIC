@@ -51,6 +51,11 @@ class ParamCase:
     realizations: int = 0
     stat_taps: tuple[str, ...] = ("rgb_out",)
     stat_bins: int = 8
+    # `grainAmount` OFX tidak punya padanan Python: oracle-nya `cmy_film`
+    # grain-mati dan grain-hidup yang dicampur `base + (grained - base) *
+    # amount` (`SpektraGrain.comp::applyGrainControls`), lalu tap hilir
+    # dijalankan dengan `inject = cmy_film`.
+    grain_amount: float | None = None
 
 
 def film_push_pull_gamma(stops: float) -> float:
@@ -278,6 +283,65 @@ PARAM_CASES: dict[str, ParamCase] = {
     "grain_glare_default_flat": ParamCase(
         image="flat_patch", family="stochastic",
         realizations=16,
+    ),
+    # Task 7: grain. `grainAmount` lewat oracle campuran (lih. `grain_amount`),
+    # glare dimatikan (percent 0) supaya momen murni grain. `grainSeed`: Python
+    # memakai seed tetap, jadi oracle-nya sama dengan grain_only_flat -- yang
+    # diuji adalah realisasi engine berbeda dengan statistik yang sama.
+    "grain_amount0_5_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainAmount": 0.5, "glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0",),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.0),
+        realizations=4, stat_taps=("cmy_film", "rgb_out"), grain_amount=0.5,
+    ),
+    "grain_amount1_8_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainAmount": 1.8, "glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0",),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.0),
+        realizations=4, stat_taps=("cmy_film", "rgb_out"), grain_amount=1.8,
+    ),
+    "grain_amount0_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainAmount": 0.0, "glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0",),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.0),
+        realizations=4, stat_taps=("cmy_film", "rgb_out"), grain_amount=0.0,
+    ),
+    "grain_seed42_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"grainSeed": 42, "glarePercent": 0.0},
+        python_overrides=("print_render.glare.percent = 0.0", "(Python: seed grain tetap, tanpa padanan grainSeed)"),
+        pre=lambda p: setattr(p.print_render.glare, "percent", 0.0),
+        realizations=4, stat_taps=("cmy_film", "rgb_out"),
+    ),
+    # `filmFormat` -> `camera.film_format_mm` (sisi panjang OFX,
+    # `FILM_FORMAT_LONG_EDGE_MM`): ukuran piksel menggeser halation/DIR.
+    "format_super8": ParamCase(
+        image="impulse_highlight", family="deterministic",
+        render_params={"filmFormat": "super8"},
+        python_overrides=("camera.film_format_mm = 5.79",),
+        pre=lambda p: setattr(p.camera, "film_format_mm", 5.79),
+    ),
+    "format_standard16": ParamCase(
+        image="hard_edge", family="deterministic",
+        render_params={"filmFormat": "standard16"},
+        python_overrides=("camera.film_format_mm = 10.26",),
+        pre=lambda p: setattr(p.camera, "film_format_mm", 10.26),
+    ),
+    "format_imax70": ParamCase(
+        image="impulse_highlight", family="deterministic",
+        render_params={"filmFormat": "imax70"},
+        python_overrides=("camera.film_format_mm = 70.41",),
+        pre=lambda p: setattr(p.camera, "film_format_mm", 70.41),
+    ),
+    "format_super16_grain_flat": ParamCase(
+        image="flat_patch", family="stochastic",
+        render_params={"filmFormat": "super16", "glarePercent": 0.0},
+        python_overrides=("camera.film_format_mm = 12.52", "print_render.glare.percent = 0.0"),
+        pre=lambda p: (setattr(p.camera, "film_format_mm", 12.52), setattr(p.print_render.glare, "percent", 0.0)),
+        realizations=4, stat_taps=("cmy_film", "rgb_out"),
     ),
     # percent 0 tanpa grain: deterministik (glare dilewati) -- per piksel.
     "glare_p0_no_grain": ParamCase(

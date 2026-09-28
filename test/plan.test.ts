@@ -143,6 +143,8 @@ describe('buildRenderPlan -> FrameParams', () => {
       halationAmount: 1,
       scannerUnsharpAmount: 0.7,
       glarePercent: 0.03,
+      grainSeed: 1,
+      grainAmount: 1,
     });
   });
 

@@ -158,7 +158,8 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
 | 4 push/pull | `filmPushPullStops` (Standard) | 16/16 @1e-5 | `3c9839c` |
 | 5 halation | `halationEnabled`, `halationAmount` | 15/15 @1e-5 (FIR + IIR) | `c36a692` |
 | 6a unsharp | `scannerUnsharpAmount` | 3/3 @1e-5 | `feb749e` |
-| 6b glare | `glarePercent`; kombinasi `grainEnabled` x `glareEnabled` | 5 statistik + 1 per piksel | (task ini) |
+| 6b glare | `glarePercent`; kombinasi `grainEnabled` x `glareEnabled` | 5 statistik + 1 per piksel | `d6fbbc8` |
+| 7 grain + format | `grainAmount`, `grainSeed`, `filmFormat` | 10 statistik + 1 seed + 9 per piksel | (task ini) |
 
 ### Temuan dan ruling
 
@@ -189,6 +190,21 @@ Dieksekusi 2026-09-28 di Windows (RTX 3060 Ti, Dawn/D3D12), branch
   satu proses (sd grain 0, diukur), jadi bila grain hidup lantainya konstanta
   Gate B (mean 1e-4, varians 2%). Uji negatif: percent +20% gagal di kasus glare
   saja (mean meleset 3.5x ambang).
+- **`grainAmount`** tanpa padanan Python: oracle = campuran `cmy_film`
+  grain-mati/grain-hidup Python `base + (grained - base) * amount` (titik OFX:
+  setelah blur densitas akhir), tap hilir lewat `process(inject='cmy_film')`,
+  yang terbukti identik bit-per-bit dengan run normal. Varians Python persis
+  mengikuti amount^2.
+- **Grain hulu di-seed tetap** (`grain.py`: `seed=[0,1,2]`): realisasi Python
+  identik antar-run dalam satu proses, jadi fixture adalah SATU realisasi.
+  Gerbang statistik karenanya mengukur sebaran realisasi dari ENGINE lewat
+  `grainSeed` (8 seed) dan membandingkan rata-ratanya dengan realisasi Python
+  itu -- menggantikan lantai Gate B 2%, yang terlalu sempit untuk citra 64x64
+  berautokorelasi 0.5 (sd estimator varians ~4.5%). Uji negatif: amount +10%
+  gagal.
+- `grainSeed` dicampur ke hash RNG grain sebagai `(seed - 1) * 0x85ebca6b`:
+  seed 1 mereproduksi realisasi Fase 1 bit-identik (gerbang tiling bit-identik
+  tetap hijau).
 - Kinerja: kunci arena menyertakan filter C/M/Y, jadi mengubah filter
   memra-hitung ulang arena (termasuk tabel Hanatos). Kandidat optimasi saat UI:
   pindahkan `printFilteredIlluminant` ke nilai per render.

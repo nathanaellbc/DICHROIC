@@ -579,14 +579,30 @@ def _moments_binned(rgb: np.ndarray, bins: int) -> dict:
     return {"mean": mean, "variance": var, "radialPower": power, "lag1": (lag_x + lag_y) / 2}
 
 
+def _run_param_tap(case, image: np.ndarray, tap):
+    """Satu tap untuk kasus `param/`. Bila `grain_amount` diset, `cmy_film`
+    adalah campuran OFX `applyGrainControls` dan tap hilirnya diinjeksi dari
+    campuran itu; tap hulu `cmy_film` tidak dipengaruhi grain."""
+    params = _build_param_case_params(case)
+    if case.grain_amount is None or TAPS.index(tap) < TAPS.index(Tap.CMY_FILM):
+        return SimulationPipeline(params).process(image, collect=tap)
+    grained = SimulationPipeline(params).process(image, collect=Tap.CMY_FILM)
+    base_params = _build_param_case_params(case)
+    base_params.film_render.grain.active = False
+    base = SimulationPipeline(base_params).process(image, collect=Tap.CMY_FILM)
+    blend = np.maximum(base + (grained - base) * case.grain_amount, 0.0)
+    if tap == Tap.CMY_FILM:
+        return blend
+    return SimulationPipeline(params).process(blend, inject=Tap.CMY_FILM, collect=tap)
+
+
 def _python_stats(case, image: np.ndarray) -> dict:
     """Momen tiap `stat_taps` atas `case.realizations` realisasi Python
     independen (RNG hulu tidak di-seed): rata-rata dan simpangan baku sampel."""
     samples = {tap: [] for tap in case.stat_taps}
     for _ in range(case.realizations):
         for tap in case.stat_taps:
-            result = SimulationPipeline(_build_param_case_params(case)).process(image, collect=tap)
-            samples[tap].append(_moments_binned(result, case.stat_bins))
+            samples[tap].append(_moments_binned(_run_param_tap(case, image, tap), case.stat_bins))
     out = {}
     for tap, rows in samples.items():
         def summarize(values):
@@ -635,8 +651,7 @@ def _generate_param_case(name: str, case_dir: Path) -> None:
     (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
     written = []
     for tap in TAPS:
-        params = _build_param_case_params(case)
-        result = SimulationPipeline(params).process(image, collect=tap)
+        result = _run_param_tap(case, image, tap)
         arr = np.ascontiguousarray(result, dtype="<f4")
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())
         written.append({"tap": tap, "channels": int(arr.shape[2])})
@@ -649,7 +664,9 @@ def _generate_param_case(name: str, case_dir: Path) -> None:
         "film": case.film,
         "print": case.print_stock,
         "renderParams": case.render_params,
-        "pythonOverrides": list(case.python_overrides),
+        "pythonOverrides": list(case.python_overrides)
+        + ([f"grain_amount={case.grain_amount}: cmy_film = base + (grained - base) * amount; hilir inject=cmy_film"]
+           if case.grain_amount is not None else []),
         "taps": written,
     }
     if case.family == "lut":

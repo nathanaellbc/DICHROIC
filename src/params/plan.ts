@@ -218,6 +218,9 @@ function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFor
     // Fase 2C Task 6: `scanner.unsharp_mask[1]`, `print_render.glare.percent`.
     scannerUnsharpAmount: params.scannerUnsharpAmount,
     glarePercent: params.glarePercent,
+    // Fase 2C Task 7: RNG dan blend grain OFX.
+    grainSeed: params.grainSeed,
+    grainAmount: params.grainAmount,
   };
 }
 

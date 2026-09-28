@@ -55,6 +55,10 @@ export interface FrameParams {
   scannerUnsharpAmount?: number;
   /** Fase 2C: `print_render.glare.percent` Python. Baku 0.03. */
   glarePercent?: number;
+  /** Fase 2C: `grainSeed` OFX (RNG grain; Python memakai seed tetap). Baku 1. */
+  grainSeed?: number;
+  /** Fase 2C: `grainAmount` OFX (`applyGrainControls`). Baku 1. */
+  grainAmount?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */
