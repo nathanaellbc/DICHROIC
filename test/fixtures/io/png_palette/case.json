@@ -1,0 +1,8 @@
+{
+  "name": "png_palette",
+  "format": "png",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 8,
+  "oracle": "Pillow mode P (palet 64 warna)"
+}

@@ -13,7 +13,10 @@ export { DecodeError } from './errors';
 type Decoder = (bytes: Uint8Array, name?: string) => Promise<DecodedImage> | DecodedImage;
 
 /** Decoder per format; diisi bertahap oleh Task 2-5 rencana 2B. */
-const DECODERS: Partial<Record<ImageFormat, () => Promise<Decoder>>> = {};
+const DECODERS: Partial<Record<ImageFormat, () => Promise<Decoder>>> = {
+  jpeg: async () => (await import('./jpeg')).decodeJpeg,
+  png: async () => (await import('./png')).decodePng,
+};
 
 async function runDecoder(format: ImageFormat, bytes: Uint8Array, name?: string): Promise<DecodedImage> {
   const load = DECODERS[format];
