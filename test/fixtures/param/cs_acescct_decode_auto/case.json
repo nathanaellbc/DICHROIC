@@ -1,0 +1,45 @@
+{
+  "name": "param/cs_acescct_decode_auto",
+  "height": 16,
+  "width": 32,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "inputColorSpace": "ACEScct",
+    "inputCctfDecoding": true,
+    "filmExposureEv": 0.5
+  },
+  "pythonOverrides": [
+    "io.input_color_space = 'ACEScct'",
+    "io.input_cctf_decoding = True",
+    "camera.exposure_compensation_ev = 0.5"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

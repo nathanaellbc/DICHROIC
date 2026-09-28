@@ -551,11 +551,23 @@ def flat_patch(width: int = 64, height: int = 64) -> np.ndarray:
     return np.full((height, width, 3), 0.184, dtype=np.float64)
 
 
+def encoded_patches() -> np.ndarray:
+    """Seperti `color_patches` tetapi nilai TER-ENCODE di [0, 1] (tanpa 2.0):
+    untuk kasus decode CCTF, yang domain LUT decode-nya [-0.125, 1.5]."""
+    colors = np.array([
+        [0.46, 0.46, 0.46], [0.73, 0.25, 0.25], [0.25, 0.73, 0.25],
+        [0.25, 0.25, 0.73], [0.90, 0.85, 0.70], [0.15, 0.15, 0.15],
+        [0.98, 0.98, 0.98], [0.95, 0.66, 0.35],
+    ], dtype=np.float64)
+    return np.repeat(colors[None, :, :], 8, axis=0)
+
+
 PARAM_IMAGES = {
     **CASES,
     "grain_dense_patch": grain_dense_patch,
     "identity_lattice_17": identity_lattice_17,
     "flat_patch": flat_patch,
+    "encoded_patches": encoded_patches,
 }
 
 

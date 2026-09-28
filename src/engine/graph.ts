@@ -59,6 +59,12 @@ export interface FrameParams {
   grainSeed?: number;
   /** Fase 2C: `grainAmount` OFX (`applyGrainControls`). Baku 1. */
   grainAmount?: number;
+  /**
+   * Fase 2C: pengali nilai input TER-ENCODE sebelum decode CCTF
+   * (`2**autoexposure_ev`, Python `FilmingStage.auto_exposure`). Hanya dibaca
+   * bila flag decode menyala. Baku 1.
+   */
+  inputDecodeScale?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

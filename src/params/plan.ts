@@ -19,11 +19,12 @@
  *   `slot0 = 0`: film/print exposure menutup `log10` sendiri.
  */
 
-import { FLAG_GLARE_ACTIVE, FLAG_UNSHARP_ACTIVE } from '../engine/params';
+import { FLAG_GLARE_ACTIVE, FLAG_INPUT_CCTF_DECODING, FLAG_UNSHARP_ACTIVE } from '../engine/params';
 import type { CoreParams } from '../engine/params';
 import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
+import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
@@ -203,8 +204,25 @@ export function buildRenderPlan(
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
 
+  const inputColorSpace = validateInputColorSpace(bundle, params.inputColorSpace, params.inputCctfDecoding);
+  // Auto-exposure diukur dari gambar ter-decode (bila decode), tapi Python
+  // MENERAPKANNYA pada gambar ter-encode (`image * 2**ev`, sebelum
+  // `rgb_to_raw`). Tanpa decode keduanya linear dan EV cukup dijumlah ke
+  // `filmExposureEv`; dengan decode EV itu dibawa `frame.inputDecodeScale`.
+  const autoEv =
+    family === 'measured' && params.autoExposure
+      ? measureAutoExposureEv(
+          image.rgba,
+          image.width,
+          image.height,
+          bundle.staticTable('inputMeterXyzMatrices'),
+          inputColorSpace,
+          params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined,
+        )
+      : 0;
+
   return {
-    core: buildCoreParams(params, bundle, image, family, glareActive),
+    core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
     arenaKey: `${params.film}::print=${params.paper}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: {
       stockId: params.film,
@@ -213,8 +231,54 @@ export function buildRenderPlan(
     chain: { family, grain: grainActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
-    frame: exposureFrame(params, family, filmFormatMm),
+    frame: {
+      ...exposureFrame(params, family, filmFormatMm),
+      inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
+    },
   };
+}
+
+/**
+ * Label colour space input yang decode OFX-nya TIDAK sama dengan
+ * `cctf_decoding` colour pada kunci Python-nya (diukur Fase 2C Task 9:
+ * selisih relatif 1..74; 20 label lain identik persis). Tanpa decode, ke-26
+ * label sah (primaries identik).
+ */
+export const INPUT_DECODE_WITHOUT_ORACLE: readonly string[] = Object.freeze([
+  'Canon Log2 CinemaGamut D55',
+  'Canon Log3 CinemaGamut D55',
+  'Linear Rec.709',
+  'P3-D65 Gamma 2.2',
+  'Rec.709 Gamma 2.2',
+  'Rec.709 Gamma 2.4',
+]);
+
+/** Indeks label di manifest; menolak label tak dikenal dan decode tanpa oracle. */
+export function validateInputColorSpace(bundle: AssetBundle, label: string, decode: boolean): number {
+  const index = bundle.manifest.colorSpaces.labels.indexOf(label);
+  if (index < 0) {
+    throw new UnverifiedParameterError('inputColorSpace', label, BASELINE_RENDER_PARAMS.inputColorSpace, 'bukan label colour space');
+  }
+  if (decode && INPUT_DECODE_WITHOUT_ORACLE.includes(label)) {
+    throw new UnverifiedParameterError(
+      'inputCctfDecoding',
+      decode,
+      false,
+      `decode "${label}" tidak punya padanan cctf_decoding di colour-science`,
+    );
+  }
+  return index;
+}
+
+function inputDecoder(bundle: AssetBundle, colorSpace: number): (value: number) => number {
+  const { colorSpaces } = bundle.manifest;
+  const table = {
+    luts: bundle.staticTable('colorDecodeLuts'),
+    size: colorSpaces.transferLutSize,
+    min: colorSpaces.decodeLutMin,
+    max: colorSpaces.decodeLutMax,
+  };
+  return (value) => decodeWithLut(table, colorSpace, value);
 }
 
 /**
@@ -338,28 +402,20 @@ function buildCoreParams(
   image: PlanImage,
   family: 'measured' | 'lut',
   glareActive: boolean,
+  inputColorSpace: number,
+  autoEv: number,
 ): CoreParams {
   const { width, height } = image;
   const { colorSpaces } = bundle.manifest;
-  const inputColorSpace = colorSpaces.labels.indexOf(params.inputColorSpace);
-  if (inputColorSpace < 0) {
-    throw new Error(`"${params.inputColorSpace}" tidak ditemukan di manifest.colorSpaces.labels`);
-  }
 
   // `lut_mode` memaksa `camera.exposure_compensation_ev = 0` dan
-  // `auto_exposure = False` (`params_builder.py`).
-  let filmExposureEv = family === 'lut' ? 0 : params.filmExposureEv;
-  if (family === 'measured' && params.autoExposure) {
-    filmExposureEv += measureAutoExposureEv(
-      image.rgba,
-      width,
-      height,
-      bundle.staticTable('inputMeterXyzMatrices'),
-      inputColorSpace,
-    );
-  }
+  // `auto_exposure = False` (`params_builder.py`); `autoEv` sudah 0 di sana.
+  // Dengan decode CCTF, auto-EV diterapkan di ruang ter-encode lewat
+  // `frame.inputDecodeScale`, jadi tidak dijumlah di sini.
+  const filmExposureEv = (family === 'lut' ? 0 : params.filmExposureEv) + (params.inputCctfDecoding ? 0 : autoEv);
 
   const FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION = 1 << 0;
+  const inputDecodingFlag = params.inputCctfDecoding ? FLAG_INPUT_CCTF_DECODING : 0;
   // Guard Python: `add_glare` hanya bila `active and percent > 0` (sudah di
   // `glareActive`); `_apply_blur_and_unsharp` hanya bila `sigma > 0 and
   // amount > 0` (sigma tetap 0.7).
@@ -383,7 +439,7 @@ function buildCoreParams(
     hanatosWidth: bundle.manifest.hanatos.width,
     hanatosHeight: bundle.manifest.hanatos.height,
     slot0: family === 'lut' ? 0 : 1,
-    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag,
+    slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag | inputDecodingFlag,
     // Tidak lagi dibaca filmExposure.wgsl (review seluruh-branch Fase 1, agenda #5).
     slot2: 0,
     // Mode `Standard` (0): efeknya hanya lewat `filmGamma` di atas, persis OFX.

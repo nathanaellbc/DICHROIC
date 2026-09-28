@@ -136,6 +136,15 @@ export const FLAG_GLARE_ACTIVE = 1 << 2;
 export const FLAG_UNSHARP_ACTIVE = 1 << 3;
 
 /**
+ * Bit 4 dari slot1 (Fase 2C Task 9). Dipakai HANYA oleh FilmExposure untuk
+ * `io.input_cctf_decoding` Python: decode LUT colour space input (sebelumnya
+ * `decodeInputRgb` selalu identitas). Sumbu independen dari nama colour space,
+ * persis Python; OFX menyimpulkannya dari `colorTransferKinds`, yang terbukti
+ * salah untuk konfigurasi baseline (lih. `filmExposure.wgsl`).
+ */
+export const FLAG_INPUT_CCTF_DECODING = 1 << 4;
+
+/**
  * TIGA RUANG KOORDINAT BERBEDA hidup berdampingan di `CoreParams`, dan
  * kedelapan tahap Task 11-18 (plus tahap `materializeActiveRegion` yang
  * membangun `rgb_in`, Task 9) membaca ketiganya lewat konstanta ini —

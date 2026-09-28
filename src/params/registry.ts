@@ -22,8 +22,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   film: 'verified',
   paper: 'verified',
   rgbToRawMethod: 'locked',
-  inputColorSpace: 'locked',
-  inputCctfDecoding: 'locked',
+  // Fase 2C Task 9: param/cs_* (`test/parity/inputColorSpace.test.ts`). Label
+  // dan kombinasi decode divalidasi `validateInputColorSpace` (plan.ts; butuh aset).
+  inputColorSpace: 'verified',
+  inputCctfDecoding: 'verified',
   outputColorSpace: 'locked',
   // Fase 2C Task 2: param/exposure_* (`test/parity/exposure.test.ts`).
   autoExposure: 'verified',

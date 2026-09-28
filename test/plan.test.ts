@@ -146,6 +146,7 @@ describe('buildRenderPlan -> FrameParams', () => {
       glarePercent: 0.03,
       grainSeed: 1,
       grainAmount: 1,
+      inputDecodeScale: 1,
     });
   });
 

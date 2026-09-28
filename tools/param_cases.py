@@ -389,3 +389,76 @@ for _film, _paper in _stock_pairs():
         image="hard_edge", family="deterministic", film=_film, print_stock=_paper,
         render_params=_patch, python_overrides=(f"init_params({_film!r}, {_paper!r})",),
     )
+
+# Task 9: colour space input. `inputColorSpace` (label manifest/OFX) ->
+# `io.input_color_space` = kunci colour-science (label itu sendiri bila ada,
+# selain itu `matrix_space` OFX; primaries identik, diukur);
+# `inputCctfDecoding` -> `io.input_cctf_decoding`. Decode hanya untuk label
+# yang decode OFX-nya identik dengan `cctf_decoding` colour (diukur: selisih 0).
+INPUT_COLOR_SPACES = (
+    # (label, slug, kunci colour, decode punya oracle)
+    ("ARRI LogC4", "arri_logc4", "ARRI Wide Gamut 4", True),
+    ("ARRI LogC3 EI800", "arri_logc3_ei800", "ARRI Wide Gamut 3", True),
+    ("BMDFilm WideGamut Gen5", "bmdfilm_widegamut_gen5", "Blackmagic Wide Gamut", True),
+    ("DaVinci Intermediate WideGamut", "davinci_intermediate_widegamut", "DaVinci Wide Gamut", True),
+    ("RED Log3G10 REDWideGamutRGB", "log3g10_redwidegamutrgb", "REDWideGamutRGB", True),
+    ("Sony S-Log3 S-Gamut3", "slog3_sgamut3", "S-Gamut3", True),
+    ("Sony S-Log3 S-Gamut3.Cine", "slog3_sgamut3cine", "S-Gamut3.Cine", True),
+    ("Canon Log2 CinemaGamut D55", "canonlog2_cinemagamut_d55", "Cinema Gamut", False),
+    ("Canon Log3 CinemaGamut D55", "canonlog3_cinemagamut_d55", "Cinema Gamut", False),
+    ("Panasonic V-Log V-Gamut", "vlog_vgamut", "V-Gamut", True),
+    ("ACES2065-1", "aces2065_1", "ACES2065-1", True),
+    ("ACEScg", "acescg", "ACEScg", True),
+    ("ACEScct", "acescct", "ACEScct", True),
+    ("ACEScc", "acescc", "ACEScc", True),
+    ("Linear Rec.2020", "lin_rec2020", "Linear Rec.2020", True),
+    ("Linear Rec.709", "lin_rec709", "ITU-R BT.709", False),
+    ("Linear P3-D65", "lin_p3d65", "Linear P3-D65", True),
+    ("sRGB", "srgb", "sRGB", True),
+    ("Display P3", "display_p3", "Display P3", True),
+    ("ProPhoto RGB", "prophoto_rgb", "ProPhoto RGB", True),
+    ("Adobe RGB (1998)", "adobe_rgb_1998", "Adobe RGB (1998)", True),
+    ("DCI-P3", "dci_p3", "DCI-P3", True),
+    ("P3-D65 Gamma 2.2", "p3d65_gamma22", "P3-D65", False),
+    ("P3-D65 Gamma 2.6", "p3d65_gamma26", "P3-D65", True),
+    ("Rec.709 Gamma 2.2", "rec709_gamma22", "ITU-R BT.709", False),
+    ("Rec.709 Gamma 2.4", "rec709_gamma24", "ITU-R BT.709", False),
+)
+
+
+def _input_cs(key: str, decode: bool) -> Override:
+    return lambda p: (setattr(p.io, "input_color_space", key), setattr(p.io, "input_cctf_decoding", decode))
+
+
+for _label, _slug, _key, _has_decode in INPUT_COLOR_SPACES:
+    PARAM_CASES[f"cs_{_slug}_lut"] = ParamCase(
+        image="color_patches", family="lut",
+        render_params={"inputColorSpace": _label, "inputCctfDecoding": False},
+        python_overrides=(f"io.input_color_space = {_key!r}", "io.input_cctf_decoding = False"),
+        pre=_input_cs(_key, False),
+    )
+    if _has_decode:
+        PARAM_CASES[f"cs_{_slug}_decode_lut"] = ParamCase(
+            image="encoded_patches", family="lut",
+            render_params={"inputColorSpace": _label, "inputCctfDecoding": True},
+            python_overrides=(f"io.input_color_space = {_key!r}", "io.input_cctf_decoding = True"),
+            pre=_input_cs(_key, True),
+        )
+
+# Decode + auto-exposure (measured): metering ter-decode, EV diterapkan di
+# ruang ter-encode (`image * 2**ev`) -- beda dari EV kompensasi (raw).
+for _label, _slug, _key in (("sRGB", "srgb", "sRGB"), ("ACEScct", "acescct", "ACEScct"),
+                            ("ARRI LogC4", "arri_logc4", "ARRI Wide Gamut 4")):
+    PARAM_CASES[f"cs_{_slug}_decode_auto"] = ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"inputColorSpace": _label, "inputCctfDecoding": True, "filmExposureEv": 0.5},
+        python_overrides=(f"io.input_color_space = {_key!r}", "io.input_cctf_decoding = True",
+                          "camera.exposure_compensation_ev = 0.5"),
+        pre=lambda p, k=_key: (_input_cs(k, True)(p), setattr(p.camera, "exposure_compensation_ev", 0.5)),
+    )
+PARAM_CASES["cs_acescg_auto"] = ParamCase(
+    image="color_patches", family="deterministic",
+    render_params={"inputColorSpace": "ACEScg", "inputCctfDecoding": False},
+    python_overrides=("io.input_color_space = 'ACEScg'", "io.input_cctf_decoding = False"),
+    pre=_input_cs("ACEScg", False),
+)
