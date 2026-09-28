@@ -1,12 +1,7 @@
 import { describe, it } from 'vitest';
-import { createMaterializeActiveRegionStage } from '../../src/engine/stages/materializeActiveRegion';
-import { createFilmExposureStage } from '../../src/engine/stages/filmExposure';
-import { createCurveDevelopStage } from '../../src/engine/stages/curveDevelop';
-import { createDirStage } from '../../src/engine/stages/dir';
-import { createPrintExposureStage, createPrintDevelopStage } from '../../src/engine/stages/printScan';
-import { createScannerPostStage } from '../../src/engine/stages/scannerPost';
 import { Tap } from '../../src/engine/taps';
 import { runTapParity } from './run';
+import { buildChain } from '../../src/engine/chain';
 
 /**
  * Gate A (Task 18) -- deterministik, keluarga `_lut`, tap `rgb_out`.
@@ -57,17 +52,7 @@ describe('parity: rgb_out (Gate A, deterministik, keluarga _lut)', () => {
             yFilterShift: 0,
           },
         },
-        stages: (device, arenas) => [
-          createMaterializeActiveRegionStage(device),
-          createFilmExposureStage(device, arenas),
-          createCurveDevelopStage(device, arenas),
-          // lut_mode menolkan dir_couplers.diffusion_size_um (deactivate_spatial_effects)
-          // -- lih. DirStageOptions.
-          createDirStage(device, arenas, { spatialDiffusionActive: false }),
-          createPrintExposureStage(device, arenas),
-          createPrintDevelopStage(device, arenas),
-          createScannerPostStage(device, arenas),
-        ],
+        stages: (device, arenas) => buildChain(device, arenas, { family: 'lut', grain: false }),
       });
     });
   }
