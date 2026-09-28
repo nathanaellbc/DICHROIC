@@ -10,9 +10,14 @@ import { ioCases, loadIoExpected, loadIoInput, loadIoMeta, mismatches } from './
  */
 export function describeBitIdenticalDecoder(
   format: ImageFormat,
-  expectations: { suggestedColorSpace: (name: string) => string; encoding: (name: string) => 'encoded' | 'linear' },
+  expectations: {
+    suggestedColorSpace: (name: string) => string;
+    encoding: (name: string) => 'encoded' | 'linear';
+    /** Kasus lossy yang punya gerbang sendiri (terukur, dikunci) di berkas test format. */
+    notBitIdentical?: readonly string[];
+  },
 ): void {
-  const cases = ioCases(format);
+  const cases = ioCases(format).filter((name) => !expectations.notBitIdentical?.includes(name));
 
   it('fixture ada', () => {
     expect(cases.length).toBeGreaterThan(0);

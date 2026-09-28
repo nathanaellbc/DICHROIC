@@ -1,0 +1,8 @@
+{
+  "name": "exr_float_rgba_zip",
+  "format": "exr",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 32,
+  "oracle": "OIIO float RGBA, ZIP"
+}

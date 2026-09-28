@@ -1,0 +1,8 @@
+{
+  "name": "exr_data_window",
+  "format": "exr",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "OIIO half RGB, data window berawal (5, -3)"
+}

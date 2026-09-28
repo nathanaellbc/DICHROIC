@@ -1,0 +1,8 @@
+{
+  "name": "exr_tiled",
+  "format": "exr",
+  "width": 45,
+  "height": 29,
+  "bitDepth": 16,
+  "oracle": "OIIO half RGB, tile 16x16"
+}

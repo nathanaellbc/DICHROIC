@@ -7,7 +7,7 @@ lalu mendecodenya dengan pustaka rujukan:
 - PNG 16-bit: OpenImageIO (libpng) -- Pillow tidak bisa menulis atau
   membaca PNG RGB 16-bit tanpa memotongnya ke 8-bit;
 - TIFF: tifffile (float disimpan apa adanya, tanpa normalisasi);
-- EXR: OpenImageIO (ditambahkan Task 4 rencana 2B).
+- EXR: OpenImageIO (OpenEXR) -- half dibaca sebagai float32 eksak.
 
 Keluaran (`test/fixtures/io/<case>/`): `input.<ext>`, `expected.f32` (RGB f32
 little-endian, baris-mayor, integer dinormalisasi `v / (2^bits - 1)`,
@@ -122,6 +122,51 @@ def _tiff(array: np.ndarray, **kwargs):
     return lambda p: tifffile.imwrite(p, array, **kwargs)
 
 
+CHROMATICITIES = {
+    # (Rx, Ry, Gx, Gy, Bx, By, Wx, Wy)
+    "ap0": (0.7347, 0.2653, 0.0, 1.0, 0.0001, -0.0770, 0.32168, 0.33767),
+    "ap1": (0.713, 0.293, 0.165, 0.830, 0.128, 0.044, 0.32168, 0.33767),
+    "rec2020": (0.708, 0.292, 0.170, 0.797, 0.131, 0.046, 0.3127, 0.3290),
+}
+
+
+def _exr(array: np.ndarray, *, half: bool = True, channels: tuple[str, ...] | None = None,
+         formats: tuple | None = None, **attrs):
+    def write(path: Path) -> None:
+        a = array if array.ndim == 3 else array[..., None]
+        a = np.ascontiguousarray(a.astype(np.float16 if half else np.float32))
+        h, w, c = a.shape
+        spec = oiio.ImageSpec(w, h, c, oiio.HALF if half else oiio.FLOAT)
+        if channels:
+            spec.channelnames = channels
+        if formats:
+            spec.channelformats = formats
+            a = a.astype(np.float32)
+        # OIIO menulis waktu sekarang bila tidak diisi -- berkas jadi berubah tiap run.
+        spec.attribute("DateTime", "2026:09:28 00:00:00")
+        for key, value in attrs.items():
+            if key == "chromaticities":
+                spec.attribute("chromaticities", oiio.TypeDesc("float[8]"), CHROMATICITIES[value])
+            elif key == "origin":
+                spec.x, spec.y = value
+            elif key == "tile":
+                spec.tile_width, spec.tile_height, spec.tile_depth = value[0], value[1], 1
+            else:
+                spec.attribute(key, value)
+        out = oiio.ImageOutput.create(str(path))
+        if out is None or not out.open(str(path), spec):
+            raise RuntimeError(f"OIIO tidak bisa menulis {path}: {oiio.geterror()}")
+        out.write_image(a)
+        out.close()
+    return write
+
+
+def _oiio_float(path: Path) -> tuple[np.ndarray, int]:
+    buf = oiio.ImageBuf(str(path))
+    bits = 16 if buf.spec().format == oiio.HALF else 32
+    return _to_rgb(buf.get_pixels(oiio.FLOAT)), bits
+
+
 def _gray(rgb: np.ndarray) -> np.ndarray:
     return rgb @ np.array([0.2126, 0.7152, 0.0722])
 
@@ -162,6 +207,30 @@ def _cases(scene: np.ndarray):
                       "Pillow mode 1 (gray 1-bit, baris ber-padding)"),
         "png_rgb16": ("png", lambda p: _oiio_write(p, rgb16), _oiio, "OIIO/libpng RGB 16-bit big-endian"),
         "png_gray16": ("png", lambda p: _oiio_write(p, gray16), _oiio, "OIIO/libpng gray 16-bit"),
+        "exr_half_none": ("exr", _exr(hdr, compression="none"), _oiio_float, "OIIO half RGB, tanpa kompresi"),
+        "exr_half_zip": ("exr", _exr(hdr, compression="zip"), _oiio_float, "OIIO half RGB, ZIP (blok 16 baris)"),
+        "exr_half_zips": ("exr", _exr(hdr, compression="zips"), _oiio_float, "OIIO half RGB, ZIPS (per baris)"),
+        "exr_half_piz": ("exr", _exr(hdr, compression="piz"), _oiio_float, "OIIO half RGB, PIZ"),
+        "exr_half_rle": ("exr", _exr(hdr, compression="rle"), _oiio_float, "OIIO half RGB, RLE"),
+        "exr_float_rgba_zip": ("exr", _exr(np.concatenate([hdr, _alpha(WIDTH, HEIGHT)[..., None]], -1), half=False,
+                                           compression="zip"), _oiio_float, "OIIO float RGBA, ZIP"),
+        "exr_float_pxr24": ("exr", _exr(hdr, half=False, compression="pxr24"), _oiio_float,
+                            "OIIO float RGB, PXR24 (lossy 24-bit; oracle = hasil decode OpenEXR)"),
+        "exr_ap0": ("exr", _exr(hdr, compression="zip", chromaticities="ap0"), _oiio_float,
+                    "OIIO half RGB, chromaticities ACES AP0"),
+        "exr_ap1": ("exr", _exr(hdr, compression="zip", chromaticities="ap1"), _oiio_float,
+                    "OIIO half RGB, chromaticities ACES AP1"),
+        "exr_rec2020": ("exr", _exr(hdr, compression="zip", chromaticities="rec2020"), _oiio_float,
+                        "OIIO half RGB, chromaticities Rec.2020"),
+        "exr_luminance": ("exr", _exr(_gray(hdr), compression="zip", channels=("Y",)), _oiio_float,
+                          "OIIO half satu kanal Y"),
+        "exr_half_dwaa": ("exr", _exr(hdr, compression="dwaa"), _oiio_float, "OIIO half RGB, DWAA (lossy)"),
+        "exr_tiled": ("exr", _exr(hdr, compression="zip", tile=(16, 16)), _oiio_float,
+                      "OIIO half RGB, tile 16x16"),
+        "exr_decreasing_y": ("exr", _exr(hdr, compression="zip", **{"openexr:lineOrder": "decreasingY"}), _oiio_float,
+                             "OIIO half RGB, lineOrder decreasingY"),
+        "exr_data_window": ("exr", _exr(hdr, compression="zip", origin=(5, -3)), _oiio_float,
+                            "OIIO half RGB, data window berawal (5, -3)"),
         "tiff_rgb8": ("tif", _tiff(rgb8, photometric="rgb"), _tifffile, "tifffile RGB 8-bit, tanpa kompresi"),
         "tiff_rgb16_le": ("tif", _tiff(rgb16, photometric="rgb", byteorder="<"), _tifffile, "tifffile RGB 16-bit little-endian"),
         "tiff_rgb16_be": ("tif", _tiff(rgb16, photometric="rgb", byteorder=">"), _tifffile, "tifffile RGB 16-bit big-endian"),
@@ -192,6 +261,19 @@ def _cases(scene: np.ndarray):
     }
 
 
+def _invalid_cases(scene: np.ndarray):
+    """Berkas yang HARUS ditolak decoder (tanpa oracle): nama -> (ekstensi, penulis)."""
+    hdr = (scene * 3.0).astype(np.float32)
+    rgba = np.concatenate([hdr, _alpha(WIDTH, HEIGHT)[..., None]], -1)
+    return {
+        "exr_layered": ("exr", _exr(hdr, channels=("diffuse.R", "diffuse.G", "diffuse.B"), compression="zip")),
+        "exr_mixed_types": ("exr", _exr(rgba, channels=("R", "G", "B", "A"), compression="zip",
+                                        formats=(oiio.HALF, oiio.HALF, oiio.HALF, oiio.FLOAT))),
+        "exr_b44": ("exr", _exr(hdr, compression="b44")),
+        "exr_luma_chroma": ("exr", _exr(hdr, channels=("Y", "RY", "BY"), compression="zip")),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
@@ -218,6 +300,12 @@ def main() -> int:
             "oracle": note,
         })
         print(f"Wrote {case_dir}")
+
+    for name, (ext, write) in _invalid_cases(scene).items():
+        target = args.out / "io_invalid" / f"{name}.{ext}"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        write(target)
+        print(f"Wrote {target}")
 
     if args.manifest:
         _write_manifest(args.out)
