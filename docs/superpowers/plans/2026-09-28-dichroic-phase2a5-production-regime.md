@@ -160,4 +160,19 @@ export function gaussianKernel1d(sigma: number, truncate: number): { weights: Fl
 
 ## Status 2A.5
 
-(diisi di Task 8)
+**Selesai 2026-09-28** (branch `phase2/core`, 098c80b..HEAD). tsc dan eslint
+bersih; suite 519 lulus + 1 dilewati (520) di 29 berkas. Angka terukur dan
+invarian tiling yang baru ada di spec Fase 2 §6a.1.
+
+| Task | Commit |
+|---|---|
+| 1 oracle primitif | 8bb417e |
+| 2 `GaussianBlur` df64 | ce5750b, da0c6c3 |
+| 3 `FrameParams` + fixture rezim | 9510bfa |
+| 4 halation | 0ec463f |
+| 5 DIR | 9fd9d56 |
+| 6 apron dari σ | 80f76b4 |
+| 7 penerimaan `Session` | 0e80574 |
+
+Penyimpangan dari rencana (lihat ledger): `filmFormatMm` lewat `FrameParams`,
+bukan `CoreParams`; apron IIR 10σ, bukan 5,5σ; gerbang tile `rgb_out` 2e-6.

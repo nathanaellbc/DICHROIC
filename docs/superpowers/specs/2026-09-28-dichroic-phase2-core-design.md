@@ -307,6 +307,36 @@ Tujuan: setiap tahap spasial benar di ukuran piksel foto sungguhan
   menghasilkan 1024 px tanpa galat, dan render penuh gambar ≥ 4000 px
   berjalan lewat tiling.
 
+### 6a.1 Hasil (2026-09-28, selesai)
+
+- **Primitif `GaussianBlur`** vs `fast_gaussian_filter` numba f64: galat maks
+  ≤ 2,4e-7 di semua kasus oracle (ambang 1e-6). IIR Young-van Vliet dalam f32
+  polos meleset hingga 1,6e-3 (koefisien YvV hampir saling menghapus,
+  B ≈ 2e-3 pada σ 13), jadi rekursinya dihitung dalam **df64** (pasangan
+  hi+lo f32, two-sum Knuth dan two-prod dengan split Dekker, tidak
+  bergantung `fma`). **Risiko portabilitas terbuka:** compiler yang
+  melakukan reasosiasi fast-math akan meruntuhkan df64 ke presisi f32
+  polos. Mitigasi yang direkomendasikan sebelum rilis: self-test runtime
+  kecil saat `Session.create`.
+- **Halation dan DIR** memakai primitif ini. Gerbang rezim produksi
+  (`hard_edge`/`impulse_highlight` di 6,25 dan 31,25 µm/px) lulus
+  `log_e_film`, `cmy_film`, dan `rgb_out` di ambang 1e-5. FIR lama meleset
+  hingga 3,3e-2.
+- **`filmFormatMm`** dibawa `FrameParams` (bukan `CoreParams`, yang tetap
+  cermin persis 26 field push-constant OFX).
+- **Apron tiling** dihitung dari σ sebenarnya: FIR memakai support eksak,
+  IIR memakai `ceil(10σ)`. Ekor maju-mundur YvV eksponensial dan
+  berosilasi, bukan Gaussian: massa ekor 5,5σ sekitar 6e-4. Apron 256 px
+  OFX tidak lagi dipakai untuk halation dan DIR.
+- **Invarian tiling (menggantikan "nol perbedaan" spec induk §4.4 untuk
+  rezim IIR saja):** rezim FIR tetap bit-identik. Rezim IIR: jahitan
+  `cmy_film` ≤ 1e-6 (terukur 2,4e-7) dan `rgb_out` rantai penuh ≤ 2e-6
+  (terukur 1,55e-6). Didiagnosis per tap sebagai derau pembulatan f32
+  1–2 ulp yang diperkuat kurva print/scan, bukan jahitan.
+- **Performa** (mesin pengembangan, Dawn/D3D12): pratinjau hangat 1024 px
+  sekitar 0,3 s; render penuh 2048 px sekitar 1,8 s; graf varian rantai
+  baru butuh 2–9 s untuk kompilasi shader pertama (kandidat *prewarm*).
+
 ---
 
 ## 6. 2C — Batch parameter 1
