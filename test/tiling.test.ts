@@ -1,11 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { estimateTileOverlap, planTiles } from '../src/engine/tiling';
 import { RenderGraph } from '../src/engine/graph';
+import type { Stage } from '../src/engine/graph';
 import { Tap } from '../src/engine/taps';
 import { fullChain } from './parity/chain';
 import { sharedResources } from './parity/run';
 import { defaultCoreParams } from './parity/params';
 import { loadCase, loadInputAsRgba } from './parity/compare';
+import { createMaterializeActiveRegionStage } from '../src/engine/stages/materializeActiveRegion';
+import { createFilmExposureStage } from '../src/engine/stages/filmExposure';
+import { createHalationStage } from '../src/engine/stages/halation';
+import { createCurveDevelopStage } from '../src/engine/stages/curveDevelop';
+import { createDirStage } from '../src/engine/stages/dir';
+import { createGrainStage } from '../src/engine/stages/grain';
+import { createPrintExposureStage, createPrintDevelopStage } from '../src/engine/stages/printScan';
+import { createScannerPostStage } from '../src/engine/stages/scannerPost';
 
 describe('perencanaan tile', () => {
   it('tidak memakai apron ketika tidak ada efek spasial aktif', () => {
@@ -213,5 +222,171 @@ describe('Task 19 -- gerbang bit-identik (full-frame vs ter-tile)', () => {
       expect(tiled).toEqual(fullFrame);
     },
     30_000,
+  );
+});
+
+/**
+ * Review seluruh-branch, agenda #3 (`docs/superpowers/plans/2026-09-11-
+ * dichroic-phase1-engine.md`, "Agenda review seluruh-branch"): `grain.wgsl`
+ * (`blurLayersX/Y`/`microGenerate`/`microBlurX/Y`/`blurX/Y`) dan
+ * `scannerPost.wgsl` (`glareBlurX/Y`/`unsharpBlurX/Y`) mendispatch LEWAT
+ * SELURUH lebar/tinggi buffer tile, sementara pasangannya
+ * (`generateLayers`/`combine` milik grain, `glareGenerate`/`scanPreUnsharp`/
+ * `scan` milik scannerPost) hanya mendispatch sub-rektangel AKTIF
+ * (ter-inflasi `remainingSpatialRadius`, lih. `graph.ts::inflateActiveRect`).
+ * `grain.ts`/`scannerPost.ts` mendokumentasikan ini sebagai "keterbatasan
+ * tiling yang diketahui, tidak diselesaikan" -- gerbang bit-identik Task 19
+ * di atas TIDAK PERNAH menguji jalur ini: `TEST_OVERLAP_PX=16` dipilih
+ * sekecil itu justru karena `remainingSpatialRadius` (832px, radius PORT
+ * literal upstream) langsung melebihi buffer 48x48px-nya, memaksa
+ * `inflateActiveRect` mengembalikan SELURUH buffer untuk SETIAP tahap
+ * (fallback `width===0||height===0` di baris konstruksinya) -- tidak ada
+ * satu tahap pun yang benar-benar menulis hanya SUB-rektangel dari
+ * buffernya. "Terbukti tak berbahaya" hanya berarti "tidak pernah
+ * benar-benar dieksekusi".
+ *
+ * PENGUKURAN (bukan tebakan): dengan radius PORT literal upstream dipakai
+ * APA ADANYA (`SPATIAL_EFFECT_RADIUS_PX=256` x2 -- halation, unsharp scanner
+ * -- + `GRAIN_SPATIAL_RADIUS_PX=64`, total 576px, PERSIS `estimateTileOverlap`
+ * di bawah, TIDAK diperkecil seperti gerbang di atas -- DIR spasial DIMATIKAN
+ * di rantai test ini, lih. `productionScaleChain` di bawah untuk alasannya:
+ * batas `MAX_KERNEL_RADIUS` `dir.ts` yang tidak terkait agenda #3),
+ * geometri `width=600,height=32,activeSide~120px` membuat setiap tile
+ * planTiles menghasilkan buffer SAMA DENGAN lebar gambar penuh (overlap
+ * lebih besar dari gambar) TAPI rektangel aktif grain/scannerPost ter-inflasi
+ * (`center ± remainingSpatialRadius-nya sendiri`) MASIH sub-rektangel SEJATI
+ * dari buffer itu -- persis skala "produksi" (radius menjadi signifikan
+ * relatif terhadap buffer) yang gerbang di atas tidak pernah mencapai.
+ * Diverifikasi lewat skrip murni (bukan GPU) sebelum test ini ditulis: pada
+ * geometri ini `grainSubset`/`scannerPostSubset` (rektangel tulis tahap itu
+ * < lebar buffer tile) bernilai true untuk hampir setiap tile yang
+ * `planTiles` hasilkan.
+ *
+ * Kalau mismatch ini SUNGGUH berbahaya, tile mana pun yang datanya bocor
+ * dari pool scratch (dipakai ulang ANTAR tile, lih. `StageContext.scratch`)
+ * akan membuat gerbang bit-identik di bawah MERAH. Ia HIJAU -- diukur, bukan
+ * diasumsikan -- karena `remainingSpatialRadius` yang menginflasi rektangel
+ * aktif SETIAP tahap SELALU >= radius kernel tahap itu sendiri (dijumlahkan
+ * SEBELUM radius tahap itu dikurangkan, lih. `runSingleBuffer`), jadi
+ * rektangel yang DITULIS tahap manapun (generateLayers/combine,
+ * glareGenerate/scanPreUnsharp/scan) selalu mencakup PALING SEDIKIT
+ * `center ± radius-kernel-tahap-itu-sendiri` -- persis yang pass full-buffer
+ * setelahnya (blurLayersX/Y, glareBlurX/Y, dst.) butuh baca untuk piksel di
+ * dalam `center`. Data pool yang bocor dari tile SEBELUMNYA selalu berada DI
+ * LUAR jendela itu, jadi tidak pernah terbaca saat menghitung piksel `center`
+ * tile SEKARANG. Ini KESIMPULAN STRUKTURAL (berlaku selama `spatialRadiusPx`
+ * yang dideklarasikan adalah batas atas SAH dari radius kernel runtime-nya --
+ * premis yang sudah diterima di tempat lain repo ini, radius diambil literal
+ * dari sumber upstream), dibuktikan EMPIRIS oleh gerbang di bawah pada
+ * geometri yang benar-benar menekannya, bukan cuma dinalar di komentar ini.
+ *
+ * Keputusan: TIDAK diubah. `grain.ts`/`scannerPost.ts` boleh terus
+ * mendispatch pass blur-nya full-buffer -- mengubahnya ke active-only+radius
+ * akan menambah kerumitan (menghitung ulang rect per pass internal) tanpa
+ * membeli korektnes yang belum ada. Komentar "keterbatasan tiling" di kedua
+ * berkas itu digantikan referensi ke test ini di bawah -- lih. commit yang
+ * memperbaruinya.
+ */
+/**
+ * Rantai manual (bukan `fullChain`) -- SATU beda dari `fullChain`: DIR
+ * dipanggil dengan `spatialDiffusionActive: false`. Bukan penghematan --
+ * pada `pixel_size_um` yang geometri INI butuhkan (gambar lebih besar dari
+ * fixture lain di repo ini, supaya radius grain/scannerPost berarti relatif
+ * terhadap buffer, lih. blok komentar di atas), kernel DIR (fit dua-
+ * eksponensial `DIFFUSION_TAIL_UM=200`) melampaui `MAX_KERNEL_RADIUS=16`
+ * milik `dir.ts` (radius 28 terukur pada `width=600`) -- itu batas TERPISAH,
+ * sudah ada sebelum test ini (lih. `dir.ts`), bukan sesuatu yang test ini
+ * ada untuk menekan. Menonaktifkan cabang spasial DIR menghindarinya tanpa
+ * mempengaruhi apa yang test ini SEBENARNYA mengukur (mismatch full-buffer/
+ * active-only grain dan scannerPost) -- DIR tidak disebut agenda #3 sama
+ * sekali. `estimateTileOverlap` diberi `dirCouplersAmount: 0` senada.
+ */
+function productionScaleChain(device: GPUDevice, arenas: Awaited<ReturnType<typeof sharedResources>>['arenas']): Stage[] {
+  return [
+    createMaterializeActiveRegionStage(device),
+    createFilmExposureStage(device, arenas),
+    createHalationStage(device, arenas),
+    createCurveDevelopStage(device, arenas),
+    createDirStage(device, arenas, { spatialDiffusionActive: false }),
+    createGrainStage(device, arenas),
+    createPrintExposureStage(device, arenas),
+    createPrintDevelopStage(device, arenas),
+    createScannerPostStage(device, arenas),
+  ];
+}
+
+describe('Task 19b -- gerbang bit-identik pada skala apron produksi (agenda #3)', () => {
+  it(
+    'radius spasial PORT literal (576px total: halation+grain+unsharp) dipakai apa adanya, bukan diperkecil: full-frame === ter-tile',
+    async () => {
+      const stockId = 'kodak_portra_400';
+      const { engine, bundle, arenas } = await sharedResources(stockId, {
+        printStockId: 'kodak_portra_endura',
+        enlargerFilters: {
+          cFilterNeutral: 0,
+          mFilterNeutral: 51.56801468495496,
+          mFilterShift: 0,
+          yFilterNeutral: 52.53400422349596,
+          yFilterShift: 0,
+        },
+      });
+
+      const width = 600;
+      const height = 32;
+      // Sintetik (bukan fixture Python) -- gerbang ini self-consistency
+      // ANTARA dua jalur RenderGraph.run milik engine ini sendiri, persis
+      // seperti gerbang hard_edge di atas, jadi tidak perlu tap referensi
+      // Python. Tepi tajam dipilih dengan alasan yang sama (Task 19):
+      // ramp halus akan menyembunyikan seam, tepi tajam tidak.
+      const inputRgba = new Float32Array(width * height * 4);
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          const i = (y * width + x) * 4;
+          const v = x < width / 2 ? 0.02 : 0.9;
+          inputRgba[i] = v;
+          inputRgba[i + 1] = v;
+          inputRgba[i + 2] = v;
+          inputRgba[i + 3] = 1;
+        }
+      }
+
+      const params = defaultCoreParams(width, height, bundle, inputRgba, 'measured', true, stockId);
+
+      const flags = {
+        halationEnabled: true,
+        grainEnabled: true,
+        cameraDiffusionEnabled: false,
+        printDiffusionEnabled: false,
+        dirCouplersAmount: 0,
+        scannerUnsharpEnabled: true,
+      };
+      // TIDAK diperkecil (beda dari `TEST_OVERLAP_PX` di atas) -- inilah
+      // seluruh poin gerbang ini.
+      const overlap = estimateTileOverlap(flags);
+      expect(overlap).toBe(576);
+
+      const ACTIVE_SIDE_PX = 120;
+      const budgetSide = ACTIVE_SIDE_PX + 2 * overlap;
+      const maxBufferBytes = budgetSide * budgetSide * 16;
+
+      const plannedTiles = planTiles(width, height, maxBufferBytes, overlap);
+      expect(plannedTiles.length).toBeGreaterThan(1);
+
+      const fullFrameGraph = new RenderGraph(engine);
+      for (const stage of productionScaleChain(engine.device, arenas)) fullFrameGraph.addStage(stage);
+      const fullFrame = await fullFrameGraph.run(inputRgba, params, Tap.RGB_OUT);
+      fullFrameGraph.dispose();
+
+      const tiledGraph = new RenderGraph(engine);
+      for (const stage of productionScaleChain(engine.device, arenas)) tiledGraph.addStage(stage);
+      const tiled = await tiledGraph.run(inputRgba, params, Tap.RGB_OUT, {
+        maxBufferBytes,
+        overlap,
+      });
+      tiledGraph.dispose();
+
+      expect(tiled).toEqual(fullFrame);
+    },
+    60_000,
   );
 });

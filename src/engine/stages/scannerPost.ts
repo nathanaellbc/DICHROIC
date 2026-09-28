@@ -142,6 +142,18 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
     // kVulkanSpatialEffectRadiusPx : 0u`) -- ketiga dispatch glare DAN
     // kedua dispatch unsharp blur di tahap ini "SELALU berjalan" (lih.
     // blok komentar modul di atas), jadi guard hulu itu SELALU true di sini.
+    //
+    // Review seluruh-branch agenda #3: `glareGenerate`/`scanPreUnsharp`/`scan`
+    // di bawah dispatch aktif-saja (`activeGroupsX/Y`) sementara
+    // `glareBlurX/Y`/`unsharpBlurX/Y` dispatch full-buffer (`fullGroupsX/Y`)
+    // -- mismatch yang SAMA dengan `grain.ts`. Diaudit dan DIUKUR (bukan
+    // dinalar) pada skala apron produksi lewat `test/tiling.test.ts` ("Task
+    // 19b -- gerbang bit-identik pada skala apron produksi"), yang memaksa
+    // `remainingSpatialRadius` di titik tahap ini lebih kecil dari buffer
+    // tile-nya sendiri (beda dari setiap fixture gerbang lain di repo ini).
+    // Gerbang itu HIJAU untuk alasan struktural yang sama seperti `grain.ts`:
+    // lih. komentar `grain.ts` di dekat `spatialRadiusPx`-nya untuk buktinya.
+    // TIDAK diubah.
     spatialRadiusPx: SPATIAL_EFFECT_RADIUS_PX,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;

@@ -69,19 +69,28 @@ import source from '../../shaders/grain.wgsl?raw';
  * yang di-cache lintas kasus uji berbeda ukuran (lih. penjelasan panjang di
  * `halation.ts` untuk bahaya membakar nilai ini ke arena yang di-cache).
  *
- * KETERBATASAN TILING YANG DIKETAHUI, TIDAK DISELESAIKAN DI SINI (Task 16b
- * memperluas cakupan yang sama, tidak memperkenalkan yang baru):
+ * MISMATCH FULL-BUFFER/AKTIF-SAJA, DIAUDIT (review seluruh-branch agenda #3,
+ * `docs/superpowers/plans/2026-09-11-dichroic-phase1-engine.md`):
  * `generateLayers()`/`combine()` hanya menulis `layerRaw`/`preBlur` di dalam
  * sub-rektangel aktif (mengikuti pola `curveDevelop`/`dir`, PERSIS `generate()`
  * lama); `blurLayersX/Y`/`microGenerate`/`microBlurX/Y`/`blurX`/`blurY`
  * membaca/menulis LEWAT SELURUH lebar/tinggi buffer (untuk refleksi tepi
- * yang benar). Bila `activeWidth/Height` suatu hari < `width/height`
- * (Task 19, tiling), piksel `layerRaw`/`preBlur` DI LUAR sub-rektangel aktif
- * tidak pernah ditulis (scratch buffer TIDAK di-nol-kan) dan pass blur
- * berikutnya akan membaca sampah di dekat tepi sub-rektangel itu. Fixture
- * gerbang ini SELALU `activeWidth=activeHeight=0` ("seluruh buffer"), jadi
- * ini tidak termanifestasi di sini -- dicatat eksplisit untuk siapa pun yang
- * mengaktifkan tiling pada tahap ini nanti.
+ * yang benar). Draf sebelumnya paragraf ini mengklaim ini "keterbatasan
+ * tiling yang diketahui, tidak diselesaikan" -- SALAH DIAGNOSIS: diaudit
+ * ulang dan DIUKUR (bukan dinalar) di `test/tiling.test.ts` ("Task 19b --
+ * gerbang bit-identik pada skala apron produksi"), pada geometri yang
+ * `remainingSpatialRadius`-nya (lih. `graph.ts::inflateActiveRect`) BENAR-
+ * BENAR lebih kecil dari buffer tile (beda dari fixture gerbang lain di repo
+ * ini, yang semuanya kekecilan sehingga rektangel aktif selalu terinflasi
+ * balik jadi SELURUH buffer -- lih. komentar di test itu). Gerbang itu HIJAU:
+ * `remainingSpatialRadius` yang menginflasi rektangel aktif tahap ini SELALU
+ * >= `spatialRadiusPx` tahap ini sendiri (dijumlahkan SEBELUM radiusnya
+ * dikurangkan), jadi rektangel yang DITULIS `generateLayers()`/`combine()`
+ * selalu mencakup PALING SEDIKIT `center ± GRAIN_SPATIAL_RADIUS_PX` -- persis
+ * yang `blurLayersX/Y`/dst. butuh baca untuk piksel di dalam `center`. Data
+ * pool yang bocor dari tile sebelumnya (scratch TIDAK di-nol-kan, lih.
+ * `StageContext.scratch`) selalu berada DI LUAR jendela itu. Kesimpulan
+ * struktural, bukan cuma properti fixture kecil -- TIDAK diubah.
  */
 export function createGrainStage(
   device: GPUDevice,
