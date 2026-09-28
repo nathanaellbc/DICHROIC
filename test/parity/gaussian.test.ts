@@ -64,7 +64,7 @@ beforeAll(async () => {
   blur = new GaussianBlur(engine.device);
 });
 
-function rgbToRgba(rgb: Float32Array): Float32Array {
+function rgbToRgba(rgb: Float32Array): Float32Array<ArrayBuffer> {
   const out = new Float32Array((rgb.length / 3) * 4);
   for (let p = 0; p < rgb.length / 3; p += 1) out.set([rgb[p * 3]!, rgb[p * 3 + 1]!, rgb[p * 3 + 2]!, 1], p * 4);
   return out;
@@ -79,7 +79,7 @@ async function runBlur(c: GaussianCase, input: Float32Array): Promise<Float32Arr
   const scratch = device.createBuffer({ size: bytes, usage });
   const component = device.createBuffer({ size: bytes, usage });
   const read = device.createBuffer({ size: bytes, usage: gpuBufferUsage.MAP_READ | gpuBufferUsage.COPY_DST });
-  device.queue.writeBuffer(src, 0, rgbToRgba(input));
+  device.queue.writeBuffer(src, 0, rgbToRgba(input) as Float32Array<ArrayBuffer>);
   const encoder = device.createCommandEncoder();
   const common = {
     src,

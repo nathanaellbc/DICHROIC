@@ -120,7 +120,7 @@ export class GaussianBlur {
     let firMask = 0;
     let iirMask = 0;
     for (let c = 0; c < 3; c += 1) {
-      const sigma = args.sigma[c];
+      const sigma = args.sigma[c]!;
       if (paths[c] === 'fir') {
         const k = gaussianKernel1d(sigma, truncate);
         if (k.radius > MAX_RADIUS) {
