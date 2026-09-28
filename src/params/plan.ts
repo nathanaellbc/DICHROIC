@@ -69,6 +69,23 @@ export const FILM_FORMAT_LONG_EDGE_MM: Readonly<Record<FilmFormat, number>> = Ob
   imax70: 70.41,
 });
 
+/**
+ * Push/pull mode `Standard`: pengali gamma kurva film dari waktu develop ECN-2
+ * (`SpektraVulkanRenderer.cpp::filmPushPullGamma`, 180 s normal, pull-1 150 s,
+ * push-1 220 s, push-2 280 s). Padanan Python: `film_render.density_curve_gamma`,
+ * yang dipakai `develop_simple`, koreksi DIR, dan midgray print.
+ */
+export function filmPushPullGamma(stops: number): number {
+  const s = Math.min(Math.max(stops, -2), 2);
+  const normal = 180;
+  const pull1 = 150;
+  const push1 = 220;
+  const push2 = 280;
+  if (s < 0) return (pull1 / normal) ** -s;
+  if (s <= 1) return Math.exp(Math.log(push1 / normal) * s);
+  return Math.exp(Math.log(push1 / normal) + Math.log(push2 / push1) * (s - 1));
+}
+
 export interface PlanImage {
   width: number;
   height: number;
@@ -315,7 +332,8 @@ function buildCoreParams(
     width,
     height,
     filmExposureEv,
-    filmGamma: 1, // density_curve_gamma default Python (FilmRenderingParams)
+    // `density_curve_gamma` Python; push/pull `Standard` (Fase 2C Task 4).
+    filmGamma: filmPushPullGamma(params.filmPushPullStops),
     // curveDevelop.wgsl membaca ini sebagai batas pencarian biner kurva H&D.
     exposureCount: bundle.stock(params.film).entry.exposureCount,
     inputColorSpace,
@@ -330,7 +348,8 @@ function buildCoreParams(
     slot1: FLAG_COLOR_ADAPTATION_INPUT_COMPRESSION | glareActiveFlag | unsharpActiveFlag,
     // Tidak lagi dibaca filmExposure.wgsl (review seluruh-branch Fase 1, agenda #5).
     slot2: 0,
-    // Push/pull tidak aktif; curveDevelop.wgsl membaca mode ini.
+    // Mode `Standard` (0): efeknya hanya lewat `filmGamma` di atas, persis OFX.
+    // Mode `Experimental` (1) tidak punya oracle Python dan tidak dibuka.
     filmPushPullMode: 0,
     filmPushPullStops: params.filmPushPullStops,
     fullWidth: width,

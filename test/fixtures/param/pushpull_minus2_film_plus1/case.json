@@ -1,0 +1,43 @@
+{
+  "name": "param/pushpull_minus2_film_plus1",
+  "height": 16,
+  "width": 32,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "filmPushPullStops": -2.0,
+    "filmExposureEv": 1.0
+  },
+  "pythonOverrides": [
+    "film_render.density_curve_gamma = film_push_pull_gamma(-2.0)",
+    "camera.exposure_compensation_ev = 1.0"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

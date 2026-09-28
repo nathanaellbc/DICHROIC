@@ -47,6 +47,23 @@ class ParamCase:
     film_format_mm: float | None = None
 
 
+def film_push_pull_gamma(stops: float) -> float:
+    """`SpektraVulkanRenderer.cpp::filmPushPullGamma` (OFX, mode Standard):
+    rasio waktu develop ECN-2. Padanan Python-nya `density_curve_gamma`."""
+    import math
+
+    s = min(max(stops, -2.0), 2.0)
+    if s < 0:
+        return (150.0 / 180.0) ** -s
+    if s <= 1:
+        return math.exp(math.log(220.0 / 180.0) * s)
+    return math.exp(math.log(220.0 / 180.0) + math.log(280.0 / 220.0) * (s - 1.0))
+
+
+def _push_pull(stops: float) -> Override:
+    return lambda p: setattr(p.film_render, "density_curve_gamma", film_push_pull_gamma(stops))
+
+
 PARAM_CASES: dict[str, ParamCase] = {
     # Task 1: kasus kendali harness. Patch kosong; keluarannya harus
     # bit-identik dengan fixture lama yang setara (`gray_ramp`,
@@ -135,5 +152,39 @@ PARAM_CASES: dict[str, ParamCase] = {
         python_overrides=("enlarger.y_filter_shift = 40.0", "enlarger.c_filter_neutral += 30.0 (setelah digest_params)"),
         pre=lambda p: setattr(p.enlarger, "y_filter_shift", 40.0),
         post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 30.0),
+    ),
+    # Task 4: push/pull `Standard` -> `film_render.density_curve_gamma =
+    # film_push_pull_gamma(stops)` (kurva film, DIR, midgray print).
+    "pushpull_minus1": ParamCase(
+        image="log_gray_ramp", family="deterministic",
+        render_params={"filmPushPullStops": -1.0},
+        python_overrides=("film_render.density_curve_gamma = film_push_pull_gamma(-1.0)",),
+        pre=_push_pull(-1.0),
+    ),
+    "pushpull_plus0_5": ParamCase(
+        image="color_patches", family="deterministic",
+        render_params={"filmPushPullStops": 0.5},
+        python_overrides=("film_render.density_curve_gamma = film_push_pull_gamma(0.5)",),
+        pre=_push_pull(0.5),
+    ),
+    "pushpull_plus2": ParamCase(
+        image="gray_ramp", family="deterministic",
+        render_params={"filmPushPullStops": 2.0},
+        python_overrides=("film_render.density_curve_gamma = film_push_pull_gamma(2.0)",),
+        pre=_push_pull(2.0),
+    ),
+    "pushpull_plus1_5_lut": ParamCase(
+        image="color_patches", family="lut",
+        render_params={"filmPushPullStops": 1.5},
+        python_overrides=("film_render.density_curve_gamma = film_push_pull_gamma(1.5)",),
+        pre=_push_pull(1.5),
+    ),
+    # push/pull bersama EV kompensasi: midgray print `_comp` memakai gamma yang sama.
+    "pushpull_minus2_film_plus1": ParamCase(
+        image="log_gray_ramp", family="deterministic",
+        render_params={"filmPushPullStops": -2.0, "filmExposureEv": 1.0},
+        python_overrides=("film_render.density_curve_gamma = film_push_pull_gamma(-2.0)",
+                          "camera.exposure_compensation_ev = 1.0"),
+        pre=lambda p: (_push_pull(-2.0)(p), setattr(p.camera, "exposure_compensation_ev", 1.0)),
     ),
 }

@@ -27,7 +27,8 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   autoExposure: 'verified',
   filmExposureEv: 'verified',
   printExposureEv: 'verified',
-  filmPushPullStops: 'locked',
+  // Fase 2C Task 4: param/pushpull_* (`test/parity/pushPull.test.ts`), mode Standard.
+  filmPushPullStops: 'verified',
   // Fase 2C Task 3: param/enlarger_* (`test/parity/enlarger.test.ts`).
   filterC: 'verified',
   filterMShift: 'verified',
