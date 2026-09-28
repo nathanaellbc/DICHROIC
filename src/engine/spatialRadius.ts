@@ -12,19 +12,21 @@
  * tile di atas ambang parity; di ukuran piksel fixture Fase 1 apron 256 jauh
  * berlebihan.
  *
- * IIR: `ceil(APRON_SIGMAS * sigma)`, APRON_SIGMAS = 8. Respons impuls maju-
- * mundur YvV TIDAK berekor Gaussian: all-pole, meluruh eksponensial dan
- * berosilasi (pole kompleks). Massa ekor satu sisi terukur (sigma 3..88.6):
- * 5.5 sigma ~6e-4, 7 sigma ~5e-5, 9 sigma ~1e-5, 12 sigma ~1e-7 -- jauh di
- * atas ekor Gaussian (1.9e-8 pada 5.5 sigma). Galat jahitan tile terukur
- * ~1e-2 x massa ekor (5.5 sigma: 5.7e-6 pada cmy_film, 6.25 um/px), jadi
- * 8 sigma dipilih untuk menjaga jahitan <= 1e-6 (`test/tiling.test.ts`).
+ * IIR: `ceil(APRON_SIGMAS * sigma)`, APRON_SIGMAS = 10. Respons impuls
+ * maju-mundur YvV TIDAK berekor Gaussian: all-pole, meluruh eksponensial dan
+ * berosilasi (pole kompleks). Massa |ekor| satu sisi terukur (sigma 3..88.6):
+ * 5.5 sigma ~6e-4, 8 sigma ~2e-5, 10 sigma ~3e-6, 12 sigma ~1e-7 -- jauh di
+ * atas ekor Gaussian (1.9e-8 pada 5.5 sigma). Jahitan tile terukur ~1e-2 x
+ * massa ekor pada cmy_film (5.5 sigma: 5.7e-6; 8 sigma: 2.4e-7), dan
+ * kontras print/scan memperkuatnya ~6x di rgb_out (8 sigma: 1.37e-6 --
+ * melewati 1e-6). 10 sigma menjaga jahitan rgb_out rantai penuh <= 1e-6
+ * (`test/tiling.test.ts`, `test/session.test.ts`).
  */
 
 import { SMALL_SIGMA_MAX } from './gaussian';
 import type { Vec3 } from './gaussian';
 
-export const APRON_SIGMAS = 8;
+export const APRON_SIGMAS = 10;
 
 /** Radius support satu blur `fast_gaussian_filter` bersigma `sigma` px. */
 export function blurSupportPx(sigma: number): number {

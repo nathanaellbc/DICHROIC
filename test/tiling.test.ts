@@ -398,7 +398,7 @@ describe('Fase 2A.5 -- tiling di rezim resolusi produksi (IIR)', () => {
    * 6.25 um/px (foto sungguhan): ekor DIR sigma ~89 px, bounce halation
    * ~18 px -- keduanya IIR Young-van Vliet, ekor tak terbatas. Overlap dan
    * radius tahap dihitung dari sigma (`src/engine/spatialRadius.ts`):
-   * halation 145 + DIR 709 (8 sigma, lih. catatan ekor YvV di sana). Tile TIDAK bisa bit-identik dengan full-frame
+   * halation 181 + DIR 886 (10 sigma, lih. catatan ekor YvV di sana). Tile TIDAK bisa bit-identik dengan full-frame
    * di rezim IIR (rekursi baris penuh dimulai dari tepi rect yang berbeda);
    * yang dijamin adalah galat batas meluruh di bawah 1e-6 di dalam apron.
    * Gerbang bit-identik rezim FIR di atas tetap berlaku apa adanya.
@@ -438,7 +438,7 @@ describe('Fase 2A.5 -- tiling di rezim resolusi produksi (IIR)', () => {
       const pixelSizeUm = (frame.filmFormatMm * 1000) / width;
       const firstSigma = Array.from(arenas.stock.values('halationFirstSigmaUm')) as [number, number, number];
       const overlap = halationRadiusPx(pixelSizeUm, firstSigma) + dirRadiusPx(pixelSizeUm);
-      expect(overlap).toBe(145 + 709);
+      expect(overlap).toBe(181 + 886);
 
       const chain = (): Stage[] => [
         createMaterializeActiveRegionStage(engine.device),

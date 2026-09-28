@@ -17,14 +17,14 @@ import {
 const FIRST_SIGMA: [number, number, number] = [65, 65, 65];
 
 describe('blurSupportPx', () => {
-  it('FIR: radius truncasi hulu int(3*sigma + 0.5); IIR: ceil(8*sigma)', () => {
-    expect(APRON_SIGMAS).toBe(8);
+  it('FIR: radius truncasi hulu int(3*sigma + 0.5); IIR: ceil(10*sigma)', () => {
+    expect(APRON_SIGMAS).toBe(10);
     expect(blurSupportPx(0)).toBe(0);
     expect(blurSupportPx(1e-6)).toBe(0);
     expect(blurSupportPx(0.2)).toBe(1);
     expect(blurSupportPx(2.9)).toBe(9);
-    expect(blurSupportPx(3)).toBe(24);
-    expect(blurSupportPx(88.6)).toBe(709);
+    expect(blurSupportPx(3)).toBe(30);
+    expect(blurSupportPx(88.6)).toBe(886);
   });
 });
 
@@ -34,14 +34,14 @@ describe('radius tahap', () => {
     expect(dirRadiusPx(546.875)).toBe(3);
   });
 
-  it('31.25 um: halation 29 (bounce IIR 3.6 px), DIR 142 (ekor 17.7 px)', () => {
-    expect(halationRadiusPx(31.25, FIRST_SIGMA)).toBe(29);
-    expect(dirRadiusPx(31.25)).toBe(142);
+  it('31.25 um: halation 37 (bounce IIR 3.6 px), DIR 178 (ekor 17.7 px)', () => {
+    expect(halationRadiusPx(31.25, FIRST_SIGMA)).toBe(37);
+    expect(dirRadiusPx(31.25)).toBe(178);
   });
 
-  it('6.25 um (foto sungguhan): halation 145, DIR 709', () => {
-    expect(halationRadiusPx(6.25, FIRST_SIGMA)).toBe(145);
-    expect(dirRadiusPx(6.25)).toBe(709);
+  it('6.25 um (foto sungguhan): halation 181, DIR 886', () => {
+    expect(halationRadiusPx(6.25, FIRST_SIGMA)).toBe(181);
+    expect(dirRadiusPx(6.25)).toBe(886);
   });
 });
 

@@ -7,6 +7,11 @@ import { UnverifiedParameterError } from '../src/params/registry';
 import type { DecodedImage } from '../src/io/decoded';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './parity/compare';
 import { sharedResources } from './parity/run';
+import { buildRenderPlan } from '../src/params/plan';
+import { buildChain } from '../src/engine/chain';
+import { RenderGraph } from '../src/engine/graph';
+import { Tap } from '../src/engine/taps';
+import { planTiles } from '../src/engine/tiling';
 
 /**
  * Gerbang ujung-ke-ujung lewat facade `Session` (Fase 2A Task 5): gambar
@@ -110,8 +115,13 @@ function gradientImage(width: number, height: number): DecodedImage {
   const rgba = new Float32Array(width * height * 4);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
-      const v = 0.02 + (0.6 * x) / width;
-      rgba.set([v, v * 0.9, v * 0.8, 1], (y * width + x) * 4);
+      let v = 0.02 + (0.6 * x) / width;
+      if ((x >> 6) % 2 === (y >> 6) % 2) v *= 0.3; // tepi tajam untuk efek spasial
+      if ((x - width / 2) ** 2 + (y - height / 2) ** 2 < 25) v = 6; // sorotan
+      rgba[(y * width + x) * 4] = v;
+      rgba[(y * width + x) * 4 + 1] = v * 0.9;
+      rgba[(y * width + x) * 4 + 2] = v * 0.8;
+      rgba[(y * width + x) * 4 + 3] = 1;
     }
   }
   return { width, height, rgba, suggestedColorSpace: 'ProPhoto RGB', encoding: 'linear', source: { format: 'fixture', bitDepth: 32 } };
@@ -119,22 +129,20 @@ function gradientImage(width: number, height: number): DecodedImage {
 
 describe('Session: pratinjau, antrean, cache', () => {
   /**
-   * Batas bawaan 1024 px dikunci `downscale.test.ts`. Render GPU di 1024 px
-   * BELUM mungkin: blur spasial hulu beralih ke IIR Young-van Vliet pada
-   * sigma >= 3 px (`fast_gaussian_filter.py::SMALL_SIGMA_MAX`) dan jalur itu
-   * belum di-port (dir.ts melempar di radius > 16). Test render 1024 px
-   * adalah test penerimaan Fase 2A.5 (rezim resolusi produksi). Di sini
-   * batasnya diturunkan ke 256 px, masih dalam rezim FIR yang terverifikasi.
+   * Penerimaan Fase 2A.5: di 2A render 1024 px masih melempar (dir.ts, radius
+   * > 16) karena jalur IIR `fast_gaussian_filter` belum di-port. Sekarang
+   * batas pratinjau bawaan (1024) dipakai apa adanya.
    */
-  it('render pratinjau memperkecil sisi terpanjang ke batas pratinjau', async () => {
-    const s = await sharedSession({ previewMaxLongEdge: 256 });
-    s.open(gradientImage(2048, 32));
+  it('render pratinjau memperkecil 2048x1365 ke 1024x683 dengan batas bawaan', async () => {
+    const s = await sharedSession();
+    s.open(gradientImage(2048, 1365));
     s.setParams({ grainEnabled: false, glareEnabled: false });
     const result = await s.render('preview');
     expect(result.quality).toBe('preview');
-    expect(result.width).toBe(256);
-    expect(result.height).toBe(4);
-    expect(result.rgb.length).toBe(256 * 4 * 3);
+    expect(result.width).toBe(1024);
+    expect(result.height).toBe(683);
+    expect(result.rgb.length).toBe(1024 * 683 * 3);
+    for (const v of result.rgb) expect(Number.isFinite(v)).toBe(true);
     s.dispose();
   });
 
@@ -182,4 +190,49 @@ describe('Session: pratinjau, antrean, cache', () => {
     expect(s.paramsVersion).toBe(before + 1);
     s.dispose();
   });
+});
+
+describe('Session: penerimaan rezim resolusi produksi', () => {
+  it(
+    'render penuh 2048x1365 cocok dengan render ter-tile paksa dari plan yang sama (<= 2e-6)',
+    async () => {
+      const s = await sharedSession();
+      const image = gradientImage(2048, 1365);
+      s.open(image);
+      s.setParams({ grainEnabled: false, glareEnabled: false });
+      const full = await s.render('full');
+      expect(full.width).toBe(2048);
+
+      const { engine, bundle, arenas } = await sharedResources(STOCK_ID, PRINT);
+      const plan = buildRenderPlan(s.getParams(), bundle, image, 'image');
+      expect(plan.overlap).toBeGreaterThan(256); // apron IIR, bukan konstanta OFX
+      const maxBufferBytes = (700 + 2 * plan.overlap) ** 2 * 16;
+      expect(planTiles(2048, 1365, maxBufferBytes, plan.overlap).length).toBeGreaterThan(1);
+
+      const graph = new RenderGraph(engine);
+      for (const stage of buildChain(engine.device, arenas, plan.chain)) graph.addStage(stage);
+      const tiled = await graph.run(image.rgba, plan.core, Tap.RGB_OUT, {
+        maxBufferBytes,
+        overlap: plan.overlap,
+        frame: plan.frame,
+      });
+      graph.dispose();
+
+      let maxAbs = 0;
+      for (let p = 0; p < 2048 * 1365; p += 1) {
+        for (let c = 0; c < 3; c += 1) maxAbs = Math.max(maxAbs, Math.abs(tiled[p * 4 + c]! - full.rgb[p * 3 + c]!));
+      }
+      // Ambang rgb_out 2e-6 (<= 20% ambang parity rgb_out 1e-5), BUKAN 1e-6:
+      // didiagnosis per tap (2026-09-28) -- selisih tile vs full di tap antara
+      // adalah derau pembulatan f32 1-2 ulp (log_e_film 1.2e-7, cmy_film
+      // 2.4e-7), lalu diperkuat bagian kurva print/scan yang curam (cmy_print
+      // 8.3e-7, rgb_out 1.55e-6). Piksel terburuk rgb_out 270/517 px dari tepi
+      // tile dan hanya 22 piksel > 1e-7: bukan jahitan; apron 8 vs 10 sigma
+      // tidak mengubahnya. Jahitan sendiri dijaga di cmy_film (<= 1e-6,
+      // tiling.test.ts).
+      expect(maxAbs, `tile vs full ${maxAbs.toExponential(3)}`).toBeLessThanOrEqual(2e-6);
+      s.dispose();
+    },
+    180_000,
+  );
 });
