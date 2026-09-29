@@ -18,8 +18,10 @@ import type { RenderParams } from '../../params/renderParams';
 import { SessionClient } from '../../session/client';
 import { PREVIEW_MAX_LONG_EDGE } from '../../session/downscale';
 import { RenderSupersededError } from '../../session/errors';
-import type { ExportFormat } from '../../session/session';
-import { suggestedInput } from '../model/tools';
+import type { ExportFormat, ExportOptions } from '../../session/session';
+import { isScanMode, suggestedInput } from '../model/tools';
+import { stockInfo } from '../model/stocks';
+import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { canvasColorSpaceFor, originalFrame, rgbToPixels, type Frame } from './display';
 
@@ -50,12 +52,22 @@ export interface EngineState {
 
 type Listener = () => void;
 
-const MIME: Record<ExportFormat, string> = { png8: 'image/png', png16: 'image/png', tiff16: 'image/tiff' };
-const EXT: Record<ExportFormat, string> = { png8: 'png', png16: 'png', tiff16: 'tif' };
-
-function baseName(name: string | undefined): string {
-  return (name ?? 'photo').replace(/\.[^.]+$/, '') || 'photo';
-}
+export const EXPORT_MIME: Record<ExportFormat, string> = {
+  png8: 'image/png',
+  png16: 'image/png',
+  tiff16: 'image/tiff',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  avif: 'image/avif',
+};
+export const EXPORT_EXT: Record<ExportFormat, string> = {
+  png8: 'png',
+  png16: 'png',
+  tiff16: 'tif',
+  jpeg: 'jpg',
+  webp: 'webp',
+  avif: 'avif',
+};
 
 export function describeError(error: unknown, fileName?: string): AppError {
   if (error instanceof DecodeError) {
@@ -270,20 +282,51 @@ export class Engine {
     }
   }
 
-  async exportImage(format: ExportFormat): Promise<File> {
-    const bytes = await this.#client!.exportImage(format);
-    // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
-    // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
-    const size = await this.#client!.lastFullSize();
-    const full = this.#imageSize;
-    this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
-    const name = `${baseName(this.#state.fileName)}-dichroic.${EXT[format]}`;
-    return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: MIME[format] });
+  /** Ukuran gambar asli yang terbuka. */
+  get imageSize(): { width: number; height: number } | undefined {
+    return this.#imageSize;
+  }
+
+  /** Format yang bisa di-encode worker (lossy hanya bila lolos probing). */
+  exportFormats(): Promise<ExportFormat[]> {
+    return this.#client!.exportFormats();
+  }
+
+  /**
+   * Fase render ekspor (gaya EMULSION): dipanggil saat lembar Ekspor dibuka
+   * dan saat sisi panjang berubah. `limited` = difusi FFT memaksa ukuran
+   * lebih kecil dari yang diminta (Fase 2D).
+   */
+  async renderExport(longEdge: number | undefined, requested: { width: number; height: number }): Promise<{ width: number; height: number; limited: boolean }> {
+    const size = await this.#client!.renderExport(longEdge);
+    const limited = size.width < requested.width || size.height < requested.height;
+    this.lastExportLimited = limited ? size : undefined;
+    return { ...size, limited };
+  }
+
+  /** Nama berkas ASCII: `<foto> - <film> on <kertas>.<ext>`. */
+  exportName(ext: string, suffix = ''): string {
+    const { params, fileName } = this.#state;
+    const film = stockInfo(params.film).name;
+    const name = exportFileName(fileName, film, isScanMode(params) ? undefined : stockInfo(params.paper).name, ext);
+    return suffix ? name.replace(/\.[^.]+$/, ` ${suffix}.${ext}`) : name;
+  }
+
+  async exportImage(format: ExportFormat, options?: ExportOptions): Promise<File> {
+    const bytes = await this.#client!.exportImage(format, options);
+    if (!options) {
+      // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
+      // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
+      const size = await this.#client!.lastFullSize();
+      const full = this.#imageSize;
+      this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
+    }
+    return new File([bytes as Uint8Array<ArrayBuffer>], this.exportName(EXPORT_EXT[format]), { type: EXPORT_MIME[format] });
   }
 
   async exportCube(size: number): Promise<File> {
     const text = await this.#client!.exportCube(size);
-    return new File([text], `${baseName(this.#state.fileName)}-dichroic-${size}.cube`, { type: 'text/plain' });
+    return new File([text], this.exportName('cube', `${size}`), { type: 'text/plain' });
   }
 }
 

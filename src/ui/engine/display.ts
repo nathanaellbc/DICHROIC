@@ -4,6 +4,7 @@
  */
 import type { DecodedImage } from '../../io/decoded';
 import { boxDownscale } from '../../session/downscale';
+import { rgbToRgba8 } from '../../io/canvasEncode';
 
 export interface Frame {
   width: number;
@@ -13,18 +14,13 @@ export interface Frame {
   colorSpace: PredefinedColorSpace;
 }
 
-/** RGB f32 rapat -> RGBA 8-bit (clamp [0,1], bulatkan). */
+/**
+ * RGB f32 rapat -> RGBA 8-bit, kuantisasi yang sama dengan ekspor PNG 8-bit
+ * (dulu `v*255 + 0.5` ke `Uint8ClampedArray`, yang sudah membulatkan sendiri:
+ * bias setengah level ke atas).
+ */
 export function rgbToPixels(rgb: Float32Array, width: number, height: number): Uint8ClampedArray {
-  const n = width * height;
-  const out = new Uint8ClampedArray(n * 4);
-  for (let i = 0, j = 0; i < n; i += 1, j += 3) {
-    const o = i * 4;
-    out[o] = rgb[j]! * 255 + 0.5;
-    out[o + 1] = rgb[j + 1]! * 255 + 0.5;
-    out[o + 2] = rgb[j + 2]! * 255 + 0.5;
-    out[o + 3] = 255;
-  }
-  return out;
+  return rgbToRgba8(rgb, width, height);
 }
 
 export function canvasColorSpaceFor(outputColorSpace: string): PredefinedColorSpace {
@@ -70,13 +66,13 @@ export function originalFrame(image: DecodedImage, maxLongEdge: number): Frame {
     const b = rgba[i * 4 + 2]!;
     const o = i * 4;
     if (matrix) {
-      pixels[o] = srgbEncode(matrix[0] * r + matrix[1] * g + matrix[2] * b) * 255 + 0.5;
-      pixels[o + 1] = srgbEncode(matrix[3] * r + matrix[4] * g + matrix[5] * b) * 255 + 0.5;
-      pixels[o + 2] = srgbEncode(matrix[6] * r + matrix[7] * g + matrix[8] * b) * 255 + 0.5;
+      pixels[o] = srgbEncode(matrix[0] * r + matrix[1] * g + matrix[2] * b) * 255;
+      pixels[o + 1] = srgbEncode(matrix[3] * r + matrix[4] * g + matrix[5] * b) * 255;
+      pixels[o + 2] = srgbEncode(matrix[6] * r + matrix[7] * g + matrix[8] * b) * 255;
     } else {
-      pixels[o] = r * 255 + 0.5;
-      pixels[o + 1] = g * 255 + 0.5;
-      pixels[o + 2] = b * 255 + 0.5;
+      pixels[o] = r * 255;
+      pixels[o + 1] = g * 255;
+      pixels[o + 2] = b * 255;
     }
     pixels[o + 3] = 255;
   }

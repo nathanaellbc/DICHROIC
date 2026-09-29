@@ -16,7 +16,7 @@ import type { RenderParams } from '../params/renderParams';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { ExportFormat, RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 export class SessionClient {
   #nextId = 1;
@@ -99,9 +99,19 @@ export class SessionClient {
     return this.call('exportCube', [size]) as Promise<string>;
   }
 
-  /** Berkas PNG/TIFF dari render penuh (lihat `Session.exportImage`). */
-  exportImage(format: ExportFormat): Promise<Uint8Array> {
-    return this.call('exportImage', [format]) as Promise<Uint8Array>;
+  /** Render ekspor saja pada sisi panjang itu (lihat `Session.renderExport`). */
+  renderExport(longEdge?: number): Promise<ExportRenderInfo> {
+    return this.call('renderExport', [longEdge]) as Promise<ExportRenderInfo>;
+  }
+
+  /** Format yang bisa di-encode worker ini (lihat `Session.exportFormats`). */
+  exportFormats(): Promise<ExportFormat[]> {
+    return this.call('exportFormats', []) as Promise<ExportFormat[]>;
+  }
+
+  /** Berkas gambar dari render penuh (lihat `Session.exportImage`). */
+  exportImage(format: ExportFormat, options?: ExportOptions): Promise<Uint8Array> {
+    return this.call('exportImage', options === undefined ? [format] : [format, options]) as Promise<Uint8Array>;
   }
 
   dispose(): Promise<void> {

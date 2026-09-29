@@ -1,23 +1,66 @@
 /**
- * Ekspor: gambar (PNG 8/16, TIFF 16) dari render resolusi penuh, atau LUT
- * `.cube`. Satu aksi utama di bawah; hasilnya diserahkan lewat lembar Bagikan
- * (HP) atau unduhan (desktop).
+ * Ekspor, dengan disiplin lembar ekspor EMULSION (ditulis ulang untuk
+ * DICHROIC):
+ *
+ *  - Format ditawarkan hanya bila browser ini benar-benar menghasilkannya:
+ *    PNG 8/16 dan TIFF 16 dari encoder kita sendiri (selalu), JPEG/WebP/AVIF
+ *    dari encoder kanvas worker setelah lolos probing.
+ *  - Sisi panjang berupa detent yang sungguh memperkecil (2048/4096/8192) plus
+ *    "Source"; tidak pernah memperbesar. Efek berukuran fisik dirender ulang
+ *    pada pitch piksel itu, bukan di-resize.
+ *  - Render dan encode berjalan SELAGI pengaturan dipilih: tombol simpan
+ *    langsung aktif, `navigator.share` (yang di iOS wajib di dalam gestur)
+ *    menerima berkas yang sudah ada, dan ukuran berkas yang ditampilkan adalah
+ *    ukuran TERUKUR, bukan perkiraan.
+ *  - Pilihan disimpan di `localStorage`.
  */
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ExportFormat } from '../../session/session';
 import { Icon } from '../components/Icon';
-import { PressButton, Segmented } from '../components/controls';
+import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { engine } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
-import { deliverFile } from '../share';
+import { canvasLimits, longEdgeDetents } from '../model/exportSizes';
+import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
 
-const FORMATS: ReadonlyArray<{ value: ExportFormat; name: string; hint: string }> = [
-  { value: 'png8', name: 'PNG 8-bit', hint: 'For the web and sharing' },
-  { value: 'png16', name: 'PNG 16-bit', hint: 'Smooth gradients, still lossless' },
-  { value: 'tiff16', name: 'TIFF 16-bit', hint: 'For further editing, uncompressed' },
-];
+const FORMAT_INFO: Record<ExportFormat, { name: string; hint: string; lossy: boolean }> = {
+  png8: { name: 'PNG 8-bit', hint: 'Lossless · every pixel as rendered', lossy: false },
+  png16: { name: 'PNG 16-bit', hint: 'Lossless · smooth gradients', lossy: false },
+  tiff16: { name: 'TIFF 16-bit', hint: 'Uncompressed · for further editing', lossy: false },
+  jpeg: { name: 'JPEG', hint: 'Lossy · smallest widely compatible file', lossy: true },
+  webp: { name: 'WebP', hint: 'Lossy · smaller than JPEG at like quality', lossy: true },
+  avif: { name: 'AVIF', hint: 'Lossy · smallest file, slowest to encode', lossy: true },
+};
 const CUBE_SIZES = [{ value: '17', label: '17' }, { value: '33', label: '33' }, { value: '65', label: '65' }] as const;
+
+const DEFAULT_QUALITY = 100;
+const STORAGE_KEY = 'dichroic.export.v1';
+
+interface ExportPrefs {
+  format: ExportFormat;
+  /** 1..100, hanya format lossy. */
+  quality: number;
+  /** `null` = ukuran sumber. */
+  longEdge: number | null;
+}
+
+function loadPrefs(): ExportPrefs {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<ExportPrefs>;
+      return {
+        format: p.format && p.format in FORMAT_INFO ? p.format : 'png8',
+        quality: typeof p.quality === 'number' ? Math.min(100, Math.max(1, Math.round(p.quality))) : DEFAULT_QUALITY,
+        longEdge: typeof p.longEdge === 'number' ? p.longEdge : null,
+      };
+    }
+  } catch {
+    // Preferensi tersimpan yang rusak tidak sepadan dengan ekspor yang gagal.
+  }
+  return { format: 'png8', quality: DEFAULT_QUALITY, longEdge: null };
+}
 
 export function ExportContent({
   outputColorSpace,
@@ -31,25 +74,136 @@ export function ExportContent({
   onError: (error: unknown) => void;
 }) {
   const [mode, setMode] = useState<'image' | 'cube'>('image');
-  const [format, setFormat] = useState<ExportFormat>('png8');
+  const [formats, setFormats] = useState<ExportFormat[] | null>(null);
+  const [prefs, setPrefs] = useState<ExportPrefs>(loadPrefs);
   const [cubeSize, setCubeSize] = useState<'17' | '33' | '65'>('33');
-  const [busy, setBusy] = useState(false);
-  const formatName = FORMATS.find((f) => f.value === format)!.name;
+  const [rendered, setRendered] = useState<{ width: number; height: number; limited: boolean; request: number | undefined } | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [cubeFile, setCubeFile] = useState<File | null>(null);
+  const [encoding, setEncoding] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const shareable = useMemo(prefersShareSheet, []);
 
-  const run = async () => {
-    setBusy(true);
+  const format: ExportFormat = formats?.includes(prefs.format) ? prefs.format : 'png8';
+  const info = FORMAT_INFO[format];
+  const source = engine.imageSize ?? { width: 1, height: 1 };
+  const detents = useMemo(
+    () => longEdgeDetents(source.width, source.height, info.lossy ? canvasLimits() : undefined),
+    [source.width, source.height, info.lossy],
+  );
+  const selected = detents.find((d) => d.longEdge === prefs.longEdge) ?? detents[detents.length - 1]!;
+  const request = selected.request;
+  const rendering = mode === 'image' && (rendered === null || rendered.request !== request);
+
+  useEffect(() => {
+    let alive = true;
+    engine.exportFormats().then(
+      (f) => alive && setFormats(f),
+      () => alive && setFormats(['png8', 'png16', 'tiff16']),
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     try {
-      const file = mode === 'image' ? await engine.exportImage(format) : await engine.exportCube(Number(cubeSize));
-      const result = await deliverFile(file);
-      const limited = mode === 'image' ? engine.lastExportLimited : undefined;
-      const note = limited ? ` at ${limited.width} × ${limited.height} (diffusion filter size limit)` : '';
-      if (result !== 'cancelled') onDone(result === 'shared' ? `Exported${note}` : `Saved ${file.name}${note}`);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    } catch {
+      // Preferensi yang tidak tersimpan hanya gangguan kecil.
+    }
+  }, [prefs]);
+
+  // Fase 1, render: saat dibuka dan saat sisi panjang berubah (debounce,
+  // supaya worker tidak merender tiap detent yang dilewati).
+  useEffect(() => {
+    if (mode !== 'image') return;
+    let alive = true;
+    setFile(null);
+    const t = window.setTimeout(() => {
+      engine.renderExport(request, selected).then(
+        (size) => {
+          if (!alive) return;
+          setRendered({ ...size, request });
+          setFailure(null);
+        },
+        (error: unknown) => alive && setFailure(error instanceof Error ? error.message : String(error)),
+      );
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+    // `selected` berubah identitas tiap render; `request` sudah mewakilinya.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, request]);
+
+  // Fase 2, encode: setelah render mendarat, dan saat format/kualitas
+  // bergeser -- tanpa kerja GPU (render diambil dari cache `Session`).
+  useEffect(() => {
+    if (mode !== 'image' || rendering || !formats) return;
+    let alive = true;
+    setEncoding(true);
+    const t = window.setTimeout(() => {
+      engine.exportImage(format, { longEdge: request, quality: prefs.quality / 100 }).then(
+        (f) => {
+          if (!alive) return;
+          setFile(f);
+          setEncoding(false);
+          setFailure(null);
+        },
+        (error: unknown) => {
+          if (!alive) return;
+          setFile(null);
+          setEncoding(false);
+          setFailure(error instanceof Error ? error.message : String(error));
+        },
+      );
+    }, 200);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [mode, rendering, formats, format, request, prefs.quality]);
+
+  useEffect(() => {
+    if (mode !== 'cube') return;
+    let alive = true;
+    setCubeFile(null);
+    engine.exportCube(Number(cubeSize)).then(
+      (f) => alive && setCubeFile(f),
+      (error: unknown) => alive && setFailure(error instanceof Error ? error.message : String(error)),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [mode, cubeSize]);
+
+  const ready = mode === 'image' ? (!rendering && !encoding ? file : null) : cubeFile;
+  const limitedNote = mode === 'image' && rendered?.limited ? ` at ${rendered.width} × ${rendered.height} (diffusion filter size limit)` : '';
+
+  // Keduanya menerima berkas yang SUDAH ada: tidak ada `await` antara
+  // ketukan dan `navigator.share` (syarat iOS).
+  const doShare = () => {
+    if (!ready) return;
+    saveViaShare(ready).then(
+      (result) => result === 'shared' && onDone(`Exported${limitedNote}`),
+      onError,
+    );
+  };
+  const doDownload = () => {
+    if (!ready) return;
+    try {
+      saveViaDownload(ready);
+      onDone(`Saved ${ready.name}${limitedNote}`);
     } catch (error) {
       onError(error);
-    } finally {
-      setBusy(false);
     }
   };
+
+  const sizeLabel = ready ? formatBytes(ready.size) : '';
+  const busyLabel = mode === 'cube' ? 'Building LUT…' : rendering ? 'Developing…' : 'Encoding…';
+  const busy = !ready && !failure;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
@@ -58,19 +212,60 @@ export function ExportContent({
 
         {mode === 'image' ? (
           <>
-            <div className="list" role="radiogroup" aria-label="Format">
-              {FORMATS.map((f) => (
-                <button key={f.value} type="button" role="radio" aria-checked={f.value === format} className="row" style={{ minHeight: 60 }} onClick={() => setFormat(f.value)}>
-                  <span className="row-body">
-                    <span className="row-text">
-                      <span className="t-body">{f.name}</span>
-                      <span className="t-subhead secondary">{f.hint}</span>
+            {formats ? (
+              <div className="list" role="radiogroup" aria-label="Format">
+                {formats.map((f) => (
+                  <button key={f} type="button" role="radio" aria-checked={f === format} className="row" style={{ minHeight: 56 }} onClick={() => setPrefs((p) => ({ ...p, format: f }))}>
+                    <span className="row-body">
+                      <span className="row-text">
+                        <span className="t-body">{FORMAT_INFO[f].name}</span>
+                        <span className="t-subhead secondary">{FORMAT_INFO[f].hint}</span>
+                      </span>
+                      {f === format && <Icon name="check" size={20} color="#0091ff" strokeWidth={2.8} />}
                     </span>
-                    {f.value === format && <Icon name="check" size={20} color="#0091ff" strokeWidth={2.8} />}
-                  </span>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="t-footnote secondary" style={{ margin: 0 }}>Checking what this browser can encode…</p>
+            )}
+
+            {info.lossy && (
+              <div className="list-section">
+                <h3 className="list-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Quality</span>
+                  <span className="num">{prefs.quality} · {encoding || rendering ? 'measuring…' : sizeLabel || '—'}</span>
+                </h3>
+                <Slider
+                  label="Quality"
+                  value={prefs.quality}
+                  min={1}
+                  max={100}
+                  step={1}
+                  defaultValue={DEFAULT_QUALITY}
+                  valueText={`${prefs.quality}`}
+                  onChange={(v) => setPrefs((p) => ({ ...p, quality: Math.round(v) }))}
+                />
+                <p className="list-footer t-footnote">The size is measured, not estimated: the file is encoded again as the slider settles.</p>
+              </div>
+            )}
+
+            <div className="list-section">
+              <h3 className="list-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Long edge</span>
+                <span className="num">{selected.width} × {selected.height} px</span>
+              </h3>
+              <Segmented
+                label="Long edge"
+                items={detents.map((d) => ({ value: String(d.longEdge), label: d.label }))}
+                value={String(selected.longEdge)}
+                onChange={(v) => setPrefs((p) => ({ ...p, longEdge: v === 'null' ? null : Number(v) }))}
+              />
+              <p className="list-footer t-footnote">
+                Grain, halation and diffusion are physical sizes, so a smaller export is developed again at its own pixel pitch rather than resized.
+              </p>
             </div>
+
             <div className="list-section">
               <div className="list">
                 <div className="row-static">
@@ -81,7 +276,10 @@ export function ExportContent({
                 </div>
               </div>
               <p className="list-footer t-footnote">
-                Rendered again at full resolution. No ICC profile is embedded yet, so other apps read the file as {isDisplayReferred(outputColorSpace) ? 'sRGB' : 'untagged RGB'}. Change the color space in Color › Output.
+                {info.lossy
+                  ? `Tagged ${outputColorSpace === 'Display P3' ? 'Display P3' : 'sRGB'} by the browser’s encoder.`
+                  : `No ICC profile is embedded yet, so other apps read the file as ${isDisplayReferred(outputColorSpace) ? 'sRGB' : 'untagged RGB'}.`}{' '}
+                Change the color space in Color › Output.
               </p>
             </div>
           </>
@@ -102,24 +300,48 @@ export function ExportContent({
             <div style={{ borderRadius: 20, background: 'rgba(255,146,48,0.14)', padding: '12px 16px', display: 'flex', gap: 10 }}>
               <span style={{ flexShrink: 0, color: '#ffa056' }}><Icon name="info" size={20} /></span>
               <span className="t-subhead" style={{ color: 'rgba(255,232,214,0.92)' }}>
-                A LUT carries color only. Grain, halation, glare and sharpening are left out, and film and print exposure are ignored.
+                A LUT carries color only. Grain, halation, glare, diffusion, lens blur and sharpening are left out, and film and print exposure are ignored.
               </span>
             </div>
           </>
         )}
+
+        {failure && (
+          <p className="t-footnote" role="alert" style={{ margin: 0, color: '#ff6961' }}>{failure}</p>
+        )}
+        <p className="t-footnote secondary num" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ready?.name}>
+          {ready?.name ?? ' '}
+        </p>
       </div>
-      <div style={{ padding: '12px 16px 16px', flexShrink: 0 }}>
-        <PressButton className="capsule prominent large" disabled={busy} onClick={run}>
-          {busy ? (
-            <>
-              <Spinner size={18} /> {mode === 'image' ? 'Developing full size…' : 'Building LUT…'}
-            </>
-          ) : mode === 'image' ? (
-            `Export ${formatName}`
-          ) : (
-            `Export ${cubeSize}³ LUT`
-          )}
-        </PressButton>
+      <div style={{ padding: '12px 16px 16px', flexShrink: 0, display: 'flex', gap: 10 }}>
+        {shareable ? (
+          <>
+            <PressButton className="capsule bordered large" style={{ flex: '0 0 38%' }} disabled={!ready} onClick={doDownload}>
+              Download
+            </PressButton>
+            <PressButton className="capsule prominent large" disabled={!ready} onClick={doShare}>
+              {busy ? (
+                <>
+                  <Spinner size={18} /> {busyLabel}
+                </>
+              ) : (
+                'Save to Photos'
+              )}
+            </PressButton>
+          </>
+        ) : (
+          <PressButton className="capsule prominent large" disabled={!ready} onClick={doDownload}>
+            {busy ? (
+              <>
+                <Spinner size={18} /> {busyLabel}
+              </>
+            ) : sizeLabel ? (
+              `Download · ${sizeLabel}`
+            ) : (
+              'Download'
+            )}
+          </PressButton>
+        )}
       </div>
     </div>
   );

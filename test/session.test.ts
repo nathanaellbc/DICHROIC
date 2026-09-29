@@ -16,6 +16,8 @@ import { planTiles } from '../src/engine/tiling';
 import { decodeImage } from '../src/io';
 import { quantize } from '../src/io/encode';
 import type { ExportFormat } from '../src/session/session';
+import { rgbToRgba8 } from '../src/io/canvasEncode';
+import type { CanvasEncoder } from '../src/io/canvasEncode';
 
 /**
  * Gerbang ujung-ke-ujung lewat facade `Session` (Fase 2A Task 5): gambar
@@ -41,7 +43,7 @@ const PRINT = {
 let session: Session;
 
 /** Semua Session di berkas ini berbagi device dan arena yang dipra-hitung sebelum device hidup. */
-async function sharedSession(extra: { previewMaxLongEdge?: number } = {}): Promise<Session> {
+async function sharedSession(extra: { previewMaxLongEdge?: number; canvasEncoder?: CanvasEncoder } = {}): Promise<Session> {
   const { engine, bundle } = await sharedResources(STOCK_ID, PRINT);
   return Session.create({
     ...extra,
@@ -312,8 +314,47 @@ describe('Session: exportImage (rencana 2B Task 7)', () => {
     }
   });
 
-  it('format tidak dikenal -> RangeError', async () => {
-    await expect(session.exportImage('jpeg' as ExportFormat)).rejects.toBeInstanceOf(RangeError);
+  it('format tidak dikenal -> RangeError; lossy tanpa encoder kanvas -> RangeError', async () => {
+    await expect(session.exportImage('gif' as ExportFormat)).rejects.toBeInstanceOf(RangeError);
+    // Node tidak punya OffscreenCanvas: JPEG/WebP/AVIF tidak ditawarkan.
+    expect(await session.exportFormats()).toEqual(['png8', 'png16', 'tiff16']);
+    await expect(session.exportImage('jpeg')).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it('JPEG/WebP/AVIF lewat encoder kanvas suntikan: piksel 8-bit render penuh, kualitas, ruang warna', async () => {
+    const calls: unknown[][] = [];
+    const encoder: CanvasEncoder = {
+      probe: async () => ['jpeg', 'avif'],
+      encode: async (pixels, width, height, format, quality, colorSpace) => {
+        calls.push([pixels, width, height, format, quality, colorSpace]);
+        return Uint8Array.of(1, 2, 3);
+      },
+    };
+    const s = await sharedSession({ canvasEncoder: encoder });
+    s.open(gradientImage(40, 24));
+    expect(await s.exportFormats()).toEqual(['png8', 'png16', 'tiff16', 'jpeg', 'avif']);
+    expect(await s.exportImage('jpeg', { quality: 0.8 })).toEqual(Uint8Array.of(1, 2, 3));
+    const full = await s.render('full');
+    const [pixels, width, height, format, quality, colorSpace] = calls[0]!;
+    expect([width, height, format, quality, colorSpace]).toEqual([40, 24, 'jpeg', 0.8, 'srgb']);
+    expect(pixels).toEqual(rgbToRgba8(full.rgb, 40, 24));
+    s.setParams({ outputColorSpace: 'Display P3' });
+    await s.exportImage('avif');
+    expect(calls[1]!.slice(3)).toEqual(['avif', 1, 'display-p3']);
+    s.dispose();
+  });
+
+  it('longEdge: render ekspor sungguhan pada ukuran itu, tidak pernah memperbesar; cache dipakai ulang', async () => {
+    session.open(gradientImage(96, 64));
+    expect(await session.renderExport(48)).toEqual({ width: 48, height: 32 });
+    const small = await decodeImage(await session.exportImage('png16', { longEdge: 48 }));
+    expect([small.width, small.height]).toEqual([48, 32]);
+    expect(session.lastFullSize()).toEqual({ width: 48, height: 32 });
+    // Lebih besar dari sumber = sumber.
+    expect(await session.renderExport(4096)).toEqual({ width: 96, height: 64 });
+    const full = await session.render('full');
+    expect(await session.renderExport()).toEqual({ width: full.width, height: full.height });
+    await expect(session.renderExport(0)).rejects.toBeInstanceOf(RangeError);
   });
 
   it('ekspor yang tersalip sebelum mulai diantrekan ulang, tidak gagal', async () => {

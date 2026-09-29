@@ -78,8 +78,15 @@ class FakeSession implements SessionLike {
   async exportCube(size: number): Promise<string> {
     return `LUT_3D_SIZE ${size}\n`;
   }
-  async exportImage(format: ExportFormat): Promise<Uint8Array> {
-    this.calls.push(['exportImage', [format]]);
+  async renderExport(longEdge?: number) {
+    this.calls.push(['renderExport', [longEdge]]);
+    return { width: longEdge ?? 4, height: 3 };
+  }
+  async exportFormats(): Promise<ExportFormat[]> {
+    return ['png8', 'png16', 'tiff16', 'jpeg'];
+  }
+  async exportImage(format: ExportFormat, options?: { longEdge?: number; quality?: number }): Promise<Uint8Array> {
+    this.calls.push(['exportImage', options === undefined ? [format] : [format, options]]);
     return new TextEncoder().encode(format);
   }
   dispose() {
@@ -160,6 +167,18 @@ describe('RPC exportImage dan decode', () => {
     expect(bytes).toBeInstanceOf(Uint8Array);
     expect(new TextDecoder().decode(bytes)).toBe('tiff16');
     expect(fake.calls).toEqual([['exportImage', ['tiff16']]]);
+  });
+
+  it('renderExport, exportFormats, dan opsi ekspor diteruskan apa adanya', async () => {
+    const fake = new FakeSession();
+    const client = await connect(fake);
+    expect(await client.renderExport(2048)).toEqual({ width: 2048, height: 3 });
+    expect(await client.exportFormats()).toEqual(['png8', 'png16', 'tiff16', 'jpeg']);
+    await client.exportImage('jpeg', { longEdge: 2048, quality: 0.8 });
+    expect(fake.calls).toEqual([
+      ['renderExport', [2048]],
+      ['exportImage', ['jpeg', { longEdge: 2048, quality: 0.8 }]],
+    ]);
   });
 
   it('decode di worker sama dengan decode langsung, dan tidak menunggu init', async () => {

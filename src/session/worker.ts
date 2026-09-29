@@ -4,7 +4,7 @@
  * `self` bila modul ini berjalan sebagai Dedicated Worker.
  *
  * Panggilan dilayani BERURUTAN sesuai kedatangan, kecuali `render`,
- * `exportCube`, `exportImage`, dan `decode` yang asinkron: dimulai berurutan
+ * `exportCube`, `renderExport`, `exportImage`, dan `decode` yang asinkron: dimulai berurutan
  * tapi boleh selesai tidak berurutan (antrean terbaru-menang ada di `Session`
  * sendiri). `decode` tidak butuh `init`.
  */

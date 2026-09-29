@@ -5,6 +5,8 @@ describe('konversi tampilan', () => {
   it('rgb_out f32 -> RGBA 8-bit, dijepit dan dibulatkan', () => {
     const px = rgbToPixels(new Float32Array([0, 0.5, 1, -0.2, 1.4, 0.002]), 2, 1);
     expect(Array.from(px)).toEqual([0, 128, 255, 255, 0, 255, 1, 255]);
+    // Sama dengan kuantisasi PNG 8-bit: 0.2 -> 51, bukan 52.
+    expect(rgbToPixels(Float32Array.of(0.2, 0.2, 0.2), 1, 1)[0]).toBe(51);
   });
 
   it('pratinjau asli: ter-encode apa adanya, linear -> sRGB', () => {
