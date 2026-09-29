@@ -145,6 +145,32 @@ export interface RenderParams {
   cameraBlacks: number;
   /** Saturasi di sekitar luminans, 0..2. */
   cameraSaturation: number;
+
+  // Lens blur (`host/lens.ts`, `stages/lensBlur.ts`): defocus sintetis dari
+  // peta kedalaman Depth Anything V2 yang diestimasi di perangkat. Tanpa peta
+  // kedalaman (`Session.setDepthMap`) tahap ini tidak ada, apa pun nilainya.
+  /** Sakelar lens blur. */
+  lensBlurEnabled: boolean;
+  /** Titik fokus, 0..1 dari kiri. */
+  lensFocusX: number;
+  /** Titik fokus, 0..1 dari atas. */
+  lensFocusY: number;
+  /** Jarak ke titik fokus, meter (0,3..100). */
+  lensFocusDistanceM: number;
+  /** Panjang fokus, mm (8..600); 0 = lensa normal format. */
+  lensFocalLengthMm: number;
+  /** Bukaan, f-number (1,2..22). */
+  lensFNumber: number;
+  /** Bilah iris: 0 = bulat, 5..9. */
+  lensBlades: number;
+  /** Kelengkungan bilah, 0 lurus .. 1 bulat. */
+  lensBladeCurvature: number;
+  /** Cat's eye (vignetting optik), 0..1. */
+  lensCatEye: number;
+  /** Batas dekat zona tajam, meter; 0 = bidang fokus (perilaku lensa). */
+  lensNearSharpM: number;
+  /** Porsi blur foreground, 0 (dipotong tajam) .. 1 (lensa). */
+  lensForeground: number;
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
@@ -193,4 +219,15 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   cameraWhites: 0,
   cameraBlacks: 0,
   cameraSaturation: 1,
+  lensBlurEnabled: false,
+  lensFocusX: 0.5,
+  lensFocusY: 0.5,
+  lensFocusDistanceM: 2.5,
+  lensFocalLengthMm: 0,
+  lensFNumber: 2,
+  lensBlades: 0,
+  lensBladeCurvature: 0.5,
+  lensCatEye: 0.35,
+  lensNearSharpM: 0,
+  lensForeground: 1,
 });

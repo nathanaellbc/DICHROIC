@@ -89,6 +89,18 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   cameraWhites: 'extension',
   cameraBlacks: 'extension',
   cameraSaturation: 'extension',
+  // Ekstensi lens blur (`test/lensBlur.test.ts`, referensi JS + sifat).
+  lensBlurEnabled: 'extension',
+  lensFocusX: 'extension',
+  lensFocusY: 'extension',
+  lensFocusDistanceM: 'extension',
+  lensFocalLengthMm: 'extension',
+  lensFNumber: 'extension',
+  lensBlades: 'extension',
+  lensBladeCurvature: 'extension',
+  lensCatEye: 'extension',
+  lensNearSharpM: 'extension',
+  lensForeground: 'extension',
 });
 
 export class UnverifiedParameterError extends Error {

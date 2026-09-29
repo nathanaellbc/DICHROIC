@@ -8,6 +8,7 @@ import { createDiffusionStage } from './stages/diffusion';
 import { createDiffusionFftStage } from './stages/diffusionFft';
 import { createPrintExposureStage, createPrintDevelopStage } from './stages/printScan';
 import { createScannerPostStage } from './stages/scannerPost';
+import { createLensBlurStage } from './stages/lensBlur';
 import type { Arenas } from './arena';
 import type { Stage } from './graph';
 import type { ChainSpec } from '../params/plan';
@@ -125,6 +126,17 @@ function printDiffusionStage(device: GPUDevice, arenas: Arenas, spec: ChainSpec)
     : createDiffusionStage(device, arenas, 'print', { bypassConvolution: true });
 }
 
+/**
+ * Ekstensi lens blur: di raw linear setelah `filmExposure`, sebelum difusi
+ * kamera dan halation -- urutan `camera.lens_blur_um` Python. Hanya dibangun
+ * bila aktif; rantai yang digerbangi Python tidak pernah memuatnya.
+ */
+function lensStages(device: GPUDevice, spec: ChainSpec): Stage[] {
+  if (!spec.lensBlur) return [];
+  if (spec.family === 'lut') throw new Error('buildChain: lens blur tidak sah di keluarga lut (efek spasial).');
+  return [createLensBlurStage(device)];
+}
+
 export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
   if (!spec.scan) return buildPrintChain(device, arenas, spec);
   if (spec.family === 'lut') {
@@ -140,6 +152,7 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): 
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
+    ...lensStages(device, spec),
     cameraDiffusionStage(device, arenas, spec),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),
@@ -167,6 +180,7 @@ function buildPrintChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): St
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
+    ...lensStages(device, spec),
     cameraDiffusionStage(device, arenas, spec),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),

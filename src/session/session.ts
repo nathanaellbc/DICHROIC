@@ -30,6 +30,7 @@ import { DICHROIC_VERSION } from '../version';
 import { buildRenderPlan, FILM_FORMAT_LONG_EDGE_MM, validateStocks } from '../params/plan';
 import { diffusionFftBytes, diffusionRadiusPx } from '../engine/stages/diffusionFft';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
+import type { DepthMap } from '../host/lens';
 import { applyParamsPatch } from '../params/registry';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
 import type { RenderParams } from '../params/renderParams';
@@ -164,6 +165,8 @@ export function diffusionRenderLongEdge(
   params: RenderParams,
   maxBindingBytes: number,
   planeBudget = DIFFUSION_PLANE_BUDGET,
+  /** Ekstensi lens blur aktif: juga butuh frame utuh dalam satu binding. */
+  lensBlur = false,
 ): number {
   const original = Math.max(width, height);
   const sites = [
@@ -174,7 +177,7 @@ export function diffusionRenderLongEdge(
       ? { family: params.printDiffusionFamily, strength: params.printDiffusionStrength }
       : undefined,
   ].filter((site) => site !== undefined);
-  if (sites.length === 0) return original;
+  if (sites.length === 0 && !lensBlur) return original;
   const planeLimit = Math.min(planeBudget, maxBindingBytes);
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const aspect = Math.min(width, height) / original;
@@ -203,6 +206,9 @@ export class Session {
   #image: DecodedImage | undefined;
   #imageId = 0;
   #preview: { imageId: number; image: ScaledImage } | undefined;
+  /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
+  #depth: DepthMap | undefined;
+  #depthId = 0;
   #disposed = false;
   /** Antrean terbaru-menang: paling banyak satu render berjalan dan satu menunggu. */
   #busy = false;
@@ -289,7 +295,31 @@ export class Session {
     this.#image = image;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#depth = undefined;
+    this.#depthId += 1;
     this.#cache.clear();
+  }
+
+  /**
+   * Peta kedalaman foto terbuka untuk lens blur: disparitas ternormalisasi
+   * (0 = tak hingga), baris atas-ke-bawah, orientasi sama dengan gambar.
+   * Resolusinya bebas (diambil bilinear). `null` menghapusnya.
+   */
+  setDepthMap(map: DepthMap | null): void {
+    this.assertAlive();
+    if (map) {
+      const { width, height, data } = map;
+      if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) || data.length !== width * height) {
+        throw new RangeError(`Peta kedalaman ${width}x${height} butuh ${width * height} float, diterima ${data.length}.`);
+      }
+    }
+    this.#depth = map ?? undefined;
+    this.#depthId += 1;
+  }
+
+  /** Ada peta kedalaman untuk foto terbuka. */
+  hasDepthMap(): boolean {
+    return this.#depth !== undefined;
   }
 
   /** Validasi segera dan atomik: patch yang ditolak tidak mengubah apa pun. */
@@ -415,7 +445,15 @@ export class Session {
     image: { width: number; height: number; rgba: Float32Array },
     params: RenderParams,
   ): { width: number; height: number; rgba: Float32Array } {
-    const longEdge = diffusionRenderLongEdge(image.width, image.height, params, this.engine.maxStorageBufferBindingSize);
+    const lensBlur = params.lensBlurEnabled && this.#depth !== undefined;
+    const longEdge = diffusionRenderLongEdge(
+      image.width,
+      image.height,
+      params,
+      this.engine.maxStorageBufferBindingSize,
+      DIFFUSION_PLANE_BUDGET,
+      lensBlur,
+    );
     if (longEdge >= Math.max(image.width, image.height)) return image;
     return boxDownscale(image.rgba, image.width, image.height, longEdge);
   }
@@ -432,7 +470,7 @@ export class Session {
   }
 
   private cacheKey(quality: RenderQuality, longEdge?: number): string {
-    return `${this.#imageId}|${quality}|${longEdge ?? 'source'}|${JSON.stringify(this.#params)}`;
+    return `${this.#imageId}|${this.#depthId}|${quality}|${longEdge ?? 'source'}|${JSON.stringify(this.#params)}`;
   }
 
   /** Sisi panjang ekspor yang efektif: `undefined` bila sama/lebih besar dari sumber. */
@@ -567,7 +605,7 @@ export class Session {
     params: RenderParams,
     mode: RenderMode,
   ): Promise<{ rgb: Float32Array; plan: RenderPlan }> {
-    const plan = buildRenderPlan(params, this.bundle, frame, mode);
+    const plan = buildRenderPlan(params, this.bundle, frame, mode, mode === 'image' && this.#depth ? { depth: this.#depth } : {});
     const graph = await this.graphFor(plan);
     this.assertAlive();
     const rgba = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
@@ -586,7 +624,7 @@ export class Session {
   private graphFor(plan: RenderPlan): Promise<RenderGraph> {
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}`;
+      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) return existing;
     const building = (async () => {

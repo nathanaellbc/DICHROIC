@@ -7,11 +7,13 @@
 
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
+import type { DepthMap } from '../host/lens';
 import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
+  setDepthMap(map: DepthMap | null): void;
   setParams(patch: Partial<RenderParams>): void;
   getParams(): RenderParams;
   getDiagnostics(): SessionDiagnostics;

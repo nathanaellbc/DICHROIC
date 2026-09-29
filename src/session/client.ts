@@ -13,6 +13,7 @@ import { DecodeError } from '../io/errors';
 import { MissingNeutralFiltersError } from '../params/plan';
 import { UnverifiedParameterError } from '../params/registry';
 import type { RenderParams } from '../params/renderParams';
+import type { DepthMap } from '../host/lens';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
@@ -67,6 +68,11 @@ export class SessionClient {
   /** `image.rgba` DITRANSFER ke worker (buffer pemanggil ter-detach). */
   open(image: DecodedImage): Promise<void> {
     return this.call('open', [image], transferablesOf(image)) as Promise<void>;
+  }
+
+  /** Peta kedalaman lens blur; `data` DITRANSFER (buffer pemanggil ter-detach). */
+  setDepthMap(map: DepthMap | null): Promise<void> {
+    return this.call('setDepthMap', [map], map ? transferablesOf(map) : []) as Promise<void>;
   }
 
   setParams(patch: Partial<RenderParams>): Promise<void> {

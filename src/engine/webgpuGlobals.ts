@@ -38,3 +38,13 @@ export const gpuMapMode: typeof GPUMapMode =
           globals: { GPUMapMode: typeof GPUMapMode };
         }
       ).globals.GPUMapMode;
+
+/** `GPUTextureUsage` -- untuk tahap yang memakai tekstur (lens blur). */
+export const gpuTextureUsage: typeof GPUTextureUsage =
+  typeof GPUTextureUsage !== 'undefined'
+    ? GPUTextureUsage
+    : (
+        (await importDawn()) as {
+          globals: { GPUTextureUsage: typeof GPUTextureUsage };
+        }
+      ).globals.GPUTextureUsage;

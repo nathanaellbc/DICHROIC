@@ -20,6 +20,7 @@
  */
 
 import type { DiffusionFilterConfig } from '../host/diffusionFilter';
+import type { LensFrame } from '../host/lens';
 import { CORE_PARAMS_BYTES, writeCoreParams } from './params';
 import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
@@ -71,6 +72,8 @@ export interface FrameParams {
    * `CameraFrame` `filmExposure`. Tidak ada = dilewati persis.
    */
   camera?: Float32Array;
+  /** Ekstensi lens blur (`host/lens.ts`): hanya dibaca tahap `lensBlur`. */
+  lens?: LensFrame;
   /**
    * Fase 2D: `film_render.dir_couplers` Python -- `amount` (0 bila
    * `active=False`), `inhibition_samelayer`, `inhibition_interlayer`, dan
