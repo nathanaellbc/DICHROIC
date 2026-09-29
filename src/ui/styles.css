@@ -63,7 +63,16 @@
   --r-list: 12px;
   --r-menu: 12px;
   --r-dialog: 16px;
-  --r-panel: 16px;
+  /*
+   * Kontinuitas sudut (konsentris): radius dalam = radius luar - jarak.
+   * Panel dan sheet menempel ke tepi bawah layar, jadi sudut atasnya
+   * mengikuti sudut layar iPhone; tab grup berjarak 16 px dari tepi
+   * panel, pil terpilihnya 3 px lagi ke dalam.
+   */
+  --display-radius: 47px;
+  --r-panel: var(--display-radius);
+  --r-tabs: calc(var(--display-radius) - 16px);
+  --r-tab: calc(var(--r-tabs) - 3px);
   --icon-btn: 44px;
 }
 
@@ -249,17 +258,17 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 /* Tab kelompok (ikon + label, pola ARIA tabs), seperti tab inspector Final Cut. */
 .tabs {
   position: relative; display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column;
-  padding: 3px; gap: 2px; border-radius: calc(var(--r-control) + 2px); background: var(--fill); box-sizing: border-box;
+  padding: 3px; gap: 2px; border-radius: var(--r-tabs); background: var(--fill); box-sizing: border-box;
 }
 .tab {
-  position: relative; min-height: 50px; border: 0; background: transparent; border-radius: var(--r-control); cursor: pointer; padding: 5px 0 4px;
+  position: relative; min-height: 50px; border: 0; background: transparent; border-radius: var(--r-tab); cursor: pointer; padding: 5px 0 4px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   color: rgba(235, 235, 245, 0.72); transition: color 0.15s;
 }
 .tab:hover { color: #fff; }
 .tab[aria-selected="true"] { color: #fff; }
 .tab-pill {
-  position: absolute; inset: 0; border-radius: var(--r-control);
+  position: absolute; inset: 0; border-radius: var(--r-tab);
   background: rgba(255, 255, 255, 0.18); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
 }
 .tab-icon { position: relative; display: inline-flex; }
@@ -411,7 +420,7 @@ html[data-size="regular"] .search-field input { font-size: 12px; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
   margin: 0 auto; max-width: 640px;
   background: var(--bg-elevated); border: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 0;
-  border-radius: var(--r-dialog) var(--r-dialog) 0 0;
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
   display: flex; flex-direction: column; box-sizing: border-box;
   touch-action: none;
 }
