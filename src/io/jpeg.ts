@@ -1,6 +1,7 @@
 /**
  * Decoder JPEG. Keluaran 8-bit ter-encode, disarankan `sRGB` (spec Fase 2
- * §5); profil ICC dan orientasi EXIF belum dibaca. Decodenya sendiri ada di
+ * §5). Orientasi EXIF dan saran ICC diterapkan `decodeImage` (`metadata.ts`),
+ * bukan di sini. Decodenya sendiri ada di
  * `jpegDecoder.ts` (meniru libjpeg-turbo, lihat alasannya di sana).
  */
 import type { DecodedImage } from './decoded';

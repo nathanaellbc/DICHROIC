@@ -1,7 +1,7 @@
 /**
  * Decoder PNG (`fast-png`, MIT): 1/2/4/8/16-bit, grayscale (+alpha), RGB(A),
- * dan palet. Keluaran ter-encode, disarankan `sRGB` (spec Fase 2 §5); chunk
- * `gAMA`/`iCCP`/`sRGB` belum dibaca.
+ * dan palet. Keluaran ter-encode, disarankan `sRGB` (spec Fase 2 §5); `eXIf`
+ * dan deskripsi `iCCP` dibaca `decodeImage` (`metadata.ts`), `gAMA` tidak.
  *
  * `fast-png` membiarkan grayscale di bawah 8-bit tetap terkemas per baris,
  * jadi dibongkar di sini; palet diserahkan ke `convertIndexedToRgb` pustaka.

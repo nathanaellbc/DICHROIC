@@ -33,8 +33,14 @@ export function useSizeClass(): SizeClass {
   return size;
 }
 
+/**
+ * `image/heic` sengaja TIDAK didaftarkan: tanpanya iOS mengonversi foto HEIC
+ * dari Photos menjadi JPEG (dengan Orientation dan profil Display P3), yang
+ * lewat decoder `io/` bit-identik. HEIC yang tetap masuk (seret-lepas, Files)
+ * dibaca lewat `engine/browserDecode.ts`.
+ */
 export const ACCEPTED_FILES =
-  'image/jpeg,image/png,image/tiff,image/x-exr,.jpg,.jpeg,.png,.tif,.tiff,.exr,.dng,.cr2,.cr3,.crw,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.rwl,.pef,.srw,.3fr,.iiq,.x3f,.mrw,.erf,.kdc,.dcr,.mos';
+  'image/jpeg,image/png,image/tiff,image/x-exr,image/webp,image/avif,.jpg,.jpeg,.png,.tif,.tiff,.exr,.dng,.cr2,.cr3,.crw,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.rwl,.pef,.srw,.3fr,.iiq,.x3f,.mrw,.erf,.kdc,.dcr,.mos';
 
 /** Pemilih berkas tersembunyi; `pick()` membukanya dari gestur pengguna. */
 export function useFilePicker(onFile: (file: File) => void): { pick: () => void; input: HTMLInputElement | null; ref: (el: HTMLInputElement | null) => void } {

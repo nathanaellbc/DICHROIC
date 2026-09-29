@@ -5,6 +5,7 @@
 import type { DecodedImage } from './decoded';
 import { detectFormat, type ImageFormat } from './detect';
 import { DecodeError } from './errors';
+import { applyOrientation, colorSpaceForIcc, readMetadata } from './metadata';
 import type { RawDecodeOptions } from './raw';
 
 export type { DecodedImage } from './decoded';
@@ -31,6 +32,18 @@ const DECODERS: Partial<Record<ImageFormat, () => Promise<Decoder>>> = {
   },
 };
 
+/**
+ * Orientation EXIF diterapkan dan deskripsi ICC dipakai sebagai saran colour
+ * space (lihat `metadata.ts`). Decoder per format sendiri tetap mengembalikan
+ * piksel apa adanya -- itulah yang digerbangi terhadap Pillow/tifffile.
+ */
+function withMetadata(image: DecodedImage, bytes: Uint8Array, format: ImageFormat): DecodedImage {
+  const meta = readMetadata(bytes, format);
+  const suggested = image.encoding === 'encoded' && meta.iccDescription ? colorSpaceForIcc(meta.iccDescription) : undefined;
+  const oriented = applyOrientation(image, meta.orientation);
+  return suggested ? { ...oriented, suggestedColorSpace: suggested } : oriented;
+}
+
 async function runDecoder(format: ImageFormat, bytes: Uint8Array, name: string | undefined, options: DecodeOptions): Promise<DecodedImage> {
   const load = DECODERS[format];
   if (!load) throw new DecodeError(format, 'decoder untuk format ini belum tersedia');
@@ -50,7 +63,7 @@ async function runDecoder(format: ImageFormat, bytes: Uint8Array, name: string |
  */
 export async function decodeImage(bytes: Uint8Array, name?: string, options: DecodeOptions = {}): Promise<DecodedImage> {
   const format = detectFormat(bytes);
-  if (format !== 'unknown') return runDecoder(format, bytes, name, options);
+  if (format !== 'unknown') return withMetadata(await runDecoder(format, bytes, name, options), bytes, format);
   try {
     return await runDecoder('raw', bytes, name, options);
   } catch (error) {
