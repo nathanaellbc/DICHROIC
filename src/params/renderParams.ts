@@ -125,6 +125,26 @@ export interface RenderParams {
   preflashMFilterShift: number;
   /** Python: `enlarger.preflash_y_filter_shift` (`:82`), Kodak CC. */
   preflashYFilterShift: number;
+
+  // --- Ekstensi DICHROIC (status `extension`, TANPA padanan Python) --------
+  // "Camera Raw" (`host/cameraDevelop.ts`): develop kamera sebelum film.
+  // Nilai baseline netral = tahap dilewati persis.
+  /** Suhu iluminan adegan, K (2000..12000). 5500 = identitas. */
+  cameraWhiteBalanceK: number;
+  /** Tint iluminan, -1..1 (Duv ±0.02; + = cahaya hijau). */
+  cameraTint: number;
+  /** Kemiringan log2 di sekitar pivot, -0.75..0.75 (pengali 2^x). */
+  cameraContrast: number;
+  /** Stop di pusat masker terang (+1.5 stop), -1.5..1.5. */
+  cameraHighlights: number;
+  /** Stop di pusat masker gelap (-1.5 stop), -1.5..1.5. */
+  cameraShadows: number;
+  /** Stop di ujung putih (+4 stop), -2..2. */
+  cameraWhites: number;
+  /** Stop di ujung hitam (-4 stop), -2..2. */
+  cameraBlacks: number;
+  /** Saturasi di sekitar luminans, 0..2. */
+  cameraSaturation: number;
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
@@ -165,4 +185,12 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   preflashExposure: 0,
   preflashMFilterShift: 0,
   preflashYFilterShift: 0,
+  cameraWhiteBalanceK: 5500,
+  cameraTint: 0,
+  cameraContrast: 0,
+  cameraHighlights: 0,
+  cameraShadows: 0,
+  cameraWhites: 0,
+  cameraBlacks: 0,
+  cameraSaturation: 1,
 });

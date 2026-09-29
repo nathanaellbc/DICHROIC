@@ -1,3 +1,4 @@
+import { CAMERA_LIMITS } from '../../src/host/cameraDevelop';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -65,12 +66,33 @@ describe('katalog stok UI == manifest', () => {
 describe('alat UI == permukaan parameter engine', () => {
   const tools = GROUPS.flatMap((g) => g.tools);
 
-  it('setiap field yang diubah alat berstatus verified', () => {
-    for (const tool of tools) {
-      if (tool.kind === 'locked') continue;
-      const fields = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : [tool.field];
-      for (const field of fields) expect(FIELD_STATUS[field], tool.id).toBe('verified');
-      if (tool.kind === 'slider' && tool.enabledBy) expect(FIELD_STATUS[tool.enabledBy], tool.id).toBe('verified');
+  it('setiap field yang diubah alat berstatus verified (atau extension di grup Camera), tidak pernah locked', () => {
+    for (const group of GROUPS) {
+      for (const tool of group.tools) {
+        if (tool.kind === 'locked') continue;
+        const fields: Array<keyof typeof FIELD_STATUS> = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : [tool.field];
+        if (tool.kind === 'slider' && tool.enabledBy) fields.push(tool.enabledBy);
+        const allowed = group.id === 'camera' ? ['verified', 'extension'] : ['verified'];
+        for (const field of fields) expect(allowed, `${tool.id}: ${field}`).toContain(FIELD_STATUS[field]);
+      }
+    }
+  });
+
+  it('rentang slider Camera Raw = rentang yang divalidasi engine', () => {
+    const camera = GROUPS.find((g) => g.id === 'camera')!;
+    const limits: Record<string, { min: number; max: number }> = {
+      cameraWhiteBalanceK: CAMERA_LIMITS.whiteBalanceK,
+      cameraTint: CAMERA_LIMITS.tint,
+      cameraContrast: CAMERA_LIMITS.contrast,
+      cameraHighlights: CAMERA_LIMITS.highlights,
+      cameraShadows: CAMERA_LIMITS.shadows,
+      cameraWhites: CAMERA_LIMITS.whites,
+      cameraBlacks: CAMERA_LIMITS.blacks,
+      cameraSaturation: CAMERA_LIMITS.saturation,
+    };
+    for (const tool of camera.tools) {
+      if (tool.kind !== 'slider' || !(tool.field in limits)) continue;
+      expect({ min: tool.min, max: tool.max }, tool.id).toEqual(limits[tool.field]);
     }
   });
 

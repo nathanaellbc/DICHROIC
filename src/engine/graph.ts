@@ -67,6 +67,11 @@ export interface FrameParams {
    */
   inputDecodeScale?: number;
   /**
+   * Ekstensi "Camera Raw" (`host/cameraDevelop.ts`): isi uniform
+   * `CameraFrame` `filmExposure`. Tidak ada = dilewati persis.
+   */
+  camera?: Float32Array;
+  /**
    * Fase 2D: `film_render.dir_couplers` Python -- `amount` (0 bila
    * `active=False`), `inhibition_samelayer`, `inhibition_interlayer`, dan
    * `diffusion_size_um` (0 mematikan difusi spasial, termasuk ekornya).

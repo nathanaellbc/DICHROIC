@@ -7,7 +7,7 @@
 import type { DiffusionFilterFamily, FilmFormat, RenderParams } from '../../params/renderParams';
 import { isSlideFilm } from './stocks';
 
-export type GroupId = 'film' | 'color' | 'darkroom' | 'texture';
+export type GroupId = 'camera' | 'film' | 'color' | 'darkroom' | 'texture';
 
 type NumericField = {
   [K in keyof RenderParams]: RenderParams[K] extends number ? K : never;
@@ -20,7 +20,8 @@ export type IconName =
   | 'exposure' | 'auto' | 'print' | 'negative' | 'pushPull' | 'format' | 'process'
   | 'dot' | 'input' | 'decode' | 'output'
   | 'couplers' | 'layers' | 'edge' | 'spread' | 'flash'
-  | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion' | 'enlargerFilter';
+  | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion' | 'enlargerFilter'
+  | 'temperature' | 'tint' | 'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'saturation' | 'lens';
 
 interface ToolBase {
   id: string;
@@ -165,7 +166,27 @@ export const DIFFUSION_FAMILIES: readonly ChoiceOption<DiffusionFilterFamily>[] 
   { value: 'cinebloom', label: 'CineBloom' },
 ];
 
+/**
+ * "Camera Raw" (ekstensi DICHROIC, di luar spektrafilm): develop kamera
+ * sebelum film. Rentang = `CAMERA_LIMITS` (`host/cameraDevelop.ts`).
+ */
+const CAMERA_NOTE = 'Camera develop before the film, beyond spektrafilm.';
+
 export const GROUPS: readonly ToolGroup[] = [
+  {
+    id: 'camera',
+    label: 'Camera',
+    tools: [
+      { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', label: 'Temp', title: 'White Balance', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, unit: ' K', note: 'The light the scene was under. 5500 K leaves the picture as it is; lower corrects warm (tungsten) light toward blue, higher corrects cool light toward amber.' },
+      { kind: 'slider', id: 'cameraTint', field: 'cameraTint', label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 2, note: 'The light’s green–magenta error. + says the light was green (fluorescent) and adds magenta; − the opposite.' },
+      { kind: 'slider', id: 'cameraContrast', field: 'cameraContrast', label: 'Contrast', title: 'Contrast', icon: 'contrast', min: -0.75, max: 0.75, step: 0.01, digits: 2, note: `Steepens or flattens the tones around the picture’s own middle grey, which stays put. ${CAMERA_NOTE}` },
+      { kind: 'slider', id: 'cameraHighlights', field: 'cameraHighlights', label: 'Highlights', title: 'Highlights', icon: 'highlights', min: -1.5, max: 1.5, step: 0.05, digits: 2, unit: ' EV', note: 'Brightens or recovers the tones about 1½ stops over the middle.' },
+      { kind: 'slider', id: 'cameraShadows', field: 'cameraShadows', label: 'Shadows', title: 'Shadows', icon: 'shadows', min: -1.5, max: 1.5, step: 0.05, digits: 2, unit: ' EV', note: 'Opens up or deepens the tones about 1½ stops under the middle.' },
+      { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme top end, four stops over the middle.' },
+      { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme bottom end, four stops under the middle. True black stays black.' },
+      { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 2, note: `Color intensity of the scene before the film sees it; brightness is kept. ${CAMERA_NOTE}` },
+    ],
+  },
   {
     id: 'film',
     label: 'Film',

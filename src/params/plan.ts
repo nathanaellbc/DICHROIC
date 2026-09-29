@@ -24,6 +24,8 @@ import type { CoreParams } from '../engine/params';
 import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
+import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
+import type { CameraSettings } from '../host/cameraDevelop';
 import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions, ScanFilmArenaOptions } from '../host/spectral';
@@ -101,6 +103,7 @@ export interface PlanImage {
 }
 
 const CUBE_DISABLED_EFFECTS = [
+  'camera raw',
   'halation',
   'grain',
   'camera diffusion',
@@ -250,6 +253,63 @@ export function validateDirCouplers(params: RenderParams): void {
   }
 }
 
+/** Rentang kontrol "Camera Raw" (ekstensi DICHROIC, `host/cameraDevelop.ts`). */
+const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max: number }]> = [
+  ['cameraWhiteBalanceK', CAMERA_LIMITS.whiteBalanceK],
+  ['cameraTint', CAMERA_LIMITS.tint],
+  ['cameraContrast', CAMERA_LIMITS.contrast],
+  ['cameraHighlights', CAMERA_LIMITS.highlights],
+  ['cameraShadows', CAMERA_LIMITS.shadows],
+  ['cameraWhites', CAMERA_LIMITS.whites],
+  ['cameraBlacks', CAMERA_LIMITS.blacks],
+  ['cameraSaturation', CAMERA_LIMITS.saturation],
+];
+
+export function validateCamera(params: RenderParams): void {
+  for (const [field, { min, max }] of CAMERA_FIELD_LIMITS) {
+    const value = params[field] as number;
+    if (!(value >= min && value <= max)) {
+      throw new RangeError(`Parameter "${field}" = ${String(value)} di luar rentang ${min}..${max}.`);
+    }
+  }
+}
+
+export function cameraSettings(params: RenderParams): CameraSettings {
+  return {
+    whiteBalanceK: params.cameraWhiteBalanceK,
+    tint: params.cameraTint,
+    contrast: params.cameraContrast,
+    highlights: params.cameraHighlights,
+    shadows: params.cameraShadows,
+    whites: params.cameraWhites,
+    blacks: params.cameraBlacks,
+    saturation: params.cameraSaturation,
+  };
+}
+
+/**
+ * Uniform "Camera Raw" untuk render ini, atau `undefined` bila netral (tahap
+ * dilewati persis). Pivot tone diukur dari gambar ini sendiri, ter-decode
+ * persis seperti yang dilihat shader (termasuk pengali auto-exposure di ruang
+ * ter-encode bila decode aktif).
+ */
+function cameraFrame(
+  params: RenderParams,
+  bundle: AssetBundle,
+  image: PlanImage,
+  inputColorSpace: number,
+  inputDecodeScale: number,
+): Float32Array | undefined {
+  const settings = cameraSettings(params);
+  if (isNeutralCamera(settings)) return undefined;
+  const all = bundle.staticTable('inputMeterXyzMatrices');
+  const rgbToXyz = Array.from({ length: 9 }, (_, i) => all[inputColorSpace * 9 + i]!);
+  const decode = params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined;
+  const scaled = decode && inputDecodeScale !== 1 ? (v: number) => decode(v * inputDecodeScale) : decode;
+  const pivot = measureScenePivot(image.rgba, image.width, image.height, lumaWeights(rgbToXyz), scaled);
+  return cameraFrameValues(settings, rgbToXyz, pivot);
+}
+
 export function buildRenderPlan(
   params: RenderParams,
   bundle: AssetBundle,
@@ -260,6 +320,7 @@ export function buildRenderPlan(
   validateStocks(bundle, params.film, params.paper, params.process);
   validateOutputColorSpace(bundle, params.outputColorSpace);
   validateDirCouplers(params);
+  validateCamera(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
   const scan = params.process === 'scanNegative';
@@ -308,6 +369,10 @@ export function buildRenderPlan(
         )
       : 0;
 
+  // Ekstensi "Camera Raw": warna per piksel, tapi pivot tone diukur dari
+  // gambar -- kisi `.cube` bukan gambar, jadi `lut_mode` melewatinya.
+  const camera = family === 'measured' ? cameraFrame(params, bundle, image, inputColorSpace, params.inputCctfDecoding ? 2 ** autoEv : 1) : undefined;
+
   return {
     core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
     arenaKey: scan
@@ -328,6 +393,7 @@ export function buildRenderPlan(
       ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
       inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
+      ...(camera ? { camera } : {}),
     },
   };
 }

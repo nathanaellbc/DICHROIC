@@ -4,6 +4,10 @@
  * `verified`: nilai apa pun boleh; ada gerbang parity yang menyebut field ini
  * lewat penanda `@verifies <field>` di `test/` (dijaga `renderParams.test.ts`).
  * `locked`: hanya nilai baseline yang boleh.
+ * `extension`: fitur DICHROIC DI LUAR spektrafilm (tidak ada oracle Python).
+ * Nilai apa pun dalam rentangnya boleh; digerbangi terhadap implementasi
+ * referensi JS lewat penanda `@extends <field>` di `test/`. Nilai baseline-nya
+ * netral dan tahapnya DILEWATI persis, jadi gerbang parity Python tetap utuh.
  *
  * Tidak ada jalur yang meneruskan nilai tak terverifikasi ke engine: nilai
  * yang ditolak di sini adalah nilai yang tidak pernah diadu dengan Python,
@@ -14,7 +18,7 @@
 import { BASELINE_RENDER_PARAMS } from './renderParams';
 import type { RenderParams } from './renderParams';
 
-export type FieldStatus = 'verified' | 'locked';
+export type FieldStatus = 'verified' | 'locked' | 'extension';
 
 export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = Object.freeze({
   // Fase 2D Task 3: param/scan_* (`test/parity/scanFilm.test.ts`). Pasangan
@@ -76,6 +80,15 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   preflashExposure: 'verified',
   preflashMFilterShift: 'verified',
   preflashYFilterShift: 'verified',
+  // Ekstensi "Camera Raw" (`test/cameraDevelop.test.ts`, referensi JS).
+  cameraWhiteBalanceK: 'extension',
+  cameraTint: 'extension',
+  cameraContrast: 'extension',
+  cameraHighlights: 'extension',
+  cameraShadows: 'extension',
+  cameraWhites: 'extension',
+  cameraBlacks: 'extension',
+  cameraSaturation: 'extension',
 });
 
 export class UnverifiedParameterError extends Error {
