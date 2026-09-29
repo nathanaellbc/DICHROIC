@@ -36,6 +36,7 @@
     "fflate": "^0.8.2",
     "libraw-wasm": "^1.6.0",
     "motion": "^12.43.0",
+    "onnxruntime-web": "^1.30.0",
     "parse-exr": "^1.0.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

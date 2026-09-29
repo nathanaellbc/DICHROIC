@@ -23,11 +23,14 @@ import { precomputeArenaData, uploadArenas } from '../host/spectral';
 import type { ArenaPlan } from '../host/spectral';
 import type { DecodedImage } from '../io/decoded';
 import { encodePng, encodeTiff16 } from '../io/encode';
+import { CANVAS_FORMATS, offscreenCanvasEncoder, rgbToRgba8 } from '../io/canvasEncode';
+import type { CanvasEncoder, CanvasFormat } from '../io/canvasEncode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
 import { buildRenderPlan, FILM_FORMAT_LONG_EDGE_MM, validateStocks } from '../params/plan';
 import { diffusionFftBytes, diffusionRadiusPx } from '../engine/stages/diffusionFft';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
+import type { DepthMap } from '../host/lens';
 import { applyParamsPatch } from '../params/registry';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
 import type { RenderParams } from '../params/renderParams';
@@ -39,9 +42,33 @@ import type { ScaledImage } from './downscale';
 
 export type RenderQuality = 'full' | 'preview';
 
-/** Format ekspor gambar (spec Fase 2 §5): PNG 8/16-bit, TIFF 16-bit tak terkompresi. */
-export type ExportFormat = 'png8' | 'png16' | 'tiff16';
-export const EXPORT_FORMATS: readonly ExportFormat[] = ['png8', 'png16', 'tiff16'];
+/**
+ * Format ekspor gambar. PNG 8/16-bit dan TIFF 16-bit tak terkompresi (spec
+ * Fase 2 §5) memakai encoder kita sendiri -- selalu tersedia, nilai persis.
+ * JPEG/WebP/AVIF (ekspor gaya EMULSION) memakai encoder kanvas browser dan
+ * hanya ditawarkan bila probing membuktikan browser menghasilkannya
+ * (`exportFormats`).
+ */
+export type ExportFormat = 'png8' | 'png16' | 'tiff16' | CanvasFormat;
+export const LOSSLESS_EXPORT_FORMATS: readonly ExportFormat[] = ['png8', 'png16', 'tiff16'];
+export const EXPORT_FORMATS: readonly ExportFormat[] = [...LOSSLESS_EXPORT_FORMATS, ...CANVAS_FORMATS];
+
+export interface ExportOptions {
+  /**
+   * Sisi panjang render ekspor (px). Tidak pernah memperbesar: nilai >= sisi
+   * panjang gambar (atau tidak diisi) = resolusi sumber. Efek berukuran fisik
+   * (grain, halation, DIR, difusi) dihitung pada pitch piksel render ini, jadi
+   * ekspor kecil adalah render sungguhan, bukan hasil resize.
+   */
+  longEdge?: number;
+  /** Kualitas format lossy, (0, 1]; bawaan 1. Diabaikan format lossless. */
+  quality?: number;
+}
+
+export interface ExportRenderInfo {
+  width: number;
+  height: number;
+}
 
 export interface RenderResult {
   width: number;
@@ -79,6 +106,11 @@ export interface SessionOptions {
    * UI boleh menurunkannya di perangkat lemah; render penuh tidak terpengaruh.
    */
   previewMaxLongEdge?: number;
+  /**
+   * Encoder JPEG/WebP/AVIF. Bawaan: `OffscreenCanvas` bila ada (worker
+   * browser); tanpa encoder, format lossy tidak ditawarkan.
+   */
+  canvasEncoder?: CanvasEncoder;
 }
 
 /** Provider bawaan: pra-hitung -> unggah, di-cache per kunci, dihancurkan saat dispose. */
@@ -133,6 +165,8 @@ export function diffusionRenderLongEdge(
   params: RenderParams,
   maxBindingBytes: number,
   planeBudget = DIFFUSION_PLANE_BUDGET,
+  /** Ekstensi lens blur aktif: juga butuh frame utuh dalam satu binding. */
+  lensBlur = false,
 ): number {
   const original = Math.max(width, height);
   const sites = [
@@ -143,7 +177,7 @@ export function diffusionRenderLongEdge(
       ? { family: params.printDiffusionFamily, strength: params.printDiffusionStrength }
       : undefined,
   ].filter((site) => site !== undefined);
-  if (sites.length === 0) return original;
+  if (sites.length === 0 && !lensBlur) return original;
   const planeLimit = Math.min(planeBudget, maxBindingBytes);
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const aspect = Math.min(width, height) / original;
@@ -172,11 +206,17 @@ export class Session {
   #image: DecodedImage | undefined;
   #imageId = 0;
   #preview: { imageId: number; image: ScaledImage } | undefined;
+  /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
+  #depth: DepthMap | undefined;
+  #depthId = 0;
   #disposed = false;
   /** Antrean terbaru-menang: paling banyak satu render berjalan dan satu menunggu. */
   #busy = false;
   #pending: PendingRender | undefined;
-  /** Satu hasil terakhir per kualitas. */
+  /**
+   * Satu hasil terakhir per kualitas. Slot `full` menampung render penuh
+   * terakhir pada sisi panjang apa pun (ekspor); kuncinya memuat sisi itu.
+   */
   readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
   private readonly graphs = new Map<string, Promise<RenderGraph>>();
 
@@ -187,6 +227,7 @@ export class Session {
     private readonly ownedArenas: OwnedArenaProvider | undefined,
     private readonly previewMaxLongEdge: number,
     readonly diagnostics: Readonly<SessionDiagnostics>,
+    private readonly canvasEncoder: CanvasEncoder | undefined,
   ) {}
 
   static async create(opts: SessionOptions): Promise<Session> {
@@ -211,6 +252,7 @@ export class Session {
       owned,
       opts.previewMaxLongEdge ?? PREVIEW_MAX_LONG_EDGE,
       Object.freeze({ iirPrecisionOk: selfTest.ok, iirMaxAbsError: selfTest.maxAbsError }),
+      opts.canvasEncoder ?? (typeof OffscreenCanvas !== 'undefined' ? offscreenCanvasEncoder : undefined),
     );
   }
 
@@ -253,7 +295,31 @@ export class Session {
     this.#image = image;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#depth = undefined;
+    this.#depthId += 1;
     this.#cache.clear();
+  }
+
+  /**
+   * Peta kedalaman foto terbuka untuk lens blur: disparitas ternormalisasi
+   * (0 = tak hingga), baris atas-ke-bawah, orientasi sama dengan gambar.
+   * Resolusinya bebas (diambil bilinear). `null` menghapusnya.
+   */
+  setDepthMap(map: DepthMap | null): void {
+    this.assertAlive();
+    if (map) {
+      const { width, height, data } = map;
+      if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) || data.length !== width * height) {
+        throw new RangeError(`Peta kedalaman ${width}x${height} butuh ${width * height} float, diterima ${data.length}.`);
+      }
+    }
+    this.#depth = map ?? undefined;
+    this.#depthId += 1;
+  }
+
+  /** Ada peta kedalaman untuk foto terbuka. */
+  hasDepthMap(): boolean {
+    return this.#depth !== undefined;
   }
 
   /** Validasi segera dan atomik: patch yang ditolak tidak mengubah apa pun. */
@@ -280,10 +346,14 @@ export class Session {
     } catch (e) {
       return Promise.reject(e);
     }
-    const hit = this.#cache.get(quality);
-    if (hit && hit.key === this.cacheKey(quality)) return Promise.resolve(hit.result);
+    return this.renderAt(quality, undefined);
+  }
 
-    return this.enqueue(() => this.execute(quality));
+  /** `render` dengan sisi panjang ekspor (`undefined` = sumber; hanya `full`). */
+  private renderAt(quality: RenderQuality, longEdge: number | undefined): Promise<RenderResult> {
+    const hit = this.#cache.get(quality);
+    if (hit && hit.key === this.cacheKey(quality, longEdge)) return Promise.resolve(hit.result);
+    return this.enqueue(() => this.execute(quality, longEdge));
   }
 
   /**
@@ -347,13 +417,16 @@ export class Session {
     }
   }
 
-  private async execute(quality: RenderQuality): Promise<RenderResult> {
+  private async execute(quality: RenderQuality, longEdge?: number): Promise<RenderResult> {
     this.assertAlive();
     const image = this.#image!;
     const params = this.#params;
     const paramsVersion = this.#paramsVersion;
-    const key = this.cacheKey(quality);
-    const frame = quality === 'preview' ? this.previewImage() : this.fitForDiffusion(image, params);
+    const key = this.cacheKey(quality, longEdge);
+    const frame =
+      quality === 'preview'
+        ? this.previewImage()
+        : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
     const rgb = await this.renderFrame(frame, params, 'image');
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
     if (!this.#disposed) this.#cache.set(quality, { key, result });
@@ -368,8 +441,19 @@ export class Session {
    * gambar diperkecil ke sisi panjang terbesar yang muat -- ekspor tetap
    * berjalan, hanya lebih kecil; `lastRenderSize` melaporkannya ke UI.
    */
-  private fitForDiffusion(image: DecodedImage, params: RenderParams): { width: number; height: number; rgba: Float32Array } {
-    const longEdge = diffusionRenderLongEdge(image.width, image.height, params, this.engine.maxStorageBufferBindingSize);
+  private fitForDiffusion(
+    image: { width: number; height: number; rgba: Float32Array },
+    params: RenderParams,
+  ): { width: number; height: number; rgba: Float32Array } {
+    const lensBlur = params.lensBlurEnabled && this.#depth !== undefined;
+    const longEdge = diffusionRenderLongEdge(
+      image.width,
+      image.height,
+      params,
+      this.engine.maxStorageBufferBindingSize,
+      DIFFUSION_PLANE_BUDGET,
+      lensBlur,
+    );
     if (longEdge >= Math.max(image.width, image.height)) return image;
     return boxDownscale(image.rgba, image.width, image.height, longEdge);
   }
@@ -385,8 +469,54 @@ export class Session {
     return this.#preview.image;
   }
 
-  private cacheKey(quality: RenderQuality): string {
-    return `${this.#imageId}|${quality}|${JSON.stringify(this.#params)}`;
+  private cacheKey(quality: RenderQuality, longEdge?: number): string {
+    return `${this.#imageId}|${this.#depthId}|${quality}|${longEdge ?? 'source'}|${JSON.stringify(this.#params)}`;
+  }
+
+  /** Sisi panjang ekspor yang efektif: `undefined` bila sama/lebih besar dari sumber. */
+  private exportLongEdge(longEdge: number | undefined): number | undefined {
+    const image = this.#image;
+    if (longEdge === undefined || !image) return undefined;
+    if (!Number.isFinite(longEdge) || longEdge < 1) {
+      throw new RangeError(`longEdge ekspor harus >= 1 px, diterima ${String(longEdge)}.`);
+    }
+    const edge = Math.round(longEdge);
+    return edge >= Math.max(image.width, image.height) ? undefined : edge;
+  }
+
+  /** Render penuh untuk ekspor; render yang tersalip sebelum mulai diantrekan ulang. */
+  private async renderForExport(longEdge: number | undefined): Promise<RenderResult> {
+    for (;;) {
+      try {
+        this.assertAlive();
+        if (!this.#image) throw new SessionStateError('Ekspor sebelum open(): belum ada gambar.');
+        return await this.renderAt('full', this.exportLongEdge(longEdge));
+      } catch (e) {
+        if (e instanceof RenderSupersededError) continue;
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Fase render ekspor saja (gaya EMULSION): UI memanggilnya saat lembar
+   * Ekspor dibuka atau sisi panjang berubah, lalu `exportImage` dengan format
+   * dan kualitas apa pun memakai hasil yang sama dari cache -- menggeser
+   * kualitas hanya meng-encode ulang. Ukuran yang dikembalikan bisa lebih
+   * kecil dari permintaan bila difusi memaksa `fitForDiffusion`.
+   */
+  async renderExport(longEdge?: number): Promise<ExportRenderInfo> {
+    const { width, height } = await this.renderForExport(longEdge);
+    return { width, height };
+  }
+
+  /**
+   * Format ekspor yang bisa dihasilkan di sini: lossless selalu, lossy hanya
+   * yang lolos probing encoder kanvas.
+   */
+  async exportFormats(): Promise<ExportFormat[]> {
+    const lossy = this.canvasEncoder ? await this.canvasEncoder.probe() : [];
+    return [...LOSSLESS_EXPORT_FORMATS, ...CANVAS_FORMATS.filter((f) => lossy.includes(f))];
   }
 
   /**
@@ -431,22 +561,22 @@ export class Session {
    * sempat mulai diantrekan ulang, bukan digagalkan: pengguna meminta berkas,
    * bukan pratinjau yang boleh dibuang.
    */
-  async exportImage(format: ExportFormat): Promise<Uint8Array> {
+  async exportImage(format: ExportFormat, options: ExportOptions = {}): Promise<Uint8Array> {
     if (!EXPORT_FORMATS.includes(format)) {
       throw new RangeError(`Format ekspor tidak dikenal: ${String(format)} (pilihan: ${EXPORT_FORMATS.join(', ')}).`);
     }
-    for (;;) {
-      let result: RenderResult;
-      try {
-        result = await this.render('full');
-      } catch (e) {
-        if (e instanceof RenderSupersededError) continue;
-        throw e;
-      }
-      const { rgb, width, height } = result;
-      if (format === 'tiff16') return encodeTiff16(rgb, width, height);
-      return encodePng(rgb, width, height, format === 'png8' ? 8 : 16);
+    const canvasFormat = (CANVAS_FORMATS as readonly string[]).includes(format) ? (format as CanvasFormat) : undefined;
+    if (canvasFormat && !this.canvasEncoder) {
+      throw new RangeError(`Format ${format} butuh encoder kanvas browser, yang tidak tersedia di sini.`);
     }
+    const outputColorSpace = this.#params.outputColorSpace;
+    const { rgb, width, height } = await this.renderForExport(options.longEdge);
+    if (canvasFormat) {
+      const colorSpace = outputColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
+      return this.canvasEncoder!.encode(rgbToRgba8(rgb, width, height), width, height, canvasFormat, options.quality ?? 1, colorSpace);
+    }
+    if (format === 'tiff16') return encodeTiff16(rgb, width, height);
+    return encodePng(rgb, width, height, format === 'png8' ? 8 : 16);
   }
 
   dispose(): void {
@@ -475,7 +605,7 @@ export class Session {
     params: RenderParams,
     mode: RenderMode,
   ): Promise<{ rgb: Float32Array; plan: RenderPlan }> {
-    const plan = buildRenderPlan(params, this.bundle, frame, mode);
+    const plan = buildRenderPlan(params, this.bundle, frame, mode, mode === 'image' && this.#depth ? { depth: this.#depth } : {});
     const graph = await this.graphFor(plan);
     this.assertAlive();
     const rgba = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
@@ -494,7 +624,7 @@ export class Session {
   private graphFor(plan: RenderPlan): Promise<RenderGraph> {
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}`;
+      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) return existing;
     const building = (async () => {

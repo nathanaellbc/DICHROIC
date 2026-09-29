@@ -24,13 +24,18 @@ import type { CoreParams } from '../engine/params';
 import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
+import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
+import type { CameraSettings } from '../host/cameraDevelop';
+import { LENS_LIMITS, lensSettings, resolveLensFrame } from '../host/lens';
+import type { DepthMap } from '../host/lens';
 import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions, ScanFilmArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
+import { FILM_FORMAT_LONG_EDGE_MM } from './filmFormat';
 import { UnverifiedParameterError, validateRenderParams } from './registry';
 import { BASELINE_RENDER_PARAMS } from './renderParams';
-import type { FilmFormat, ProcessMode, RenderParams } from './renderParams';
+import type { ProcessMode, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
 
@@ -43,6 +48,14 @@ export interface ChainSpec {
   /** Fase 2D Task 4: difusi FFT kamera / enlarger aktif. Baku `false`. */
   cameraDiffusion?: boolean;
   printDiffusion?: boolean;
+  /** Ekstensi lens blur aktif (butuh peta kedalaman). Baku `false`. */
+  lensBlur?: boolean;
+}
+
+/** Data per gambar di luar `RenderParams` (bukan parameter, tapi milik foto). */
+export interface PlanExtras {
+  /** Peta kedalaman foto ini (lens blur); tanpa ini lens blur tidak berjalan. */
+  depth?: DepthMap;
 }
 
 export interface ArenaInputs {
@@ -65,17 +78,9 @@ export interface RenderPlan {
   frame: FrameParams;
 }
 
-/** `filmFormatLongEdgeMm` OFX (`SpektraVulkanRenderer.cpp:2008`), mm sisi panjang. */
-export const FILM_FORMAT_LONG_EDGE_MM: Readonly<Record<FilmFormat, number>> = Object.freeze({
-  standard8: 4.8,
-  super8: 5.79,
-  standard16: 10.26,
-  super16: 12.52,
-  standard35: 35,
-  super35: 24.89,
-  standard65: 52.48,
-  imax70: 70.41,
-});
+// Tabel format film dan `lensSettings` tinggal di modul ringan supaya UI bisa
+// memakainya tanpa menarik modul GPU yang diimpor plan ini.
+export { FILM_FORMAT_LONG_EDGE_MM } from './filmFormat';
 
 /**
  * Push/pull mode `Standard`: pengali gamma kurva film dari waktu develop ECN-2
@@ -101,6 +106,8 @@ export interface PlanImage {
 }
 
 const CUBE_DISABLED_EFFECTS = [
+  'camera raw',
+  'lens blur',
   'halation',
   'grain',
   'camera diffusion',
@@ -250,16 +257,104 @@ export function validateDirCouplers(params: RenderParams): void {
   }
 }
 
+/** Rentang kontrol "Camera Raw" (ekstensi DICHROIC, `host/cameraDevelop.ts`). */
+const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max: number }]> = [
+  ['cameraWhiteBalanceK', CAMERA_LIMITS.whiteBalanceK],
+  ['cameraTint', CAMERA_LIMITS.tint],
+  ['cameraContrast', CAMERA_LIMITS.contrast],
+  ['cameraHighlights', CAMERA_LIMITS.highlights],
+  ['cameraShadows', CAMERA_LIMITS.shadows],
+  ['cameraWhites', CAMERA_LIMITS.whites],
+  ['cameraBlacks', CAMERA_LIMITS.blacks],
+  ['cameraSaturation', CAMERA_LIMITS.saturation],
+];
+
+export function validateCamera(params: RenderParams): void {
+  for (const [field, { min, max }] of CAMERA_FIELD_LIMITS) {
+    const value = params[field] as number;
+    if (!(value >= min && value <= max)) {
+      throw new RangeError(`Parameter "${field}" = ${String(value)} di luar rentang ${min}..${max}.`);
+    }
+  }
+}
+
+export function cameraSettings(params: RenderParams): CameraSettings {
+  return {
+    whiteBalanceK: params.cameraWhiteBalanceK,
+    tint: params.cameraTint,
+    contrast: params.cameraContrast,
+    highlights: params.cameraHighlights,
+    shadows: params.cameraShadows,
+    whites: params.cameraWhites,
+    blacks: params.cameraBlacks,
+    saturation: params.cameraSaturation,
+  };
+}
+
+/**
+ * Uniform "Camera Raw" untuk render ini, atau `undefined` bila netral (tahap
+ * dilewati persis). Pivot tone diukur dari gambar ini sendiri, ter-decode
+ * persis seperti yang dilihat shader (termasuk pengali auto-exposure di ruang
+ * ter-encode bila decode aktif).
+ */
+function cameraFrame(
+  params: RenderParams,
+  bundle: AssetBundle,
+  image: PlanImage,
+  inputColorSpace: number,
+  inputDecodeScale: number,
+): Float32Array | undefined {
+  const settings = cameraSettings(params);
+  if (isNeutralCamera(settings)) return undefined;
+  const all = bundle.staticTable('inputMeterXyzMatrices');
+  const rgbToXyz = Array.from({ length: 9 }, (_, i) => all[inputColorSpace * 9 + i]!);
+  const decode = params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined;
+  const scaled = decode && inputDecodeScale !== 1 ? (v: number) => decode(v * inputDecodeScale) : decode;
+  const pivot = measureScenePivot(image.rgba, image.width, image.height, lumaWeights(rgbToXyz), scaled);
+  return cameraFrameValues(settings, rgbToXyz, pivot);
+}
+
+/** Rentang lens blur (`host/lens.ts`). */
+export function validateLens(params: RenderParams): void {
+  const check = (field: keyof RenderParams, ok: boolean, range: string) => {
+    if (!ok) throw new RangeError(`Parameter "${field}" = ${String(params[field])} di luar rentang ${range}.`);
+  };
+  const inRange = (v: number, min: number, max: number) => v >= min && v <= max;
+  check('lensFocusX', inRange(params.lensFocusX, 0, 1), '0..1');
+  check('lensFocusY', inRange(params.lensFocusY, 0, 1), '0..1');
+  check('lensFocusDistanceM', inRange(params.lensFocusDistanceM, LENS_LIMITS.focusDistanceM.min, LENS_LIMITS.focusDistanceM.max), '0.3..100 m');
+  check(
+    'lensFocalLengthMm',
+    params.lensFocalLengthMm === 0 || inRange(params.lensFocalLengthMm, LENS_LIMITS.focalLengthMm.min, LENS_LIMITS.focalLengthMm.max),
+    '0 (normal) atau 8..600 mm',
+  );
+  check('lensFNumber', inRange(params.lensFNumber, LENS_LIMITS.fNumber.min, LENS_LIMITS.fNumber.max), 'f/1.2..f/22');
+  check('lensBlades', [0, 5, 6, 7, 8, 9].includes(params.lensBlades), '0 (bulat) atau 5..9');
+  check('lensBladeCurvature', inRange(params.lensBladeCurvature, 0, 1), '0..1');
+  check('lensCatEye', inRange(params.lensCatEye, 0, 1), '0..1');
+  check(
+    'lensNearSharpM',
+    params.lensNearSharpM === 0 || inRange(params.lensNearSharpM, LENS_LIMITS.nearSharpM.min, params.lensFocusDistanceM),
+    '0 (bidang fokus) atau 0.2..jarak fokus',
+  );
+  check('lensForeground', inRange(params.lensForeground, 0, 1), '0..1');
+}
+
+export { lensSettings } from '../host/lens';
+
 export function buildRenderPlan(
   params: RenderParams,
   bundle: AssetBundle,
   image: PlanImage,
   mode: RenderMode,
+  extras: PlanExtras = {},
 ): RenderPlan {
   validateRenderParams(params);
   validateStocks(bundle, params.film, params.paper, params.process);
   validateOutputColorSpace(bundle, params.outputColorSpace);
   validateDirCouplers(params);
+  validateCamera(params);
+  validateLens(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
   const scan = params.process === 'scanNegative';
@@ -272,6 +367,8 @@ export function buildRenderPlan(
   const cameraDiffusion = family === 'measured' && params.cameraDiffusionEnabled && params.cameraDiffusionStrength > 0;
   const printDiffusion = family === 'measured' && !scan && params.printDiffusionEnabled && params.printDiffusionStrength > 0;
   const glareActive = family === 'measured' && !scan && params.glareEnabled && params.glarePercent > 0;
+  // Ekstensi lens blur: efek spasial (mati di `lut_mode`) dan butuh peta kedalaman.
+  const lensBlur = family === 'measured' && params.lensBlurEnabled && extras.depth !== undefined;
 
   const printScan: PrintScanArenaOptions | ScanFilmArenaOptions = scan
     ? { scanFilm: true, outputColorSpace: params.outputColorSpace }
@@ -308,6 +405,10 @@ export function buildRenderPlan(
         )
       : 0;
 
+  // Ekstensi "Camera Raw": warna per piksel, tapi pivot tone diukur dari
+  // gambar -- kisi `.cube` bukan gambar, jadi `lut_mode` melewatinya.
+  const camera = family === 'measured' ? cameraFrame(params, bundle, image, inputColorSpace, params.inputCctfDecoding ? 2 ** autoEv : 1) : undefined;
+
   return {
     core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
     arenaKey: scan
@@ -320,6 +421,7 @@ export function buildRenderPlan(
       ...(scan ? { scan } : {}),
       ...(cameraDiffusion ? { cameraDiffusion: true } : {}),
       ...(printDiffusion ? { printDiffusion: true } : {}),
+      ...(lensBlur ? { lensBlur: true } : {}),
     },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
@@ -328,6 +430,18 @@ export function buildRenderPlan(
       ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
       inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
+      ...(camera ? { camera } : {}),
+      ...(lensBlur
+        ? {
+            lens: resolveLensFrame(
+              lensSettings(params),
+              extras.depth!,
+              params.filmFormat,
+              filmFormatMm,
+              Math.max(image.width, image.height),
+            ),
+          }
+        : {}),
     },
   };
 }

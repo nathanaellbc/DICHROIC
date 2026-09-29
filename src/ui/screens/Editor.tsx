@@ -21,7 +21,7 @@ import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
 import { stockInfo } from '../model/stocks';
-import { GROUPS, choicePatch, findTool, isScanMode, stockPatch, valueText, visibleTools } from '../model/tools';
+import { GROUPS, choicePatch, findTool, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
 import type { ChoiceTool, GroupId } from '../model/tools';
 import { snappy } from '../motion';
 import { ExportContent, ListPickerContent } from './Export';
@@ -47,17 +47,28 @@ export interface EditorProps {
 
 export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }: EditorProps) {
   const [group, setGroup] = useState<GroupId>('film');
-  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
+  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ camera: 'cameraWhiteBalanceK', lens: 'lensBlur', film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
   const [compare, setCompare] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
+  const [pickingFocus, setPickingFocus] = useState(false);
+  // Mode pilih fokus hanya selama grup Lens terbuka dan lens blur menyala.
+  const picking = pickingFocus && group === 'lens' && state.params.lensBlurEnabled && state.depth.status === 'ready';
 
   const ctx: ToolContext = {
     params: state.params,
     defaults: state.defaults,
-    onPatch: (patch) => engine.setParams(patch),
+    onPatch: (patch) => engine.setParams(normalizePatch(state.params, patch)),
     onOpenList: (tool) => setSheet({ kind: 'list', toolId: tool.id }),
+    lens: {
+      depth: state.depth,
+      picking,
+      aspect: state.frame ? state.frame.width / state.frame.height : 1.5,
+      onDownload: () => engine.downloadDepth(),
+      onRetry: () => engine.retryDepth(),
+      onPickFocus: () => setPickingFocus(!picking),
+    },
   };
 
   const openStocks = (stockKind: StockKind = 'film') =>
@@ -76,7 +87,24 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
   const photo = (
-    <PhotoView frame={state.frame} original={state.original} compare={compare} rendering={state.rendering} photoKey={state.fileName ?? 'photo'} label={photoLabel} />
+    <PhotoView
+      frame={state.frame}
+      original={state.original}
+      compare={compare}
+      rendering={state.rendering}
+      photoKey={state.fileName ?? 'photo'}
+      label={photoLabel}
+      focus={{
+        x: state.params.lensFocusX,
+        y: state.params.lensFocusY,
+        show: group === 'lens' && state.params.lensBlurEnabled,
+        picking,
+        onPick: (lensFocusX, lensFocusY) => {
+          engine.setParams({ lensFocusX, lensFocusY });
+          setPickingFocus(false);
+        },
+      }}
+    />
   );
 
   const layoutProps = { state, ctx, group, setGroup, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind };

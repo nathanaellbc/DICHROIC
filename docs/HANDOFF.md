@@ -5,7 +5,43 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, batch parameter 2 + difusi)
+## Posisi sekarang (diperbarui 2026-09-29, fitur gaya EMULSION — SELESAI)
+
+Permintaan pemilik: "untuk implementasi save gunakan cara dari aplikasi
+EMULSION, tambahkan juga menu camera raw control seperti EMULSION beserta lens
+blur nya". Ringkasan teknis di spec Fase 2 §6c. Semua kode EMULSION ditulis
+ulang, tidak diimpor.
+
+**Selesai dan teruji:** ekspor gaya EMULSION, Camera Raw, engine lens blur
+(commit 8a31e18, 2f1721f, af9e016), lalu di sesi Windows (NVIDIA/D3D12):
+
+- `src/depth/` tersambung: `Engine` membangun guide kedalaman sebelum
+  `open`, `DepthController` (status + token per foto) mengestimasi saat lens
+  blur dinyalakan; unduhan model hanya atas perintah (76 MB WebGPU / 41 MB
+  WASM ditampilkan dari `firstDownloadBytes`).
+- UI grup **Lens** (setelah Camera): kartu status/unduh, Pick Focus + reticle
+  (`PhotoView.focus`), jarak fokus dan batas tajam dekat (log10), panjang
+  fokus (log2, 0 = normal), bukaan (sepertiga stop), bilah iris,
+  kelengkungan, cat's eye, foreground, readout near/far/hyperfocal. Alat
+  lensa memakai `requires` (bukan `enabledBy`).
+- `vite.config.ts`: runtime WASM ORT dikecualikan dari precache,
+  `onnxruntime-web` dari pra-bundling.
+- Tes baru: `test/depth/refine.test.ts`, `test/ui/depthController.test.ts`,
+  `test/ui/lensModel.test.ts`. Dua ekspektasi basi diperbaiki (kunci graf
+  prewarm `|lb=`, header `.cube` kini dari daftar plan).
+- Verifikasi Chrome headless (390x844, WebGPU, cross-origin isolated) lewat
+  `playwright-core` + Chrome terpasang: buka foto, grup Lens, kartu unduhan,
+  stepper, slider log, tanpa galat console.
+
+**Belum:**
+
+1. Unduhan model asli (76 MB dari Hugging Face) dan inferensi di browser
+   sungguhan belum pernah dijalankan -- perlu izin pemilik untuk mengunduh.
+2. Uji di iPhone fisik (kecepatan FFT df64, kedalaman WASM int8 392 px).
+3. Uji suite penuh lavapipe (kegagalan lama yang diketahui: tile-vs-full
+   2,086e-6 > 2e-6).
+
+## Posisi sebelumnya (2026-09-29, batch parameter 2 + difusi)
 
 - **Batch parameter 2 dan difusi selesai** (spec Fase 2 §6b): DIR couplers,
   preflash, mode proses scan film + empat film reversal, dan filter difusi

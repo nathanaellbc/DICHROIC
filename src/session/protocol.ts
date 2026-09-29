@@ -7,11 +7,13 @@
 
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
-import type { ExportFormat, RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { DepthMap } from '../host/lens';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
+  setDepthMap(map: DepthMap | null): void;
   setParams(patch: Partial<RenderParams>): void;
   getParams(): RenderParams;
   getDiagnostics(): SessionDiagnostics;
@@ -19,7 +21,9 @@ export interface SessionLike {
   prewarm(): Promise<void>;
   lastFullSize(): { width: number; height: number } | undefined;
   exportCube(size: number): Promise<string>;
-  exportImage(format: ExportFormat): Promise<Uint8Array>;
+  renderExport(longEdge?: number): Promise<ExportRenderInfo>;
+  exportFormats(): Promise<ExportFormat[]>;
+  exportImage(format: ExportFormat, options?: ExportOptions): Promise<Uint8Array>;
   dispose(): void;
 }
 

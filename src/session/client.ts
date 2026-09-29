@@ -13,10 +13,11 @@ import { DecodeError } from '../io/errors';
 import { MissingNeutralFiltersError } from '../params/plan';
 import { UnverifiedParameterError } from '../params/registry';
 import type { RenderParams } from '../params/renderParams';
+import type { DepthMap } from '../host/lens';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { ExportFormat, RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
 
 export class SessionClient {
   #nextId = 1;
@@ -69,6 +70,11 @@ export class SessionClient {
     return this.call('open', [image], transferablesOf(image)) as Promise<void>;
   }
 
+  /** Peta kedalaman lens blur; `data` DITRANSFER (buffer pemanggil ter-detach). */
+  setDepthMap(map: DepthMap | null): Promise<void> {
+    return this.call('setDepthMap', [map], map ? transferablesOf(map) : []) as Promise<void>;
+  }
+
   setParams(patch: Partial<RenderParams>): Promise<void> {
     return this.call('setParams', [patch]) as Promise<void>;
   }
@@ -99,9 +105,19 @@ export class SessionClient {
     return this.call('exportCube', [size]) as Promise<string>;
   }
 
-  /** Berkas PNG/TIFF dari render penuh (lihat `Session.exportImage`). */
-  exportImage(format: ExportFormat): Promise<Uint8Array> {
-    return this.call('exportImage', [format]) as Promise<Uint8Array>;
+  /** Render ekspor saja pada sisi panjang itu (lihat `Session.renderExport`). */
+  renderExport(longEdge?: number): Promise<ExportRenderInfo> {
+    return this.call('renderExport', [longEdge]) as Promise<ExportRenderInfo>;
+  }
+
+  /** Format yang bisa di-encode worker ini (lihat `Session.exportFormats`). */
+  exportFormats(): Promise<ExportFormat[]> {
+    return this.call('exportFormats', []) as Promise<ExportFormat[]>;
+  }
+
+  /** Berkas gambar dari render penuh (lihat `Session.exportImage`). */
+  exportImage(format: ExportFormat, options?: ExportOptions): Promise<Uint8Array> {
+    return this.call('exportImage', options === undefined ? [format] : [format, options]) as Promise<Uint8Array>;
   }
 
   dispose(): Promise<void> {

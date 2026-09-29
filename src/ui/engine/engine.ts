@@ -18,9 +18,16 @@ import type { RenderParams } from '../../params/renderParams';
 import { SessionClient } from '../../session/client';
 import { PREVIEW_MAX_LONG_EDGE } from '../../session/downscale';
 import { RenderSupersededError } from '../../session/errors';
-import type { ExportFormat } from '../../session/session';
-import { suggestedInput } from '../model/tools';
+import type { ExportFormat, ExportOptions } from '../../session/session';
+import { isScanMode, suggestedInput } from '../model/tools';
+import { stockInfo } from '../model/stocks';
+import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
+import { DepthEstimator, buildGuide } from '../../depth/estimate';
+import { depthProfile, firstDownloadBytes } from '../../depth/model';
+import type { DepthProfile } from '../../depth/model';
+import { DepthController } from './depthController';
+import type { DepthState } from './depthController';
 import { canvasColorSpaceFor, originalFrame, rgbToPixels, type Frame } from './display';
 
 export type EngineStatus = 'connecting' | 'ready' | 'unsupported' | 'failed';
@@ -46,16 +53,31 @@ export interface EngineState {
   error?: AppError;
   /** `false` bila backend meruntuhkan aritmetika df64 (halation/DIR bisa meleset ~1e-3). */
   precisionOk: boolean;
+  /** Peta kedalaman lens blur untuk foto terbuka. */
+  depth: DepthState;
 }
+
+/** Profil cadangan bila deteksi perangkat gagal: CPU, masukan kecil, hemat memori. */
+const FALLBACK_DEPTH_PROFILE: DepthProfile = { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
 
 type Listener = () => void;
 
-const MIME: Record<ExportFormat, string> = { png8: 'image/png', png16: 'image/png', tiff16: 'image/tiff' };
-const EXT: Record<ExportFormat, string> = { png8: 'png', png16: 'png', tiff16: 'tif' };
-
-function baseName(name: string | undefined): string {
-  return (name ?? 'photo').replace(/\.[^.]+$/, '') || 'photo';
-}
+export const EXPORT_MIME: Record<ExportFormat, string> = {
+  png8: 'image/png',
+  png16: 'image/png',
+  tiff16: 'image/tiff',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  avif: 'image/avif',
+};
+export const EXPORT_EXT: Record<ExportFormat, string> = {
+  png8: 'png',
+  png16: 'png',
+  tiff16: 'tif',
+  jpeg: 'jpg',
+  webp: 'webp',
+  avif: 'avif',
+};
 
 export function describeError(error: unknown, fileName?: string): AppError {
   if (error instanceof DecodeError) {
@@ -96,6 +118,7 @@ export class Engine {
     defaults: { ...BASELINE_RENDER_PARAMS },
     rendering: false,
     precisionOk: true,
+    depth: { status: 'idle' },
   };
   readonly #listeners = new Set<Listener>();
   #client: SessionClient | undefined;
@@ -107,6 +130,21 @@ export class Engine {
   lastExportLimited: { width: number; height: number } | undefined;
   #inFlight = false;
   #dirty = false;
+  #depthProfile: Promise<DepthProfile> | undefined;
+  #estimator: DepthEstimator | undefined;
+  readonly #depth = new DepthController({
+    estimate: async (guide, allowDownload, onProgress) => {
+      const profile = await this.#profile();
+      this.#estimator ??= new DepthEstimator();
+      return this.#estimator.estimate(guide, { allowDownload, profile, onProgress });
+    },
+    deliver: async (map) => {
+      await this.#client!.setDepthMap(map);
+      this.requestRender();
+    },
+    downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend),
+    onChange: (depth) => this.#set({ depth }),
+  });
 
   getState = (): EngineState => this.#state;
 
@@ -118,6 +156,11 @@ export class Engine {
   #set(patch: Partial<EngineState>): void {
     this.#state = { ...this.#state, ...patch };
     for (const listener of this.#listeners) listener();
+  }
+
+  #profile(): Promise<DepthProfile> {
+    this.#depthProfile ??= depthProfile().catch(() => FALLBACK_DEPTH_PROFILE);
+    return this.#depthProfile;
   }
 
   /** Menyalakan worker dan menyiapkan `Session` (aset, device WebGPU, self-test). */
@@ -163,15 +206,22 @@ export class Engine {
       const imageSize = { width: image.width, height: image.height };
       const input = suggestedInput(image);
 
+      // Gambar yang dilihat jaringan kedalaman dibangun SEBELUM `open`, yang
+      // mentransfer `image.rgba` ke worker.
+      const guide = buildGuide(image, (await this.#profile()).guideMaxEdge);
+      if (!stillCurrent()) return;
+
       if (this.#state.engine !== 'ready') this.#set({ opening: { name: file.name, stage: 'Preparing the darkroom…' } });
       await this.#ready;
       if (!stillCurrent()) return;
       await client.open(image);
       this.#imageSize = imageSize;
-      // Tampilan (film, kertas, penyesuaian) dibawa ke foto berikutnya; hanya
-      // colour space input dan auto exposure yang milik berkas.
-      const params = { ...this.#state.params, ...input };
-      await client.setParams(input);
+      this.#depth.reset(guide);
+      // Tampilan (film, kertas, penyesuaian, lensa) dibawa ke foto berikutnya;
+      // colour space input, auto exposure, dan titik fokus milik berkas.
+      const fileParams = { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
+      const params = { ...this.#state.params, ...fileParams };
+      await client.setParams(fileParams);
       this.#set({
         params,
         defaults: { ...BASELINE_RENDER_PARAMS, ...input },
@@ -182,6 +232,7 @@ export class Engine {
       await this.#renderOnce();
       if (!stillCurrent()) return;
       this.#set({ phase: 'editing', opening: undefined });
+      if (params.lensBlurEnabled) this.#depth.ensure();
     } catch (error) {
       if (!stillCurrent()) return;
       this.#set({ phase: this.#state.frame && this.#state.phase === 'editing' ? 'editing' : 'idle', opening: undefined, error: describeError(error, file.name) });
@@ -195,6 +246,7 @@ export class Engine {
 
   closePhoto(): void {
     this.#openToken += 1;
+    this.#depth.reset(undefined);
     this.#set({ phase: 'idle', frame: undefined, original: undefined, fileName: undefined, opening: undefined });
   }
 
@@ -213,9 +265,23 @@ export class Engine {
     const previous = this.#state.params;
     this.#set({ params: { ...previous, ...patch } });
     client.setParams(patch).then(
-      () => this.requestRender(),
+      () => {
+        this.requestRender();
+        // Lens blur baru berarti setelah ada peta kedalaman.
+        if (patch.lensBlurEnabled === true) this.#depth.ensure();
+      },
       (error: unknown) => this.#set({ params: previous, error: describeError(error) }),
     );
+  }
+
+  /** Pengguna menyetujui unduhan model kedalaman. */
+  downloadDepth(): void {
+    this.#depth.download();
+  }
+
+  /** Coba lagi setelah estimasi gagal. */
+  retryDepth(): void {
+    this.#depth.ensure();
   }
 
   resetAll(): void {
@@ -270,20 +336,51 @@ export class Engine {
     }
   }
 
-  async exportImage(format: ExportFormat): Promise<File> {
-    const bytes = await this.#client!.exportImage(format);
-    // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
-    // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
-    const size = await this.#client!.lastFullSize();
-    const full = this.#imageSize;
-    this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
-    const name = `${baseName(this.#state.fileName)}-dichroic.${EXT[format]}`;
-    return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: MIME[format] });
+  /** Ukuran gambar asli yang terbuka. */
+  get imageSize(): { width: number; height: number } | undefined {
+    return this.#imageSize;
+  }
+
+  /** Format yang bisa di-encode worker (lossy hanya bila lolos probing). */
+  exportFormats(): Promise<ExportFormat[]> {
+    return this.#client!.exportFormats();
+  }
+
+  /**
+   * Fase render ekspor (gaya EMULSION): dipanggil saat lembar Ekspor dibuka
+   * dan saat sisi panjang berubah. `limited` = difusi FFT memaksa ukuran
+   * lebih kecil dari yang diminta (Fase 2D).
+   */
+  async renderExport(longEdge: number | undefined, requested: { width: number; height: number }): Promise<{ width: number; height: number; limited: boolean }> {
+    const size = await this.#client!.renderExport(longEdge);
+    const limited = size.width < requested.width || size.height < requested.height;
+    this.lastExportLimited = limited ? size : undefined;
+    return { ...size, limited };
+  }
+
+  /** Nama berkas ASCII: `<foto> - <film> on <kertas>.<ext>`. */
+  exportName(ext: string, suffix = ''): string {
+    const { params, fileName } = this.#state;
+    const film = stockInfo(params.film).name;
+    const name = exportFileName(fileName, film, isScanMode(params) ? undefined : stockInfo(params.paper).name, ext);
+    return suffix ? name.replace(/\.[^.]+$/, ` ${suffix}.${ext}`) : name;
+  }
+
+  async exportImage(format: ExportFormat, options?: ExportOptions): Promise<File> {
+    const bytes = await this.#client!.exportImage(format, options);
+    if (!options) {
+      // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
+      // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
+      const size = await this.#client!.lastFullSize();
+      const full = this.#imageSize;
+      this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
+    }
+    return new File([bytes as Uint8Array<ArrayBuffer>], this.exportName(EXPORT_EXT[format]), { type: EXPORT_MIME[format] });
   }
 
   async exportCube(size: number): Promise<File> {
     const text = await this.#client!.exportCube(size);
-    return new File([text], `${baseName(this.#state.fileName)}-dichroic-${size}.cube`, { type: 'text/plain' });
+    return new File([text], this.exportName('cube', `${size}`), { type: 'text/plain' });
   }
 }
 

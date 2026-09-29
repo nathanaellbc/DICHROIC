@@ -4,9 +4,13 @@
  */
 import { motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
+import { lensReadout, lensSettings } from '../../host/lens';
+import { FILM_FORMAT_LONG_EDGE_MM } from '../../params/filmFormat';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
 import { OptionRow, PressButton, Slider, Stepper, Switch } from '../components/controls';
+import { Spinner } from '../components/Overlays';
+import type { DepthState } from '../engine/depthController';
 import { pressScale, snappy } from '../motion';
 import {
   DIFFUSION_FAMILIES,
@@ -16,13 +20,29 @@ import {
   formatPushPull,
   formatStops,
   isModified,
+  positionPatch,
   resetPatch,
-  sliderPatch,
-  sliderValue,
+  sliderPosition,
+  sliderRange,
+  stepperAtEnd,
+  stepperPatch,
+  stepperText,
   valueText,
   visibleTools,
 } from '../model/tools';
-import type { ChoiceTool, Tool, ToolGroup } from '../model/tools';
+import type { ChoiceTool, LensTool, Tool, ToolGroup } from '../model/tools';
+
+/** Status peta kedalaman dan aksi lens blur (grup Lens). */
+export interface LensContext {
+  depth: DepthState;
+  /** Mode pilih titik fokus aktif di foto. */
+  picking: boolean;
+  /** Rasio lebar/tinggi foto (readout kedalaman ruang). */
+  aspect: number;
+  onDownload: () => void;
+  onRetry: () => void;
+  onPickFocus: () => void;
+}
 
 export interface ToolContext {
   params: RenderParams;
@@ -30,6 +50,7 @@ export interface ToolContext {
   onPatch: (patch: Partial<RenderParams>) => void;
   /** Daftar pilihan panjang (colour space input) dibuka di sheet terpisah. */
   onOpenList: (tool: ChoiceTool) => void;
+  lens?: LensContext;
 }
 
 /** Pilihan > 10 tidak muat sebagai kapsul; tampil sebagai tombol yang membuka daftar. */
@@ -38,6 +59,7 @@ export function isLongChoice(tool: ChoiceTool): boolean {
 }
 
 function toolEnabled(tool: Tool, params: RenderParams): boolean {
+  if (tool.requires && !params[tool.requires]) return false;
   if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
   if (tool.kind === 'diffusion') return params[tool.enabledBy];
   if (tool.kind === 'toggle' && tool.field === 'inputCctfDecoding') return decodeAllowed(params.inputColorSpace);
@@ -50,6 +72,9 @@ export function ToolSwitch({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
   if (tool.kind === 'toggle') {
     const allowed = tool.field !== 'inputCctfDecoding' || decodeAllowed(params.inputColorSpace);
     return <Switch label={tool.title} checked={params[tool.field]} disabled={!allowed} onChange={(v) => onPatch({ [tool.field]: v })} />;
+  }
+  if (tool.kind === 'lens') {
+    return <Switch label={tool.title} checked={params.lensBlurEnabled} onChange={(v) => onPatch({ lensBlurEnabled: v })} />;
   }
   if ((tool.kind === 'slider' || tool.kind === 'diffusion') && tool.enabledBy) {
     const field = tool.enabledBy;
@@ -81,17 +106,19 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
   const { params, defaults, onPatch } = ctx;
   switch (tool.kind) {
     case 'slider': {
+      // Posisi, bukan nilai: slider berskala log (lensa) bergerak di log10/log2.
+      const range = sliderRange(tool, params);
       const slider = (
         <Slider
           label={tool.title}
-          value={sliderValue(tool, params)}
-          min={tool.min}
-          max={tool.max}
-          step={tool.step}
-          defaultValue={sliderValue(tool, defaults)}
+          value={sliderPosition(tool, params)}
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          defaultValue={sliderPosition(tool, { ...params, [tool.field]: defaults[tool.field] })}
           valueText={valueText(tool, params)}
           disabled={!toolEnabled(tool, params)}
-          onChange={(v) => onPatch(sliderPatch(tool, v))}
+          onChange={(v) => onPatch(positionPatch(tool, v, params))}
         />
       );
       if (!tool.note) return slider;
@@ -103,6 +130,20 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
       );
     }
     case 'stepper': {
+      if (tool.values) {
+        const enabled = toolEnabled(tool, params);
+        return (
+          <Stepper
+            label={tool.title}
+            valueText={stepperText(tool, params)}
+            hint={tool.field === 'lensFNumber' ? 'Wider apertures blur more' : 'Shape of out-of-focus highlights'}
+            atMin={!enabled || stepperAtEnd(tool, params, -1)}
+            atMax={!enabled || stepperAtEnd(tool, params, 1)}
+            onDecrement={() => onPatch(stepperPatch(tool, params, -1))}
+            onIncrement={() => onPatch(stepperPatch(tool, params, 1))}
+          />
+        );
+      }
       const v = params[tool.field];
       const isSeed = tool.field === 'grainSeed';
       return (
@@ -168,9 +209,98 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
       const blocked = tool.field === 'inputCctfDecoding' && !decodeAllowed(params.inputColorSpace);
       return <p className="t-subhead secondary" style={{ margin: 0 }}>{blocked ? `Not available for ${params.inputColorSpace}.` : tool.note}</p>;
     }
+    case 'lens':
+      return <LensCard tool={tool} ctx={ctx} />;
     case 'locked':
       return <p className="t-subhead secondary" style={{ margin: 0 }}>{tool.note}</p>;
   }
+}
+
+function megabytes(bytes: number): string {
+  return `${Math.round(bytes / 1_000_000)} MB`;
+}
+
+function meters(m: number): string {
+  if (!Number.isFinite(m)) return '∞';
+  if (m < 1) return `${m.toFixed(2)} m`;
+  if (m < 10) return `${m.toFixed(1)} m`;
+  return `${Math.round(m)} m`;
+}
+
+const DEPTH_PHASE: Record<string, string> = {
+  runtime: 'Downloading the depth engine',
+  model: 'Downloading the depth model',
+  compile: 'Preparing the depth model',
+  infer: 'Measuring depth',
+  refine: 'Refining edges',
+};
+
+/** Status peta kedalaman, unduhan model, pilih fokus, dan kedalaman ruang. */
+function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
+  const { params, lens } = ctx;
+  const note = <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>;
+  if (!params.lensBlurEnabled || !lens) return note;
+
+  const r = lensReadout(lensSettings(params), params.filmFormat, FILM_FORMAT_LONG_EDGE_MM[params.filmFormat], lens.aspect);
+  const readout = (
+    <p className="t-footnote secondary tabular" style={{ margin: 0 }}>
+      Sharp from {meters(r.nearLimitM)} to {meters(r.farLimitM)} · {Math.round(r.focalLengthMm)} mm f/{params.lensFNumber} · hyperfocal {meters(r.hyperfocalM)}
+    </p>
+  );
+  const { depth } = lens;
+  let status: React.ReactNode;
+  switch (depth.status) {
+    case 'idle':
+    case 'working': {
+      const phase = depth.status === 'working' ? depth.phase : 'runtime';
+      const pct = depth.status === 'working' && depth.total > 0 ? ` ${Math.round((100 * depth.loaded) / depth.total)}%` : '';
+      status = (
+        <span className="t-subhead" role="status" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Spinner size={16} />
+          {DEPTH_PHASE[phase]}…{pct}
+        </span>
+      );
+      break;
+    }
+    case 'needs-download':
+      status = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p className="t-subhead" style={{ margin: 0 }}>Lens blur needs a one-time download of the depth model. It stays on this device, and your photos never leave it.</p>
+          <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onDownload}>
+            Download · {megabytes(depth.bytes)}
+          </PressButton>
+        </div>
+      );
+      break;
+    case 'error':
+      status = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p className="t-subhead" role="alert" style={{ margin: 0 }}>Couldn’t measure depth: {depth.message}</p>
+          <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onRetry}>
+            Try Again
+          </PressButton>
+        </div>
+      );
+      break;
+    case 'ready':
+      status = (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <PressButton className="capsule bordered" aria-pressed={lens.picking} onClick={lens.onPickFocus} style={lens.picking ? { background: 'var(--blue)', color: '#fff' } : undefined}>
+            <Icon name="focus" size={16} /> {lens.picking ? 'Tap the Subject' : 'Pick Focus'}
+          </PressButton>
+          <span className="t-footnote secondary">
+            Depth ready · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
+          </span>
+        </div>
+      );
+      break;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+      {status}
+      {readout}
+    </div>
+  );
 }
 
 /** Deretan alat satu kelompok (panel HP). Alat terpilih digulir ke tengah. */
@@ -236,7 +366,7 @@ export function InspectorTool({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
           {locked && <Icon name="lock" size={13} />}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && <span className="t-subhead secondary tabular">{valueText(tool, ctx.params)}</span>}
+          {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && <span className="t-subhead secondary tabular">{tool.kind === 'stepper' && tool.values ? stepperText(tool, ctx.params) : valueText(tool, ctx.params)}</span>}
           <ResetButton tool={tool} ctx={ctx} />
           <ToolSwitch tool={tool} ctx={ctx} />
         </span>

@@ -26,6 +26,18 @@ function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperti
   return <canvas ref={ref} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', ...style }} />;
 }
 
+/**
+ * Titik fokus lens blur (koordinat 0..1 relatif foto). `picking`: ketukan
+ * berikutnya memilih subjek (pembanding dan intip asli dimatikan selama itu).
+ */
+export interface FocusOverlay {
+  x: number;
+  y: number;
+  show: boolean;
+  picking: boolean;
+  onPick: (x: number, y: number) => void;
+}
+
 export function PhotoView({
   frame,
   original,
@@ -33,6 +45,7 @@ export function PhotoView({
   rendering,
   photoKey,
   label,
+  focus,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -41,6 +54,7 @@ export function PhotoView({
   /** Berganti per berkas: foto baru muncul dengan pudar singkat. */
   photoKey: string;
   label: string;
+  focus?: FocusOverlay;
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
@@ -86,7 +100,19 @@ export function PhotoView({
     setSplit(Math.min(1, Math.max(0, (clientX - box.left - rect.left) / rect.width)));
   };
 
+  const picking = focus?.picking === true;
+
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (picking && focus) {
+      const box = areaRef.current?.getBoundingClientRect();
+      if (!box || rect.width === 0 || rect.height === 0) return;
+      const x = (e.clientX - box.left - rect.left) / rect.width;
+      const y = (e.clientY - box.top - rect.top) / rect.height;
+      // Ketukan di luar foto (di bingkai hitam) tidak memilih apa pun.
+      if (x < 0 || x > 1 || y < 0 || y > 1) return;
+      focus.onPick(Number(x.toFixed(4)), Number(y.toFixed(4)));
+      return;
+    }
     if (compare) {
       splitDrag.current = true;
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -105,13 +131,13 @@ export function PhotoView({
     setPeek(false);
   };
 
-  const showOriginal = !!original && (compare || peek);
+  const showOriginal = !!original && !picking && (compare || peek);
   const clip = compare ? `inset(0 ${(1 - split) * 100}% 0 0)` : 'inset(0 0 0 0)';
 
   return (
     <div
       ref={areaRef}
-      style={{ position: 'absolute', inset: 0, touchAction: compare ? 'none' : 'manipulation', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      style={{ position: 'absolute', inset: 0, touchAction: compare || picking ? 'none' : 'manipulation', cursor: picking ? 'crosshair' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
@@ -152,7 +178,21 @@ export function PhotoView({
                 <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: `calc(${split * 100}% + 8px)`, padding: '4px 10px', borderRadius: 9999, fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
               </>
             )}
-            {peek && !compare && (
+            {focus && (focus.show || picking) && (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute', left: `${focus.x * 100}%`, top: `${focus.y * 100}%`, width: 56, height: 56, marginLeft: -28, marginTop: -28,
+                  border: `2px solid ${picking ? '#ffd60a' : 'rgba(255,255,255,0.9)'}`, borderRadius: 10, boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none',
+                }}
+              />
+            )}
+            {picking && (
+              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 9999, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Tap the subject to focus
+              </span>
+            )}
+            {peek && !compare && !picking && (
               <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 9999, fontWeight: 600 }}>Original</span>
             )}
             <AnimatePresence>

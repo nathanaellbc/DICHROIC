@@ -35,6 +35,23 @@
 // (auto-exposure lalu ikut `filmExposureEv`, setara karena linear).
 @group(0) @binding(6) var<uniform> inputFrame: vec4<f32>;
 
+// "Camera Raw" (ekstensi DICHROIC di luar spektrafilm, `host/cameraDevelop.ts`):
+// white balance (3x3 di primer input), tone luminans di sekitar pivot, lalu
+// saturasi. `flags.z == 0` -> DILEWATI persis (nilai netral), jadi gerbang
+// parity Python tidak tersentuh.
+struct CameraFrame {
+  wb0: vec4<f32>,
+  wb1: vec4<f32>,
+  wb2: vec4<f32>,
+  // xyz = bobot luminans ternormalisasi, w = pivot
+  luma: vec4<f32>,
+  // x = pengali contrast, y = highlights, z = shadows, w = whites
+  tone: vec4<f32>,
+  // x = blacks, y = saturasi, z = aktif (1/0)
+  flags: vec4<f32>,
+}
+@group(0) @binding(7) var<uniform> cameraFrame: CameraFrame;
+
 const kLog10E: f32 = 0.4342944819032518;
 const kColorAdaptationInputCompression: u32 = 1u << 0u;
 // Fase 2C Task 9: `io.input_cctf_decoding` Python (`FLAG_INPUT_CCTF_DECODING`, params.ts).
@@ -120,6 +137,34 @@ fn decodeInputRgb(rgb: vec3<f32>, colorSpace: u32) -> vec3<f32> {
     sampleDecodeLut(scaled.g, colorSpace),
     sampleDecodeLut(scaled.b, colorSpace),
   );
+}
+
+fn logistic(x: f32) -> f32 {
+  return 1.0 / (1.0 + exp(-x));
+}
+
+// Port `developLuma` (host/cameraDevelop.ts): stop di atas pivot, dikali
+// contrast, lalu empat masker logistik (sisi gelap dalam bentuk cermin).
+fn developLuma(y: f32) -> f32 {
+  let pivot = cameraFrame.luma.w;
+  let l = log2(max(y, 1.0e-7) / pivot);
+  var t = l * cameraFrame.tone.x;
+  t += cameraFrame.tone.y * logistic(t - 1.5);
+  t += cameraFrame.tone.z * logistic(-1.5 - t);
+  t += cameraFrame.tone.w * logistic(t - 4.0);
+  t += cameraFrame.flags.x * logistic(-4.0 - t);
+  return pivot * exp2(t);
+}
+
+fn cameraDevelop(rgb: vec3<f32>) -> vec3<f32> {
+  if (cameraFrame.flags.z == 0.0) {
+    return rgb;
+  }
+  let c = vec3<f32>(dot(cameraFrame.wb0.xyz, rgb), dot(cameraFrame.wb1.xyz, rgb), dot(cameraFrame.wb2.xyz, rgb));
+  let y = dot(cameraFrame.luma.xyz, c);
+  let yOut = developLuma(y);
+  let gain = yOut / max(y, 1.0e-7);
+  return max(vec3<f32>(yOut) + cameraFrame.flags.y * (c * gain - vec3<f32>(yOut)), vec3<f32>(0.0));
 }
 
 // Baca satu matriks 3x3 row-major dari `arena` mulai `base`, kalikan `rgb`.
@@ -289,7 +334,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let exposure = exp2(params.filmExposureEv);
   let colorSpace = colorSpaceIndex();
   let source = src[index];
-  let decoded = decodeInputRgb(source.rgb, colorSpace);
+  let decoded = cameraDevelop(decodeInputRgb(source.rgb, colorSpace));
   let linearSrgb = multiplyMatrix3(0u, ARENA_INPUTTOSRGB_OFFSET, colorSpace, decoded);
   let referenceXyz = multiplyMatrix3(1u, ARENA_INPUTTOREFERENCEXYZ_OFFSET, colorSpace, decoded);
   let raw = select(hanatosRaw(referenceXyz), mallettRaw(linearSrgb), params.rgbToRawMethod == 1);

@@ -118,6 +118,17 @@ describe('FIELD_STATUS', () => {
       expect(marker.test(corpus), `tidak ada "@verifies ${field}" di test/`).toBe(true);
     }
   });
+
+  it('setiap field extension punya penanda @extends di test/ (gerbang referensi JS)', () => {
+    const corpus = testSources(join('test')).join('\n');
+    const extensions = (Object.keys(FIELD_STATUS) as Array<keyof RenderParams>).filter(
+      (f) => FIELD_STATUS[f] === 'extension',
+    );
+    for (const field of extensions) {
+      const marker = new RegExp(`@extends\\b[^\\n]*\\b${field}\\b`);
+      expect(marker.test(corpus), `tidak ada "@extends ${field}" di test/`).toBe(true);
+    }
+  });
 });
 
 function testSources(dir: string): string[] {

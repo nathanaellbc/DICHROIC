@@ -47,7 +47,11 @@ export default defineConfig({
         // Manifest aplikasi ditambahkan plugin sendiri.
         globPatterns: ['**/*.{html,js,css,wasm,svg,png,json,f16,f32}'],
         // Layar pembuka hanya diminta iOS saat memasang; tidak perlu offline.
-        globIgnores: ['icons/splash-*.png'],
+        // Runtime WASM ONNX Runtime (lens blur, 14-27 MB) diambil worker
+        // kedalaman lewat cache kedalamannya sendiri (`src/depth/model.ts`),
+        // bersama bobot model, dan hanya bila pengguna memakai lens blur --
+        // bukan diunduh setiap rilis oleh precache.
+        globIgnores: ['icons/splash-*.png', '**/ort-wasm*.wasm'],
         // Aset spektral terbesar (hanatos.f16) sekitar 6 MB.
         maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
       },
@@ -75,7 +79,9 @@ export default defineConfig({
   preview: { headers: crossOriginIsolation },
   // Pra-bundling esbuild memutus `new URL('libraw.wasm', import.meta.url)` dan
   // worker pthread Emscripten; paketnya disajikan apa adanya.
-  optimizeDeps: { exclude: ['libraw-wasm'] },
+  // Hal yang sama untuk ONNX Runtime: pra-bundling memutus pemuatan biner
+  // WASM-nya dan build JSEP/WebGPU-nya (lens blur, `src/depth/`).
+  optimizeDeps: { exclude: ['libraw-wasm', 'onnxruntime-web'] },
   // Worker Session mengimpor modul ES (dan LibRaw memuat pthread sebagai modul).
   worker: { format: 'es' },
   build: { target: 'es2022' },

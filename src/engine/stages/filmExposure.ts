@@ -3,6 +3,7 @@ import { Tap } from '../taps';
 import type { Stage, StageContext } from '../graph';
 import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { CAMERA_FRAME_FLOATS } from '../../host/cameraDevelop';
 import source from '../../shaders/filmExposure.wgsl?raw';
 
 /**
@@ -48,6 +49,15 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
       });
       new Float32Array(inputFrame.getMappedRange()).set([ctx.frame.inputDecodeScale ?? 1, 0, 0, 0]);
       inputFrame.unmap();
+      // "Camera Raw" (binding 7): nol semua = dilewati persis.
+      const cameraFrame = ctx.device.createBuffer({
+        label: 'filmExposure:cameraFrame',
+        size: CAMERA_FRAME_FLOATS * 4,
+        usage: gpuBufferUsage.UNIFORM,
+        mappedAtCreation: true,
+      });
+      if (ctx.frame.camera) new Float32Array(cameraFrame.getMappedRange()).set(ctx.frame.camera);
+      cameraFrame.unmap();
 
       const bindGroup = ctx.device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
@@ -59,6 +69,7 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
           { binding: 4, resource: { buffer: arenas.stock.buffer } },
           { binding: 5, resource: { buffer: arenas.dynamic.buffer } },
           { binding: 6, resource: { buffer: inputFrame } },
+          { binding: 7, resource: { buffer: cameraFrame } },
         ],
       });
 

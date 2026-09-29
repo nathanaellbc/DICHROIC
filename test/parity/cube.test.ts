@@ -4,6 +4,8 @@ import { parseCube } from '../../src/io/cube';
 import { expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './compare';
 import type { Comparison } from './compare';
 import { sharedResources } from './run';
+import { buildRenderPlan } from '../../src/params/plan';
+import type { AssetBundle } from '../../src/profiles/load';
 
 /**
  * Gerbang parity `.cube` (Fase 2A Task 7): kubus 17^3 dari
@@ -36,8 +38,12 @@ const PRINT = {
 
 let session: Session;
 
+let bundle: AssetBundle;
+
 beforeAll(async () => {
-  const { engine, bundle } = await sharedResources('kodak_portra_400', PRINT);
+  const shared = await sharedResources('kodak_portra_400', PRINT);
+  const { engine } = shared;
+  bundle = shared.bundle;
   session = await Session.create({
     assetsBaseUrl: 'public/data',
     engine,
@@ -75,7 +81,12 @@ describe('parity: .cube (lattice 17^3, lut_mode)', () => {
 
   it('header mencatat efek yang dimatikan', async () => {
     const text = await session.exportCube(2);
-    expect(text).toContain('# disabled effects: halation, grain, camera diffusion, print diffusion');
+    // Kubus tidak bisa membawa efek spasial/stokastik maupun ekstensi yang
+    // bergantung isi gambar (camera raw mengukur pivot, lens blur butuh peta
+    // kedalaman) -- daftar lengkap dari plan, bukan salinan di sini.
+    const plan = buildRenderPlan(session.getParams(), bundle, { width: 2, height: 2, rgba: new Float32Array(16) }, 'cube');
+    expect(plan.disabledEffects).toEqual(expect.arrayContaining(['camera raw', 'lens blur', 'halation', 'grain', 'camera diffusion', 'print diffusion']));
+    expect(text).toContain(`# disabled effects: ${plan.disabledEffects.join(', ')}`);
     expect(text).toContain('LUT_3D_SIZE 2');
   });
 
