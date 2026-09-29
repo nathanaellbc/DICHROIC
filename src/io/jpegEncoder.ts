@@ -179,7 +179,10 @@ class Output {
     this.u8(0xff);
     this.u8(marker);
     this.u16(len);
-    for (const p of parts) typeof p === 'string' ? this.ascii(p) : this.bytes(p);
+    for (const p of parts) {
+      if (typeof p === 'string') this.ascii(p);
+      else this.bytes(p);
+    }
   }
 }
 
