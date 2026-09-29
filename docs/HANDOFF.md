@@ -5,9 +5,34 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, UI versi pertama)
+## Posisi sekarang (diperbarui 2026-09-29, rilis PWA)
 
-- **Branch:** `claude/admiring-galileo-1vwlrk`, dari `main` setelah PR #4 (2C).
+- **Branch:** `claude/admiring-galileo-1vwlrk`, dari `main` setelah PR #5 (UI).
+- **PWA selesai:** `src/sw.ts` (vite-plugin-pwa `injectManifest`) mem-precache
+  seluruh aplikasi termasuk `data/` (~9,7 MB) dan menambahkan header
+  COOP/COEP/CORP ke setiap respons, jadi RAW jalan juga di GitHub Pages.
+  `src/ui/pwa.ts`: pembaruan hanya diaktifkan saat tidak ada foto terbuka;
+  satu muat ulang untuk isolasi bila host tidak mengirim header (tidak
+  diulang bila browser tidak mendukungnya). Ikon dan 11 layar pembuka iPhone
+  dari `tools/gen_icons.mjs`. Deploy: `.github/workflows/deploy.yml` (Pages,
+  base `/<repo>/`) atau `public/_headers` (Cloudflare Pages/Netlify).
+- **Foto HP:** `io/metadata.ts` menerapkan Orientation EXIF (JPEG/PNG/TIFF)
+  dan memakai deskripsi ICC (Display P3 dari iPhone) sebagai saran colour
+  space. HEIC/AVIF/WebP lewat decoder browser (`ui/engine/browserDecode.ts`).
+  `image/heic` sengaja tidak ada di `accept`, supaya iOS mengonversi ke JPEG.
+- **Prewarm:** `Session.prewarm()` mengompilasi measured (grain hidup/mati)
+  dan lut dengan frame 8x8 lewat antrean render; UI memanggilnya setelah
+  `init`. `graphFor` kini berbagi `Promise` (graf duplikat hilang) dan
+  `exportCube` lewat antrean.
+- **Diverifikasi** di Chromium headless (SwiftShader): pasang, reload
+  offline, buka JPEG ber-Orientation 6 / WebP / DNG offline, isolasi dari
+  service worker di host tanpa header, subpath `/DICHROIC/`. Suite Session di
+  lavapipe: prewarm lulus; satu-satunya gagal tetap tile-vs-full 2,09e-6.
+- **Belum:** uji di iPhone fisik (WebGPU Safari, presisi df64 Metal, memori),
+  suite penuh 2x di NVIDIA setelah perbaikan NaN (lihat di bawah).
+
+### UI versi pertama (2026-09-29, PR #5)
+
 - **UI selesai versi pertama** (`src/ui/`): React 19 + Motion 12, iPhone-first
   sesuai DESIGN.md (Apple HIG / Liquid Glass) yang diberikan pemilik proyek;
   desain kanvas di Claude Design ("DICHROIC UI"). Jalankan: `npm run dev`
@@ -20,16 +45,12 @@ peta jalan untuk melanjutkan.
   2,09e-6 terhadap 2e-6, derau f32 backend perangkat lunak; ambang tidak
   diubah). **Konfirmasi suite hijau dua kali di mesin NVIDIA** -- aritmetika
   untuk wavelength non-NaN identik, jadi harus tetap bit-identik.
-- **Diverifikasi** di Chromium headless (WebGPU SwiftShader): viewport iPhone
-  14 potret/lanskap dan 1440x900; buka JPEG dan DNG, semua alat, sheet stok,
-  ekspor PNG resolusi penuh (unduhan), discard, alert format tak didukung;
-  `vite build` dan `vite preview` bersih. **Belum** dicoba di iPhone fisik.
 
 | Sub-proyek | Status | Rencana |
 |---|---|---|
 | 2A, 2A.5, 2B, 2C | selesai | lihat rencana masing-masing |
 | UI versi pertama | **selesai** (compact + regular) | DESIGN.md pemilik proyek; kanvas Claude Design |
-| PWA (manifest, ikon, precache, hosting COOP/COEP) | belum | spec induk |
+| PWA (manifest, ikon, precache, hosting COOP/COEP) | **selesai** | spec induk §5.3; README "Installing and hosting" |
 | Batch parameter 2, difusi FFT | belum | spec Fase 2 §8 |
 
 ## UI: peta cepat
@@ -189,14 +210,14 @@ Setiap baris: keputusan — alasan — biaya bila salah.
 
 ## Minor yang ditunda
 
-- `Session.graphFor` bisa membuat graf duplikat (tak di-dispose) bila dua
-  graf baru diminta bersamaan — simpan `Promise<RenderGraph>` di map.
-- `exportCube` tidak lewat antrean render; aman karena encode `graph.run`
-  sinkron, tapi tidak ada batasan konkurensi eksplisit.
 - `GaussianBlur.pass` membuat buffer bobot dummy per pass tanpa FIR.
-- Graf varian rantai baru butuh 2–9 s kompilasi shader pertama —
-  *prewarm* di `Session.create` saat UI dikerjakan. Pratinjau hangat 1024 px
-  ~0,3 s; render penuh 2048 px ~1,8 s.
+- Mengubah filter C/M/Y memra-hitung ulang arena (beberapa ratus ms per
+  nilai); kandidat: `printFilteredIlluminant` sebagai nilai per render.
+- Ekspor (gambar/kubus) yang menunggu menyalip pratinjau yang menunggu;
+  pratinjau itu dibuang dan baru diperbarui pada perubahan berikutnya.
+- Pratinjau hangat 1024 px ~0,3 s; render penuh 2048 px ~1,8 s (NVIDIA).
+- Selesai saat rilis PWA: graf duplikat `graphFor`, `exportCube` di luar
+  antrean, prewarm kompilasi shader.
 
 ## Menyiapkan mesin baru
 

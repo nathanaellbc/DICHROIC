@@ -256,9 +256,18 @@ interface DecodedImage {
 | RAW | `libraw-wasm` (ISC; LibRaw LGPL-2.1/CDDL) | setelan rawpy §2.5 → linear | `ACES2065-1` |
 
 Semua decoder murni JS/WASM, jadi bisa diuji di Node tanpa DOM. Profil ICC
-belum dibaca di fase ini: warna yang disarankan hanya saran, dan colour space
-input tetap parameter yang dipilih pengguna (`inputColorSpace`, §6). Ini
-dicatat sebagai keterbatasan, bukan disembunyikan.
+belum diterapkan: warna yang disarankan hanya saran, dan colour space input
+tetap parameter yang dipilih pengguna (`inputColorSpace`, §6). Ini dicatat
+sebagai keterbatasan, bukan disembunyikan.
+
+*Tambahan rilis PWA (2026-09-29):* `decodeImage` membaca metadata di luar
+decoder (`io/metadata.ts`): tag Orientation (JPEG APP1 Exif, PNG `eXIf`, TIFF
+IFD0) diterapkan setelah decode, dan deskripsi profil ICC yang jelas (Display
+P3, Adobe RGB, ProPhoto, sRGB) menggantikan saran `sRGB`. Decoder per format
+tetap mengembalikan piksel apa adanya, jadi gerbang Pillow/tifffile tidak
+berubah. Di browser, HEIC/AVIF/WebP/GIF/BMP dibaca lewat `createImageBitmap`
+(`ui/engine/browserDecode.ts`, 8-bit, Display P3 bila kanvas mendukung) --
+jalur tanpa oracle, hanya untuk format yang tidak bisa dibuka `io/`.
 
 `detect.ts` memilih decoder dari magic bytes, bukan dari ekstensi. Galat
 decode dibungkus `DecodeError` yang menyebut format dan alasannya.
@@ -356,9 +365,9 @@ menyebut COOP/COEP. Diverifikasi di Chromium headless lewat Vite: kelima
 format ter-decode, baik di halaman maupun lewat RPC `decode` di worker
 `Session` (pthread LibRaw bersarang di worker itu).
 
-**Keterbatasan yang tercatat** (bukan disembunyikan): profil ICC tidak dibaca
-(dan tidak disematkan saat ekspor), tag orientasi EXIF/TIFF tidak diterapkan
-pada JPEG/PNG/TIFF (RAW memakai orientasi berkas), EXR multi-part/deep dan
+**Keterbatasan yang tercatat** (bukan disembunyikan): profil ICC tidak
+diterapkan (hanya deskripsinya dipakai sebagai saran sejak rilis PWA) dan
+tidak disematkan saat ekspor, EXR multi-part/deep dan
 mipmap selain level 0 tidak didukung, halaman TIFF selain IFD pertama
 diabaikan.
 
