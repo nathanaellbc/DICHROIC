@@ -66,6 +66,9 @@ class FakeSession implements SessionLike {
     this.lastRgb = Float32Array.of(delay, 0.5, 0.25);
     return { width: 1, height: 1, rgb: this.lastRgb, quality, paramsVersion: delay };
   }
+  lastFullSize() {
+    return { width: 4, height: 3 };
+  }
   async prewarm(): Promise<void> {
     this.calls.push(['prewarm', []]);
   }

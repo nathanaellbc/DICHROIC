@@ -40,6 +40,9 @@ export interface ChainSpec {
   grain: boolean;
   /** Fase 2D Task 3: `io.scan_film` -- tanpa tahap print. Baku `false`. */
   scan?: boolean;
+  /** Fase 2D Task 4: difusi FFT kamera / enlarger aktif. Baku `false`. */
+  cameraDiffusion?: boolean;
+  printDiffusion?: boolean;
 }
 
 export interface ArenaInputs {
@@ -227,6 +230,16 @@ export function validateDirCouplers(params: RenderParams): void {
       throw new UnverifiedParameterError(field, params[field], baseline[field], 'shift filter preflash digerbangi -60..60 CC');
     }
   }
+  for (const field of ['cameraDiffusionStrength', 'printDiffusionStrength'] as const) {
+    if (!(params[field] >= 0) || params[field] > 2) {
+      throw new UnverifiedParameterError(field, params[field], baseline[field], 'strength difusi digerbangi 0..2 (stop filter komersial)');
+    }
+  }
+  for (const field of ['cameraDiffusionFamily', 'printDiffusionFamily'] as const) {
+    if (!['glimmerglass', 'black_pro_mist', 'pro_mist', 'cinebloom'].includes(params[field])) {
+      throw new UnverifiedParameterError(field, params[field], baseline[field], 'family difusi tidak dikenal');
+    }
+  }
   if (!(params.dirCouplersDiffusionUm >= 0) || params.dirCouplersDiffusionUm > 60) {
     throw new UnverifiedParameterError(
       'dirCouplersDiffusionUm',
@@ -254,6 +267,10 @@ export function buildRenderPlan(
   // `print_render.glare.active`); keduanya mati di lut_mode. Scan film
   // (Fase 2D) tidak punya glare: `scanning.py` memberi `glare = None`.
   const grainActive = family === 'measured' && params.grainEnabled;
+  // Fase 2D Task 4: difusi spasial -- `lut_mode` (deactivate_spatial_effects)
+  // mematikan keduanya; situs enlarger tidak ada di mode scan film.
+  const cameraDiffusion = family === 'measured' && params.cameraDiffusionEnabled && params.cameraDiffusionStrength > 0;
+  const printDiffusion = family === 'measured' && !scan && params.printDiffusionEnabled && params.printDiffusionStrength > 0;
   const glareActive = family === 'measured' && !scan && params.glareEnabled && params.glarePercent > 0;
 
   const printScan: PrintScanArenaOptions | ScanFilmArenaOptions = scan
@@ -297,11 +314,19 @@ export function buildRenderPlan(
       ? `${params.film}::scan::out=${params.outputColorSpace}`
       : `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: { stockId: params.film, printScan },
-    chain: scan ? { family, grain: grainActive, scan } : { family, grain: grainActive },
+    chain: {
+      family,
+      grain: grainActive,
+      ...(scan ? { scan } : {}),
+      ...(cameraDiffusion ? { cameraDiffusion: true } : {}),
+      ...(printDiffusion ? { printDiffusion: true } : {}),
+    },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {
       ...exposureFrame(params, family, filmFormatMm),
+      ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
+      ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
       inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
     },
   };

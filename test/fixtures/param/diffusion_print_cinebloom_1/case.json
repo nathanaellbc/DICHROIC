@@ -1,0 +1,43 @@
+{
+  "name": "param/diffusion_print_cinebloom_1",
+  "height": 96,
+  "width": 128,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "printDiffusionEnabled": true,
+    "printDiffusionFamily": "cinebloom",
+    "printDiffusionStrength": 1.0
+  },
+  "pythonOverrides": [
+    "enlarger.diffusion_filter = (active=True, 'cinebloom', strength=1.0)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

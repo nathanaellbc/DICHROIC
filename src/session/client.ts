@@ -85,6 +85,11 @@ export class SessionClient {
     return this.call('render', [quality]) as Promise<RenderResult>;
   }
 
+  /** Ukuran render penuh terakhir (lihat `Session.lastFullSize`). */
+  lastFullSize(): Promise<{ width: number; height: number } | undefined> {
+    return this.call('lastFullSize', []) as Promise<{ width: number; height: number } | undefined>;
+  }
+
   /** Kompilasi varian rantai lebih dulu (lihat `Session.prewarm`). */
   prewarm(): Promise<void> {
     return this.call('prewarm', []) as Promise<void>;

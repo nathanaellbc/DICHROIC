@@ -25,7 +25,8 @@ import type { DecodedImage } from '../io/decoded';
 import { encodePng, encodeTiff16 } from '../io/encode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
-import { buildRenderPlan, validateStocks } from '../params/plan';
+import { buildRenderPlan, FILM_FORMAT_LONG_EDGE_MM, validateStocks } from '../params/plan';
+import { diffusionFftBytes, diffusionRadiusPx } from '../engine/stages/diffusionFft';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
 import { applyParamsPatch } from '../params/registry';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
@@ -118,6 +119,53 @@ class OwnedArenaProvider implements ArenaProvider {
   }
 }
 
+/** Byte maksimum satu bidang FFT difusi (dari tiga; lih. `fitForDiffusion`). */
+export const DIFFUSION_PLANE_BUDGET = 256 * 1024 * 1024;
+
+/**
+ * Sisi panjang terbesar (<= asli) tempat render penuh dengan difusi aktif
+ * muat: frame utuh dalam satu binding storage, dan tiap bidang FFT df64
+ * <= min(`planeBudget`, batas binding). Tanpa difusi: sisi panjang asli.
+ */
+export function diffusionRenderLongEdge(
+  width: number,
+  height: number,
+  params: RenderParams,
+  maxBindingBytes: number,
+  planeBudget = DIFFUSION_PLANE_BUDGET,
+): number {
+  const original = Math.max(width, height);
+  const sites = [
+    params.cameraDiffusionEnabled && params.cameraDiffusionStrength > 0
+      ? { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength }
+      : undefined,
+    params.process !== 'scanNegative' && params.printDiffusionEnabled && params.printDiffusionStrength > 0
+      ? { family: params.printDiffusionFamily, strength: params.printDiffusionStrength }
+      : undefined,
+  ].filter((site) => site !== undefined);
+  if (sites.length === 0) return original;
+  const planeLimit = Math.min(planeBudget, maxBindingBytes);
+  const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
+  const aspect = Math.min(width, height) / original;
+  const dims = (edge: number) =>
+    width >= height
+      ? { w: edge, h: Math.max(1, Math.round(edge * aspect)) }
+      : { w: Math.max(1, Math.round(edge * aspect)), h: edge };
+  const fits = (edge: number) => {
+    const { w, h } = dims(edge);
+    return (
+      w * h * 16 <= maxBindingBytes &&
+      sites.every((site) => {
+        const radius = diffusionRadiusPx(site, (filmFormatMm * 1000) / Math.max(w, h), w, h);
+        return diffusionFftBytes(w, h, radius) / 3 <= planeLimit;
+      })
+    );
+  };
+  let edge = original;
+  while (edge > 256 && !fits(edge)) edge = Math.floor(edge * 0.9);
+  return edge;
+}
+
 export class Session {
   #params: RenderParams = { ...BASELINE_RENDER_PARAMS };
   #paramsVersion = 0;
@@ -173,6 +221,15 @@ export class Session {
   /** Naik setiap `setParams` yang diterima. */
   get paramsVersion(): number {
     return this.#paramsVersion;
+  }
+
+  /**
+   * Ukuran render penuh terakhir (Fase 2D): lebih kecil dari gambar bila
+   * difusi memaksa `fitForDiffusion`. UI membandingkannya setelah ekspor.
+   */
+  lastFullSize(): { width: number; height: number } | undefined {
+    const hit = this.#cache.get('full');
+    return hit ? { width: hit.result.width, height: hit.result.height } : undefined;
   }
 
   /** Bentuk method `diagnostics` untuk RPC. */
@@ -296,11 +353,25 @@ export class Session {
     const params = this.#params;
     const paramsVersion = this.#paramsVersion;
     const key = this.cacheKey(quality);
-    const frame = quality === 'preview' ? this.previewImage() : image;
+    const frame = quality === 'preview' ? this.previewImage() : this.fitForDiffusion(image, params);
     const rgb = await this.renderFrame(frame, params, 'image');
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
     if (!this.#disposed) this.#cache.set(quality, { key, result });
     return result;
+  }
+
+  /**
+   * Fase 2D Task 4: konvolusi FFT difusi butuh frame utuh (tidak bisa di-tile)
+   * dan tiga bidang kompleks df64 (16 byte per elemen) seukuran pangkat dua
+   * >= (w + 2r) x (h + 2r). Bila render penuh tidak muat dalam
+   * `DIFFUSION_PLANE_BUDGET` per bidang (dan batas binding storage device),
+   * gambar diperkecil ke sisi panjang terbesar yang muat -- ekspor tetap
+   * berjalan, hanya lebih kecil; `lastRenderSize` melaporkannya ke UI.
+   */
+  private fitForDiffusion(image: DecodedImage, params: RenderParams): { width: number; height: number; rgba: Float32Array } {
+    const longEdge = diffusionRenderLongEdge(image.width, image.height, params, this.engine.maxStorageBufferBindingSize);
+    if (longEdge >= Math.max(image.width, image.height)) return image;
+    return boxDownscale(image.rgba, image.width, image.height, longEdge);
   }
 
   private previewImage(): ScaledImage {
@@ -421,7 +492,9 @@ export class Session {
    * membangun dua (yang kedua dulu tertimpa tanpa di-dispose).
    */
   private graphFor(plan: RenderPlan): Promise<RenderGraph> {
-    const key = `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}`;
+    const key =
+      `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
+      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) return existing;
     const building = (async () => {

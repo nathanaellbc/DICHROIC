@@ -309,6 +309,8 @@ export interface PrecomputedDiffusionFilter {
   scatterFraction: number;
   /** Shape `(2*radius+1, 2*radius+1, 3)`, C-order, f32 for GPU upload. */
   psf: Float32Array;
+  /** Nilai f64 yang sama (Fase 2D: dipecah ke df64 untuk konvolusi FFT). */
+  psf64: Float64Array;
 }
 
 /**
@@ -318,6 +320,20 @@ export interface PrecomputedDiffusionFilter {
  * of width/height of the image this filter will run on, used only to cap
  * the radius so it can never exceed the image.
  */
+/**
+ * Radius kernel `apply_diffusion_filter_um` tanpa membangun PSF: 0 bila
+ * filter tidak berefek (strength/p_s/spatial scale <= 0), selain itu
+ * `min(ceil(max(8 * lambda_max_px, 5)), max(min_dim // 2 - 1, 1))`.
+ */
+export function diffusionRadius(config: DiffusionFilterConfig, pixelSizeUm: number, minImageDim: number): number {
+  const spatialScale = config.spatialScale ?? 1.0;
+  if (!(config.strength > 0) || !(spatialScale > 0)) return 0;
+  if (strengthToScatter(config.strength, config.family) <= 0) return 0;
+  const bloomMaxLambdaPx = (bloomMaxLambdaUm(config.family, config.overrides) * spatialScale) / pixelSizeUm;
+  const radius = Math.ceil(Math.max(8.0 * bloomMaxLambdaPx, 5.0));
+  return Math.min(radius, Math.max(Math.floor(minImageDim / 2) - 1, 1));
+}
+
 export function precomputeDiffusionFilter(
   config: DiffusionFilterConfig,
   pixelSizeUm: number,
@@ -327,12 +343,12 @@ export function precomputeDiffusionFilter(
   const haloWarmth = config.haloWarmth ?? 0.0;
 
   if (!(config.strength > 0) || !(spatialScale > 0)) {
-    return { radius: 0, scatterFraction: 0, psf: new Float32Array([1, 1, 1]) };
+    return { radius: 0, scatterFraction: 0, psf: new Float32Array([1, 1, 1]), psf64: new Float64Array([1, 1, 1]) };
   }
 
   const scatterFraction = strengthToScatter(config.strength, config.family);
   if (scatterFraction <= 0) {
-    return { radius: 0, scatterFraction: 0, psf: new Float32Array([1, 1, 1]) };
+    return { radius: 0, scatterFraction: 0, psf: new Float32Array([1, 1, 1]), psf64: new Float64Array([1, 1, 1]) };
   }
 
   const bloomMaxLambdaPx = (bloomMaxLambdaUm(config.family, config.overrides) * spatialScale) / pixelSizeUm;
@@ -341,5 +357,5 @@ export function precomputeDiffusionFilter(
 
   const size = 2 * radius + 1;
   const psf64 = diffusionFilterPsf(size, config.family, pixelSizeUm, spatialScale, haloWarmth, config.overrides);
-  return { radius, scatterFraction, psf: Float32Array.from(psf64) };
+  return { radius, scatterFraction, psf: Float32Array.from(psf64), psf64 };
 }

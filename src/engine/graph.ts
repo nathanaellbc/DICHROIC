@@ -19,6 +19,7 @@
  * di bawah adalah loop terbalik manual yang setara, tanpa menaikkan target lib.
  */
 
+import type { DiffusionFilterConfig } from '../host/diffusionFilter';
 import { CORE_PARAMS_BYTES, writeCoreParams } from './params';
 import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
@@ -82,6 +83,12 @@ export interface FrameParams {
   preflashExposure?: number;
   preflashMFilterShift?: number;
   preflashYFilterShift?: number;
+  /**
+   * Fase 2D Task 4: `camera.diffusion_filter` dan `enlarger.diffusion_filter`
+   * Python bila aktif (tahap `diffusionFft`). Tidak ada = tidak aktif.
+   */
+  cameraDiffusion?: DiffusionFilterConfig;
+  printDiffusion?: DiffusionFilterConfig;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

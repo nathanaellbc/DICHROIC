@@ -637,3 +637,55 @@ PARAM_CASES.update({
     ),
     "scan_velvia100_grain_flat": _scan_case("fujifilm_velvia_100", "flat_patch", "stochastic", realizations=16),
 })
+
+# Fase 2D Task 4: filter difusi (konvolusi FFT df64 di engine). `camera*` ->
+# `camera.diffusion_filter`, `print*` -> `enlarger.diffusion_filter`
+# (`active`, `filter_family`, `strength`). `lamp_scene` 128x96 membawa radius
+# ke klem 47 px dan kontras 4e4:1 (FFT f32 gagal di sana); kasus `_px6um`
+# di ukuran piksel produksi; `_lut` membuktikan lut_mode mematikan difusi.
+def _diffusion(site: str, family: str, strength: float) -> Override:
+    def apply(p: Any) -> None:
+        target = p.camera.diffusion_filter if site == "camera" else p.enlarger.diffusion_filter
+        target.active = True
+        target.filter_family = family
+        target.strength = strength
+    return apply
+
+
+def _diffusion_case(image: str, family_case: str, sites: dict[str, tuple[str, float]],
+                    film_format_mm: float | None = None) -> ParamCase:
+    render_params: dict[str, Any] = {}
+    overrides: list[str] = []
+    applies: list[Override] = []
+    for site, (family, strength) in sites.items():
+        prefix = "camera" if site == "camera" else "print"
+        render_params.update({
+            f"{prefix}DiffusionEnabled": True,
+            f"{prefix}DiffusionFamily": family,
+            f"{prefix}DiffusionStrength": strength,
+        })
+        target = "camera" if site == "camera" else "enlarger"
+        overrides.append(f"{target}.diffusion_filter = (active=True, {family!r}, strength={strength})")
+        applies.append(_diffusion(site, family, strength))
+    return ParamCase(
+        image=image, family=family_case,
+        render_params=render_params,
+        python_overrides=tuple(overrides),
+        pre=lambda p, fns=tuple(applies): [fn(p) for fn in fns] and None,
+        film_format_mm=film_format_mm,
+    )
+
+
+PARAM_CASES.update({
+    "diffusion_camera_glimmerglass_0_125": _diffusion_case("lamp_scene", "deterministic", {"camera": ("glimmerglass", 0.125)}),
+    "diffusion_camera_black_pro_mist_1": _diffusion_case("lamp_scene", "deterministic", {"camera": ("black_pro_mist", 1.0)}),
+    "diffusion_camera_pro_mist_0_5": _diffusion_case("lamp_scene", "deterministic", {"camera": ("pro_mist", 0.5)}),
+    "diffusion_camera_cinebloom_2": _diffusion_case("lamp_scene", "deterministic", {"camera": ("cinebloom", 2.0)}),
+    "diffusion_print_cinebloom_1": _diffusion_case("lamp_scene", "deterministic", {"print": ("cinebloom", 1.0)}),
+    "diffusion_print_glimmerglass_2": _diffusion_case("lamp_scene", "deterministic", {"print": ("glimmerglass", 2.0)}),
+    "diffusion_both_pro_mist_bpm": _diffusion_case(
+        "lamp_scene", "deterministic", {"camera": ("pro_mist", 0.25), "print": ("black_pro_mist", 0.5)},
+    ),
+    "diffusion_camera_cinebloom_1_px6um": _diffusion_case("impulse_highlight", "deterministic", {"camera": ("cinebloom", 1.0)}, 0.4),
+    "diffusion_camera_black_pro_mist_1_lut": _diffusion_case("color_patches", "lut", {"camera": ("black_pro_mist", 1.0)}),
+})

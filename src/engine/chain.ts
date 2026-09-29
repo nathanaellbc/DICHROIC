@@ -5,6 +5,7 @@ import { createCurveDevelopStage } from './stages/curveDevelop';
 import { createDirStage } from './stages/dir';
 import { createGrainStage } from './stages/grain';
 import { createDiffusionStage } from './stages/diffusion';
+import { createDiffusionFftStage } from './stages/diffusionFft';
 import { createPrintExposureStage, createPrintDevelopStage } from './stages/printScan';
 import { createScannerPostStage } from './stages/scannerPost';
 import type { Arenas } from './arena';
@@ -107,6 +108,23 @@ import type { ChainSpec } from '../params/plan';
  * tahap scanner yang SAMA membaca `cmy_film` dengan data scanner FILM di
  * arena dynamic (`precomputeArenaData(..., { scanFilm: true })`).
  */
+/**
+ * Fase 2D Task 4: situs difusi memakai konvolusi FFT df64 bila aktif; bila
+ * mati tetap tahap identitas (`bypassConvolution`) yang menjaga semantik
+ * linear/log antar-tahap persis seperti sebelumnya.
+ */
+function cameraDiffusionStage(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage {
+  return spec.cameraDiffusion
+    ? createDiffusionFftStage(device, 'camera')
+    : createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true });
+}
+
+function printDiffusionStage(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage {
+  return spec.printDiffusion
+    ? createDiffusionFftStage(device, 'print')
+    : createDiffusionStage(device, arenas, 'print', { bypassConvolution: true });
+}
+
 export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
   if (!spec.scan) return buildPrintChain(device, arenas, spec);
   if (spec.family === 'lut') {
@@ -122,7 +140,7 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): 
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true }),
+    cameraDiffusionStage(device, arenas, spec),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),
     createDirStage(device, arenas),
@@ -149,13 +167,13 @@ function buildPrintChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): St
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true }),
+    cameraDiffusionStage(device, arenas, spec),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),
     createDirStage(device, arenas),
     ...(spec.grain ? [createGrainStage(device, arenas)] : []),
     createPrintExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'print', { bypassConvolution: true }),
+    printDiffusionStage(device, arenas, spec),
     createPrintDevelopStage(device, arenas),
     createScannerPostStage(device, arenas),
   ];

@@ -562,8 +562,26 @@ def encoded_patches() -> np.ndarray:
     return np.repeat(colors[None, :, :], 8, axis=0)
 
 
+def lamp_scene(width: int = 128, height: int = 96) -> np.ndarray:
+    """Fase 2D Task 4 (difusi FFT): adegan malam 128x96 -- gradien warna,
+    pita bayangan dalam (0.001), dan dua lampu terang (40 dan 25) di samping
+    bayangan. Radius kernel difusi mencapai klem `min(h, w) // 2 - 1 = 47`, dan
+    kontras 4e4:1 membuat FFT f32 gagal jelas di bayangan (derau pembulatan
+    energi lampu), jadi gerbang ini membuktikan presisi df64 -- deterministik."""
+    y, x = np.mgrid[0:height, 0:width].astype(np.float64)
+    img = np.empty((height, width, 3), dtype=np.float64)
+    img[..., 0] = 0.02 + 0.30 * (x / width)
+    img[..., 1] = 0.03 + 0.20 * (y / height)
+    img[..., 2] = 0.05 + 0.10 * ((x + y) / (width + height))
+    img[:, : width // 8, :] = 0.001
+    img[height // 3 : height // 3 + 4, width // 2 : width // 2 + 4, :] = [40.0, 36.0, 28.0]
+    img[2 * height // 3 : 2 * height // 3 + 3, width // 8 + 2 : width // 8 + 5, :] = [25.0, 22.0, 30.0]
+    return img
+
+
 PARAM_IMAGES = {
     **CASES,
+    "lamp_scene": lamp_scene,
     "grain_dense_patch": grain_dense_patch,
     "identity_lattice_17": identity_lattice_17,
     "flat_patch": flat_patch,

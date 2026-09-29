@@ -1,0 +1,43 @@
+{
+  "name": "param/diffusion_camera_glimmerglass_0_125",
+  "height": 96,
+  "width": 128,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_400",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "cameraDiffusionEnabled": true,
+    "cameraDiffusionFamily": "glimmerglass",
+    "cameraDiffusionStrength": 0.125
+  },
+  "pythonOverrides": [
+    "camera.diffusion_filter = (active=True, 'glimmerglass', strength=0.125)"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}
