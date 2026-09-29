@@ -144,6 +144,10 @@ export class Engine {
     },
     downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend),
     onChange: (depth) => this.#set({ depth }),
+    cancel: () => {
+      this.#estimator?.dispose();
+      this.#estimator = undefined;
+    },
   });
 
   getState = (): EngineState => this.#state;
