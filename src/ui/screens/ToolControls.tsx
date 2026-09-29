@@ -370,7 +370,8 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
                 </span>
               )}
             </motion.span>
-            <span className="t-caption2" style={{ color: isSelected ? '#fff' : 'rgba(235,235,245,0.6)' }}>{tool.label}</span>
+            {/* Selalu setinggi dua baris: label panjang (Flash Magenta) tidak menaikkan panel. */}
+            <span className="t-caption2" style={{ color: isSelected ? '#fff' : 'rgba(235,235,245,0.6)', height: '2.36em', textAlign: 'center' }}>{tool.label}</span>
           </motion.button>
         );
       })}

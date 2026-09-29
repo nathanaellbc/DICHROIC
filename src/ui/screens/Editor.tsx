@@ -343,6 +343,9 @@ interface LayoutProps {
 /** Tanpa foto, panel tetap terlihat sebagai pratinjau fungsinya, tapi jelas belum aktif. */
 const EMPTY_OPACITY = 0.6;
 
+/** Kotak kontrol alat di panel HP: slider + catatan tiga baris, stepper, atau pilihan. */
+const COMPACT_CONTROL_HEIGHT = 108;
+
 function PreviewNote({ state }: { state: EngineState }) {
   if (isDisplayReferred(state.params.outputColorSpace)) return null;
   return (
@@ -482,8 +485,13 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
             </div>
           </div>
 
-          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center' }}>
-            <ToolControl key={tool.id} tool={tool} ctx={ctx} />
+          {/* Tinggi tetap: panel (dan foto di atasnya) tidak naik-turun saat
+              berpindah alat atau grup. Isi yang lebih tinggi (kartu lens)
+              digulir di dalam kotak ini. */}
+          <div className="scroll-y" style={{ height: COMPACT_CONTROL_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ margin: 'auto 0', width: '100%' }}>
+              <ToolControl key={tool.id} tool={tool} ctx={ctx} />
+            </div>
           </div>
 
           <ToolChips group={currentGroup} selected={tool.id} onSelect={(id) => setToolByGroup({ ...toolByGroup, [group]: id })} ctx={ctx} />
