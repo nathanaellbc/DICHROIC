@@ -66,13 +66,15 @@ describe('katalog stok UI == manifest', () => {
 describe('alat UI == permukaan parameter engine', () => {
   const tools = GROUPS.flatMap((g) => g.tools);
 
-  it('setiap field yang diubah alat berstatus verified (atau extension di grup Camera), tidak pernah locked', () => {
+  it('setiap field yang diubah alat berstatus verified (atau extension di grup Camera/Lens), tidak pernah locked', () => {
     for (const group of GROUPS) {
       for (const tool of group.tools) {
         if (tool.kind === 'locked') continue;
         const fields: Array<keyof typeof FIELD_STATUS> = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : [tool.field];
         if (tool.kind === 'slider' && tool.enabledBy) fields.push(tool.enabledBy);
-        const allowed = group.id === 'camera' ? ['verified', 'extension'] : ['verified'];
+        // Ekstensi di luar spektrafilm (tanpa oracle Python) hanya di grup yang
+        // menyatakannya: Camera Raw dan Lens blur.
+        const allowed = group.id === 'camera' || group.id === 'lens' ? ['verified', 'extension'] : ['verified'];
         for (const field of fields) expect(allowed, `${tool.id}: ${field}`).toContain(FIELD_STATUS[field]);
       }
     }
@@ -100,6 +102,8 @@ describe('alat UI == permukaan parameter engine', () => {
     for (const tool of tools) {
       if (tool.kind !== 'slider' && tool.kind !== 'stepper') continue;
       const v = BASELINE_RENDER_PARAMS[tool.field];
+      // 0 bermakna sendiri untuk slider ber-`zeroAs` (lensa normal, bidang fokus).
+      if (tool.kind === 'slider' && tool.zeroAs && v === 0) continue;
       expect(v, tool.id).toBeGreaterThanOrEqual(tool.min);
       expect(v, tool.id).toBeLessThanOrEqual(tool.max);
     }

@@ -4,10 +4,11 @@
  * parity Fase 2C (`tools/param_cases.py`, spec Fase 2 §6.1), misalnya unsharp
  * berhenti di 2,5 karena di atasnya derau f32 melewati ambang.
  */
+import { F_STOPS, LENS_LIMITS, NORMAL_FOCAL_MM } from '../../host/lens';
 import type { DiffusionFilterFamily, FilmFormat, RenderParams } from '../../params/renderParams';
 import { isSlideFilm } from './stocks';
 
-export type GroupId = 'camera' | 'film' | 'color' | 'darkroom' | 'texture';
+export type GroupId = 'camera' | 'lens' | 'film' | 'color' | 'darkroom' | 'texture';
 
 type NumericField = {
   [K in keyof RenderParams]: RenderParams[K] extends number ? K : never;
@@ -21,7 +22,8 @@ export type IconName =
   | 'dot' | 'input' | 'decode' | 'output'
   | 'couplers' | 'layers' | 'edge' | 'spread' | 'flash'
   | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion' | 'enlargerFilter'
-  | 'temperature' | 'tint' | 'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'saturation' | 'lens';
+  | 'temperature' | 'tint' | 'contrast' | 'highlights' | 'shadows' | 'whites' | 'blacks' | 'saturation' | 'lens'
+  | 'focus' | 'aperture' | 'focalLength' | 'nearSharp' | 'foreground' | 'blades' | 'curvature' | 'catEye';
 
 interface ToolBase {
   id: string;
@@ -58,6 +60,19 @@ export interface SliderTool extends ToolBase {
   invert?: boolean;
   /** Penjelasan singkat di bawah slider. */
   note?: string;
+  /**
+   * Skala posisi slider. `log10`/`log2`: jarak di slider = rasio nilai (jarak
+   * fokus, panjang fokus), seperti cincin lensa. Baku linear.
+   */
+  scale?: 'log10' | 'log2';
+  /**
+   * Arti nilai 0 bagi field ini, dan di mana ia digambar:
+   * `normalFocal` = lensa normal format (digambar di panjang fokus itu);
+   * `max` = ujung maks (batas tajam dekat 0 = bidang fokus).
+   */
+  zeroAs?: 'normalFocal' | 'max';
+  /** Batas maks dinamis dari field lain (batas tajam dekat <= jarak fokus). */
+  maxField?: NumericField;
 }
 
 export interface ToggleTool extends ToolBase {
@@ -72,6 +87,8 @@ export interface StepperTool extends ToolBase {
   min: number;
   max: number;
   step: number;
+  /** Bila ada, stepper melangkah di daftar ini (f-stop, jumlah bilah), bukan `step`. */
+  values?: readonly number[];
 }
 
 export interface ChoiceOption<V extends string = string> {
@@ -104,7 +121,18 @@ export interface LockedTool extends ToolBase {
   note: string;
 }
 
-export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | DiffusionTool | LockedTool;
+/**
+ * Lens blur (ekstensi, `host/lens.ts`): sakelar plus kartu status peta
+ * kedalaman (unduh model, progres, siap, galat), pemilih titik fokus, dan
+ * readout kedalaman ruang.
+ */
+export interface LensTool extends ToolBase {
+  kind: 'lens';
+  field: 'lensBlurEnabled';
+  note: string;
+}
+
+export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | DiffusionTool | LockedTool | LensTool;
 
 export interface ToolGroup {
   id: GroupId;
@@ -171,6 +199,7 @@ export const DIFFUSION_FAMILIES: readonly ChoiceOption<DiffusionFilterFamily>[] 
  * sebelum film. Rentang = `CAMERA_LIMITS` (`host/cameraDevelop.ts`).
  */
 const CAMERA_NOTE = 'Camera develop before the film, beyond spektrafilm.';
+const LENS_NOTE = 'Beyond spektrafilm.';
 
 export const GROUPS: readonly ToolGroup[] = [
   {
@@ -185,6 +214,21 @@ export const GROUPS: readonly ToolGroup[] = [
       { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme top end, four stops over the middle.' },
       { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme bottom end, four stops under the middle. True black stays black.' },
       { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 2, note: `Color intensity of the scene before the film sees it; brightness is kept. ${CAMERA_NOTE}` },
+    ],
+  },
+  {
+    id: 'lens',
+    label: 'Lens',
+    tools: [
+      { kind: 'lens', id: 'lensBlur', field: 'lensBlurEnabled', label: 'Lens', title: 'Lens Blur', icon: 'lens', note: `Defocus like a real lens, from a depth map estimated on this device. Tap “Pick Focus” then the subject. ${LENS_NOTE}` },
+      { kind: 'slider', id: 'lensFocusDistanceM', field: 'lensFocusDistanceM', enabledBy: 'lensBlurEnabled', scale: 'log10', label: 'Focus', title: 'Focus Distance', icon: 'focus', min: LENS_LIMITS.focusDistanceM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'How far the focused subject was from the camera. With the aperture and focal length, it sets how quickly the background falls out of focus.' },
+      { kind: 'stepper', id: 'lensFNumber', field: 'lensFNumber', label: 'Aperture', title: 'Aperture', icon: 'aperture', min: LENS_LIMITS.fNumber.min, max: LENS_LIMITS.fNumber.max, step: 1, values: F_STOPS },
+      { kind: 'slider', id: 'lensFocalLengthMm', field: 'lensFocalLengthMm', enabledBy: 'lensBlurEnabled', scale: 'log2', zeroAs: 'normalFocal', label: 'Focal Length', title: 'Focal Length', icon: 'focalLength', min: LENS_LIMITS.focalLengthMm.min, max: LENS_LIMITS.focalLengthMm.max, step: 0.01, digits: 0, unit: ' mm', note: 'Longer lenses blur the background more at the same aperture. Normal matches the film format.' },
+      { kind: 'slider', id: 'lensNearSharpM', field: 'lensNearSharpM', enabledBy: 'lensBlurEnabled', scale: 'log10', zeroAs: 'max', maxField: 'lensFocusDistanceM', label: 'Keep Sharp', title: 'Keep Sharp From', icon: 'nearSharp', min: LENS_LIMITS.nearSharpM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'Keeps everything from this distance to the focused subject sharp, for foregrounds that should stay crisp.' },
+      { kind: 'slider', id: 'lensForeground', field: 'lensForeground', enabledBy: 'lensBlurEnabled', label: 'Foreground', title: 'Foreground Blur', icon: 'foreground', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much the things in front of the subject blur. 1 is the lens itself; 0 keeps the foreground sharp.' },
+      { kind: 'stepper', id: 'lensBlades', field: 'lensBlades', label: 'Blades', title: 'Aperture Blades', icon: 'blades', min: 0, max: 9, step: 1, values: [0, 5, 6, 7, 8, 9] },
+      { kind: 'slider', id: 'lensBladeCurvature', field: 'lensBladeCurvature', enabledBy: 'lensBlurEnabled', label: 'Curvature', title: 'Blade Curvature', icon: 'curvature', min: 0, max: 1, step: 0.05, digits: 2, note: 'Straight blades draw polygons in out-of-focus highlights; curved blades round them off.' },
+      { kind: 'slider', id: 'lensCatEye', field: 'lensCatEye', enabledBy: 'lensBlurEnabled', label: 'Cat’s Eye', title: 'Cat’s Eye', icon: 'catEye', min: 0, max: 1, step: 0.05, digits: 2, note: 'Vignetting inside the lens clips highlights toward the corners into lemon shapes.' },
     ],
   },
   {
@@ -306,10 +350,16 @@ export function sliderPatch(tool: SliderTool, value: number): Partial<RenderPara
 /** Teks nilai di readout. */
 export function valueText(tool: Tool, params: RenderParams): string {
   switch (tool.kind) {
-    case 'slider':
+    case 'slider': {
       if (tool.enabledBy && !params[tool.enabledBy]) return 'Off';
+      const v = params[tool.field];
+      if (tool.zeroAs === 'normalFocal' && v === 0) return `${NORMAL_FOCAL_MM[params.filmFormat]} mm · Normal`;
+      if (tool.zeroAs === 'max' && v === 0) return 'At focus';
+      if (tool.scale) return `${formatScaled(v)}${tool.unit ?? ''}`;
       return formatNumber(sliderValue(tool, params), tool.digits, isBipolar(tool)) + (tool.unit ?? '');
+    }
     case 'stepper':
+      if (tool.values) return stepperText(tool, params);
       return tool.field === 'filmPushPullStops' ? formatPushPull(params.filmPushPullStops) : String(params[tool.field]);
     case 'toggle':
       return params[tool.field] ? 'On' : 'Off';
@@ -319,6 +369,8 @@ export function valueText(tool: Tool, params: RenderParams): string {
       if (!params[tool.enabledBy] || params[tool.strengthField] <= 0) return 'Off';
       return formatStops(params[tool.strengthField]);
     }
+    case 'lens':
+      return params.lensBlurEnabled ? 'On' : 'Off';
     case 'locked':
       return '';
   }
@@ -331,6 +383,7 @@ export function isModified(tool: Tool, params: RenderParams, defaults: RenderPar
     case 'stepper':
     case 'toggle':
     case 'choice':
+    case 'lens':
       return params[tool.field] !== defaults[tool.field];
     case 'diffusion':
       return (
@@ -352,6 +405,7 @@ export function resetPatch(tool: Tool, defaults: RenderParams): Partial<RenderPa
     case 'stepper':
     case 'toggle':
     case 'choice':
+    case 'lens':
       return { [tool.field]: defaults[tool.field] };
     case 'diffusion':
       return {
@@ -423,4 +477,103 @@ export function suggestedInput(image: { suggestedColorSpace: string; encoding: '
     inputCctfDecoding: image.encoding === 'encoded' && decodeAllowed(inputColorSpace),
     autoExposure: image.encoding === 'linear',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Posisi slider (linear atau log) dan stepper berdaftar -- grup Lens.
+
+/** Nilai berskala log dengan pembulatan yang dibaca manusia: 0,46 / 7,3 / 24. */
+function roundScaled(v: number): number {
+  if (v < 1) return Number(v.toFixed(2));
+  if (v < 10) return Number(v.toFixed(1));
+  return Math.round(v);
+}
+
+function formatScaled(v: number): string {
+  return String(roundScaled(v));
+}
+
+function toPosition(tool: SliderTool, v: number): number {
+  if (tool.scale === 'log10') return Math.log10(v);
+  if (tool.scale === 'log2') return Math.log2(v);
+  return v;
+}
+
+function fromPosition(tool: SliderTool, p: number): number {
+  if (tool.scale === 'log10') return 10 ** p;
+  if (tool.scale === 'log2') return 2 ** p;
+  return p;
+}
+
+function dynamicMax(tool: SliderTool, params: RenderParams): number {
+  return tool.maxField ? Math.min(tool.max, params[tool.maxField]) : tool.max;
+}
+
+/** Rentang slider dalam ruang posisi (log bila `scale`). */
+export function sliderRange(tool: SliderTool, params: RenderParams): { min: number; max: number; step: number } {
+  if (!tool.scale) return { min: tool.min, max: tool.max, step: tool.step };
+  const min = toPosition(tool, tool.min);
+  const max = toPosition(tool, Math.max(dynamicMax(tool, params), tool.min));
+  return { min, max, step: tool.step };
+}
+
+/** Posisi thumb untuk nilai field saat ini. */
+export function sliderPosition(tool: SliderTool, params: RenderParams): number {
+  if (!tool.scale) return sliderValue(tool, params);
+  const v = params[tool.field];
+  if (v === 0 && tool.zeroAs === 'normalFocal') return toPosition(tool, NORMAL_FOCAL_MM[params.filmFormat]);
+  if (v === 0 && tool.zeroAs === 'max') return sliderRange(tool, params).max;
+  return toPosition(tool, Math.min(Math.max(v, tool.min), dynamicMax(tool, params)));
+}
+
+/** Patch field dari posisi thumb. */
+export function positionPatch(tool: SliderTool, position: number, params: RenderParams): Partial<RenderParams> {
+  if (!tool.scale) return sliderPatch(tool, position);
+  const range = sliderRange(tool, params);
+  if (tool.zeroAs === 'max' && position >= range.max - 1e-9) return { [tool.field]: 0 };
+  // Ujung dipaku ke batas persis: 10^log10(x) tidak selalu kembali ke x.
+  let v: number;
+  if (position <= range.min + 1e-9) v = tool.min;
+  else if (position >= range.max - 1e-9) v = dynamicMax(tool, params);
+  else v = roundScaled(fromPosition(tool, position));
+  return { [tool.field]: Math.min(Math.max(v, tool.min), dynamicMax(tool, params)) };
+}
+
+/** Langkah stepper (`dir` = -1/+1); patch kosong di ujung. */
+export function stepperPatch(tool: StepperTool, params: RenderParams, dir: -1 | 1): Partial<RenderParams> {
+  const v = params[tool.field];
+  if (tool.values) {
+    const list = tool.values;
+    // Nilai di luar daftar (mis. f/1.7 lama) melangkah dari tetangga terdekatnya.
+    let i = list.findIndex((x) => Math.abs(x - v) < 1e-9);
+    if (i < 0) i = list.reduce((best, x, k) => (Math.abs(x - v) < Math.abs(list[best]! - v) ? k : best), 0);
+    const j = i + dir;
+    return j < 0 || j >= list.length ? {} : { [tool.field]: list[j]! };
+  }
+  const next = Math.min(tool.max, Math.max(tool.min, v + dir * tool.step));
+  return next === v ? {} : { [tool.field]: next };
+}
+
+export function stepperAtEnd(tool: StepperTool, params: RenderParams, dir: -1 | 1): boolean {
+  return Object.keys(stepperPatch(tool, params, dir)).length === 0;
+}
+
+/** Teks stepper berdaftar: f-stop dan bilah iris. */
+export function stepperText(tool: StepperTool, params: RenderParams): string {
+  const v = params[tool.field];
+  if (tool.field === 'lensFNumber') return `f/${v}`;
+  if (tool.field === 'lensBlades') return v === 0 ? 'Round' : `${v} blades`;
+  return String(v);
+}
+
+/**
+ * Patch yang dijaga tetap sah terhadap validasi `plan.ts`: batas tajam dekat
+ * harus 0 atau <= jarak fokus, jadi menurunkan jarak fokus di bawahnya
+ * mengembalikannya ke bidang fokus dalam patch yang sama.
+ */
+export function normalizePatch(params: RenderParams, patch: Partial<RenderParams>): Partial<RenderParams> {
+  const focus = patch.lensFocusDistanceM;
+  if (focus === undefined) return patch;
+  const near = patch.lensNearSharpM ?? params.lensNearSharpM;
+  return near > focus ? { ...patch, lensNearSharpM: 0 } : patch;
 }
