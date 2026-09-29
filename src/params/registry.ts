@@ -17,6 +17,9 @@ import type { RenderParams } from './renderParams';
 export type FieldStatus = 'verified' | 'locked';
 
 export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = Object.freeze({
+  // Fase 2D Task 3: param/scan_* (`test/parity/scanFilm.test.ts`). Pasangan
+  // mode dan jenis film divalidasi `validateStocks` (plan.ts).
+  process: 'verified',
   // Fase 2C Task 8: param/stock_* (`test/parity/stocks.test.ts`). Pasangan
   // dan jenis stock divalidasi `validateStocks` (plan.ts; butuh aset).
   film: 'verified',

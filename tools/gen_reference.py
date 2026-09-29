@@ -641,6 +641,8 @@ def _build_param_case_params(case):
         raise ValueError(f"keluarga tidak dikenal: {case.family}")
     if case.film_format_mm is not None:
         raw.camera.film_format_mm = case.film_format_mm
+    if case.scan_film:
+        raw.io.scan_film = True
     if case.pre is not None:
         case.pre(raw)
     params = digest_params(raw)
@@ -649,6 +651,7 @@ def _build_param_case_params(case):
     assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
     if case.family != "stochastic":
         assert not params.film_render.grain.active and not params.print_render.glare.active
+    assert params.io.scan_film == case.scan_film
     return params
 
 
@@ -662,7 +665,9 @@ def _generate_param_case(name: str, case_dir: Path) -> None:
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
     written = []
-    for tap in TAPS:
+    # Scan film (Fase 2D): topologi Python `CMY_FILM -> RGB_OUT`, tanpa tap print.
+    taps = [t for t in TAPS if not (case.scan_film and t in (Tap.LOG_E_PRINT, Tap.CMY_PRINT))]
+    for tap in taps:
         result = _run_param_tap(case, image, tap)
         arr = np.ascontiguousarray(result, dtype="<f4")
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())

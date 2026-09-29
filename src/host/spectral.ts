@@ -950,10 +950,26 @@ export interface PrintScanArenaOptions {
   outputColorSpace?: string;
 }
 
+/**
+ * Fase 2D Task 3: `io.scan_film=True` Python -- film di-scan langsung, tanpa
+ * enlarger dan kertas (`pipeline.py::_build_topology`). Scanner memakai data
+ * FILM (`channel_density`, `base_density`, iluminan tontonan film,
+ * `scanning.py::_return_callable_cmy_to_log_xyz` cabang scan_film), jadi
+ * `addScannerPostDynamicData` dipanggil dengan stock film itu sendiri.
+ */
+export interface ScanFilmArenaOptions {
+  scanFilm: true;
+  outputColorSpace?: string;
+}
+
+export function isScanFilm(options: PrintScanArenaOptions | ScanFilmArenaOptions | undefined): options is ScanFilmArenaOptions {
+  return !!options && 'scanFilm' in options;
+}
+
 export function precomputeArenaData(
   bundle: AssetBundle,
   stockId: string,
-  printScan?: PrintScanArenaOptions,
+  printScan?: PrintScanArenaOptions | ScanFilmArenaOptions,
 ): ArenaPlan {
   const stock = bundle.stockEntry(stockId);
   const wavelengthCount = stock.wavelengthCount;
@@ -1213,7 +1229,9 @@ export function precomputeArenaData(
   // `stock`/`static` arena pair) and why they're safe to compute for a
   // DIFFERENT stock (`printScan.printStockId`) than the `stockId` this
   // whole function was called for.
-  if (printScan) {
+  if (isScanFilm(printScan)) {
+    addScannerPostDynamicData(dynamicBuilder, bundle, stockId, printScan.outputColorSpace ?? 'sRGB');
+  } else if (printScan) {
     addPrintScanDynamicData(
       dynamicBuilder,
       bundle,

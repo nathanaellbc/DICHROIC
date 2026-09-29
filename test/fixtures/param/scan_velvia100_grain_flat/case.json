@@ -1,0 +1,85 @@
+{
+  "name": "param/scan_velvia100_grain_flat",
+  "height": 64,
+  "width": 64,
+  "family": "stochastic",
+  "stochastic": true,
+  "film": "fujifilm_velvia_100",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "process": "scanNegative"
+  },
+  "pythonOverrides": [
+    "io.scan_film = True"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "pythonStats": {
+    "rgb_out": {
+      "bins": 8,
+      "realizations": 16,
+      "mean": [
+        0.46352100264150015,
+        0.0
+      ],
+      "variance": [
+        5.5787066436019484e-08,
+        0.0
+      ],
+      "lag1": [
+        0.40229918539303633,
+        0.0
+      ],
+      "radialPower": [
+        [
+          5.2758042209849046e-08,
+          0.0
+        ],
+        [
+          6.049039733503678e-08,
+          0.0
+        ],
+        [
+          6.50695737989405e-08,
+          0.0
+        ],
+        [
+          6.014984136202793e-08,
+          0.0
+        ],
+        [
+          4.841747010460047e-08,
+          0.0
+        ],
+        [
+          5.630886783378742e-08,
+          0.0
+        ],
+        [
+          4.3840493752221534e-08,
+          0.0
+        ],
+        [
+          5.976646473573633e-08,
+          0.0
+        ]
+      ]
+    }
+  }
+}

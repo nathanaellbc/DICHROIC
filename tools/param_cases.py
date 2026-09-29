@@ -56,6 +56,9 @@ class ParamCase:
     # amount` (`SpektraGrain.comp::applyGrainControls`), lalu tap hilir
     # dijalankan dengan `inject = cmy_film`.
     grain_amount: float | None = None
+    # Fase 2D Task 3: `io.scan_film = True` (film di-scan langsung, tanpa
+    # print). Tap print (`log_e_print`, `cmy_print`) tidak ada di topologi ini.
+    scan_film: bool = False
 
 
 def film_push_pull_gamma(stops: float) -> float:
@@ -598,3 +601,39 @@ PARAM_CASES["preflash_0_4_with_filter_c15"] = _preflash_case(
     {"preflash_exposure": 0.4},
     post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 15.0),
 )
+
+
+# Fase 2D Task 3: scan film (`process: "scanNegative"` -> `io.scan_film = True`).
+# Film reversal (slide) -> positif; film negatif -> negatif oranye. Tanpa
+# glare (`scanning.py`: `glare = None`), grain ber-`positive_film` untuk reversal.
+def _scan_case(film: str, image: str, family: str, render_params: dict[str, Any] | None = None,
+               python: tuple[str, ...] = (), pre: Override | None = None,
+               film_format_mm: float | None = None, realizations: int = 0) -> ParamCase:
+    return ParamCase(
+        image=image, family=family, film=film,
+        render_params={"process": "scanNegative", **(render_params or {})},
+        python_overrides=("io.scan_film = True", *python),
+        pre=pre, film_format_mm=film_format_mm, realizations=realizations,
+        scan_film=True,
+    )
+
+
+PARAM_CASES.update({
+    "scan_velvia100": _scan_case("fujifilm_velvia_100", "color_patches", "deterministic"),
+    "scan_provia100f_log": _scan_case("fujifilm_provia_100f", "log_gray_ramp", "deterministic"),
+    "scan_ektachrome100_lut": _scan_case("kodak_ektachrome_100", "color_patches", "lut"),
+    "scan_kodachrome64_px6um": _scan_case("kodak_kodachrome_64", "hard_edge", "deterministic", film_format_mm=0.4),
+    "scan_portra400_negative": _scan_case("kodak_portra_400", "color_patches", "deterministic"),
+    "scan_velvia100_film_plus1": _scan_case(
+        "fujifilm_velvia_100", "gray_ramp", "deterministic",
+        {"filmExposureEv": 1.0}, ("camera.exposure_compensation_ev = 1.0",),
+        pre=lambda p: setattr(p.camera, "exposure_compensation_ev", 1.0),
+    ),
+    "scan_velvia100_dir_amount0_5_p3": _scan_case(
+        "fujifilm_velvia_100", "color_patches", "deterministic",
+        {"dirCouplersAmount": 0.5, "outputColorSpace": "Display P3"},
+        ("film_render.dir_couplers.amount = 0.5", "io.output_color_space = 'Display P3'"),
+        pre=lambda p: (setattr(p.film_render.dir_couplers, "amount", 0.5), setattr(p.io, "output_color_space", "Display P3")),
+    ),
+    "scan_velvia100_grain_flat": _scan_case("fujifilm_velvia_100", "flat_patch", "stochastic", realizations=16),
+})

@@ -35,7 +35,18 @@ export type FilmFormat =
   | 'standard65'
   | 'imax70';
 
+/**
+ * `ProcessMode` OFX. `printSimulation`: negatif dicetak ke kertas lalu
+ * di-scan (topologi default Python). `scanNegative`: film di-scan langsung
+ * (`io.scan_film=True`) -- untuk film reversal hasilnya positif (slide),
+ * untuk film negatif hasilnya negatif oranye. `ProcessNegative` OFX tidak
+ * punya padanan Python dan tidak dibuka.
+ */
+export type ProcessMode = 'printSimulation' | 'scanNegative';
+
 export interface RenderParams {
+  /** OFX `process`; Python `io.scan_film` (Fase 2D Task 3). */
+  process: ProcessMode;
   /** Python: `film_stock` argumen `init_params`. */
   film: string;
   /** Python: `print_stock` argumen `init_params`. */
@@ -117,6 +128,7 @@ export interface RenderParams {
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
+  process: 'printSimulation',
   film: 'kodak_portra_400',
   paper: 'kodak_portra_endura',
   rgbToRawMethod: 'hanatos2025',

@@ -26,11 +26,11 @@ import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
-import type { PrintScanArenaOptions } from '../host/spectral';
+import type { PrintScanArenaOptions, ScanFilmArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
 import { UnverifiedParameterError, validateRenderParams } from './registry';
 import { BASELINE_RENDER_PARAMS } from './renderParams';
-import type { FilmFormat, RenderParams } from './renderParams';
+import type { FilmFormat, ProcessMode, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
 
@@ -38,11 +38,14 @@ export interface ChainSpec {
   family: 'measured' | 'lut';
   /** Tahap grain disertakan. Selalu `false` untuk `lut`. */
   grain: boolean;
+  /** Fase 2D Task 3: `io.scan_film` -- tanpa tahap print. Baku `false`. */
+  scan?: boolean;
 }
 
 export interface ArenaInputs {
   stockId: string;
-  printScan: PrintScanArenaOptions;
+  /** Data print+scan (mode print) atau scanner film (mode scan, Fase 2D). */
+  printScan: PrintScanArenaOptions | ScanFilmArenaOptions;
 }
 
 export interface RenderPlan {
@@ -125,29 +128,44 @@ export class MissingNeutralFiltersError extends Error {
 }
 
 /**
- * Stock yang sah untuk batch parameter 1: `film` harus film NEGATIF yang ada
- * di database netral, `paper` harus stock kertas di database itu. Film
- * reversal (`positive`) ikut batch parameter 2 bersama `ProcessMode` (spec
- * Fase 2 §2.7). Dipanggil `buildRenderPlan` dan `Session.setParams`.
+ * Stock yang sah per mode proses.
+ *
+ * - `printSimulation`: `film` harus film NEGATIF di database filter netral
+ *   kertas `paper` (Python diam-diam memakai default dataclass untuk pasangan
+ *   di luar database -- konfigurasi yang tidak pernah kita gerbangi).
+ * - `scanNegative` (Fase 2D Task 3, `io.scan_film`): `film` boleh negatif
+ *   maupun reversal, asal stock FILM (bukan kertas); `paper` tetap harus
+ *   kertas yang sah (tidak dipakai, tapi dibawa ke mode print berikutnya).
+ *
+ * Dipanggil `buildRenderPlan` dan `Session.setParams`.
  */
-export function validateStocks(bundle: AssetBundle, film: string, paper: string): void {
+export function validateStocks(bundle: AssetBundle, film: string, paper: string, process: ProcessMode = 'printSimulation'): void {
   const { table } = bundle.manifest.neutralPrintFilters;
   const papers = Object.keys(table);
   if (!papers.includes(paper)) {
     throw new UnverifiedParameterError('paper', paper, BASELINE_RENDER_PARAMS.paper, `bukan stock kertas (${papers.join(', ')})`);
   }
+  if (process === 'scanNegative') {
+    const isStock = bundle.manifest.stocks.some((s) => s.id === film);
+    if (!isStock || papers.includes(film)) {
+      throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, 'bukan stock film');
+    }
+    return;
+  }
   const films = Object.keys(table[paper]!);
   if (!films.includes(film)) {
-    throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, 'bukan stock film di database netral');
+    const reason = isStockOfType(bundle, film, 'positive')
+      ? 'film reversal hanya bisa di-scan langsung (process scanNegative)'
+      : 'bukan stock film di database netral';
+    throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, reason);
   }
   if (bundle.stockEntry(film).type !== 'negative') {
-    throw new UnverifiedParameterError(
-      'film',
-      film,
-      BASELINE_RENDER_PARAMS.film,
-      'film reversal ikut batch parameter 2 (ProcessMode)',
-    );
+    throw new UnverifiedParameterError('film', film, BASELINE_RENDER_PARAMS.film, 'film reversal hanya bisa di-scan langsung (process scanNegative)');
   }
+}
+
+function isStockOfType(bundle: AssetBundle, id: string, type: string): boolean {
+  return bundle.manifest.stocks.some((s) => s.id === id && s.type === type);
 }
 
 /**
@@ -226,24 +244,32 @@ export function buildRenderPlan(
   mode: RenderMode,
 ): RenderPlan {
   validateRenderParams(params);
-  validateStocks(bundle, params.film, params.paper);
+  validateStocks(bundle, params.film, params.paper, params.process);
   validateOutputColorSpace(bundle, params.outputColorSpace);
   validateDirCouplers(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
+  const scan = params.process === 'scanNegative';
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
-  // `print_render.glare.active`); keduanya mati di lut_mode.
+  // `print_render.glare.active`); keduanya mati di lut_mode. Scan film
+  // (Fase 2D) tidak punya glare: `scanning.py` memberi `glare = None`.
   const grainActive = family === 'measured' && params.grainEnabled;
-  const glareActive = family === 'measured' && params.glareEnabled && params.glarePercent > 0;
+  const glareActive = family === 'measured' && !scan && params.glareEnabled && params.glarePercent > 0;
 
-  const enlargerFilters = resolveEnlargerFilters(
-    bundle,
-    params.film,
-    params.paper,
-    params.filterC,
-    params.filterMShift,
-    params.filterYShift,
-  );
+  const printScan: PrintScanArenaOptions | ScanFilmArenaOptions = scan
+    ? { scanFilm: true, outputColorSpace: params.outputColorSpace }
+    : {
+        printStockId: params.paper,
+        enlargerFilters: resolveEnlargerFilters(
+          bundle,
+          params.film,
+          params.paper,
+          params.filterC,
+          params.filterMShift,
+          params.filterYShift,
+        ),
+        outputColorSpace: params.outputColorSpace,
+      };
 
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
@@ -267,12 +293,11 @@ export function buildRenderPlan(
 
   return {
     core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
-    arenaKey: `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
-    arenaInputs: {
-      stockId: params.film,
-      printScan: { printStockId: params.paper, enlargerFilters, outputColorSpace: params.outputColorSpace },
-    },
-    chain: { family, grain: grainActive },
+    arenaKey: scan
+      ? `${params.film}::scan::out=${params.outputColorSpace}`
+      : `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
+    arenaInputs: { stockId: params.film, printScan },
+    chain: scan ? { family, grain: grainActive, scan } : { family, grain: grainActive },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {

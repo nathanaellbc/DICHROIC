@@ -3,7 +3,7 @@ import { RenderGraph } from '../../src/engine/graph';
 import { precomputeArenaData, uploadArenas } from '../../src/host/spectral';
 import { loadAssets } from '../../src/profiles/load';
 import type { AssetBundle } from '../../src/profiles/load';
-import type { ArenaPlan, PrintScanArenaOptions } from '../../src/host/spectral';
+import type { ArenaPlan, PrintScanArenaOptions, ScanFilmArenaOptions } from '../../src/host/spectral';
 import type { Arenas } from '../../src/engine/arena';
 import type { EngineDevice } from '../../src/engine/device';
 import type { FrameParams, Stage } from '../../src/engine/graph';
@@ -110,8 +110,9 @@ const pendingPlans = new Map<string, ArenaPlan>();
  * proses vitest -- `printScan.test.ts` yang berjalan setelahnya diam-diam
  * memakai arena basi lewat cache-hit, bukan galat yang jelas.
  */
-function arenaCacheKey(stockId: string, printScan?: PrintScanArenaOptions): string {
-  return printScan ? `${stockId}::print=${printScan.printStockId}` : stockId;
+function arenaCacheKey(stockId: string, printScan?: PrintScanArenaOptions | ScanFilmArenaOptions): string {
+  if (!printScan) return stockId;
+  return 'scanFilm' in printScan ? `${stockId}::scan` : `${stockId}::print=${printScan.printStockId}`;
 }
 
 /**
@@ -127,7 +128,7 @@ function arenaCacheKey(stockId: string, printScan?: PrintScanArenaOptions): stri
  * ini juga membawa entri PRINT (`addPrintScanDynamicData`). Lih.
  * `arenaCacheKey` di atas untuk kenapa ini butuh kunci cache sendiri.
  */
-export async function sharedResources(stockId: string, printScan?: PrintScanArenaOptions) {
+export async function sharedResources(stockId: string, printScan?: PrintScanArenaOptions | ScanFilmArenaOptions) {
   sharedBundle ??= loadAssets('public/data');
   const bundle = await sharedBundle;
 

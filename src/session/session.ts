@@ -203,7 +203,7 @@ export class Session {
   setParams(patch: Partial<RenderParams>): void {
     this.assertAlive();
     const next = applyParamsPatch(this.#params, patch);
-    validateStocks(this.bundle, next.film, next.paper);
+    validateStocks(this.bundle, next.film, next.paper, next.process);
     this.#params = next;
     this.#paramsVersion += 1;
   }
@@ -421,7 +421,7 @@ export class Session {
    * membangun dua (yang kedua dulu tertimpa tanpa di-dispose).
    */
   private graphFor(plan: RenderPlan): Promise<RenderGraph> {
-    const key = `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}`;
+    const key = `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) return existing;
     const building = (async () => {

@@ -185,18 +185,24 @@ fn densityCurveLayerMaximaAt(sublayer: u32, channel: u32) -> f32 {
   return stockArena[ARENA_DENSITYCURVELAYERMAXIMA_OFFSET + sublayer * 3u + channel];
 }
 
-// Port `interp_density_cmy_layers` (`model/density_curves.py:35-45`), cabang
-// `positive_film=False` (satu-satunya yang fixture gerbang ini tempuh --
-// `kodak_portra_400` adalah "negative"; cabang positif Python membalik
-// tanda sebelum DAN sesudah interpolasi, TIDAK diimplementasikan di sini,
-// sama seperti dir.ts/spectral.ts mencatat cabang positif DIR belum diuji).
-fn interpDensityLayer(densityCmy: f32, channel: u32, sublayer: u32) -> f32 {
+// Port `interp_density_cmy_layers` (`model/density_curves.py:35-45`). Film
+// negatif: `fast_interp(d, density_curves[:,ch], layers)`. Film reversal
+// (Fase 2D Task 3, `positive_film=True`): kurvanya MENURUN, jadi Python
+// mencari pada `-d` terhadap `-density_curves[:,ch]` (naik) -- di sini lewat
+// `sign = -1`, dengan cabang dan klem yang sama.
+fn layerSearchX(i: u32, channel: u32, sign: f32) -> f32 {
+  return sign * densityCurveAt(i, channel);
+}
+
+fn interpDensityLayer(densityCmyIn: f32, channel: u32, sublayer: u32) -> f32 {
   let count = params.exposureCount;
   if (count == 0u) {
     return 0.0;
   }
-  let firstX = densityCurveAt(0u, channel);
-  let lastX = densityCurveAt(count - 1u, channel);
+  let sign = select(1.0, -1.0, stockArena[ARENA_DIRISPOSITIVE_OFFSET] > 0.5);
+  let densityCmy = sign * densityCmyIn;
+  let firstX = layerSearchX(0u, channel, sign);
+  let lastX = layerSearchX(count - 1u, channel, sign);
   if (densityCmy <= firstX) {
     return densityCurveLayerAt(0u, sublayer, channel);
   }
@@ -208,15 +214,15 @@ fn interpDensityLayer(densityCmy: f32, channel: u32, sublayer: u32) -> f32 {
   var hi: u32 = count - 1u;
   while (hi - lo > 1u) {
     let mid = (lo + hi) >> 1u;
-    if (densityCurveAt(mid, channel) <= densityCmy) {
+    if (layerSearchX(mid, channel, sign) <= densityCmy) {
       lo = mid;
     } else {
       hi = mid;
     }
   }
 
-  let x0 = densityCurveAt(lo, channel);
-  let x1 = densityCurveAt(hi, channel);
+  let x0 = layerSearchX(lo, channel, sign);
+  let x1 = layerSearchX(hi, channel, sign);
   let y0 = densityCurveLayerAt(lo, sublayer, channel);
   let y1 = densityCurveLayerAt(hi, sublayer, channel);
   let dx = max(x1 - x0, 1.0e-9);

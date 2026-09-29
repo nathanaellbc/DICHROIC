@@ -1,3 +1,5 @@
+import { FLAG_GLARE_ACTIVE } from '../src/engine/params';
+import type { PrintScanArenaOptions } from '../src/host/spectral';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { join } from 'node:path';
 import { loadAssets } from '../src/profiles/load';
@@ -104,8 +106,9 @@ describe('buildRenderPlan -> arena dan apron', () => {
   it('memakai filter netral ter-bake dan kunci arena yang memuat stock serta shift', () => {
     const plan = buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, image('gray_ramp'), 'image');
     expect(plan.arenaInputs.stockId).toBe('kodak_portra_400');
-    expect(plan.arenaInputs.printScan.printStockId).toBe('kodak_portra_endura');
-    expect(plan.arenaInputs.printScan.enlargerFilters).toEqual({
+    const printScan = plan.arenaInputs.printScan as PrintScanArenaOptions;
+    expect(printScan.printStockId).toBe('kodak_portra_endura');
+    expect(printScan.enlargerFilters).toEqual({
       cFilterNeutral: bundle.manifest.printScan.neutralFilterC,
       mFilterNeutral: bundle.manifest.printScan.neutralFilterM,
       mFilterShift: 0,
@@ -155,6 +158,22 @@ describe('buildRenderPlan -> FrameParams', () => {
       preflashMFilterShift: 0,
       preflashYFilterShift: 0,
     });
+  });
+
+  it('process scanNegative: film reversal sah, kertas tidak sah sebagai film, tanpa print dan glare', () => {
+    expect(() => validateStocks(bundle, 'fujifilm_velvia_100', 'kodak_portra_endura')).toThrow(/scanNegative/);
+    expect(() => validateStocks(bundle, 'fujifilm_velvia_100', 'kodak_portra_endura', 'scanNegative')).not.toThrow();
+    expect(() => validateStocks(bundle, 'kodak_2383', 'kodak_portra_endura', 'scanNegative')).toThrow(/bukan stock film/);
+    const plan = buildRenderPlan(
+      { ...BASELINE_RENDER_PARAMS, process: 'scanNegative', film: 'fujifilm_velvia_100' },
+      bundle,
+      image('gray_ramp'),
+      'image',
+    );
+    expect(plan.chain).toEqual({ family: 'measured', grain: true, scan: true });
+    expect(plan.arenaInputs.printScan).toEqual({ scanFilm: true, outputColorSpace: 'sRGB' });
+    expect(plan.arenaKey).toBe('fujifilm_velvia_100::scan::out=sRGB');
+    expect(plan.core.slot1 & FLAG_GLARE_ACTIVE).toBe(0);
   });
 
   it('DIR: active=False -> amount 0 tanpa difusi; cube menolkan difusi; rentang lipatan ditolak', () => {

@@ -1,0 +1,34 @@
+{
+  "name": "param/scan_ektachrome100_lut",
+  "height": 8,
+  "width": 8,
+  "family": "lut",
+  "stochastic": false,
+  "film": "kodak_ektachrome_100",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "process": "scanNegative"
+  },
+  "pythonOverrides": [
+    "io.scan_film = True"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ],
+  "lutMode": true
+}
