@@ -1,0 +1,17 @@
+# Header hosting untuk Cloudflare Pages dan Netlify (berkas ini diabaikan host
+# lain). Cross-origin isolation wajib untuk decoder RAW (pthread libraw-wasm);
+# lihat juga src/sw.ts.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+
+# Service worker dan index.html selalu diperiksa ulang supaya versi baru terdeteksi.
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+
+# Berkas ber-hash Vite tidak pernah berubah.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
