@@ -554,3 +554,47 @@ PARAM_CASES["dir_amount1_4_portra800_push2"] = ParamCase(
     pre=_dir(amount=1.4),
     film="kodak_portra_800_push2",
 )
+
+# Fase 2D Task 2: preflash. `preflashExposure` -> `enlarger.preflash_exposure`,
+# `preflash{M,Y}FilterShift` -> `enlarger.preflash_{m,y}_filter_shift`.
+# `digest_params` tidak menyentuh ketiganya; preflash berlaku juga di lut_mode.
+def _preflash(**values: Any) -> Override:
+    def apply(p: Any) -> None:
+        for key, value in values.items():
+            setattr(p.enlarger, key, value)
+    return apply
+
+
+def _preflash_case(image: str, family: str, render_params: dict[str, Any], python: dict[str, Any],
+                   post: Override | None = None) -> ParamCase:
+    return ParamCase(
+        image=image, family=family,
+        render_params=render_params,
+        python_overrides=tuple(f"enlarger.{k} = {v!r}" for k, v in python.items()),
+        pre=_preflash(**python),
+        post=post,
+    )
+
+
+PARAM_CASES.update({
+    "preflash_0_2": _preflash_case("color_patches", "deterministic", {"preflashExposure": 0.2}, {"preflash_exposure": 0.2}),
+    "preflash_1": _preflash_case("log_gray_ramp", "deterministic", {"preflashExposure": 1.0}, {"preflash_exposure": 1.0}),
+    "preflash_0_5_m30_y_minus40": _preflash_case(
+        "color_patches", "deterministic",
+        {"preflashExposure": 0.5, "preflashMFilterShift": 30.0, "preflashYFilterShift": -40.0},
+        {"preflash_exposure": 0.5, "preflash_m_filter_shift": 30.0, "preflash_y_filter_shift": -40.0},
+    ),
+    "preflash_0_3_m_minus60_y60_lut": _preflash_case(
+        "log_gray_ramp", "lut",
+        {"preflashExposure": 0.3, "preflashMFilterShift": -60.0, "preflashYFilterShift": 60.0},
+        {"preflash_exposure": 0.3, "preflash_m_filter_shift": -60.0, "preflash_y_filter_shift": 60.0},
+    ),
+})
+
+# Filter C enlarger ikut ke preflash (Python: `c_filter_neutral` yang sama).
+PARAM_CASES["preflash_0_4_with_filter_c15"] = _preflash_case(
+    "color_patches", "deterministic",
+    {"preflashExposure": 0.4, "filterC": 15.0},
+    {"preflash_exposure": 0.4},
+    post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 15.0),
+)

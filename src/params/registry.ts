@@ -67,6 +67,10 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   dirCouplersInhibitionSameLayer: 'verified',
   dirCouplersInhibitionInterlayer: 'verified',
   dirCouplersDiffusionUm: 'verified',
+  // Fase 2D Task 2: param/preflash_* (`test/parity/preflash.test.ts`).
+  preflashExposure: 'verified',
+  preflashMFilterShift: 'verified',
+  preflashYFilterShift: 'verified',
 });
 
 export class UnverifiedParameterError extends Error {

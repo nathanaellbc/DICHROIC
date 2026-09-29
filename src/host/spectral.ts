@@ -772,6 +772,15 @@ function addPrintScanDynamicData(
   dynamicBuilder.add('printExposureCount', Float32Array.of(printExposureCount));
   dynamicBuilder.add('printCurveExposure', makePackedCurveExposure(printLogExposureField));
   dynamicBuilder.add('printDensityCurvesMorphed', printDensityCurvesMorphed);
+  // Fase 2D Task 2: masukan host untuk preflash (`src/host/preflash.ts`),
+  // dihitung per render karena shift M/Y preflash dan exposure-nya parameter
+  // pengguna. Tidak dibaca shader.
+  dynamicBuilder.add('enlargerLightSource', Float32Array.from(thKg3Illuminant));
+  dynamicBuilder.add('customEnlargerFilters', Float32Array.from(customEnlargerFilters));
+  dynamicBuilder.add(
+    'enlargerNeutralCmy',
+    Float32Array.of(enlargerFilters.cFilterNeutral, enlargerFilters.mFilterNeutral, enlargerFilters.yFilterNeutral),
+  );
 
   addScannerPostDynamicData(dynamicBuilder, bundle, printStockId, outputColorSpace);
 }

@@ -151,6 +151,9 @@ describe('buildRenderPlan -> FrameParams', () => {
       dirInhibitionSameLayer: 1,
       dirInhibitionInterlayer: 1,
       dirDiffusionUm: 20,
+      preflashExposure: 0,
+      preflashMFilterShift: 0,
+      preflashYFilterShift: 0,
     });
   });
 

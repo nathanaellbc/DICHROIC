@@ -75,6 +75,13 @@ export interface FrameParams {
   dirInhibitionSameLayer?: number;
   dirInhibitionInterlayer?: number;
   dirDiffusionUm?: number;
+  /**
+   * Fase 2D: `enlarger.preflash_exposure` dan shift filter M/Y preflash
+   * Python. Baku 0 (preflash mati).
+   */
+  preflashExposure?: number;
+  preflashMFilterShift?: number;
+  preflashYFilterShift?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

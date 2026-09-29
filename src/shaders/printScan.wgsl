@@ -71,7 +71,13 @@
 // Fase 2C, hanya `expose`: x = faktor midgray (`_compute_exposure_factor_midgray`,
 // termasuk cabang `_comp`), y = `print_exposure * black_white_printing_exposure_correction()`.
 // Dihitung host per render (`src/host/printExposure.ts`, `stages/printScan.ts`).
-@group(0) @binding(5) var<uniform> printFrame: vec4<f32>;
+// Fase 2D: `preflash.xyz` = `_compute_raw_preflash` (vektor konstan per
+// render, `src/host/preflash.ts`), nol bila preflash mati.
+struct PrintFrame {
+  exposure: vec4<f32>,
+  preflash: vec4<f32>,
+}
+@group(0) @binding(5) var<uniform> printFrame: PrintFrame;
 
 const kLog10E: f32 = 0.4342944819032518;
 
@@ -143,15 +149,16 @@ fn expose(@builtin(global_invocation_id) gid: vec3<u32>) {
       dynamicArena[so], dynamicArena[so + 1u], dynamicArena[so + 2u],
     );
   }
-  raw *= printFrame.x;
-  // `_compute_raw_preflash` -- TIDAK diimplementasikan, TERBUKTI no-op
-  // untuk setiap fixture gerbang ini (lih. komentar berkas di atas).
+  raw *= printFrame.exposure.x;
+  // `raw += _compute_raw_preflash(...)` -- setelah faktor midgray, sebelum
+  // `print_exposure` (Fase 2D Task 2).
+  raw += printFrame.preflash.xyz;
   let logRawPrint = log10Vec3(max(raw, vec3<f32>(0.0)) + vec3<f32>(1.0e-10));
 
   // `raw = 10**log_raw_print; raw *= print_exposure; raw *= black_white_printing_exposure_correction()`
   // -- keduanya digabung host-side jadi `printFrame.y` (Fase 2C; koreksi
   // hitam/putih scanner tetap 1.0, lih. `addPrintScanDynamicData`).
-  let raw2 = pow(vec3<f32>(10.0), logRawPrint) * printFrame.y;
+  let raw2 = pow(vec3<f32>(10.0), logRawPrint) * printFrame.exposure.y;
 
   // `apply_diffusion_filter_um(raw, enlarger.diffusion_filter, ...)` --
   // dijalankan sebagai tahap TERPISAH (`diffusion.wgsl`, site='print')

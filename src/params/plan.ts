@@ -201,6 +201,14 @@ export function validateDirCouplers(params: RenderParams): void {
       `amount x inhibisi maksimum ${DIR_MAX_EFFECTIVE} (kurva sebelum DIR terlipat di atasnya)`,
     );
   }
+  if (!(params.preflashExposure >= 0) || params.preflashExposure > 1) {
+    throw new UnverifiedParameterError('preflashExposure', params.preflashExposure, baseline.preflashExposure, 'preflash digerbangi 0..1');
+  }
+  for (const field of ['preflashMFilterShift', 'preflashYFilterShift'] as const) {
+    if (!(Math.abs(params[field]) <= 60)) {
+      throw new UnverifiedParameterError(field, params[field], baseline[field], 'shift filter preflash digerbangi -60..60 CC');
+    }
+  }
   if (!(params.dirCouplersDiffusionUm >= 0) || params.dirCouplersDiffusionUm > 60) {
     throw new UnverifiedParameterError(
       'dirCouplersDiffusionUm',
@@ -356,6 +364,11 @@ function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFor
     dirInhibitionSameLayer: params.dirCouplersInhibitionSameLayer,
     dirInhibitionInterlayer: params.dirCouplersInhibitionInterlayer,
     dirDiffusionUm: family === 'lut' || !params.dirCouplersEnabled ? 0 : params.dirCouplersDiffusionUm,
+    // Fase 2D Task 2: preflash tidak spasial dan tidak stokastik -- berlaku
+    // juga di `lut_mode`.
+    preflashExposure: params.preflashExposure,
+    preflashMFilterShift: params.preflashMFilterShift,
+    preflashYFilterShift: params.preflashYFilterShift,
   };
   if (family === 'lut') {
     return { filmFormatMm, exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1, ...dir };

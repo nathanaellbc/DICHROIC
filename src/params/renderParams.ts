@@ -108,6 +108,12 @@ export interface RenderParams {
   dirCouplersInhibitionInterlayer: number;
   /** Python: `film_render.dir_couplers.diffusion_size_um` (`:139`); 0 mematikan difusi (dan ekornya). */
   dirCouplersDiffusionUm: number;
+  /** Python: `enlarger.preflash_exposure` (`:81`). OFX 0..1. */
+  preflashExposure: number;
+  /** Python: `enlarger.preflash_m_filter_shift` (`:83`), Kodak CC. */
+  preflashMFilterShift: number;
+  /** Python: `enlarger.preflash_y_filter_shift` (`:82`), Kodak CC. */
+  preflashYFilterShift: number;
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
@@ -144,4 +150,7 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   dirCouplersInhibitionSameLayer: 1,
   dirCouplersInhibitionInterlayer: 1,
   dirCouplersDiffusionUm: 20,
+  preflashExposure: 0,
+  preflashMFilterShift: 0,
+  preflashYFilterShift: 0,
 });
