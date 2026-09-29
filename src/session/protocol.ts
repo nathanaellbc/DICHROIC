@@ -16,6 +16,7 @@ export interface SessionLike {
   getParams(): RenderParams;
   getDiagnostics(): SessionDiagnostics;
   render(quality: RenderQuality): Promise<RenderResult>;
+  prewarm(): Promise<void>;
   exportCube(size: number): Promise<string>;
   exportImage(format: ExportFormat): Promise<Uint8Array>;
   dispose(): void;

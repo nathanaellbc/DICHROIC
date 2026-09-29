@@ -66,6 +66,9 @@ class FakeSession implements SessionLike {
     this.lastRgb = Float32Array.of(delay, 0.5, 0.25);
     return { width: 1, height: 1, rgb: this.lastRgb, quality, paramsVersion: delay };
   }
+  async prewarm(): Promise<void> {
+    this.calls.push(['prewarm', []]);
+  }
   getDiagnostics() {
     return { iirPrecisionOk: false, iirMaxAbsError: 3e-4 };
   }
@@ -103,6 +106,13 @@ describe('RPC Session', () => {
     await client.render('full');
     expect(fake.lastRgb!.length).toBe(3);
     expect(Array.from(fake.lastRgb!)).toEqual([0, 0.5, 0.25]);
+  });
+
+  it('prewarm diteruskan ke Session', async () => {
+    const fake = new FakeSession();
+    const client = await connect(fake);
+    await client.prewarm();
+    expect(fake.calls).toContainEqual(['prewarm', []]);
   });
 
   it('mengembalikan Float32Array hasil render utuh', async () => {

@@ -127,6 +127,10 @@ export class Engine {
       async () => {
         const diagnostics = await client.getDiagnostics();
         this.#set({ engine: 'ready', precisionOk: diagnostics.iirPrecisionOk });
+        // Shader dikompilasi selagi pengguna memilih foto. Render pertama
+        // menunggu varian yang sedang dikompilasi (yang memang ia butuhkan)
+        // dan menyalip sisanya; prewarm yang tersalip atau gagal tidak fatal.
+        client.prewarm().catch(() => {});
       },
       (error: unknown) => {
         const unsupported = error instanceof Error && error.name === 'WebGPUUnavailableError';
