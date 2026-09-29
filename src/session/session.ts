@@ -130,7 +130,7 @@ export class Session {
   #pending: PendingRender | undefined;
   /** Satu hasil terakhir per kualitas. */
   readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
-  private readonly graphs = new Map<string, RenderGraph>();
+  private readonly graphs = new Map<string, Promise<RenderGraph>>();
 
   private constructor(
     private readonly engine: EngineDevice,
@@ -226,10 +226,47 @@ export class Session {
     const hit = this.#cache.get(quality);
     if (hit && hit.key === this.cacheKey(quality)) return Promise.resolve(hit.result);
 
-    return new Promise<RenderResult>((resolve, reject) => {
+    return this.enqueue(() => this.execute(quality));
+  }
+
+  /**
+   * Mengompilasi lebih dulu varian rantai yang belum pernah dirender untuk
+   * parameter saat ini: keluarga `measured` dengan grain hidup dan mati, dan
+   * `lut` (ekspor `.cube`). Kompilasi shader pertama sebuah varian 2..9 s;
+   * tanpa prewarm jeda itu jatuh saat pengguna pertama kali menyalakan grain
+   * atau mengekspor kubus. Frame 8x8 cukup -- yang mahal kompilasinya.
+   *
+   * Lewat antrean yang sama dengan `render` (tidak pernah berjalan bersamaan
+   * dengan render), dan seperti render yang menunggu, ia tersalip oleh
+   * permintaan render berikutnya (`RenderSupersededError`). Tidak butuh
+   * gambar terbuka.
+   */
+  prewarm(): Promise<void> {
+    try {
+      this.assertAlive();
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    return this.enqueue(async () => {
+      const params = this.#params;
+      const tiny = { width: 8, height: 8, rgba: new Float32Array(8 * 8 * 4).fill(0.18) };
+      for (const grainEnabled of [params.grainEnabled, !params.grainEnabled]) {
+        this.assertAlive();
+        await this.renderFrame(tiny, { ...params, grainEnabled }, 'image');
+      }
+      this.assertAlive();
+      await this.renderFrame(identityLattice(2), params, 'cube');
+    });
+  }
+
+  /** Antrean terbaru-menang bersama untuk `render` dan `prewarm`. */
+  private enqueue<T>(run: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
       const job: PendingRender = {
         start: () => {
-          this.execute(quality).then(resolve, reject);
+          run()
+            .finally(() => this.release())
+            .then(resolve, reject);
         },
         reject,
       };
@@ -243,27 +280,27 @@ export class Session {
     });
   }
 
-  private async execute(quality: RenderQuality): Promise<RenderResult> {
-    try {
-      this.assertAlive();
-      const image = this.#image!;
-      const params = this.#params;
-      const paramsVersion = this.#paramsVersion;
-      const key = this.cacheKey(quality);
-      const frame = quality === 'preview' ? this.previewImage() : image;
-      const rgb = await this.renderFrame(frame, params, 'image');
-      const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
-      if (!this.#disposed) this.#cache.set(quality, { key, result });
-      return result;
-    } finally {
-      this.#busy = false;
-      const next = this.#pending;
-      this.#pending = undefined;
-      if (next) {
-        this.#busy = true;
-        next.start();
-      }
+  private release(): void {
+    this.#busy = false;
+    const next = this.#pending;
+    this.#pending = undefined;
+    if (next) {
+      this.#busy = true;
+      next.start();
     }
+  }
+
+  private async execute(quality: RenderQuality): Promise<RenderResult> {
+    this.assertAlive();
+    const image = this.#image!;
+    const params = this.#params;
+    const paramsVersion = this.#paramsVersion;
+    const key = this.cacheKey(quality);
+    const frame = quality === 'preview' ? this.previewImage() : image;
+    const rgb = await this.renderFrame(frame, params, 'image');
+    const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
+    if (!this.#disposed) this.#cache.set(quality, { key, result });
+    return result;
   }
 
   private previewImage(): ScaledImage {
@@ -285,10 +322,24 @@ export class Session {
    * `.cube` `size^3` (spec induk §7.2, spec Fase 2 §4.6): lattice identitas
    * dirender sebagai frame lewat rencana `'cube'` (semantik `lut_mode`,
    * digerbangi `test/parity/cube.test.ts`). Tidak butuh gambar terbuka.
+   * Lewat antrean render (graf `lut` juga dipakai `prewarm`); bila tersalip
+   * sebelum mulai, diantrekan ulang seperti `exportImage`.
    */
   async exportCube(size: number): Promise<string> {
     this.assertAlive();
     const lattice = identityLattice(size);
+    for (;;) {
+      try {
+        return await this.enqueue(() => this.renderCube(lattice, size));
+      } catch (e) {
+        if (e instanceof RenderSupersededError) continue;
+        throw e;
+      }
+    }
+  }
+
+  private async renderCube(lattice: { width: number; height: number; rgba: Float32Array }, size: number): Promise<string> {
+    this.assertAlive();
     const params = this.#params;
     const { rgb, plan } = await this.renderFrameWithPlan(lattice, params, 'cube');
     return formatCube(rgb, size, {
@@ -333,7 +384,7 @@ export class Session {
     this.#pending?.reject(new SessionStateError('Session di-dispose() sebelum render ini dimulai.'));
     this.#pending = undefined;
     this.#cache.clear();
-    for (const graph of this.graphs.values()) graph.dispose();
+    for (const graph of this.graphs.values()) void graph.then((g) => g.dispose(), () => {});
     this.graphs.clear();
     this.ownedArenas?.destroy();
     this.#image = undefined;
@@ -364,15 +415,26 @@ export class Session {
     return { rgb: packRgb(rgba, frame.width * frame.height), plan };
   }
 
-  private async graphFor(plan: RenderPlan): Promise<RenderGraph> {
+  /**
+   * Graf per (arena, varian rantai). Map menyimpan `Promise`, jadi dua
+   * permintaan bersamaan untuk kunci yang sama berbagi satu graf alih-alih
+   * membangun dua (yang kedua dulu tertimpa tanpa di-dispose).
+   */
+  private graphFor(plan: RenderPlan): Promise<RenderGraph> {
     const key = `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}`;
     const existing = this.graphs.get(key);
     if (existing) return existing;
-    const arenas = await this.arenas.get(plan.arenaKey, plan.arenaInputs);
-    const graph = new RenderGraph(this.engine);
-    for (const stage of buildChain(this.engine.device, arenas, plan.chain)) graph.addStage(stage);
-    this.graphs.set(key, graph);
-    return graph;
+    const building = (async () => {
+      const arenas = await this.arenas.get(plan.arenaKey, plan.arenaInputs);
+      const graph = new RenderGraph(this.engine);
+      for (const stage of buildChain(this.engine.device, arenas, plan.chain)) graph.addStage(stage);
+      return graph;
+    })();
+    this.graphs.set(key, building);
+    building.catch(() => {
+      if (this.graphs.get(key) === building) this.graphs.delete(key);
+    });
+    return building;
   }
 
   private assertAlive(): void {

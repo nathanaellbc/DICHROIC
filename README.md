@@ -198,8 +198,27 @@ npm run preview    # serve dist/ with the same headers
 DICHROIC needs WebGPU (Safari on iOS 26+, current Chrome, Edge or Firefox).
 RAW decoding uses shared WASM memory, so the page must be cross-origin
 isolated: the dev and preview servers send `Cross-Origin-Opener-Policy:
-same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, and any
-hosting must send the same two headers.
+same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
+
+### Installing and hosting
+
+The production build is a Progressive Web App: its service worker
+(`src/sw.ts`) caches the whole app, including the ~7 MB of spectral data,
+so after the first visit it runs offline. On iPhone, open the site in Safari
+and choose **Share → Add to Home Screen**; it then opens full screen like a
+native app. Photos never leave the device.
+
+- **GitHub Pages** — `.github/workflows/deploy.yml` builds and publishes on
+  every push to `main`. Enable it once under *Settings → Pages → Source:
+  GitHub Actions*; the app is served at `https://<user>.github.io/<repo>/`.
+  Pages cannot send custom headers, so the service worker adds the isolation
+  headers itself and the page reloads once on the first visit.
+- **Cloudflare Pages / Netlify** — build command `npm run build`, output
+  `dist`; `public/_headers` sends the isolation and cache headers.
+- **Anywhere else** — serve `dist/` over HTTPS with the two headers above.
+  For a subpath, build with `DICHROIC_BASE=/path/ npm run build`.
+
+Icons and iOS launch screens come from `node tools/gen_icons.mjs`.
 
 ## Project layout
 
@@ -207,6 +226,7 @@ hosting must send the same two headers.
 index.html        app entry
 src/
   ui/             React + Motion interface (iPhone-first, Apple HIG / Liquid Glass)
+  sw.ts           service worker (offline precache, cross-origin isolation)
   session/        Session facade and its Web Worker RPC
   engine/         WebGPU render graph and stages (TypeScript + WGSL in shaders/)
   io/             image decoders and encoders

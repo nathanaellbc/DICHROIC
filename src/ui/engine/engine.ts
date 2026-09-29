@@ -20,6 +20,7 @@ import { PREVIEW_MAX_LONG_EDGE } from '../../session/downscale';
 import { RenderSupersededError } from '../../session/errors';
 import type { ExportFormat } from '../../session/session';
 import { suggestedInput } from '../model/tools';
+import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { canvasColorSpaceFor, originalFrame, rgbToPixels, type Frame } from './display';
 
 export type EngineStatus = 'connecting' | 'ready' | 'unsupported' | 'failed';
@@ -71,6 +72,22 @@ export function describeError(error: unknown, fileName?: string): AppError {
   return { title: 'Something Went Wrong', message };
 }
 
+/**
+ * Decode lewat `io/` di worker. Format yang tidak dikenal `io/` maupun LibRaw
+ * masih dicoba lewat decoder browser sebelum ditolak (galat aslinya yang
+ * dilaporkan bila browser juga gagal).
+ */
+async function decodeInWorker(client: SessionClient, bytes: Uint8Array, file: File): Promise<DecodedImage> {
+  try {
+    return await client.decode(bytes, file.name);
+  } catch (error) {
+    if (!(error instanceof DecodeError) || error.format !== 'unknown') throw error;
+    return decodeWithBrowser(file, file.name).catch(() => {
+      throw error;
+    });
+  }
+}
+
 export class Engine {
   #state: EngineState = {
     engine: 'connecting',
@@ -110,6 +127,10 @@ export class Engine {
       async () => {
         const diagnostics = await client.getDiagnostics();
         this.#set({ engine: 'ready', precisionOk: diagnostics.iirPrecisionOk });
+        // Shader dikompilasi selagi pengguna memilih foto. Render pertama
+        // menunggu varian yang sedang dikompilasi (yang memang ia butuhkan)
+        // dan menyalip sisanya; prewarm yang tersalip atau gagal tidak fatal.
+        client.prewarm().catch(() => {});
       },
       (error: unknown) => {
         const unsupported = error instanceof Error && error.name === 'WebGPUUnavailableError';
@@ -130,8 +151,9 @@ export class Engine {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const format = detectFormat(bytes);
       if (!stillCurrent()) return;
-      this.#set({ opening: { name: file.name, stage: format === 'raw' || format === 'unknown' ? 'Decoding RAW…' : 'Decoding…' } });
-      const image: DecodedImage = await client.decode(bytes, file.name);
+      const viaBrowser = format === 'unknown' && isBrowserImage(bytes);
+      this.#set({ opening: { name: file.name, stage: format === 'raw' || (format === 'unknown' && !viaBrowser) ? 'Decoding RAW…' : 'Decoding…' } });
+      const image: DecodedImage = viaBrowser ? await decodeWithBrowser(file, file.name) : await decodeInWorker(client, bytes, file);
       if (!stillCurrent()) return;
       const original = originalFrame(image, PREVIEW_MAX_LONG_EDGE);
       const input = suggestedInput(image);

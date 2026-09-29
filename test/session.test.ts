@@ -203,6 +203,53 @@ describe('Session: pratinjau, antrean, cache', () => {
   });
 });
 
+describe('Session: prewarm', () => {
+  it('tanpa gambar terbuka; graf yang dihangatkan menghasilkan render identik', async () => {
+    const warm = await sharedSession();
+    await warm.prewarm();
+    const graphs = (warm as unknown as { graphs: Map<string, unknown> }).graphs;
+    expect([...graphs.keys()].map((k) => k.split('|').slice(1).join('|')).sort()).toEqual([
+      'lut|grain=false',
+      'measured|grain=false',
+      'measured|grain=true',
+    ]);
+    const cold = await sharedSession();
+    for (const s of [warm, cold]) {
+      s.open(fixtureImage('gray_ramp'));
+      s.setParams({ grainEnabled: false, glareEnabled: false });
+    }
+    const [a, b] = [await warm.render('full'), await cold.render('full')];
+    expect(a.rgb).toEqual(b.rgb);
+    expect(graphs.size).toBe(3);
+    warm.dispose();
+    cold.dispose();
+  });
+
+  it('prewarm yang menunggu tersalip permintaan berikutnya; exportCube yang tersalip diantrekan ulang', async () => {
+    const s = await sharedSession();
+    s.open(fixtureImage('gray_ramp'));
+    const first = s.render('preview');
+    const warming = s.prewarm();
+    const cube = s.exportCube(5);
+    const next = s.render('preview');
+    const [a, w, c] = await Promise.allSettled([first, warming, cube, next.catch(() => undefined)]);
+    expect(a.status).toBe('fulfilled');
+    expect(w.status).toBe('rejected');
+    expect((w as PromiseRejectedResult).reason).toBeInstanceOf(RenderSupersededError);
+    expect(c.status).toBe('fulfilled');
+    const idle = await sharedSession();
+    expect((c as PromiseFulfilledResult<string>).value).toBe(await idle.exportCube(5));
+    s.dispose();
+    idle.dispose();
+  });
+
+  it('prewarm setelah dispose ditolak', async () => {
+    const s = await sharedSession();
+    s.dispose();
+    await expect(s.prewarm()).rejects.toBeInstanceOf(SessionStateError);
+  });
+});
+
 describe('Session: penerimaan rezim resolusi produksi', () => {
   it(
     'render penuh 2048x1365 cocok dengan render ter-tile paksa dari plan yang sama (<= 2e-6)',

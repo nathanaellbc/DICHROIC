@@ -15,7 +15,8 @@ export interface DecodedImage {
   suggestedColorSpace: string;
   encoding: 'encoded' | 'linear';
   source: {
-    format: 'jpeg' | 'png' | 'tiff' | 'exr' | 'raw' | 'fixture';
+    /** `browser`: decoder gambar bawaan browser (HEIC, AVIF, WebP; lihat `ui/engine/browserDecode.ts`). */
+    format: 'jpeg' | 'png' | 'tiff' | 'exr' | 'raw' | 'browser' | 'fixture';
     bitDepth: number;
     name?: string;
   };

@@ -5,8 +5,8 @@
  * WhiteIsZero/BlackIsZero/RGB/palet, alpha dari ExtraSamples.
  *
  * Integer -> ter-encode, disarankan `sRGB`; float -> linear, disarankan
- * `Linear Rec.709` (rencana 2B Task 3). Profil ICC dan tag Orientation belum
- * dibaca.
+ * `Linear Rec.709` (rencana 2B Task 3). Tag Orientation dan deskripsi ICC
+ * dibaca `decodeImage` (`metadata.ts`), bukan di sini.
  *
  * Kenapa bukan `utif2` (rencana awal): pustaka itu mengembalikan piksel nol
  * tanpa galat untuk kompresi yang tidak dikenalnya, tidak membalik byte float

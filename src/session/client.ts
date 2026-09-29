@@ -85,6 +85,11 @@ export class SessionClient {
     return this.call('render', [quality]) as Promise<RenderResult>;
   }
 
+  /** Kompilasi varian rantai lebih dulu (lihat `Session.prewarm`). */
+  prewarm(): Promise<void> {
+    return this.call('prewarm', []) as Promise<void>;
+  }
+
   exportCube(size: number): Promise<string> {
     return this.call('exportCube', [size]) as Promise<string>;
   }
