@@ -33,10 +33,28 @@ ulang, tidak diimpor.
   `playwright-core` + Chrome terpasang: buka foto, grup Lens, kartu unduhan,
   stepper, slider log, tanpa galat console.
 
+**Ekspor hemat memori + lens blur setara EMULSION (2026-09-30):**
+
+- Scratch GPU dibagi antar tahap dan antar graf (`ScratchPool`, slot per
+  urutan label), grain 8 -> 3 buffer, scanner 6 -> 4, readback dikemas
+  langsung ke RGB, render penuh dan scratch dilepas setelah ekspor dan saat
+  lembar Ekspor ditutup, lalu `returnFreedMemory` (Dawn baru mengembalikan
+  memori setelah submit berikutnya). Terukur di RTX 3060 Ti, 24 MP + grain:
+  kode lama DEVICE_HUNG (butuh > 8 GB VRAM); kini siap dalam ~5 s, puncak
+  ~4,9 GB VRAM / ~3 GB RAM, VRAM kembali ~0,1 GB setelah lembar ditutup.
+- Tiling seluruh gambar ala EMULSION TIDAK dipakai: apron eksak rantai kita
+  ~1400 px/sisi pada 24 MP (ekor IIR DIR/halation 10 sigma), jadi tile akan
+  mengerjakan ulang gambar berkali-kali.
+- Lens blur: grid pangkat dua dan rantai mip penuh seperti EMULSION; mode
+  fokus = cek fokus (di luar kedalaman ruang abu-abu 30 % luminans,
+  `ui/engine/focusCheck.ts`), ketuk berkali-kali sampai Done, penanda fokus
+  lingkaran 30 px. Model kedalaman diunduh dan dijalankan sungguhan di
+  Chromium headless (WASM int8, 1,4 s).
+
 **Belum:**
 
-1. Unduhan model asli (76 MB dari Hugging Face) dan inferensi di browser
-   sungguhan belum pernah dijalankan -- perlu izin pemilik untuk mengunduh.
+1. Uji lens blur WebGPU fp16 di browser dengan `shader-f16` (headless di
+   mesin ini jatuh ke WASM).
 2. Uji di iPhone fisik (kecepatan FFT df64, kedalaman WASM int8 392 px).
 3. Uji suite penuh lavapipe (kegagalan lama yang diketahui: tile-vs-full
    2,086e-6 > 2e-6).

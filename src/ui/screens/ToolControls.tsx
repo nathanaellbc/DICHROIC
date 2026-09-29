@@ -309,7 +309,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
       status = (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <PressButton className="capsule bordered" aria-pressed={lens.picking} onClick={lens.onPickFocus} style={lens.picking ? { background: 'var(--blue)', color: '#fff' } : undefined}>
-            <Icon name="focus" size={16} /> {lens.picking ? 'Tap the Subject' : 'Pick Focus'}
+            <Icon name="focus" size={16} /> {lens.picking ? 'Done' : 'Pick Focus'}
           </PressButton>
           <span className="t-footnote secondary">
             Depth ready · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s

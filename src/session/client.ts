@@ -120,6 +120,11 @@ export class SessionClient {
     return this.call('exportImage', options === undefined ? [format] : [format, options]) as Promise<Uint8Array>;
   }
 
+  /** Lepas render ekspor yang di-cache (lihat `Session.releaseExport`). */
+  releaseExport(): Promise<void> {
+    return this.call('releaseExport', []) as Promise<void>;
+  }
+
   dispose(): Promise<void> {
     return this.call('dispose', []) as Promise<void>;
   }

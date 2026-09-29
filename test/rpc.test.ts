@@ -94,6 +94,9 @@ class FakeSession implements SessionLike {
     this.calls.push(['exportImage', options === undefined ? [format] : [format, options]]);
     return new TextEncoder().encode(format);
   }
+  releaseExport() {
+    this.calls.push(['releaseExport', []]);
+  }
   dispose() {
     this.calls.push(['dispose', []]);
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { acquireDevice } from '../src/engine/device';
-import { RenderGraph } from '../src/engine/graph';
+import { RenderGraph, ScratchPool } from '../src/engine/graph';
 import type { Stage, StageContext } from '../src/engine/graph';
 import { createMaterializeActiveRegionStage } from '../src/engine/stages/materializeActiveRegion';
 import { Tap } from '../src/engine/taps';
@@ -422,6 +422,50 @@ describe('RenderGraph', () => {
     // mencegah, dan tidak akan terlihat sama sekali karena keluarannya benar.
     await expect(graph.run(input, params, Tap.RGB_IN)).rejects.toThrow(/dispose/);
     await expect(graph.run(input, params, Tap.RGB_IN)).rejects.toThrow(/RenderGraph baru/);
+  });
+
+  it('scratch dibagi antar tahap: memori pool = tahap terbesar, bukan jumlah semua tahap', async () => {
+    const engine = await acquireDevice();
+    const pool = new ScratchPool(engine.device);
+    const graph = new RenderGraph(engine, pool);
+    const first: GPUBuffer[] = [];
+    const second: GPUBuffer[] = [];
+    graph.addStage(createScratchProbeStage(Tap.RGB_IN, first, () => 256));
+    // Tahap kedua butuh scratch LEBIH BESAR: slot dibesarkan di tengah encode,
+    // dan buffer lama (sudah dirujuk perintah tahap pertama) tidak boleh
+    // dihancurkan sebelum submit -- run tetap valid dan hasilnya benar.
+    graph.addStage(createScratchProbeStage(Tap.RGB_OUT, second, () => 1024));
+    const params = paramsFor(2, 2);
+    const input = new Float32Array(2 * 2 * 4).map((_, i) => i);
+
+    await expect(graph.run(input, params, Tap.RGB_OUT)).resolves.toEqual(input);
+    expect(pool.bytes).toBe(1024);
+
+    // Run kedua: kedua tahap memakai buffer YANG SAMA (slot sudah cukup besar).
+    await graph.run(input, params, Tap.RGB_OUT);
+    expect(first[1]).toBe(second[1]);
+    expect(pool.bytes).toBe(1024);
+
+    // Graf lain dengan pool yang sama tidak menambah memori.
+    const other = new RenderGraph(engine, pool);
+    other.addStage(createScratchProbeStage(Tap.RGB_OUT, [], () => 512));
+    await other.run(input, params, Tap.RGB_OUT);
+    expect(pool.bytes).toBe(1024);
+
+    pool.release();
+    expect(pool.bytes).toBe(0);
+    graph.dispose();
+    other.dispose();
+  });
+
+  it('output rgb mengemas 3 kanal langsung dari readback', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+    const params = paramsFor(2, 1);
+    const input = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    await expect(graph.run(input, params, Tap.RGB_IN, { output: 'rgb' })).resolves.toEqual(new Float32Array([1, 2, 3, 5, 6, 7]));
+    graph.dispose();
   });
 
   it('melempar galat sinkron saat ukuran input tidak cocok dengan params, bukan peringatan validasi WebGPU asinkron', async () => {

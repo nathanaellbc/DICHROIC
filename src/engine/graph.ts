@@ -261,34 +261,95 @@ function stitchTileOutput(
   }
 }
 
+/**
+ * Pool buffer scratch yang DIBAGI antar tahap (dan antar graf milik satu
+ * `Session`). Tahap berjalan berurutan dalam satu command buffer dan hanya
+ * berkomunikasi lewat `source`/`dest`, jadi scratch tahap A bebas dipakai
+ * ulang tahap B: memori puncak = tahap terbesar, bukan jumlah semua tahap
+ * (dulu ~9,9 GB scratch persisten untuk satu ekspor 24 MP ber-grain).
+ *
+ * Kunci pool adalah SLOT (`slot0`, `slot1`, ...), bukan label tahap: label
+ * pertama yang diminta sebuah tahap mendapat slot0, label kedua slot1, dst.,
+ * dan label yang sama dalam satu tahap mendapat slot yang sama (dipakai
+ * tahap untuk sengaja menumpuk buffer yang umurnya tidak bertumpuk).
+ *
+ * Membesarkan slot di tengah encode tidak boleh menghancurkan buffer lama
+ * (perintah yang sudah di-encode masih merujuknya): buffer lama dipensiunkan
+ * dan baru dihancurkan `flushRetired()` setelah GPU selesai.
+ */
+export class ScratchPool {
+  private readonly buffers = new Map<string, GPUBuffer>();
+  private retired: GPUBuffer[] = [];
+
+  constructor(private readonly device: GPUDevice) {}
+
+  get(key: string, bytes: number): GPUBuffer {
+    const existing = this.buffers.get(key);
+    if (existing && existing.size >= bytes) return existing;
+    if (existing) this.retired.push(existing);
+    const buffer = this.device.createBuffer({ label: `scratch:${key}`, size: bytes, usage: PING_PONG_USAGE });
+    this.buffers.set(key, buffer);
+    return buffer;
+  }
+
+  /** Hancurkan buffer yang tergantikan; panggil hanya setelah pekerjaan GPU yang merujuknya selesai. */
+  flushRetired(): void {
+    for (const buffer of this.retired) buffer.destroy();
+    this.retired = [];
+  }
+
+  /** Byte yang sedang dipegang (untuk pengujian dan diagnosis memori). */
+  get bytes(): number {
+    let total = 0;
+    for (const buffer of this.buffers.values()) total += buffer.size;
+    return total;
+  }
+
+  /**
+   * Lepas semua buffer. `Session` memanggilnya setelah render penuh (ekspor):
+   * scratch seukuran foto penuh tidak dibiarkan menetap sementara pengguna
+   * lanjut mengedit pratinjau yang jauh lebih kecil.
+   */
+  release(): void {
+    this.flushRetired();
+    for (const buffer of this.buffers.values()) buffer.destroy();
+    this.buffers.clear();
+    returnFreedMemory(this.device);
+  }
+}
+
+/**
+ * Dawn baru mengembalikan memori buffer yang sudah `destroy()` ke sistem
+ * setelah submit BERIKUTNYA selesai (terukur: 3 GB tetap terpakai sampai
+ * ada submit, lalu turun ke nol). Tanpa ini memori ekspor tertahan sampai
+ * pengguna menggeser slider lagi.
+ */
+export function returnFreedMemory(device: GPUDevice): void {
+  device.queue.submit([]);
+  void device.queue.onSubmittedWorkDone().catch(() => {});
+}
+
 export class RenderGraph {
   private readonly stages: Stage[] = [];
   /**
-   * Pool buffer scratch, dikunci per label. SENGAJA TIDAK dibersihkan di
-   * akhir `run()` — lih. dokumentasi `StageContext.scratch` di atas. Umurnya
-   * adalah umur `RenderGraph` ini, dibersihkan lewat `dispose()` eksplisit.
+   * Pool scratch. SENGAJA TIDAK dibersihkan di akhir `run()` — lih.
+   * dokumentasi `StageContext.scratch` di atas. Graf yang tidak diberi pool
+   * bersama memiliki pool sendiri, dibersihkan lewat `dispose()`.
    */
-  private readonly pool = new Map<string, GPUBuffer>();
+  private readonly pool: ScratchPool;
+  private readonly ownsPool: boolean;
   #disposed = false;
 
-  constructor(private readonly engine: EngineDevice) {}
+  constructor(
+    private readonly engine: EngineDevice,
+    sharedPool?: ScratchPool,
+  ) {
+    this.pool = sharedPool ?? new ScratchPool(engine.device);
+    this.ownsPool = sharedPool === undefined;
+  }
 
   addStage(stage: Stage): void {
     this.stages.push(stage);
-  }
-
-  private scratch(label: string, bytes: number): GPUBuffer {
-    const existing = this.pool.get(label);
-    if (existing && existing.size >= bytes) return existing;
-    existing?.destroy();
-
-    const buffer = this.engine.device.createBuffer({
-      label: `scratch:${label}`,
-      size: bytes,
-      usage: PING_PONG_USAGE,
-    });
-    this.pool.set(label, buffer);
-    return buffer;
   }
 
   /**
@@ -318,18 +379,30 @@ export class RenderGraph {
     input: Float32Array,
     params: CoreParams,
     collect: TapName,
-    options?: { maxBufferBytes?: number; overlap?: number; frame?: FrameParams },
+    options?: {
+      maxBufferBytes?: number;
+      overlap?: number;
+      frame?: FrameParams;
+      /**
+       * `rgb`: keluaran 3 kanal rapat, dikemas langsung dari memori readback
+       * yang di-map -- tanpa salinan RGBA f32 seukuran frame (384 MB pada
+       * 24 MP) yang dulu dibuat lalu dibuang. Baku `rgba`.
+       */
+      output?: 'rgba' | 'rgb';
+    },
   ): Promise<Float32Array> {
     const frame = options?.frame ?? DEFAULT_FRAME;
+    const output = options?.output ?? 'rgba';
     const maxBufferBytes = options?.maxBufferBytes;
     if (maxBufferBytes !== undefined) {
       const overlap = options?.overlap ?? 0;
       const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap);
       if (tiles.length > 1) {
-        return this.runTiled(input, params, collect, tiles, frame);
+        const rgba = await this.runTiled(input, params, collect, tiles, frame);
+        return output === 'rgb' ? packRgb(rgba, params.width * params.height) : rgba;
       }
     }
-    return this.runSingleBuffer(input, params, collect, false, frame);
+    return this.runSingleBuffer(input, params, collect, false, frame, output);
   }
 
   /**
@@ -401,6 +474,7 @@ export class RenderGraph {
     collect: TapName,
     shrinkApron = false,
     frame: Readonly<FrameParams> = DEFAULT_FRAME,
+    output: 'rgba' | 'rgb' = 'rgba',
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -571,6 +645,8 @@ export class RenderGraph {
         remainingSpatialRadius = Math.max(0, remainingSpatialRadius - resolveSpatialRadius(stage, params, frame));
       }
 
+      // Label -> slot pool bersama, berurutan per tahap (lih. `ScratchPool`).
+      const slots = new Map<string, string>();
       stage.encode(encoder, {
         device,
         params: stageParams,
@@ -578,7 +654,14 @@ export class RenderGraph {
         paramsBuffer: stageParamsBuffer,
         source: front,
         dest: back,
-        scratch: (label, scratchBytes) => this.scratch(label, scratchBytes),
+        scratch: (label, scratchBytes) => {
+          let key = slots.get(label);
+          if (key === undefined) {
+            key = `slot${slots.size}`;
+            slots.set(label, key);
+          }
+          return this.pool.get(key, scratchBytes);
+        },
       });
       // Ping-pong: keadaan yang baru ditulis tahap ini (ke `dest`/`back`)
       // menjadi `source` tahap berikutnya. Menghilangkan baris ini membuat
@@ -598,7 +681,8 @@ export class RenderGraph {
     device.queue.submit([encoder.finish()]);
 
     await readback.mapAsync(gpuMapMode.READ);
-    const result = new Float32Array(readback.getMappedRange().slice(0));
+    const mapped = new Float32Array(readback.getMappedRange());
+    const result = output === 'rgb' ? packRgb(mapped, params.width * params.height) : mapped.slice();
     readback.unmap();
 
     readback.destroy();
@@ -606,6 +690,8 @@ export class RenderGraph {
     for (const buffer of perStageParamsBuffers) buffer.destroy();
     front.destroy();
     back.destroy();
+    // GPU sudah selesai (readback ter-map): buffer scratch yang tergantikan aman dihancurkan.
+    this.pool.flushRetired();
 
     return result;
   }
@@ -618,8 +704,19 @@ export class RenderGraph {
    */
   dispose(): void {
     if (this.#disposed) return;
-    for (const buffer of this.pool.values()) buffer.destroy();
-    this.pool.clear();
+    // Pool bersama milik pemanggil (`Session`), yang melepasnya sendiri.
+    if (this.ownsPool) this.pool.release();
     this.#disposed = true;
   }
+}
+
+/** RGBA -> RGB rapat (kanal alfa dibuang). */
+export function packRgb(rgba: Float32Array, pixels: number): Float32Array {
+  const rgb = new Float32Array(pixels * 3);
+  for (let p = 0; p < pixels; p += 1) {
+    rgb[p * 3] = rgba[p * 4]!;
+    rgb[p * 3 + 1] = rgba[p * 4 + 1]!;
+    rgb[p * 3 + 2] = rgba[p * 4 + 2]!;
+  }
+  return rgb;
 }

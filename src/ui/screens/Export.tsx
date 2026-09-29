@@ -117,6 +117,9 @@ export function ExportContent({
   const request = selected.request;
   const rendering = mode === 'image' && (rendered === null || rendered.request !== request);
 
+  // Seperti EMULSION: render ekspor hanya dipegang selama lembar ini terbuka.
+  useEffect(() => () => engine.releaseExport(), []);
+
   useEffect(() => {
     let alive = true;
     engine.exportFormats().then(

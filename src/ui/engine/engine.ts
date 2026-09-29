@@ -26,6 +26,7 @@ import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { DepthEstimator, buildGuide } from '../../depth/estimate';
 import { depthProfile, firstDownloadBytes } from '../../depth/model';
+import type { DepthMap } from '../../host/lens';
 import type { DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
 import type { DepthState } from './depthController';
@@ -158,6 +159,7 @@ export class Engine {
   #dirty = false;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
+  #depthMap: DepthMap | undefined;
   readonly #depth = new DepthController({
     estimate: async (guide, allowDownload, onProgress) => {
       const profile = await this.#profile();
@@ -165,6 +167,8 @@ export class Engine {
       return this.#estimator.estimate(guide, { allowDownload, profile, onProgress });
     },
     deliver: async (map) => {
+      // Salinan untuk cek fokus di thread UI: peta aslinya DITRANSFER ke worker.
+      this.#depthMap = map ? { width: map.width, height: map.height, data: map.data.slice() } : undefined;
       await this.#client!.setDepthMap(map);
       this.requestRender();
     },
@@ -252,6 +256,7 @@ export class Engine {
       if (!stillCurrent()) return;
       await client.open(image);
       this.#imageSize = imageSize;
+      this.#depthMap = undefined;
       this.#depth.reset(guide);
       // Tampilan (film, kertas, penyesuaian, lensa) dibawa ke foto berikutnya;
       // colour space input, auto exposure, dan titik fokus milik berkas.
@@ -283,6 +288,7 @@ export class Engine {
 
   closePhoto(): void {
     this.#openToken += 1;
+    this.#depthMap = undefined;
     this.#depth.reset(undefined);
     this.#clearHistory();
     this.#set({ phase: 'idle', frame: undefined, original: undefined, fileName: undefined, opening: undefined });
@@ -412,6 +418,11 @@ export class Engine {
     }
   }
 
+  /** Peta kedalaman foto terbuka (salinan UI, untuk cek fokus), bila sudah ada. */
+  get depthMap(): DepthMap | undefined {
+    return this.#depthMap;
+  }
+
   /** Ukuran gambar asli yang terbuka. */
   get imageSize(): { width: number; height: number } | undefined {
     return this.#imageSize;
@@ -452,6 +463,11 @@ export class Engine {
       this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
     }
     return new File([bytes as Uint8Array<ArrayBuffer>], this.exportName(EXPORT_EXT[format]), { type: EXPORT_MIME[format] });
+  }
+
+  /** Lembar Ekspor ditutup: worker melepas render penuh dan scratch GPU-nya. */
+  releaseExport(): void {
+    this.#client?.releaseExport().catch(() => {});
   }
 
   async exportCube(size: number): Promise<File> {

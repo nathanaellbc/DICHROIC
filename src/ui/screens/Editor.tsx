@@ -13,7 +13,7 @@
  * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto.
  */
 import { motion } from 'motion/react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
 import { GroupTabs, PressButton } from '../components/controls';
@@ -25,6 +25,7 @@ import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
+import { focusCheckFrame } from '../engine/focusCheck';
 import { dialogOpen } from '../hooks';
 import { stockInfo } from '../model/stocks';
 import { GROUPS, choicePatch, findTool, isModified, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
@@ -156,11 +157,17 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const photoLabel = scan
     ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
+  // Mode fokus menampilkan cek fokus: di luar kedalaman ruang jadi abu-abu gelap.
+  const depthMap = state.depth.status === 'ready' ? engine.depthMap : undefined;
+  const shownFrame = useMemo(
+    () => (picking && state.frame && depthMap ? focusCheckFrame(state.frame, depthMap, state.params) : state.frame),
+    [picking, state.frame, depthMap, state.params],
+  );
   const photo = !hasPhoto ? (
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} />
   ) : (
     <PhotoView
-      frame={state.frame}
+      frame={shownFrame}
       original={state.original}
       compare={compare}
       rendering={state.rendering}
@@ -171,10 +178,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         y: state.params.lensFocusY,
         show: group === 'lens' && state.params.lensBlurEnabled,
         picking,
-        onPick: (lensFocusX, lensFocusY) => {
-          engine.setParams({ lensFocusX, lensFocusY });
-          setPickingFocus(false);
-        },
+        // Mode fokus (EMULSION): tiap ketukan memindah fokus; tetap di mode ini sampai Done.
+        onPick: (lensFocusX, lensFocusY) => engine.setParams({ lensFocusX, lensFocusY }),
         onCancel: () => setPickingFocus(false),
       }}
     />

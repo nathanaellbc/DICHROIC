@@ -233,17 +233,26 @@ export function PhotoView({
               </>
             )}
             {focus && (focus.show || picking) && (
-              <div
+              // Penanda fokus seperti EMULSION: lingkaran 30 px bertepi putih
+              // dengan titik tengah, berpindah dengan pegas ke titik ketukan.
+              <motion.div
                 aria-hidden="true"
+                initial={false}
+                animate={{ left: `${(cursor ?? focus).x * 100}%`, top: `${(cursor ?? focus).y * 100}%` }}
+                transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.6 }}
                 style={{
-                  position: 'absolute', left: `${(cursor ?? focus).x * 100}%`, top: `${(cursor ?? focus).y * 100}%`, width: 56, height: 56, marginLeft: -28, marginTop: -28,
-                  border: `2px solid ${picking ? '#ffd60a' : 'rgba(255,255,255,0.9)'}`, borderRadius: 10, boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none',
+                  position: 'absolute', width: 30, height: 30, marginLeft: -15, marginTop: -15, boxSizing: 'border-box',
+                  border: '1.5px solid #fff', borderRadius: '50%', pointerEvents: 'none',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
-              />
+              >
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.45)' }} />
+              </motion.div>
             )}
             {picking && (
               <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 6, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                Tap the subject to focus
+                Tap to focus · grey is outside the depth of field
               </span>
             )}
             {peek && !compare && !picking && (
