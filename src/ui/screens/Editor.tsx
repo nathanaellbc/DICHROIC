@@ -47,7 +47,7 @@ export interface EditorProps {
 
 export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }: EditorProps) {
   const [group, setGroup] = useState<GroupId>('film');
-  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ film: 'filmExposureEv', color: 'filterC', texture: 'halationAmount' });
+  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ film: 'printExposureEv', color: 'filterC', texture: 'halationAmount' });
   const [compare, setCompare] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');

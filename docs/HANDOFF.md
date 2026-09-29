@@ -65,8 +65,21 @@ peta jalan untuk melanjutkan.
   segmented, stepper), Sheet (detent, seret), ActionSheet, Alert, PhotoView.
 - `src/ui/screens/` -- Start, Editor (compact/regular), Stocks, Export,
   ToolControls.
+- **Audit arah kontrol (2026-09-29, laporan pemilik: "exposure + malah
+  gelap", "ganti film tidak berubah").** Engine cocok dengan Python; yang
+  salah UI yang menampilkan semantik kamar gelap mentah. Terukur di Chromium
+  dan dikonfirmasi pada fixture Python: `printExposureEv` + = cetakan lebih
+  gelap (fixture `exposure_print_plus0_7` 165 -> 126 dari 255); filter C/M/Y
+  + = warna itu berkurang; `filmExposureEv` hampir tak mengubah terang (print
+  di-retime); antar-film negatif lewat kertas yang sama berbeda hanya 0,3..4,3
+  /255 di rgb_out Python (kertas: 3..33). Perbaikan UI saja: slider
+  `invert` (Exposure = print exposure dibalik, filter C/M/Y dibalik),
+  `filmExposureEv` menjadi "Negative" dengan catatan, auto exposure hanya
+  disarankan untuk input linear (JPEG HP: rata-rata 86 -> 125), catatan di
+  sheet stok bahwa kertas paling membentuk tampilan.
 - Keputusan UI (bisa dibalik): tampilan (film, kertas, penyesuaian) dibawa
-  ke foto berikutnya, hanya colour space input yang milik berkas; pilihan
+  ke foto berikutnya, hanya colour space input dan auto exposure yang milik
+  berkas; pilihan
   stok di sheet langsung dipratinjau, Cancel mengembalikan, seret-tutup =
   Done; ekspor di HP lewat lembar Bagikan, di desktop unduhan.
 

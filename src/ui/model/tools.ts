@@ -16,7 +16,7 @@ type BooleanField = {
 }[keyof RenderParams];
 
 export type IconName =
-  | 'exposure' | 'auto' | 'print' | 'pushPull' | 'format'
+  | 'exposure' | 'auto' | 'print' | 'negative' | 'pushPull' | 'format'
   | 'dot' | 'input' | 'decode' | 'output'
   | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion';
 
@@ -39,6 +39,17 @@ export interface SliderTool extends ToolBase {
   unit?: string;
   /** Bila ada, alat punya sakelar sendiri; slider nonaktif saat sakelar mati. */
   enabledBy?: BooleanField;
+  /**
+   * Slider menampilkan kebalikan field (nilai UI = -field). Beberapa parameter
+   * mengikuti semantik kamar gelap yang terbalik bagi pengguna foto: print
+   * exposure lebih besar = cetakan LEBIH GELAP, filter C/M/Y lebih besar =
+   * warna itu BERKURANG di cetakan. Di UI, + selalu berarti "lebih" dari yang
+   * tertulis di label. Engine dan rentang yang digerbangi tidak berubah
+   * (rentangnya simetris).
+   */
+  invert?: boolean;
+  /** Penjelasan singkat di bawah slider. */
+  note?: string;
 }
 
 export interface ToggleTool extends ToolBase {
@@ -128,9 +139,9 @@ export const GROUPS: readonly ToolGroup[] = [
     id: 'film',
     label: 'Film',
     tools: [
-      { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', label: 'Exposure', title: 'Film Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV' },
-      { kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene and sets the film exposure for you. Film Exposure is applied on top.' },
-      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', label: 'Print', title: 'Print Exposure', icon: 'print', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV' },
+      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
+      { kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the negative. Best for RAW and linear files; phone photos are already exposed.' },
+      { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, colour and grain more than brightness.' },
       { kind: 'stepper', id: 'filmPushPullStops', field: 'filmPushPullStops', label: 'Push/Pull', title: 'Push / Pull', icon: 'pushPull', min: -2, max: 2, step: 0.5 },
       { kind: 'choice', id: 'filmFormat', field: 'filmFormat', label: 'Format', title: 'Film Format', icon: 'format', options: FILM_FORMATS, note: 'Smaller formats enlarge the grain and halation.' },
     ],
@@ -139,9 +150,9 @@ export const GROUPS: readonly ToolGroup[] = [
     id: 'color',
     label: 'Color',
     tools: [
-      { kind: 'slider', id: 'filterC', field: 'filterC', label: 'Cyan', title: 'Cyan Filter', icon: 'dot', tint: '#3CD3FE', min: -50, max: 50, step: 1, digits: 0 },
-      { kind: 'slider', id: 'filterMShift', field: 'filterMShift', label: 'Magenta', title: 'Magenta Filter', icon: 'dot', tint: '#DB34F2', min: -50, max: 50, step: 1, digits: 0 },
-      { kind: 'slider', id: 'filterYShift', field: 'filterYShift', label: 'Yellow', title: 'Yellow Filter', icon: 'dot', tint: '#FFD600', min: -50, max: 50, step: 1, digits: 0 },
+      { kind: 'slider', id: 'filterC', field: 'filterC', invert: true, label: 'Cyan', title: 'Cyan', icon: 'dot', tint: '#3CD3FE', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds cyan, − adds red.' },
+      { kind: 'slider', id: 'filterMShift', field: 'filterMShift', invert: true, label: 'Magenta', title: 'Magenta', icon: 'dot', tint: '#DB34F2', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds magenta, − adds green.' },
+      { kind: 'slider', id: 'filterYShift', field: 'filterYShift', invert: true, label: 'Yellow', title: 'Yellow', icon: 'dot', tint: '#FFD600', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds yellow, − adds blue.' },
       { kind: 'choice', id: 'inputColorSpace', field: 'inputColorSpace', label: 'Input', title: 'Input Color Space', icon: 'input', options: INPUT_COLOR_SPACES },
       { kind: 'toggle', id: 'inputCctfDecoding', field: 'inputCctfDecoding', label: 'Decode', title: 'Decode Transfer Curve', icon: 'decode', note: 'Linearizes encoded input (like a JPEG) before exposing the film. Leave off for linear or RAW files.' },
       { kind: 'choice', id: 'outputColorSpace', field: 'outputColorSpace', label: 'Output', title: 'Output Color Space', icon: 'output', options: OUTPUT_COLOR_SPACES },
@@ -189,12 +200,23 @@ export function formatPushPull(stops: number): string {
   return `${verb} ${formatNumber(n, n % 1 === 0 ? 0 : 1, false)} ${n === 1 ? 'stop' : 'stops'}`;
 }
 
+/** Nilai slider di ruang UI (lihat `SliderTool.invert`). */
+export function sliderValue(tool: SliderTool, params: RenderParams): number {
+  const v = params[tool.field];
+  return tool.invert ? (v === 0 ? 0 : -v) : v;
+}
+
+/** Patch field dari nilai slider di ruang UI. */
+export function sliderPatch(tool: SliderTool, value: number): Partial<RenderParams> {
+  return { [tool.field]: tool.invert ? (value === 0 ? 0 : -value) : value };
+}
+
 /** Teks nilai di readout. */
 export function valueText(tool: Tool, params: RenderParams): string {
   switch (tool.kind) {
     case 'slider':
       if (tool.enabledBy && !params[tool.enabledBy]) return 'Off';
-      return formatNumber(params[tool.field], tool.digits, isBipolar(tool)) + (tool.unit ?? '');
+      return formatNumber(sliderValue(tool, params), tool.digits, isBipolar(tool)) + (tool.unit ?? '');
     case 'stepper':
       return tool.field === 'filmPushPullStops' ? formatPushPull(params.filmPushPullStops) : String(params[tool.field]);
     case 'toggle':
@@ -253,12 +275,22 @@ export function snap(value: number, tool: { min: number; max: number; step: numb
 }
 
 /**
- * Saran parameter input dari decoder (`DecodedImage`, 2B) setelah 2C
+ * Saran parameter milik berkas dari decoder (`DecodedImage`, 2B) setelah 2C
  * memverifikasi colour space input: JPEG/PNG/TIFF integer -> sRGB dengan
  * decode; TIFF float, EXR, RAW -> linear tanpa decode.
+ *
+ * Auto exposure hanya untuk berkas linear (RAW/EXR/float), yang eksposurnya
+ * belum ditetapkan. Foto ter-encode (JPEG dari HP) sudah diekspos kamera;
+ * mengukurnya ulang menggeser terang seluruh foto (terukur: bagan warna
+ * rata-rata 125 -> 86 dari 255), yang terbaca sebagai "film membuat foto
+ * gelap".
  */
-export function suggestedInput(image: { suggestedColorSpace: string; encoding: 'encoded' | 'linear' }): Pick<RenderParams, 'inputColorSpace' | 'inputCctfDecoding'> {
+export function suggestedInput(image: { suggestedColorSpace: string; encoding: 'encoded' | 'linear' }): Pick<RenderParams, 'inputColorSpace' | 'inputCctfDecoding' | 'autoExposure'> {
   const known = INPUT_COLOR_SPACES.some((o) => o.value === image.suggestedColorSpace);
   const inputColorSpace = known ? image.suggestedColorSpace : 'sRGB';
-  return { inputColorSpace, inputCctfDecoding: image.encoding === 'encoded' && decodeAllowed(inputColorSpace) };
+  return {
+    inputColorSpace,
+    inputCctfDecoding: image.encoding === 'encoded' && decodeAllowed(inputColorSpace),
+    autoExposure: image.encoding === 'linear',
+  };
 }

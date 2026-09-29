@@ -18,10 +18,12 @@ import {
   isModified,
   resetPatch,
   snap,
+  sliderPatch,
+  sliderValue,
   suggestedInput,
   valueText,
 } from '../../src/ui/model/tools';
-import type { ChoiceTool } from '../../src/ui/model/tools';
+import type { ChoiceTool, SliderTool } from '../../src/ui/model/tools';
 
 interface Manifest {
   stocks: Array<{ id: string; type: string }>;
@@ -113,6 +115,18 @@ describe('format, snap, patch', () => {
     expect(valueText(findTool('filmExposureEv'), { ...BASELINE_RENDER_PARAMS, filmExposureEv: 1.5 })).toBe('+1.5 EV');
   });
 
+  it('slider terbalik: rentang simetris, + di UI = field negatif (semantik kamar gelap)', () => {
+    const inverted = GROUPS.flatMap((g) => g.tools).filter((t): t is SliderTool => t.kind === 'slider' && !!t.invert);
+    expect(inverted.map((t) => t.field).sort()).toEqual(['filterC', 'filterMShift', 'filterYShift', 'printExposureEv']);
+    for (const tool of inverted) expect(tool.min, tool.id).toBe(-tool.max);
+    const exposure = findTool('printExposureEv') as SliderTool;
+    expect(sliderPatch(exposure, 1)).toEqual({ printExposureEv: -1 });
+    expect(sliderPatch(exposure, 0)).toEqual({ printExposureEv: 0 });
+    expect(Object.is(sliderValue(exposure, BASELINE_RENDER_PARAMS), 0)).toBe(true);
+    expect(valueText(exposure, { ...BASELINE_RENDER_PARAMS, printExposureEv: -0.5 })).toBe('+0.5 EV');
+    expect(sliderValue(findTool('filterC') as SliderTool, { ...BASELINE_RENDER_PARAMS, filterC: 12 })).toBe(-12);
+  });
+
   it('input tanpa oracle decode mematikan decode', () => {
     const input = findTool('inputColorSpace') as ChoiceTool;
     expect(choicePatch(input, 'Rec.709 Gamma 2.4')).toEqual({ inputColorSpace: 'Rec.709 Gamma 2.4', inputCctfDecoding: false });
@@ -120,8 +134,8 @@ describe('format, snap, patch', () => {
   });
 
   it('saran input dari decoder: ter-encode -> decode, linear -> tanpa decode', () => {
-    expect(suggestedInput({ suggestedColorSpace: 'sRGB', encoding: 'encoded' })).toEqual({ inputColorSpace: 'sRGB', inputCctfDecoding: true });
-    expect(suggestedInput({ suggestedColorSpace: 'ACES2065-1', encoding: 'linear' })).toEqual({ inputColorSpace: 'ACES2065-1', inputCctfDecoding: false });
-    expect(suggestedInput({ suggestedColorSpace: 'Linear Rec.709', encoding: 'linear' })).toEqual({ inputColorSpace: 'Linear Rec.709', inputCctfDecoding: false });
+    expect(suggestedInput({ suggestedColorSpace: 'sRGB', encoding: 'encoded' })).toEqual({ inputColorSpace: 'sRGB', inputCctfDecoding: true, autoExposure: false });
+    expect(suggestedInput({ suggestedColorSpace: 'ACES2065-1', encoding: 'linear' })).toEqual({ inputColorSpace: 'ACES2065-1', inputCctfDecoding: false, autoExposure: true });
+    expect(suggestedInput({ suggestedColorSpace: 'Linear Rec.709', encoding: 'linear' })).toEqual({ inputColorSpace: 'Linear Rec.709', inputCctfDecoding: false, autoExposure: true });
   });
 });

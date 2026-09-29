@@ -56,6 +56,13 @@ export function StockBrowser({
       </div>
       <div className="scroll-y" style={{ flexGrow: 1, minHeight: 0, padding: '0 16px 32px', display: 'flex', flexDirection: 'column', gap: 22 }}>
         {sections.length === 0 && <p className="t-subhead secondary" style={{ textAlign: 'center', marginTop: 24 }}>No stocks match “{query}”.</p>}
+        {query === '' && (
+          <p className="t-footnote secondary" style={{ margin: '0 4px -8px' }}>
+            {kind === 'film'
+              ? 'Every negative is printed to a neutral grey, so films differ subtly: in color, contrast and grain. For a bigger change in look, try Paper.'
+              : 'The paper sets contrast, color and the depth of the blacks. Cinema print films give the strongest look.'}
+          </p>
+        )}
         {sections.map((section) => (
           <section key={section.title} className="list-section">
             <h3 className="list-header">{section.title}</h3>

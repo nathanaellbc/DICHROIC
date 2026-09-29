@@ -163,7 +163,7 @@ export class Engine {
       if (!stillCurrent()) return;
       await client.open(image);
       // Tampilan (film, kertas, penyesuaian) dibawa ke foto berikutnya; hanya
-      // colour space input yang milik berkas.
+      // colour space input dan auto exposure yang milik berkas.
       const params = { ...this.#state.params, ...input };
       await client.setParams(input);
       this.#set({
