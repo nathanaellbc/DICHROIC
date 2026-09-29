@@ -8,7 +8,7 @@ import { lensReadout, lensSettings } from '../../host/lens';
 import { FILM_FORMAT_LONG_EDGE_MM } from '../../params/filmFormat';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
-import { OptionRow, PressButton, Slider, Stepper, Switch } from '../components/controls';
+import { OptionRow, PopUp, PressButton, Slider, Stepper, Switch, centerInScroller } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import type { DepthState } from '../engine/depthController';
 import { pressScale, snappy } from '../motion';
@@ -30,7 +30,7 @@ import {
   valueText,
   visibleTools,
 } from '../model/tools';
-import type { ChoiceTool, LensTool, Tool, ToolGroup } from '../model/tools';
+import type { ChoiceTool, LensTool, StepperTool, Tool, ToolGroup } from '../model/tools';
 
 /** Status peta kedalaman dan aksi lens blur (grup Lens). */
 export interface LensContext {
@@ -85,24 +85,57 @@ export function ToolSwitch({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
   return null;
 }
 
-export function ResetButton({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
+export function ResetButton({ tool, ctx, compact }: { tool: Tool; ctx: ToolContext; compact?: boolean }) {
   const show = (tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && isModified(tool, ctx.params, ctx.defaults);
   return (
     <motion.span
       initial={false}
-      animate={{ opacity: show ? 1 : 0, scale: show ? 1 : 0.6, width: show ? 44 : 0 }}
+      animate={{ opacity: show ? 1 : 0, scale: show ? 1 : 0.6, width: show ? (compact ? 22 : 44) : 0 }}
       transition={snappy}
       style={{ display: 'inline-flex', overflow: 'hidden', flexShrink: 0 }}
     >
-      <PressButton className="icon-btn" aria-label={`Reset ${tool.title}`} tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => ctx.onPatch(resetPatch(tool, ctx.defaults))}>
-        <Icon name="reset" size={18} strokeWidth={2.2} />
+      <PressButton className={compact ? 'icon-btn plain' : 'icon-btn'} style={compact ? { width: 22, height: 22, borderRadius: 5 } : undefined} aria-label={`Reset ${tool.title}`} title={`Reset ${tool.title}`} tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => ctx.onPatch(resetPatch(tool, ctx.defaults))}>
+        <Icon name="reset" size={compact ? 13 : 18} strokeWidth={2.2} />
       </PressButton>
     </motion.span>
   );
 }
 
-/** Kontrol utama alat (slider, stepper, pilihan, atau catatan). */
-export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
+/** Nilai, petunjuk, dan aksi satu stepper (panel HP dan baris inspector). */
+function stepperModel(tool: StepperTool, params: RenderParams, onPatch: ToolContext['onPatch']) {
+  if (tool.values) {
+    const enabled = toolEnabled(tool, params);
+    return {
+      text: stepperText(tool, params),
+      hint: tool.field === 'lensFNumber' ? 'Wider apertures blur more' : 'Shape of out-of-focus highlights',
+      atMin: !enabled || stepperAtEnd(tool, params, -1),
+      atMax: !enabled || stepperAtEnd(tool, params, 1),
+      dec: () => onPatch(stepperPatch(tool, params, -1)),
+      inc: () => onPatch(stepperPatch(tool, params, 1)),
+      seed: false,
+    };
+  }
+  const v = params[tool.field];
+  const seed = tool.field === 'grainSeed';
+  return {
+    text: seed ? `Seed ${v}` : formatPushPull(v),
+    hint: seed ? 'Grain pattern' : v === 0 ? 'Normal development' : v > 0 ? 'Longer development' : 'Shorter development',
+    atMin: v <= tool.min,
+    atMax: v >= tool.max,
+    dec: () => onPatch({ [tool.field]: Math.max(tool.min, v - tool.step) }),
+    inc: () => onPatch({ [tool.field]: Math.min(tool.max, v + tool.step) }),
+    seed,
+  };
+}
+
+const randomSeed = () => ({ grainSeed: 1 + Math.floor(Math.random() * 9999) });
+
+/**
+ * Kontrol utama alat (slider, stepper, pilihan, atau catatan). `dense`:
+ * baris inspector layar lebar -- pilihan pendek dan stepper hidup di baris
+ * label (pop-up, −/+), di sini hanya catatannya.
+ */
+export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext; dense?: boolean }) {
   const { params, defaults, onPatch } = ctx;
   switch (tool.kind) {
     case 'slider': {
@@ -130,34 +163,20 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
       );
     }
     case 'stepper': {
-      if (tool.values) {
-        const enabled = toolEnabled(tool, params);
-        return (
-          <Stepper
-            label={tool.title}
-            valueText={stepperText(tool, params)}
-            hint={tool.field === 'lensFNumber' ? 'Wider apertures blur more' : 'Shape of out-of-focus highlights'}
-            atMin={!enabled || stepperAtEnd(tool, params, -1)}
-            atMax={!enabled || stepperAtEnd(tool, params, 1)}
-            onDecrement={() => onPatch(stepperPatch(tool, params, -1))}
-            onIncrement={() => onPatch(stepperPatch(tool, params, 1))}
-          />
-        );
-      }
-      const v = params[tool.field];
-      const isSeed = tool.field === 'grainSeed';
+      const m = stepperModel(tool, params, onPatch);
+      if (dense) return <p className="note">{m.hint}</p>;
       return (
         <Stepper
           label={tool.title}
-          valueText={isSeed ? `Seed ${v}` : formatPushPull(v)}
-          hint={isSeed ? 'Grain pattern' : v === 0 ? 'Normal development' : v > 0 ? 'Longer development' : 'Shorter development'}
-          atMin={v <= tool.min}
-          atMax={v >= tool.max}
-          onDecrement={() => onPatch({ [tool.field]: Math.max(tool.min, v - tool.step) })}
-          onIncrement={() => onPatch({ [tool.field]: Math.min(tool.max, v + tool.step) })}
+          valueText={m.text}
+          hint={m.hint}
+          atMin={m.atMin}
+          atMax={m.atMax}
+          onDecrement={m.dec}
+          onIncrement={m.inc}
           extra={
-            isSeed ? (
-              <PressButton className="icon-btn" aria-label="Random grain pattern" onClick={() => onPatch({ grainSeed: 1 + Math.floor(Math.random() * 9999) })}>
+            m.seed ? (
+              <PressButton className="icon-btn" aria-label="Random grain pattern" onClick={() => onPatch(randomSeed())}>
                 <Icon name="shuffle" size={18} />
               </PressButton>
             ) : undefined
@@ -174,6 +193,7 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
           </PressButton>
         );
       }
+      if (dense) return tool.note ? <p className="note">{tool.note}</p> : null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
           <OptionRow label={tool.title} options={tool.options} value={params[tool.field]} onChange={(v) => onPatch(choicePatch(tool, v, params))} />
@@ -182,14 +202,17 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
       );
     case 'diffusion': {
       const enabled = params[tool.enabledBy];
+      const onFamily = (v: string) => onPatch({ [tool.familyField]: v, [tool.enabledBy]: true, ...(params[tool.strengthField] <= 0 ? { [tool.strengthField]: 0.5 } : {}) });
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-          <OptionRow
-            label={`${tool.title} type`}
-            options={DIFFUSION_FAMILIES}
-            value={params[tool.familyField]}
-            onChange={(v) => onPatch({ [tool.familyField]: v, [tool.enabledBy]: true, ...(params[tool.strengthField] <= 0 ? { [tool.strengthField]: 0.5 } : {}) })}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: dense ? 6 : 8, width: '100%' }}>
+          {dense ? (
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span className="t-footnote secondary">Filter</span>
+              <PopUp label={`${tool.title} type`} options={DIFFUSION_FAMILIES} value={params[tool.familyField]} onChange={onFamily} />
+            </span>
+          ) : (
+            <OptionRow label={`${tool.title} type`} options={DIFFUSION_FAMILIES} value={params[tool.familyField]} onChange={onFamily} />
+          )}
           <Slider
             label={`${tool.title} strength`}
             value={params[tool.strengthField]}
@@ -307,7 +330,8 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
 export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup; selected: string; onSelect: (id: string) => void; ctx: ToolContext }) {
   const refs = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
-    refs.current.get(selected)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    const el = refs.current.get(selected);
+    if (el) centerInScroller(el);
   }, [selected]);
   return (
     <div role="group" aria-label={`${group.label} tools`} className="scroll-x" style={{ display: 'flex', gap: 4, margin: '0 -20px', padding: '2px 16px' }}>
@@ -333,15 +357,15 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
             <motion.span
               initial={false}
               animate={{
-                backgroundColor: isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.10)',
+                backgroundColor: isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.08)',
                 boxShadow: modified ? 'inset 0 0 0 2px #0091ff' : 'inset 0 0 0 0px #0091ff',
               }}
               transition={snappy}
-              style={{ position: 'relative', width: 48, height: 48, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'relative', width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <Icon name={tool.icon} size={22} color={isSelected ? '#000' : tool.tint ?? (dimmed ? 'rgba(235,235,245,0.45)' : '#fff')} />
               {tool.kind === 'locked' && (
-                <span aria-hidden="true" style={{ position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRadius: '50%', background: '#3a3a3c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span aria-hidden="true" style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 6, background: 'var(--bg-elevated-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name="lock" size={10} strokeWidth={2.8} />
                 </span>
               )}
@@ -357,23 +381,45 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
 /** Satu alat sebagai baris inspector (layar lebar). */
 export function InspectorTool({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
   const locked = tool.kind === 'locked';
+  const modified = isModified(tool, ctx.params, ctx.defaults);
+  const stepper = tool.kind === 'stepper' ? stepperModel(tool, ctx.params, ctx.onPatch) : null;
   return (
-    <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6, opacity: locked ? 0.55 : 1 }}>
-      <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          {tool.tint && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: tool.tint, flexShrink: 0 }} />}
-          <span className="t-subhead">{tool.title}</span>
-          {locked && <Icon name="lock" size={13} />}
+    <div className="inspector-row" style={{ opacity: locked ? 0.55 : 1 }}>
+      <div style={{ minHeight: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          {tool.tint && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 2, background: tool.tint, flexShrink: 0 }} />}
+          <span className="t-body" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.title}</span>
+          {modified && <span aria-label="edited" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />}
+          {locked && <Icon name="lock" size={12} />}
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && <span className="t-subhead secondary tabular">{tool.kind === 'stepper' && tool.values ? stepperText(tool, ctx.params) : valueText(tool, ctx.params)}</span>}
-          <ResetButton tool={tool} ctx={ctx} />
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {stepper && <span className="t-body secondary tabular" style={{ whiteSpace: 'nowrap' }}>{stepper.text}</span>}
+          {(tool.kind === 'slider' || tool.kind === 'diffusion') && <span className="t-body secondary tabular" style={{ whiteSpace: 'nowrap' }}>{valueText(tool, ctx.params)}</span>}
+          <ResetButton tool={tool} ctx={ctx} compact />
+          {stepper && (
+            <span style={{ display: 'inline-flex', gap: 2, marginLeft: 2 }}>
+              {stepper.seed && (
+                <PressButton className="icon-btn plain step-btn" aria-label="Random grain pattern" title="Random grain pattern" onClick={() => ctx.onPatch(randomSeed())}>
+                  <Icon name="shuffle" size={13} />
+                </PressButton>
+              )}
+              <PressButton className="icon-btn step-btn" aria-label={`Decrease ${tool.title}`} disabled={stepper.atMin} onClick={stepper.dec}>
+                <Icon name="minus" size={12} strokeWidth={2.6} />
+              </PressButton>
+              <PressButton className="icon-btn step-btn" aria-label={`Increase ${tool.title}`} disabled={stepper.atMax} onClick={stepper.inc}>
+                <Icon name="plus" size={12} strokeWidth={2.6} />
+              </PressButton>
+            </span>
+          )}
+          {tool.kind === 'choice' && !isLongChoice(tool) && (
+            <PopUp label={tool.title} options={tool.options} value={ctx.params[tool.field]} onChange={(v) => ctx.onPatch(choicePatch(tool, v, ctx.params))} />
+          )}
           <ToolSwitch tool={tool} ctx={ctx} />
         </span>
       </div>
-      {tool.kind !== 'toggle' && <ToolControl tool={tool} ctx={ctx} />}
+      {tool.kind !== 'toggle' && <ToolControl tool={tool} ctx={ctx} dense />}
       {tool.kind === 'toggle' && (
-        <p className="t-footnote secondary" style={{ margin: 0 }}>
+        <p className="note">
           {tool.field === 'inputCctfDecoding' && !decodeAllowed(ctx.params.inputColorSpace) ? `Not available for ${ctx.params.inputColorSpace}.` : tool.note}
         </p>
       )}

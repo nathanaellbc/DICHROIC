@@ -4,6 +4,9 @@
  * tanpa mode pembanding, tekan-tahan foto memperlihatkan aslinya (seperti
  * Photos). Frame baru langsung digambar tanpa animasi -- DESIGN.md: jangan
  * menambah gerak pada interaksi yang sering.
+ *
+ * Keyboard: garis pembagi adalah slider (panah), dan mode pilih fokus
+ * memindah bidik dengan panah lalu Enter memilih, Escape batal.
  */
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -36,7 +39,10 @@ export interface FocusOverlay {
   show: boolean;
   picking: boolean;
   onPick: (x: number, y: number) => void;
+  onCancel?: () => void;
 }
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 export function PhotoView({
   frame,
@@ -61,6 +67,7 @@ export function PhotoView({
   const [split, setSplit] = useState(0.5);
   const [peek, setPeek] = useState(false);
   const [slow, setSlow] = useState(false);
+  const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
   const holdTimer = useRef(0);
   const splitDrag = useRef(false);
 
@@ -101,6 +108,32 @@ export function PhotoView({
   };
 
   const picking = focus?.picking === true;
+  // Bidik keyboard dimulai dari titik fokus sekarang tiap kali mode pilih dibuka.
+  const cursor = picking && focus ? (aim ?? { x: focus.x, y: focus.y }) : null;
+  useEffect(() => {
+    if (!picking) {
+      setAim(null);
+      return;
+    }
+    areaRef.current?.focus({ preventScroll: true });
+  }, [picking]);
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!picking || !focus || !cursor) return;
+    const step = e.shiftKey ? 0.1 : 0.02;
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const move = moves[e.key];
+    if (move) {
+      e.preventDefault();
+      setAim({ x: clamp01(cursor.x + move[0]), y: clamp01(cursor.y + move[1]) });
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      focus.onPick(Number(cursor.x.toFixed(4)), Number(cursor.y.toFixed(4)));
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      focus.onCancel?.();
+    }
+  };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (picking && focus) {
@@ -137,7 +170,11 @@ export function PhotoView({
   return (
     <div
       ref={areaRef}
-      style={{ position: 'absolute', inset: 0, touchAction: compare || picking ? 'none' : 'manipulation', cursor: picking ? 'crosshair' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      tabIndex={picking ? 0 : -1}
+      role={picking ? 'application' : undefined}
+      aria-label={picking ? 'Focus point. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
+      onKeyDown={onKeyDown}
+      style={{ position: 'absolute', inset: 0, outline: 'none', touchAction: compare || picking ? 'none' : 'manipulation', cursor: picking ? 'crosshair' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
@@ -171,41 +208,58 @@ export function PhotoView({
             {compare && (
               <>
                 <div aria-hidden="true" style={{ position: 'absolute', top: 0, bottom: 0, left: `${split * 100}%`, width: 2, marginLeft: -1, background: 'rgba(255,255,255,0.92)' }} />
-                <div aria-hidden="true" className="glass-clear" style={{ position: 'absolute', top: '50%', left: `${split * 100}%`, width: 36, height: 36, marginLeft: -18, marginTop: -18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div
+                  className="glass-clear split-handle"
+                  role="slider"
+                  tabIndex={0}
+                  aria-label="Before and after divider"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(split * 100)}
+                  aria-valuetext={`${Math.round(split * 100)}% original`}
+                  onKeyDown={(e) => {
+                    const step = e.shiftKey ? 0.1 : 0.02;
+                    const next: Record<string, number> = { ArrowLeft: split - step, ArrowDown: split - step, ArrowRight: split + step, ArrowUp: split + step, Home: 0, End: 1 };
+                    if (!(e.key in next)) return;
+                    e.preventDefault();
+                    setSplit(clamp01(next[e.key]!));
+                  }}
+                  style={{ position: 'absolute', top: '50%', left: `${split * 100}%`, width: 36, height: 36, marginLeft: -18, marginTop: -18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
                   <Icon name="compare" size={18} />
                 </div>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, right: `calc(${(1 - split) * 100}% + 8px)`, padding: '4px 10px', borderRadius: 9999, fontWeight: 600, opacity: split > 0.12 ? 1 : 0 }}>Before</span>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: `calc(${split * 100}% + 8px)`, padding: '4px 10px', borderRadius: 9999, fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
+                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, right: `calc(${(1 - split) * 100}% + 8px)`, padding: '4px 10px', borderRadius: 6, fontWeight: 600, opacity: split > 0.12 ? 1 : 0 }}>Before</span>
+                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: `calc(${split * 100}% + 8px)`, padding: '4px 10px', borderRadius: 6, fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
               </>
             )}
             {focus && (focus.show || picking) && (
               <div
                 aria-hidden="true"
                 style={{
-                  position: 'absolute', left: `${focus.x * 100}%`, top: `${focus.y * 100}%`, width: 56, height: 56, marginLeft: -28, marginTop: -28,
+                  position: 'absolute', left: `${(cursor ?? focus).x * 100}%`, top: `${(cursor ?? focus).y * 100}%`, width: 56, height: 56, marginLeft: -28, marginTop: -28,
                   border: `2px solid ${picking ? '#ffd60a' : 'rgba(255,255,255,0.9)'}`, borderRadius: 10, boxShadow: '0 0 0 1px rgba(0,0,0,0.35)', pointerEvents: 'none',
                 }}
               />
             )}
             {picking && (
-              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 9999, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 6, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Tap the subject to focus
               </span>
             )}
             {peek && !compare && !picking && (
-              <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 9999, fontWeight: 600 }}>Original</span>
+              <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>Original</span>
             )}
             <AnimatePresence>
               {slow && (
                 <motion.span
-                  className="glass-clear"
+                  className="glass-clear t-footnote"
+                  role="status"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  style={{ position: 'absolute', right: 10, bottom: 10, width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  aria-label="Developing"
+                  style={{ position: 'absolute', right: 10, bottom: 10, height: 30, padding: '0 12px 0 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
                 >
-                  <Spinner size={18} />
+                  <Spinner size={16} /> Developing
                 </motion.span>
               )}
             </AnimatePresence>

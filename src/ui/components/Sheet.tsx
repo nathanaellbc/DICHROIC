@@ -5,14 +5,15 @@
  * kartu di tengah di atas latar yang diredupkan (sheet macOS/iPadOS).
  *
  * Seret hanya dari grabber dan bar judul, supaya konten di dalamnya tetap
- * bisa digulir. Escape menutup; fokus dipindah ke sheet saat dibuka dan
- * dikembalikan saat ditutup.
+ * bisa digulir. Escape menutup dari mana saja dan Tab tidak keluar dari
+ * sheet; fokus dipindah ke sheet saat dibuka dan dikembalikan saat ditutup.
  */
 import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useTransform } from 'motion/react';
 import type { PanInfo } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { popSpring, sheetSpring } from '../motion';
+import { useDialogKeys } from '../hooks';
+import { sheetSpring } from '../motion';
 
 export type Detent = 'medium' | 'large';
 
@@ -100,6 +101,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
   }, [detent, fullHeight, offsets.medium]);
 
   useFocusReturn(ref);
+  useDialogKeys(ref, onClose);
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     const projected = y.get() + info.velocity.y * 0.2;
@@ -142,9 +144,6 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
         dragElastic={{ top: 0.08, bottom: 0.6 }}
         dragMomentum={false}
         onDragEnd={onDragEnd}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') onClose();
-        }}
       >
         <div onPointerDown={(e) => controls.start(e)} style={{ touchAction: 'none', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <button type="button" className="sheet-grabber-hit" aria-label={detents.length > 1 ? 'Resize sheet' : 'Sheet handle'} onClick={cycleDetent}>
@@ -164,9 +163,10 @@ function CenteredSheet({ onClose, title, leading, trailing, children }: SheetPro
   const ref = useRef<HTMLDivElement>(null);
   const titleId = `sheet-${title.replace(/\W+/g, '-').toLowerCase()}`;
   useFocusReturn(ref);
+  useDialogKeys(ref, onClose);
   return (
     <>
-      <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} aria-hidden="true" />
+      <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} onClick={onClose} aria-hidden="true" />
       <motion.div
         ref={ref}
         role="dialog"
@@ -175,15 +175,13 @@ function CenteredSheet({ onClose, title, leading, trailing, children }: SheetPro
         tabIndex={-1}
         className="sheet centered"
         style={{ x: '-50%', y: '-50%', maxHeight: 'min(760px, calc(100dvh - 48px))', outline: 'none' }}
-        initial={{ opacity: 0, scale: 0.96 }}
+        // Dialog macOS: muncul cepat dan tenang, tanpa pantulan.
+        initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={popSpring}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') onClose();
-        }}
+        exit={{ opacity: 0, scale: 0.99, transition: { duration: 0.12, ease: 'easeIn' } }}
+        transition={{ duration: 0.18, ease: [0.2, 0, 0, 1] }}
       >
-        <div style={{ paddingTop: 8 }}>
+        <div>
           <SheetBar title={title} leading={leading} trailing={trailing} titleId={titleId} />
         </div>
         <div className="sheet-content" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>

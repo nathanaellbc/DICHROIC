@@ -52,10 +52,26 @@ export interface EngineState {
   /** Render sedang berjalan (pratinjau masih menampilkan frame sebelumnya). */
   rendering: boolean;
   error?: AppError;
+  /** Alasan teknis dari `acquireDevice` saat `engine === 'unsupported'`. */
+  unsupportedReason?: string;
   /** `false` bila backend meruntuhkan aritmetika df64 (halation/DIR bisa meleset ~1e-3). */
   precisionOk: boolean;
   /** Peta kedalaman lens blur untuk foto terbuka. */
   depth: DepthState;
+  /** Langkah undo/redo yang tersedia untuk foto terbuka. */
+  history: { canUndo: boolean; canRedo: boolean };
+}
+
+/** Perubahan beruntun yang lebih rapat dari ini (satu seretan slider) jadi satu langkah undo. */
+const HISTORY_GAP_MS = 600;
+const HISTORY_LIMIT = 100;
+
+function diffParams(from: RenderParams, to: RenderParams): Partial<RenderParams> {
+  const patch: Partial<RenderParams> = {};
+  for (const key of Object.keys(to) as Array<keyof RenderParams>) {
+    if (from[key] !== to[key]) (patch as Record<string, unknown>)[key] = to[key];
+  }
+  return patch;
 }
 
 /** Profil cadangan bila deteksi perangkat gagal: CPU, masukan kecil, hemat memori. */
@@ -125,8 +141,12 @@ export class Engine {
     rendering: false,
     precisionOk: true,
     depth: { status: 'idle' },
+    history: { canUndo: false, canRedo: false },
   };
   readonly #listeners = new Set<Listener>();
+  #past: RenderParams[] = [];
+  #future: RenderParams[] = [];
+  #lastEditAt = 0;
   #client: SessionClient | undefined;
   #ready: Promise<void> | undefined;
   #openToken = 0;
@@ -191,7 +211,11 @@ export class Engine {
       },
       (error: unknown) => {
         const unsupported = error instanceof Error && error.name === 'WebGPUUnavailableError';
-        this.#set({ engine: unsupported ? 'unsupported' : 'failed', error: unsupported ? undefined : describeError(error) });
+        this.#set({
+          engine: unsupported ? 'unsupported' : 'failed',
+          error: unsupported ? undefined : describeError(error),
+          unsupportedReason: unsupported ? (error as Error).message : undefined,
+        });
         throw error;
       },
     );
@@ -234,6 +258,7 @@ export class Engine {
       const fileParams = { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
       const params = { ...this.#state.params, ...fileParams };
       await client.setParams(fileParams);
+      this.#clearHistory();
       this.#set({
         params,
         defaults: { ...BASELINE_RENDER_PARAMS, ...input },
@@ -259,7 +284,35 @@ export class Engine {
   closePhoto(): void {
     this.#openToken += 1;
     this.#depth.reset(undefined);
+    this.#clearHistory();
     this.#set({ phase: 'idle', frame: undefined, original: undefined, fileName: undefined, opening: undefined });
+  }
+
+  #clearHistory(): void {
+    this.#past = [];
+    this.#future = [];
+    this.#lastEditAt = 0;
+    this.#set({ history: { canUndo: false, canRedo: false } });
+  }
+
+  #historyState(): EngineState['history'] {
+    return { canUndo: this.#past.length > 0, canRedo: this.#future.length > 0 };
+  }
+
+  undo(): void {
+    const target = this.#past.pop();
+    if (!target) return;
+    this.#future.push(this.#state.params);
+    this.#lastEditAt = 0;
+    this.setParams(diffParams(this.#state.params, target), false);
+  }
+
+  redo(): void {
+    const target = this.#future.pop();
+    if (!target) return;
+    this.#past.push(this.#state.params);
+    this.#lastEditAt = 0;
+    this.setParams(diffParams(this.#state.params, target), false);
   }
 
   dismissError(): void {
@@ -271,11 +324,22 @@ export class Engine {
     return (Object.keys(params) as Array<keyof RenderParams>).some((k) => params[k] !== defaults[k]);
   }
 
-  setParams(patch: Partial<RenderParams>): void {
+  /** `record: false` untuk undo/redo sendiri (tidak menambah langkah). */
+  setParams(patch: Partial<RenderParams>, record = true): void {
     const client = this.#client;
     if (!client) return;
     const previous = this.#state.params;
-    this.#set({ params: { ...previous, ...patch } });
+    const changed = (Object.keys(patch) as Array<keyof RenderParams>).some((k) => previous[k] !== patch[k]);
+    if (record && changed) {
+      const now = performance.now();
+      if (this.#past.length === 0 || this.#future.length > 0 || now - this.#lastEditAt > HISTORY_GAP_MS) {
+        this.#past.push(previous);
+        if (this.#past.length > HISTORY_LIMIT) this.#past.shift();
+      }
+      this.#future = [];
+      this.#lastEditAt = now;
+    }
+    this.#set({ params: { ...previous, ...patch }, history: this.#historyState() });
     client.setParams(patch).then(
       () => {
         this.requestRender();

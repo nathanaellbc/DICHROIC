@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-29T00:00:00Z",
+  "title": "Design System: DICHROIC",
+  "extensions": {
+    "colorMeta": {
+      "canvas-black": { "role": "neutral", "displayName": "Canvas Black", "canonical": "#000000", "tonalRamp": ["#000000", "#050505", "#0a0a0b", "#141416", "#1c1c1e", "#2c2c2e", "#3a3a3c", "#636366"] },
+      "graphite": { "role": "neutral", "displayName": "Graphite", "canonical": "#1c1c1e", "tonalRamp": ["#0a0a0b", "#141416", "#1c1c1e", "#2c2c2e", "#3a3a3c", "#636366", "#aeaeb2", "#f2f2f7"] },
+      "graphite-raised": { "role": "neutral", "displayName": "Raised Graphite", "canonical": "#2c2c2e", "tonalRamp": ["#0a0a0b", "#141416", "#1c1c1e", "#2c2c2e", "#3a3a3c", "#636366", "#aeaeb2", "#f2f2f7"] },
+      "graphite-high": { "role": "neutral", "displayName": "High Graphite", "canonical": "#3a3a3c", "tonalRamp": ["#0a0a0b", "#141416", "#1c1c1e", "#2c2c2e", "#3a3a3c", "#636366", "#aeaeb2", "#f2f2f7"] },
+      "fill": { "role": "neutral", "displayName": "Fill", "canonical": "rgba(118, 118, 128, 0.24)" },
+      "fill-strong": { "role": "neutral", "displayName": "Fill Strong", "canonical": "rgba(120, 120, 128, 0.36)" },
+      "fill-soft": { "role": "neutral", "displayName": "Fill Soft", "canonical": "rgba(255, 255, 255, 0.08)" },
+      "hover": { "role": "neutral", "displayName": "Hover Wash", "canonical": "rgba(255, 255, 255, 0.06)" },
+      "label": { "role": "neutral", "displayName": "Label", "canonical": "#ffffff" },
+      "label-secondary": { "role": "neutral", "displayName": "Secondary Label", "canonical": "rgba(235, 235, 245, 0.62)" },
+      "label-tertiary": { "role": "neutral", "displayName": "Tertiary Label", "canonical": "rgba(235, 235, 245, 0.32)" },
+      "separator": { "role": "neutral", "displayName": "Separator", "canonical": "rgba(84, 84, 88, 0.65)" },
+      "hairline": { "role": "neutral", "displayName": "Hairline", "canonical": "rgba(255, 255, 255, 0.09)" },
+      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "#0091ff", "tonalRamp": ["#001a33", "#002c57", "#00427f", "#0058a8", "#0070e0", "#0091ff", "#5cb8ff", "#cfe8ff"] },
+      "blue-fill": { "role": "primary", "displayName": "Blue Fill", "canonical": "#0070e0", "tonalRamp": ["#001a33", "#002c57", "#00427f", "#0058a8", "#0070e0", "#0091ff", "#5cb8ff", "#cfe8ff"] },
+      "blue-text": { "role": "primary", "displayName": "Blue Text", "canonical": "#5cb8ff", "tonalRamp": ["#001a33", "#002c57", "#00427f", "#0058a8", "#0070e0", "#0091ff", "#5cb8ff", "#cfe8ff"] },
+      "blue-wash": { "role": "primary", "displayName": "Blue Wash", "canonical": "rgba(0, 145, 255, 0.16)" },
+      "green": { "role": "status", "displayName": "System Green", "canonical": "#30d158", "tonalRamp": ["#06280f", "#0b4a1c", "#126e2a", "#1c9a3c", "#30d158", "#6ee08a", "#a8edba", "#e0f8e6"] },
+      "red": { "role": "status", "displayName": "System Red", "canonical": "#ff4245", "tonalRamp": ["#3a0708", "#660f11", "#991a1d", "#cc262a", "#ff4245", "#ff6961", "#ffa8a6", "#ffe3e2"] },
+      "red-text": { "role": "status", "displayName": "Red Text", "canonical": "#ff6961", "tonalRamp": ["#3a0708", "#660f11", "#991a1d", "#cc262a", "#ff4245", "#ff6961", "#ffa8a6", "#ffe3e2"] },
+      "orange": { "role": "status", "displayName": "System Orange", "canonical": "#ff9230", "tonalRamp": ["#3a1d02", "#663305", "#994d0a", "#cc6a14", "#ff9230", "#ffb069", "#ffcfa3", "#fff0e0"] },
+      "glass-bg": { "role": "material", "displayName": "Glass (over photo only)", "canonical": "rgba(28, 28, 30, 0.78)" },
+      "glass-border": { "role": "material", "displayName": "Glass Border", "canonical": "rgba(255, 255, 255, 0.1)" },
+      "clear-bg": { "role": "material", "displayName": "Clear Glass (photo labels)", "canonical": "rgba(0, 0, 0, 0.55)" }
+    },
+    "typographyMeta": {
+      "large-title": { "displayName": "Large Title (compact)", "purpose": "Start and empty-state titles on the phone; 34px at the 17px root." },
+      "large-title-regular": { "displayName": "Large Title (regular)", "purpose": "Start and empty-state titles at macOS density." },
+      "title2": { "displayName": "Title 2 (compact)", "purpose": "Screen headings." },
+      "title2-regular": { "displayName": "Title 2 (regular)", "purpose": "Screen headings at macOS density." },
+      "title3": { "displayName": "Title 3 (compact)", "purpose": "Live value readout in the phone panel, tabular." },
+      "title3-regular": { "displayName": "Title 3 (regular)", "purpose": "Secondary headings at macOS density." },
+      "headline": { "displayName": "Headline (compact)", "purpose": "Tool titles, sheet titles." },
+      "headline-regular": { "displayName": "Headline (regular)", "purpose": "Pane headers and tool titles, 13px/600." },
+      "body": { "displayName": "Body (compact)", "purpose": "Row labels and values; iOS body at 17px." },
+      "body-regular": { "displayName": "Body (regular)", "purpose": "macOS body, 13px; inspector tool names at 500." },
+      "subhead": { "displayName": "Subhead (compact)", "purpose": "Secondary lines, film name in the phone pill (600)." },
+      "subhead-regular": { "displayName": "Subhead / Callout (regular)", "purpose": "Pop-up menus, search field, 12px." },
+      "footnote": { "displayName": "Footnote (compact)", "purpose": "Tool notes, list headers (600)." },
+      "footnote-regular": { "displayName": "Footnote (regular)", "purpose": "Inspector notes and file name, 11px/14px." },
+      "caption": { "displayName": "Caption (compact)", "purpose": "Tab labels, the paper line in the phone pill." },
+      "caption2": { "displayName": "Caption 2 (compact)", "purpose": "Tool chip labels." },
+      "caption-regular": { "displayName": "Caption (regular)", "purpose": "Status bar, tab labels, metadata; 11px/13px." }
+    },
+    "densities": [
+      { "name": "compact", "selector": "html[data-size=\"compact\"]", "when": "viewport narrower than 1080px or shorter than 560px", "tokens": { "--h-control": "44px", "--h-control-lg": "50px", "--h-seg": "34px", "--h-row": "48px", "--r-control": "10px", "--r-field": "10px", "--r-list": "12px", "--r-menu": "12px", "--r-dialog": "16px", "--r-panel": "16px", "--icon-btn": "44px" } },
+      { "name": "regular", "selector": "html[data-size=\"regular\"]", "when": "viewport at least 1080 x 560 (desktop, iPad landscape)", "tokens": { "--h-control": "28px", "--h-control-lg": "30px", "--h-seg": "24px", "--h-row": "30px", "--r-control": "6px", "--r-field": "6px", "--r-list": "8px", "--r-menu": "10px", "--r-dialog": "12px", "--r-panel": "0px", "--icon-btn": "30px" } }
+    ],
+    "materials": [
+      { "name": "glass", "value": "background: rgba(28,28,30,0.78); backdrop-filter: blur(30px) saturate(160%); border: 1px solid rgba(255,255,255,0.1)", "purpose": "Controls floating over the photo only (phone top bar, phone Before/After, toast). Solid #1c1c1e under prefers-reduced-transparency." },
+      { "name": "glass-clear", "value": "background: rgba(0,0,0,0.55); backdrop-filter: blur(20px) saturate(150%); border: 1px solid rgba(255,255,255,0.14)", "purpose": "Labels and the split handle drawn on the photo itself." }
+    ],
+    "shadows": [
+      { "name": "menu", "value": "0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 0, 0, 0.6)", "purpose": "Popovers, context menus, toast." },
+      { "name": "dialog", "value": "0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(0, 0, 0, 0.7)", "purpose": "Centred dialogs and alerts." },
+      { "name": "segment-lift", "value": "0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.12)", "purpose": "Selected pill of segmented controls and compact group tabs." },
+      { "name": "knob", "value": "0 2px 5px rgba(0, 0, 0, 0.3)", "purpose": "Switch knob (compact); 0 1px 2px rgba(0,0,0,0.35) at regular density." },
+      { "name": "thumb", "value": "0 3px 8px rgba(0, 0, 0, 0.35)", "purpose": "Slider thumb." },
+      { "name": "phone-panel-edge", "value": "0 -1px 0 rgba(255, 255, 255, 0.09), 0 -12px 32px rgba(0, 0, 0, 0.35)", "purpose": "Top edge of the compact bottom panel." }
+    ],
+    "focus": [
+      { "name": "focus-ring", "value": "outline: 3px solid rgba(0, 145, 255, 0.6); outline-offset: 1px", "purpose": "Every focusable control; 2px at regular density. Slider draws it on the track, 6px offset." },
+      { "name": "selection", "value": "background: rgba(0, 145, 255, 0.45); color: #fff", "purpose": "Text selection." }
+    ],
+    "motion": [
+      { "name": "desktop-hover", "value": "100-150ms background-color/color", "purpose": "Hover and state colour transitions on buttons, rows, segments." },
+      { "name": "desktop-panel-fade", "value": "140ms ease-out opacity", "purpose": "Inspector group panel cross-fade." },
+      { "name": "desktop-dialog-in", "value": "180ms cubic-bezier(0.2, 0, 0, 1)", "purpose": "Centred dialog entrance; exit 120ms ease-in; backdrop 160ms." },
+      { "name": "snappy", "value": "spring stiffness 560, damping 44, mass 0.8 (critically damped)", "purpose": "Segment/tab pill, switch knob, reset reveal, press scale 0.94. No overshoot; used at both densities." },
+      { "name": "sheetSpring", "value": "spring stiffness 420, damping 42, mass 1", "purpose": "Phone bottom sheets following the finger to detents." },
+      { "name": "popSpring", "value": "spring stiffness 520, damping 34, mass 0.7", "purpose": "Phone popovers, alerts and toast popping from their source." },
+      { "name": "screen-fade", "value": "280ms cubic-bezier(0.25, 0.1, 0.25, 1)", "purpose": "Screen changes." },
+      { "name": "reduced-motion", "value": "MotionConfig reducedMotion=\"user\"; spinner 2.4s", "purpose": "Transforms removed under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "regular", "value": "min-width 1080px and min-height 560px" },
+      { "name": "compact-landscape", "value": "compact, width > height, height < 520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Prominent Button",
+      "kind": "button",
+      "refersTo": "button-prominent",
+      "description": "The single primary action per surface (Export, Download). Blue Fill with white text.",
+      "html": "<button class=\"ds-btn-prominent\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3v12M8 7l4-4 4 4M5 12v7h14v-7\"/></svg>Export</button>",
+      "css": ".ds-btn-prominent { height: 28px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: var(--blue-fill, #0070e0); color: #fff; font: 500 13px -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; cursor: pointer; transition: filter 0.12s, transform 0.12s; } .ds-btn-prominent:hover { filter: brightness(1.12); } .ds-btn-prominent:active { transform: scale(0.94); } .ds-btn-prominent:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-btn-prominent:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Bordered Button",
+      "kind": "button",
+      "refersTo": "button-filled",
+      "description": "Secondary actions such as Reset All and dialog Cancel variants; transparent with a 1px inset ring.",
+      "html": "<button class=\"ds-btn-bordered\">Reset All</button>",
+      "css": ".ds-btn-bordered { height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16); color: #fff; font: 500 13px -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; cursor: pointer; transition: filter 0.12s; } .ds-btn-bordered:hover { filter: brightness(1.12); background: rgba(255,255,255,0.06); } .ds-btn-bordered:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-btn-bordered:disabled { opacity: 0.4; }"
+    },
+    {
+      "name": "Toolbar Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button-regular",
+      "description": "Plain 30px toolbar button; Blue Wash with Blue Text when toggled on (Before/After).",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Before / After\" aria-pressed=\"true\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 5h16v14H4zM12 5v14\"/></svg></button>",
+      "css": ".ds-icon-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: rgba(235,235,245,0.62); cursor: pointer; transition: background-color 0.12s, color 0.12s; } .ds-icon-btn:hover { background: rgba(255,255,255,0.06); color: #fff; } .ds-icon-btn[aria-pressed=\"true\"] { background: rgba(0,145,255,0.16); color: #5cb8ff; } .ds-icon-btn:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; }"
+    },
+    {
+      "name": "Recipe Path Control",
+      "kind": "nav",
+      "refersTo": "path-segment",
+      "description": "Signature: film › paper as the window's path, centred in the toolbar; each segment reveals its list.",
+      "html": "<nav class=\"ds-path\" aria-label=\"Recipe\"><button class=\"ds-path-seg\">Kodak Portra 400</button><span class=\"ds-path-chev\" aria-hidden=\"true\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 5l7 7-7 7\"/></svg></span><button class=\"ds-path-seg ds-path-seg-2\">Kodak Portra Endura</button></nav>",
+      "css": ".ds-path { display: inline-flex; align-items: center; gap: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; } .ds-path-seg { height: 24px; padding: 0 7px; border: 0; border-radius: 5px; background: rgba(255,255,255,0.08); color: #fff; font-size: 13px; font-weight: 500; cursor: pointer; transition: background-color 0.1s; } .ds-path-seg:hover { background: rgba(255,255,255,0.06); } .ds-path-seg:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-path-seg-2 { color: rgba(235,235,245,0.62); font-weight: 400; } .ds-path-chev { display: inline-flex; color: rgba(235,235,245,0.32); }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented-regular",
+      "description": "Fill track with a lifted white-20% pill on the selected segment (Film/Paper, Print/Scan, Image/LUT).",
+      "html": "<div class=\"ds-seg\" role=\"group\"><button class=\"ds-seg-item\" aria-pressed=\"true\">Print</button><button class=\"ds-seg-item\" aria-pressed=\"false\">Scan</button></div>",
+      "css": ".ds-seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: minmax(64px, 1fr); height: 24px; padding: 2px; gap: 2px; box-sizing: border-box; border-radius: 7px; background: rgba(118,118,128,0.24); font-family: -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; } .ds-seg-item { border: 0; border-radius: 5px; background: transparent; color: rgba(235,235,245,0.72); font-size: 12px; font-weight: 500; cursor: pointer; transition: color 0.15s, background-color 0.15s; } .ds-seg-item[aria-pressed=\"true\"] { color: #fff; background: rgba(255,255,255,0.2); box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 0.5px 0 rgba(255,255,255,0.12); } .ds-seg-item:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; }"
+    },
+    {
+      "name": "Switch",
+      "kind": "input",
+      "refersTo": "switch",
+      "description": "Blue Fill when on, Fill Strong when off; 32x18 at regular density, 51x31 on the phone.",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\" aria-label=\"Auto Exposure\"><span class=\"ds-switch-knob\"></span></button>",
+      "css": ".ds-switch { position: relative; width: 32px; height: 18px; padding: 0; border: 0; border-radius: 9999px; background: rgba(120,120,128,0.36); cursor: pointer; transition: background-color 0.2s; } .ds-switch[aria-checked=\"true\"] { background: var(--blue-fill, #0070e0); } .ds-switch-knob { position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 9999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.35); transition: transform 0.18s cubic-bezier(0.2,0,0,1); } .ds-switch[aria-checked=\"true\"] .ds-switch-knob { transform: translateX(14px); } .ds-switch:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; }"
+    },
+    {
+      "name": "Inspector Slider Row",
+      "kind": "input",
+      "refersTo": "slider",
+      "description": "Dense inspector row: 13px label, right-aligned tabular value, Signal Blue fill from zero, white thumb, plain note.",
+      "html": "<div class=\"ds-irow\"><div class=\"ds-irow-head\"><span>Exposure</span><span class=\"ds-irow-val\">+0.7 EV</span></div><div class=\"ds-slider\" role=\"slider\" tabindex=\"0\" aria-label=\"Exposure\" aria-valuenow=\"0.7\"><div class=\"ds-slider-track\"><div class=\"ds-slider-fill\"></div><div class=\"ds-slider-zero\"></div><div class=\"ds-slider-thumb\"></div></div></div><p class=\"ds-irow-note\">Brightness of the print, like printing lighter or darker in the darkroom.</p></div>",
+      "css": ".ds-irow { width: 276px; padding: 9px 12px 10px; display: flex; flex-direction: column; gap: 6px; background: #1c1c1e; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; } .ds-irow-head { display: flex; justify-content: space-between; font-size: 13px; line-height: 16px; font-weight: 500; } .ds-irow-val { color: rgba(235,235,245,0.62); font-weight: 400; font-variant-numeric: tabular-nums; } .ds-slider { position: relative; height: 22px; outline: none; cursor: grab; } .ds-slider-track { position: absolute; left: 0; right: 0; top: 10px; height: 3px; border-radius: 9999px; background: rgba(120,120,128,0.36); } .ds-slider:focus-visible .ds-slider-track { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 6px; } .ds-slider-fill { position: absolute; top: 0; bottom: 0; left: 50%; width: 12%; border-radius: 9999px; background: #0091ff; } .ds-slider-zero { position: absolute; left: 50%; top: -4px; width: 1px; height: 11px; background: rgba(255,255,255,0.35); } .ds-slider-thumb { position: absolute; left: 62%; top: -6.5px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.35); } .ds-irow-note { margin: 0; font-size: 11px; line-height: 14px; color: rgba(235,235,245,0.62); }"
+    },
+    {
+      "name": "Source List",
+      "kind": "nav",
+      "refersTo": "source-row-selected",
+      "description": "Dense sidebar rows without cards; selection is a Blue Fill row with white-78% metadata.",
+      "html": "<div class=\"ds-src\" role=\"radiogroup\" aria-label=\"Film\"><p class=\"ds-src-head\">Kodak</p><button class=\"ds-src-row\" role=\"radio\" aria-checked=\"false\"><span class=\"ds-src-name\">Portra 160</span><span class=\"ds-src-meta\">ISO 160</span></button><button class=\"ds-src-row\" role=\"radio\" aria-checked=\"true\"><span class=\"ds-src-name\">Portra 400</span><span class=\"ds-src-meta\">ISO 400</span></button><button class=\"ds-src-row\" role=\"radio\" aria-checked=\"false\"><span class=\"ds-src-name\">Vision3 500T</span><span class=\"ds-src-meta\">tungsten</span></button></div>",
+      "css": ".ds-src { width: 244px; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 1px; background: #1c1c1e; font-family: -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; } .ds-src-head { margin: 10px 0 2px; padding: 0 8px; font-size: 11px; font-weight: 600; color: rgba(235,235,245,0.62); } .ds-src-row { min-height: 26px; padding: 3px 8px; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 5px; background: transparent; color: #fff; text-align: left; cursor: pointer; transition: background-color 0.1s; } .ds-src-row:hover { background: rgba(255,255,255,0.06); } .ds-src-row[aria-checked=\"true\"] { background: var(--blue-fill, #0070e0); } .ds-src-row:focus-visible { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-src-name { flex-grow: 1; font-size: 13px; line-height: 16px; } .ds-src-meta { font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; color: rgba(235,235,245,0.62); } .ds-src-row[aria-checked=\"true\"] .ds-src-meta { color: rgba(255,255,255,0.78); }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "search-field-regular",
+      "description": "Fill field with leading icon and blue caret; 24px on desktop, 36px on the phone.",
+      "html": "<label class=\"ds-search\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\"><path d=\"M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M20 20l-4.8-4.8\"/></svg><input placeholder=\"Search\" aria-label=\"Search\"></label>",
+      "css": ".ds-search { width: 228px; height: 24px; padding: 0 8px; display: flex; align-items: center; gap: 5px; border-radius: 6px; background: rgba(118,118,128,0.24); color: rgba(235,235,245,0.62); } .ds-search:focus-within { outline: 2px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-search input { flex-grow: 1; min-width: 0; border: 0; background: transparent; outline: none; color: #fff; caret-color: #0091ff; font: 12px -apple-system, BlinkMacSystemFont, 'Inter Variable', system-ui, sans-serif; }"
+    },
+    {
+      "name": "Glass Over-Photo Button",
+      "kind": "button",
+      "refersTo": "icon-button-compact",
+      "description": "The only glass in the system: 44pt phone controls floating over the photo.",
+      "html": "<button class=\"ds-glass-btn\" aria-label=\"More\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\"><path d=\"M6 12h.01M12 12h.01M18 12h.01\"/></svg></button>",
+      "css": ".ds-glass-btn { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(28,28,30,0.78); -webkit-backdrop-filter: blur(30px) saturate(160%); backdrop-filter: blur(30px) saturate(160%); color: #fff; cursor: pointer; transition: transform 0.15s; } .ds-glass-btn:active { transform: scale(0.94); } .ds-glass-btn:focus-visible { outline: 3px solid rgba(0,145,255,0.6); outline-offset: 1px; } .ds-glass-btn[aria-pressed=\"true\"] { background: rgba(255,255,255,0.92); color: #000; } @media (prefers-reduced-transparency: reduce) { .ds-glass-btn { background: #1c1c1e; -webkit-backdrop-filter: none; backdrop-filter: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Pro App Window",
+    "overview": "DICHROIC is drawn as a mature Apple pro application in the line of Photos for Mac and Final Cut Pro. On the desktop it is a window, not a web page. A unified toolbar runs across the top. A film/paper source list sits on the left and an inspector on the right, both solid graphite panels flush to the window edges and split by 1px lines. The photo sits between them on true black. On the phone the same world uses iOS sizes: a floating top bar over the photo and a bottom panel attached to the screen edge.\n\nThe world is quiet so the photo can be judged. Surfaces are neutral dark greys with no tint. Radii are small, and there is one accent, a system blue that marks selection, focus, edited state and the single primary action. Density follows the size class on `html[data-size]`. `compact` (under 1080px wide or under 560px tall) uses iOS Dynamic Type sizes and 44pt targets. `regular` uses macOS density: 13px body, 11px labels, 28px controls.\n\nThis world replaced an earlier iOS 26 arrangement of glass cards and capsules floating over the photo, with large radii. Glass survives only where a control actually floats over the image.",
+    "keyCharacteristics": [
+      "Solid graphite panels flush to the window edge, split by 1px hairlines; no floating cards on desktop.",
+      "Photo on true black (#000); nothing tinted beside it.",
+      "One blue accent, used only for selection, focus, edited marks and the primary action.",
+      "Two densities from one token set: iOS sizes when compact, macOS density when regular.",
+      "Small radii: 6px controls on desktop, 10px on the phone; 16px only for the phone's bottom panel.",
+      "Tabular numerals for every value readout."
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Blue means one of four things: selected, focused, edited, or the primary action. Nothing else in the chrome is coloured. The cyan, magenta and yellow swatches on the CC-filter tools are data (the filter's own colour), not accent.", "section": "colors" },
+      { "name": "The White-on-Fill Rule", "body": "White text sits on #0070e0, never on #0091ff. Signal Blue is only for marks, lines and fills that carry no text.", "section": "colors" },
+      { "name": "The Neutral Neighbour Rule", "body": "Surfaces next to the photo are neutral grey or black. No gradient, tint or coloured glow may reach the image.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every number that changes (EV, ISO, pixel sizes, file sizes, slider values) is set in tabular numerals and aligned right in its row.", "section": "typography" },
+      { "name": "The Two-Scale Rule", "body": "A text style is one class with two sizes. Use the `t-*` role and let `html[data-size]` pick iOS or macOS size. Never hard-code a per-screen font size.", "section": "typography" },
+      { "name": "The Wordmark Exception", "body": "The DICHROIC wordmark in the toolbar (13px, 700, 0.12em tracking, uppercase) is the only tracked uppercase text in the system. It is the brand mark, not a label style.", "section": "typography" },
+      { "name": "The Glass Over Photo Rule", "body": "Glass is only for controls floating over the photo: the phone's top bar buttons and film/paper pill, the phone's Before/After button, the before/after split handle and labels, and the toast. Structural panels, sheets, dialogs and menus are solid graphite. With `prefers-reduced-transparency: reduce`, glass falls back to solid graphite.", "section": "elevation" },
+      { "name": "The Flush Panel Rule", "body": "On desktop, panels touch the window edges and each other. Separation comes from a 1px hairline, not a gap, a radius or a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** read size from `html[data-size]` and use the density tokens (`--h-control`, `--r-control`, `--h-row`, `--icon-btn`) instead of fixed sizes, so one component serves both the phone and the desktop.",
+      "**Do** keep hit targets at least 44px in compact. On the phone, merge adjacent small targets into one control, as the film/paper pill does.",
+      "**Do** put white text on Blue Fill (#0070e0) and use Signal Blue (#0091ff) only for marks, lines and fills without text.",
+      "**Do** separate desktop panels with 1px hairlines and let them touch the window edge.",
+      "**Do** align numeric values right in tabular numerals, and give each tool a plain-language note under its control.",
+      "**Do** align dialog actions right on desktop, with the prominent action last.",
+      "**Do** provide a visible focus ring on every control (3px blue at 60% compact, 2px regular, 1px offset), full keyboard operation, ARIA roles and states (tabs, pressed, checked), and solid fallbacks for reduced transparency."
+    ],
+    "donts": [
+      "**Don't** use glass on panels, sheets, dialogs or menus; glass is only for controls floating over the photo.",
+      "**Don't** float cards or capsules with large radii over the desktop window. Radii stay within the scale (5–12px on desktop, 16px only for the phone's bottom panel and sheets).",
+      "**Don't** introduce a second accent colour or tint any surface next to the photo.",
+      "**Don't** put white text on #0091ff (3.2:1).",
+      "**Don't** use Tertiary Label for text people must read.",
+      "**Don't** add bouncy springs to desktop chrome; desktop motion stays within 120–180ms, with no overshoot.",
+      "**Don't** add a second typeface or hard-code a font size outside the `t-*` roles."
+    ]
+  }
+}

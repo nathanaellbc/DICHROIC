@@ -14,15 +14,30 @@
  *    ukuran TERUKUR, bukan perkiraan.
  *  - Pilihan disimpan di `localStorage`.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExportFormat } from '../../session/session';
 import { Icon } from '../components/Icon';
 import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { engine } from '../engine/engine';
-import { isDisplayReferred } from '../engine/display';
 import { canvasLimits, longEdgeDetents } from '../model/exportSizes';
 import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
+
+interface Failure {
+  /** Apa yang terjadi dan apa yang bisa dicoba, untuk pengguna. */
+  text: string;
+  /** Pesan teknis aslinya, kecil di bawahnya (untuk laporan bug). */
+  detail: string;
+}
+
+function failureOf(error: unknown, what: 'image' | 'cube'): Failure {
+  return {
+    text: what === 'cube'
+      ? 'Couldn’t build the LUT. Try a smaller cube size.'
+      : 'Couldn’t prepare the file. Try a smaller long edge or another format; your edits are kept.',
+    detail: error instanceof Error ? error.message : String(error),
+  };
+}
 
 const FORMAT_INFO: Record<ExportFormat, { name: string; hint: string; lossy: boolean }> = {
   png8: { name: 'PNG 8-bit', hint: 'Lossless · every pixel as rendered', lossy: false },
@@ -34,7 +49,8 @@ const FORMAT_INFO: Record<ExportFormat, { name: string; hint: string; lossy: boo
 };
 const CUBE_SIZES = [{ value: '17', label: '17' }, { value: '33', label: '33' }, { value: '65', label: '65' }] as const;
 
-const DEFAULT_QUALITY = 100;
+/** Bawaan format lossy: tanpa artefak yang terlihat, jauh lebih kecil dari 100. */
+const DEFAULT_QUALITY = 92;
 const STORAGE_KEY = 'dichroic.export.v1';
 
 interface ExportPrefs {
@@ -65,11 +81,17 @@ function loadPrefs(): ExportPrefs {
 export function ExportContent({
   outputColorSpace,
   inputColorSpace,
+  recipe,
   onDone,
+  onCancel,
   onError,
 }: {
+  /** Tutup tanpa menyimpan (tombol Cancel dialog desktop). */
+  onCancel: () => void;
   outputColorSpace: string;
   inputColorSpace: string;
+  /** Stok foto ini ("Portra 400 on Portra Endura"), untuk konfirmasi akhir. */
+  recipe: string;
   onDone: (message: string) => void;
   onError: (error: unknown) => void;
 }) {
@@ -81,7 +103,7 @@ export function ExportContent({
   const [file, setFile] = useState<File | null>(null);
   const [cubeFile, setCubeFile] = useState<File | null>(null);
   const [encoding, setEncoding] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const shareable = useMemo(prefersShareSheet, []);
 
   const format: ExportFormat = formats?.includes(prefs.format) ? prefs.format : 'png8';
@@ -127,7 +149,7 @@ export function ExportContent({
           setRendered({ ...size, request });
           setFailure(null);
         },
-        (error: unknown) => alive && setFailure(error instanceof Error ? error.message : String(error)),
+        (error: unknown) => alive && setFailure(failureOf(error, 'image')),
       );
     }, 250);
     return () => {
@@ -156,7 +178,7 @@ export function ExportContent({
           if (!alive) return;
           setFile(null);
           setEncoding(false);
-          setFailure(error instanceof Error ? error.message : String(error));
+          setFailure(failureOf(error, 'image'));
         },
       );
     }, 200);
@@ -172,7 +194,7 @@ export function ExportContent({
     setCubeFile(null);
     engine.exportCube(Number(cubeSize)).then(
       (f) => alive && setCubeFile(f),
-      (error: unknown) => alive && setFailure(error instanceof Error ? error.message : String(error)),
+      (error: unknown) => alive && setFailure(failureOf(error, 'cube')),
     );
     return () => {
       alive = false;
@@ -187,7 +209,7 @@ export function ExportContent({
   const doShare = () => {
     if (!ready) return;
     saveViaShare(ready).then(
-      (result) => result === 'shared' && onDone(`Exported${limitedNote}`),
+      (result) => result === 'shared' && onDone(`Exported · ${recipe}${limitedNote}`),
       onError,
     );
   };
@@ -195,11 +217,30 @@ export function ExportContent({
     if (!ready) return;
     try {
       saveViaDownload(ready);
-      onDone(`Saved ${ready.name}${limitedNote}`);
+      onDone(`Saved · ${recipe}${limitedNote}`);
     } catch (error) {
       onError(error);
     }
   };
+
+  // Dialog desktop: Return menjalankan tombol bawaan (Download / Save), kecuali
+  // fokus sedang di kontrol lain yang memakai Enter sendiri.
+  const primary = shareable ? doShare : doDownload;
+  const primaryRef = useRef(primary);
+  useEffect(() => {
+    primaryRef.current = primary;
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || document.documentElement.dataset.size !== 'regular') return;
+      const active = document.activeElement;
+      if (active && active.matches('button, input, select, textarea, [role=slider]')) return;
+      e.preventDefault();
+      primaryRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const sizeLabel = ready ? formatBytes(ready.size) : '';
   const busyLabel = mode === 'cube' ? 'Building LUT…' : rendering ? 'Developing…' : 'Encoding…';
@@ -221,7 +262,7 @@ export function ExportContent({
                         <span className="t-body">{FORMAT_INFO[f].name}</span>
                         <span className="t-subhead secondary">{FORMAT_INFO[f].hint}</span>
                       </span>
-                      {f === format && <Icon name="check" size={20} color="#0091ff" strokeWidth={2.8} />}
+                      {f === format && <Icon name="check" size={20} color="var(--blue)" strokeWidth={2.8} />}
                     </span>
                   </button>
                 ))}
@@ -255,12 +296,24 @@ export function ExportContent({
                 <span>Long edge</span>
                 <span className="num">{selected.width} × {selected.height} px</span>
               </h3>
-              <Segmented
-                label="Long edge"
-                items={detents.map((d) => ({ value: String(d.longEdge), label: d.label }))}
-                value={String(selected.longEdge)}
-                onChange={(v) => setPrefs((p) => ({ ...p, longEdge: v === 'null' ? null : Number(v) }))}
-              />
+              {detents.length > 1 ? (
+                <Segmented
+                  label="Long edge"
+                  items={detents.map((d) => ({ value: String(d.longEdge), label: d.label }))}
+                  value={String(selected.longEdge)}
+                  onChange={(v) => setPrefs((p) => ({ ...p, longEdge: v === 'null' ? null : Number(v) }))}
+                />
+              ) : (
+                // Satu ukuran saja (foto sudah kecil): nilai tetap, bukan kontrol.
+                <div className="list">
+                  <div className="row-static">
+                    <span className="row-body" style={{ justifyContent: 'space-between' }}>
+                      <span className="t-body">{selected.label}</span>
+                      <span className="t-body secondary">No smaller sizes</span>
+                    </span>
+                  </div>
+                </div>
+              )}
               <p className="list-footer t-footnote">
                 Grain, halation and diffusion are physical sizes, so a smaller export is developed again at its own pixel pitch rather than resized.
               </p>
@@ -276,9 +329,9 @@ export function ExportContent({
                 </div>
               </div>
               <p className="list-footer t-footnote">
-                {info.lossy
-                  ? `Tagged ${outputColorSpace === 'Display P3' ? 'Display P3' : 'sRGB'} by the browser’s encoder.`
-                  : `No ICC profile is embedded yet, so other apps read the file as ${isDisplayReferred(outputColorSpace) ? 'sRGB' : 'untagged RGB'}.`}{' '}
+                {format === 'webp' || format === 'avif'
+                  ? `Tagged ${outputColorSpace === 'Display P3' ? 'Display P3' : 'sRGB'} by the browser’s encoder; camera EXIF isn’t carried in ${info.name}.`
+                  : `Embeds the ${outputColorSpace} ICC profile, and the camera EXIF when the original has it.`}{' '}
                 Change the color space in Color › Output.
               </p>
             </div>
@@ -297,9 +350,9 @@ export function ExportContent({
                 </span>
               </div>
             </div>
-            <div style={{ borderRadius: 20, background: 'rgba(255,146,48,0.14)', padding: '12px 16px', display: 'flex', gap: 10 }}>
-              <span style={{ flexShrink: 0, color: '#ffa056' }}><Icon name="info" size={20} /></span>
-              <span className="t-subhead" style={{ color: 'rgba(255,232,214,0.92)' }}>
+            <div className="callout warn">
+              <span style={{ flexShrink: 0, color: 'var(--orange)' }}><Icon name="info" size={20} /></span>
+              <span className="t-subhead" style={{ color: 'rgba(255,236,220,0.94)' }}>
                 A LUT carries color only. Grain, halation, glare, diffusion, lens blur and sharpening are left out, and film and print exposure are ignored.
               </span>
             </div>
@@ -307,13 +360,19 @@ export function ExportContent({
         )}
 
         {failure && (
-          <p className="t-footnote" role="alert" style={{ margin: 0, color: '#ff6961' }}>{failure}</p>
+          <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <p className="t-footnote" style={{ margin: 0, color: 'var(--red-text)', fontWeight: 600 }}>{failure.text}</p>
+            <p className="t-caption secondary" style={{ margin: 0 }}>{failure.detail}</p>
+          </div>
         )}
         <p className="t-footnote secondary num" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ready?.name}>
           {ready?.name ?? ' '}
         </p>
       </div>
-      <div style={{ padding: '12px 16px 16px', flexShrink: 0, display: 'flex', gap: 10 }}>
+      <div className="sheet-actions">
+        <PressButton className="capsule large dialog-only" aria-keyshortcuts="Escape" onClick={onCancel}>
+          Cancel
+        </PressButton>
         {shareable ? (
           <>
             <PressButton className="capsule bordered large" style={{ flex: '0 0 38%' }} disabled={!ready} onClick={doDownload}>
@@ -368,7 +427,7 @@ export function ListPickerContent({
               <button key={o.value} type="button" role="radio" aria-checked={o.value === value} className="row" onClick={() => onPick(o.value)}>
                 <span className="row-body">
                   <span className="row-text"><span className="t-body">{o.label}</span></span>
-                  {o.value === value && <Icon name="check" size={20} color="#0091ff" strokeWidth={2.8} />}
+                  {o.value === value && <Icon name="check" size={20} color="var(--blue)" strokeWidth={2.8} />}
                 </span>
               </button>
             ))}

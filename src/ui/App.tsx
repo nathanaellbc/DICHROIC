@@ -1,11 +1,9 @@
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Alert, Toast } from './components/Overlays';
 import { describeError, engine } from './engine/engine';
 import { ACCEPTED_FILES, useEngineState, useFilePicker, useSizeClass } from './hooks';
-import { fade } from './motion';
 import { Editor } from './screens/Editor';
-import { OpeningCard, StartScreen, UnsupportedScreen } from './screens/Start';
+import { OpeningCard, UnsupportedScreen } from './screens/Start';
 
 export function App() {
   const state = useEngineState();
@@ -16,6 +14,11 @@ export function App() {
   const toastTimer = useRef(0);
 
   useEffect(() => engine.start(), []);
+
+  // Kepadatan (styles.css): ukuran iOS di compact, kepadatan macOS di regular.
+  useLayoutEffect(() => {
+    document.documentElement.dataset.size = wide ? 'regular' : 'compact';
+  }, [wide]);
 
   const openFile = useCallback((file: File) => void engine.openFile(file), []);
   const picker = useFilePicker(openFile);
@@ -47,30 +50,21 @@ export function App() {
 
   if (state.engine === 'unsupported') return <UnsupportedScreen />;
 
-  const editing = !!state.frame && (state.phase === 'editing' || state.phase === 'opening');
   const error = state.error ?? localError;
 
   return (
     <>
       <input ref={picker.ref} type="file" accept={ACCEPTED_FILES} className="sr-only" tabIndex={-1} aria-hidden="true" />
-      <AnimatePresence mode="wait" initial={false}>
-        {editing ? (
-          <motion.main key="editor" style={{ position: 'absolute', inset: 0 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade}>
-            <Editor
-              state={state}
-              wide={wide}
-              landscape={size.landscape}
-              onOpenFile={picker.pick}
-              onToast={showToast}
-              onError={(e) => setLocalError(describeError(e))}
-            />
-          </motion.main>
-        ) : (
-          <motion.main key="start" style={{ position: 'absolute', inset: 0 }} initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.01 }} transition={fade}>
-            <StartScreen onChoose={picker.pick} wide={wide} engineReady={state.engine === 'ready'} />
-          </motion.main>
-        )}
-      </AnimatePresence>
+      <main style={{ position: 'absolute', inset: 0 }}>
+        <Editor
+          state={state}
+          wide={wide}
+          landscape={size.landscape}
+          onOpenFile={picker.pick}
+          onToast={showToast}
+          onError={(e) => setLocalError(describeError(e))}
+        />
+      </main>
       <OpeningCard opening={state.phase === 'opening' ? state.opening : undefined} onCancel={() => engine.cancelOpening()} />
       <Alert
         open={!!error}

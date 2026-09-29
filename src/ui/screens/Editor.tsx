@@ -3,38 +3,63 @@
  * tata letak menurut size class -- DESIGN.md (Layout): fungsi sama di semua
  * ukuran, hanya susunannya yang berubah.
  *
- * - compact (iPhone): foto penuh, toolbar atas melayang (tutup | stok |
- *   bandingkan, Ekspor), panel kaca bawah dalam jangkauan jempol; lanskap:
- *   panel pindah ke samping.
+ * - compact (iPhone): foto penuh, toolbar atas melayang (menu | stok |
+ *   undo, bandingkan, Ekspor), panel kaca bawah dalam jangkauan jempol;
+ *   lanskap: panel pindah ke samping.
  * - regular (iPad lanskap, desktop): sidebar stok, inspector parameter,
  *   toolbar melayang di atas foto.
+ *
+ * Pintasan keyboard (di luar dialog dan kolom teks): ⌘/Ctrl+Z undo,
+ * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto.
  */
 import { motion } from 'motion/react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
-import { PressButton, Segmented } from '../components/controls';
+import { GroupTabs, PressButton } from '../components/controls';
+import type { TabItem } from '../components/controls';
 import { ActionSheet } from '../components/Overlays';
+import type { SheetAction } from '../components/Overlays';
 import { PhotoView } from '../components/PhotoView';
 import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
+import { dialogOpen } from '../hooks';
 import { stockInfo } from '../model/stocks';
-import { GROUPS, choicePatch, findTool, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
+import { GROUPS, choicePatch, findTool, isModified, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
 import type { ChoiceTool, GroupId } from '../model/tools';
-import { snappy } from '../motion';
 import { ExportContent, ListPickerContent } from './Export';
 import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
+import { DropZone } from './Start';
 import { InspectorTool, ResetButton, ToolChips, ToolControl, ToolSwitch } from './ToolControls';
 import type { ToolContext } from './ToolControls';
 
+type Stocks = Pick<RenderParams, 'film' | 'paper' | 'process'>;
+
 type SheetState =
-  | { kind: 'stocks'; stockKind: StockKind; before: Pick<RenderParams, 'film' | 'paper' | 'process'> }
+  /** `before`: stok saat sheet dibuka (Cancel). `swap`: sisi lain A/B. */
+  | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks }
   | { kind: 'export' }
   | { kind: 'list'; toolId: string }
   | null;
+
+const APPLE = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MOD = APPLE ? '⌘' : 'Ctrl+';
+/** Petunjuk pintasan hanya berarti bila ada keyboard (bukan layar sentuh saja). */
+const HAS_KEYBOARD = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches;
+const UNDO_KEYS = 'Meta+Z Control+Z';
+const REDO_KEYS = 'Meta+Shift+Z Control+Y';
+
+const stocksOf = (p: RenderParams): Stocks => ({ film: p.film, paper: p.paper, process: p.process });
+const sameStocks = (a: Stocks, b: Stocks) => a.film === b.film && a.paper === b.paper && a.process === b.process;
+
+/** "Portra 400 → Portra Endura", atau "Velvia 100, scanned". */
+function recipe(s: Stocks): string {
+  const film = stockInfo(s.film).short;
+  return isScanMode(s) ? `${film}, scanned` : `${film} → ${stockInfo(s.paper).short}`;
+}
 
 export interface EditorProps {
   state: EngineState;
@@ -52,9 +77,11 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const [pickingFocus, setPickingFocus] = useState(false);
   // Mode pilih fokus hanya selama grup Lens terbuka dan lens blur menyala.
   const picking = pickingFocus && group === 'lens' && state.params.lensBlurEnabled && state.depth.status === 'ready';
+  const hasPhoto = !!state.frame;
 
   const ctx: ToolContext = {
     params: state.params,
@@ -71,13 +98,56 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     },
   };
 
-  const openStocks = (stockKind: StockKind = 'film') =>
-    setSheet({ kind: 'stocks', stockKind, before: { film: state.params.film, paper: state.params.paper, process: state.params.process } });
+  const openStocks = (stockKind: StockKind = 'film') => {
+    const current = stocksOf(state.params);
+    setSheet({ kind: 'stocks', stockKind, before: current, swap: current });
+  };
 
   const onClose = (anchor: DOMRect) => {
     if (engine.isEdited()) setDiscardAnchor(anchor);
     else engine.closePhoto();
   };
+
+  const onProcess = (process: string) => engine.setParams(choicePatch(findTool('process') as ChoiceTool, process, state.params));
+
+  // Pintasan keyboard. Nilai terbaru lewat ref supaya pendengar dipasang sekali.
+  const keys = useRef({ hasPhoto, onOpenFile, toggleCompare: () => {}, openExport: () => {} });
+  useEffect(() => {
+    keys.current = { hasPhoto, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }) };
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (dialogOpen() || e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      const k = keys.current;
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        if (key === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) engine.redo();
+          else engine.undo();
+        } else if (key === 'y') {
+          e.preventDefault();
+          engine.redo();
+        }
+        return;
+      }
+      if (e.altKey || e.metaKey || e.ctrlKey || e.repeat) return;
+      if (key === 'o') {
+        e.preventDefault();
+        k.onOpenFile();
+      } else if (k.hasPhoto && e.key === '\\') {
+        e.preventDefault();
+        k.toggleCompare();
+      } else if (k.hasPhoto && key === 'e') {
+        e.preventDefault();
+        k.openExport();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const listTool = sheet?.kind === 'list' ? (findTool(sheet.toolId) as ChoiceTool) : undefined;
   const film = stockInfo(state.params.film);
@@ -86,7 +156,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const photoLabel = scan
     ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
-  const photo = (
+  const photo = !hasPhoto ? (
+    <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} />
+  ) : (
     <PhotoView
       frame={state.frame}
       original={state.original}
@@ -103,11 +175,28 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           engine.setParams({ lensFocusX, lensFocusY });
           setPickingFocus(false);
         },
+        onCancel: () => setPickingFocus(false),
       }}
     />
   );
 
-  const layoutProps = { state, ctx, group, setGroup, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind };
+  const groupItems: TabItem<GroupId>[] = GROUPS.map((g) => ({
+    value: g.id,
+    label: g.label,
+    icon: g.icon,
+    edited: hasPhoto && visibleTools(g, state.params).some((t) => isModified(t, state.params, state.defaults)),
+  }));
+
+  const layoutProps = { state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor };
+
+  const menuActions: SheetAction[] = [
+    { label: 'Open Photo…', icon: 'open', shortcut: HAS_KEYBOARD ? 'O' : undefined, onSelect: () => { setMenuAnchor(null); onOpenFile(); } },
+    ...(state.history.canRedo ? [{ label: 'Redo', icon: 'redo' as const, shortcut: HAS_KEYBOARD ? (APPLE ? '⇧⌘Z' : 'Ctrl+Y') : undefined, onSelect: () => { setMenuAnchor(null); engine.redo(); } }] : []),
+    ...(engine.isEdited() ? [{ label: 'Reset All Adjustments', icon: 'reset' as const, onSelect: () => { setMenuAnchor(null); engine.resetAll(); } }] : []),
+    { label: 'Close Photo', icon: 'close', onSelect: () => { const anchor = menuAnchor; setMenuAnchor(null); if (anchor) onClose(anchor); } },
+  ];
+
+  const current = stocksOf(state.params);
 
   return (
     <>
@@ -116,9 +205,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       <Sheet
         open={sheet?.kind === 'stocks'}
         centered={wide}
-        title="Stock"
+        title="Film & Paper"
         detents={['medium', 'large']}
-        mediumFraction={0.62}
+        mediumFraction={0.56}
         onClose={() => setSheet(null)}
         leading={
           <PressButton
@@ -133,7 +222,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           </PressButton>
         }
         trailing={
-          <PressButton className="icon-btn" aria-label="Done" style={{ background: 'var(--blue)', color: '#fff' }} onClick={() => setSheet(null)}>
+          <PressButton className="icon-btn prominent" aria-label="Done" onClick={() => setSheet(null)}>
             <Icon name="check" size={18} strokeWidth={2.8} />
           </PressButton>
         }
@@ -145,7 +234,20 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
             kind={sheet.stockKind}
             onKindChange={(stockKind) => setSheet({ ...sheet, stockKind })}
             onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
-            scan={isScanMode(state.params)}
+            scan={scan}
+            process={state.params.process}
+            onProcess={onProcess}
+            previous={
+              sameStocks(sheet.swap, current)
+                ? undefined
+                : {
+                    label: recipe(sheet.swap),
+                    onSwap: () => {
+                      engine.setParams(sheet.swap);
+                      setSheet({ ...sheet, swap: current });
+                    },
+                  }
+            }
           />
         )}
       </Sheet>
@@ -159,14 +261,19 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         dimAtMedium
         onClose={() => setSheet(null)}
         leading={
-          <PressButton className="icon-btn" aria-label="Cancel" onClick={() => setSheet(null)}>
-            <Icon name="close" size={16} strokeWidth={2.6} />
-          </PressButton>
+          // Dialog desktop memakai tombol Cancel di footer (macOS); sheet HP menutup dari bar.
+          wide ? undefined : (
+            <PressButton className="icon-btn" aria-label="Cancel" onClick={() => setSheet(null)}>
+              <Icon name="close" size={16} strokeWidth={2.6} />
+            </PressButton>
+          )
         }
       >
         <ExportContent
+          onCancel={() => setSheet(null)}
           outputColorSpace={state.params.outputColorSpace}
           inputColorSpace={state.params.inputColorSpace}
+          recipe={scan ? `${film.short}, scanned` : `${film.short} on ${paper.short}`}
           onDone={(message) => {
             setSheet(null);
             onToast(message);
@@ -182,7 +289,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         detents={['medium', 'large']}
         onClose={() => setSheet(null)}
         trailing={
-          <PressButton className="icon-btn" aria-label="Done" style={{ background: 'var(--blue)', color: '#fff' }} onClick={() => setSheet(null)}>
+          <PressButton className="icon-btn prominent" aria-label="Done" onClick={() => setSheet(null)}>
             <Icon name="check" size={18} strokeWidth={2.8} />
           </PressButton>
         }
@@ -191,6 +298,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           <ListPickerContent options={listTool.options} value={state.params[listTool.field]} onPick={(v) => engine.setParams(choicePatch(listTool, v, state.params))} />
         )}
       </Sheet>
+
+      <ActionSheet open={menuAnchor !== null} anchor={menuAnchor} label="Photo" actions={menuActions} onCancel={() => setMenuAnchor(null)} />
 
       <ActionSheet
         open={discardAnchor !== null}
@@ -205,9 +314,12 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
 
 interface LayoutProps {
   state: EngineState;
+  /** Belum ada foto: area foto berisi DropZone, kontrol dinonaktifkan. */
+  hasPhoto: boolean;
   ctx: ToolContext;
   group: GroupId;
   setGroup: (g: GroupId) => void;
+  groupItems: TabItem<GroupId>[];
   toolByGroup: Record<GroupId, string>;
   setToolByGroup: (v: Record<GroupId, string>) => void;
   compare: boolean;
@@ -219,23 +331,34 @@ interface LayoutProps {
   setSheet: (s: SheetState) => void;
   sidebarKind: StockKind;
   setSidebarKind: (k: StockKind) => void;
+  onProcess: (process: string) => void;
+  onMenu: (anchor: DOMRect) => void;
 }
 
-const GROUP_ITEMS = GROUPS.map((g) => ({ value: g.id, label: g.label }));
+/** Tanpa foto, panel tetap terlihat sebagai pratinjau fungsinya, tapi jelas belum aktif. */
+const EMPTY_OPACITY = 0.6;
 
 function PreviewNote({ state }: { state: EngineState }) {
   if (isDisplayReferred(state.params.outputColorSpace)) return null;
   return (
-    <span className="glass-clear t-caption" style={{ padding: '4px 10px', borderRadius: 9999 }}>
+    <span className="glass-clear t-caption" style={{ padding: '4px 10px', borderRadius: 6 }}>
       Preview shows {state.params.outputColorSpace} values without conversion
     </span>
+  );
+}
+
+function UndoButton({ state, className, size = 20 }: { state: EngineState; className: string; size?: number }) {
+  return (
+    <PressButton className={className} aria-label="Undo" aria-keyshortcuts={UNDO_KEYS} title={`Undo (${MOD}Z)`} disabled={!state.history.canUndo} onClick={() => engine.undo()}>
+      <Icon name="undo" size={size} strokeWidth={2.2} />
+    </PressButton>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Compact (iPhone)
 
-function CompactLayout({ state, ctx, group, setGroup, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, setSheet, landscape }: LayoutProps & { landscape: boolean }) {
+function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, setSheet, onMenu, landscape }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
@@ -253,107 +376,195 @@ function CompactLayout({ state, ctx, group, setGroup, toolByGroup, setToolByGrou
   const selectedTool = findTool(toolByGroup[group]);
   const tool = visible.includes(selectedTool) ? selectedTool : (visible.find((t) => t.label === selectedTool.label) ?? visible[0]!);
   const film = stockInfo(state.params.film);
+  const paper = stockInfo(state.params.paper);
+  const scan = isScanMode(state.params);
 
   const topBarTop = 'calc(max(var(--safe-top), 12px) + 4px)';
-  const photoTop = 'calc(max(var(--safe-top), 12px) + 64px)';
+  const photoTop = 'calc(max(var(--safe-top), 12px) + 60px)';
   const photoStyle: React.CSSProperties = landscape
-    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: panelSize.width + 28 }
-    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: panelSize.height + 20 };
+    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: panelSize.width + 12 }
+    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: panelSize.height + 12 };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#000' }}>
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={photoStyle}>{photo}</div>
 
       <div
         style={{
           position: 'absolute', top: topBarTop,
-          left: 'calc(var(--safe-left) + 16px)',
-          right: landscape ? panelSize.width + 28 : 'calc(var(--safe-right) + 16px)',
-          height: 44, display: 'flex', alignItems: 'center', gap: 8,
+          left: 'calc(var(--safe-left) + 12px)',
+          right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+          height: 44, display: 'flex', alignItems: 'center', gap: 6,
         }}
       >
-        <PressButton className="icon-btn glass" aria-label="Close" onClick={(e) => onClose(e.currentTarget.getBoundingClientRect())}>
-          <Icon name="close" size={18} strokeWidth={2.4} />
+        <PressButton className="icon-btn glass" aria-label="More" aria-haspopup="dialog" disabled={!hasPhoto} onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
+          <Icon name="more" size={20} strokeWidth={2.4} />
         </PressButton>
         <PressButton
           className="capsule glass"
-          style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, padding: '0 12px', fontSize: '0.882rem' }}
-          aria-label={`Film stock: ${film.name}${isScanMode(state.params) ? ', scanned' : ''}. Change stock`}
+          style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, padding: '0 12px', justifyContent: 'space-between', gap: 6 }}
+          aria-label={`Stocks: ${film.name}, ${scan ? 'scanned' : `printed on ${paper.name}`}. Change`}
+          disabled={!hasPhoto}
           onClick={() => openStocks('film')}
         >
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{film.short}</span>
-          <span style={{ opacity: 0.7, display: 'inline-flex' }}><Icon name="chevronDown" size={14} strokeWidth={3} /></span>
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left' }}>
+            <span className="t-subhead" style={{ fontWeight: 600, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{film.short}</span>
+            <span className="t-caption secondary" style={{ fontWeight: 500, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scan ? 'Scanned' : `on ${paper.short}`}</span>
+          </span>
+          <span className="secondary" style={{ display: 'inline-flex', flexShrink: 0 }}><Icon name="upDown" size={14} strokeWidth={2.4} /></span>
         </PressButton>
-        <PressButton className="icon-btn glass" aria-label="Compare with original" aria-pressed={compare} onClick={() => setCompare(!compare)}>
-          <Icon name="compare" size={20} />
-        </PressButton>
-        <PressButton className="capsule prominent" onClick={() => setSheet({ kind: 'export' })}>Export</PressButton>
+        <UndoButton state={state} className="icon-btn glass" />
+        <PressButton className="capsule prominent" style={{ padding: '0 16px' }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>Export</PressButton>
       </div>
 
-      <div style={{ position: 'absolute', left: 0, right: landscape ? panelSize.width + 28 : 0, top: 'calc(max(var(--safe-top), 12px) + 70px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+      {/* Sebelum/sesudah di atas panel, dalam jangkauan jempol; toolbar atas memberi ruang ke nama stok. */}
+      {hasPhoto && (
+        <PressButton
+          className="icon-btn glass"
+          aria-label="Compare with original"
+          aria-keyshortcuts="\"
+          title="Before / After (\)"
+          aria-pressed={compare}
+          onClick={() => setCompare(!compare)}
+          style={{
+            position: 'absolute',
+            left: 'calc(var(--safe-left) + 12px)',
+            bottom: landscape ? 'calc(var(--safe-bottom) + 12px)' : panelSize.height + 12,
+          }}
+        >
+          <Icon name="compare" size={20} />
+        </PressButton>
+      )}
+
+      <div style={{ position: 'absolute', left: 0, right: landscape ? panelSize.width : 0, top: 'calc(max(var(--safe-top), 12px) + 64px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         <PreviewNote state={state} />
       </div>
 
       <section
         ref={panelRef}
         aria-label="Adjustments"
-        className="glass"
+        className="panel"
+        inert={!hasPhoto}
         style={{
           position: 'absolute',
-          ...(landscape
-            ? { top: 'calc(var(--safe-top) + 8px)', maxHeight: 'calc(100% - var(--safe-top) - var(--safe-bottom) - 16px)', right: 'calc(var(--safe-right) + 8px)', width: 340, overflowY: 'auto' }
-            : { left: 'calc(var(--safe-left) + 8px)', right: 'calc(var(--safe-right) + 8px)', bottom: 8, margin: '0 auto', maxWidth: 520 }),
+          opacity: hasPhoto ? 1 : EMPTY_OPACITY,
+          transition: 'opacity 0.2s',
           boxSizing: 'border-box',
-          borderRadius: 'calc(var(--display-radius) - 8px)',
-          padding: landscape ? '16px 20px' : '16px 20px max(20px, calc(var(--safe-bottom) - 4px))',
           display: 'flex', flexDirection: 'column', gap: 12,
+          ...(landscape
+            ? { top: 0, bottom: 0, right: 0, width: 'calc(340px + var(--safe-right))', overflowY: 'auto', borderLeft: '1px solid var(--hairline)', padding: 'calc(var(--safe-top) + 12px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 12px) 16px' }
+            : {
+                left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 560,
+                borderRadius: 'var(--r-panel) var(--r-panel) 0 0',
+                boxShadow: '0 -1px 0 var(--hairline), 0 -12px 32px rgba(0,0,0,0.35)',
+                padding: '14px calc(var(--safe-right) + 16px) max(14px, var(--safe-bottom)) calc(var(--safe-left) + 16px)',
+              }),
         }}
       >
-        <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <span className="t-footnote secondary">{currentGroup.label}</span>
-            <motion.h2 key={tool.id} className="t-headline" style={{ margin: 0 }} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
-              {tool.title}
-            </motion.h2>
+        <div id="compact-groups-panel" role="tabpanel" aria-labelledby={`compact-groups-tab-${group}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <motion.h2 key={tool.id} className="t-headline" style={{ margin: 0 }} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
+                {tool.title}
+              </motion.h2>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {(tool.kind === 'slider' || tool.kind === 'stepper') && (
+                <span className="t-title3 tabular" style={{ whiteSpace: 'nowrap' }}>{valueText(tool, state.params)}</span>
+              )}
+              <ResetButton tool={tool} ctx={ctx} />
+              <ToolSwitch tool={tool} ctx={ctx} />
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'choice') && (
-              <span className="t-title3 tabular" style={{ whiteSpace: 'nowrap' }}>{tool.kind === 'choice' ? '' : valueText(tool, state.params)}</span>
-            )}
-            <ResetButton tool={tool} ctx={ctx} />
-            <ToolSwitch tool={tool} ctx={ctx} />
+
+          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center' }}>
+            <ToolControl key={tool.id} tool={tool} ctx={ctx} />
           </div>
+
+          <ToolChips group={currentGroup} selected={tool.id} onSelect={(id) => setToolByGroup({ ...toolByGroup, [group]: id })} ctx={ctx} />
         </div>
 
-        <div style={{ minHeight: 44, display: 'flex', alignItems: 'center' }}>
-          <ToolControl key={tool.id} tool={tool} ctx={ctx} />
-        </div>
-
-        <ToolChips group={currentGroup} selected={tool.id} onSelect={(id) => setToolByGroup({ ...toolByGroup, [group]: id })} ctx={ctx} />
-
-        <Segmented label="Adjustment group" items={GROUP_ITEMS} value={group} onChange={setGroup} />
+        <GroupTabs label="Adjustment group" idPrefix="compact-groups" items={groupItems} value={group} onChange={setGroup} />
       </section>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Regular (iPad lanskap, desktop)
+// Regular (iPad lanskap, desktop): jendela aplikasi pro -- toolbar terpadu,
+// source list stok, foto di atas hitam, inspector, status bar.
 
-function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind }: LayoutProps) {
-  const currentGroup = GROUPS.find((g) => g.id === group)!;
+const SIDEBAR_WIDTH = 260;
+const INSPECTOR_WIDTH = 300;
+
+/**
+ * Resep sebagai path control jendela ("Portra 400 › Portra Endura"): tiap
+ * segmen membuka daftarnya di sidebar dan menggulir ke stok terpilih.
+ */
+function RecipePath({ state, onReveal, disabled }: { state: EngineState; onReveal: (kind: StockKind) => void; disabled: boolean }) {
   const film = stockInfo(state.params.film);
   const paper = stockInfo(state.params.paper);
-  const edited = engine.isEdited();
+  const scan = isScanMode(state.params);
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: '#000' }}>
-      <div style={{ position: 'absolute', top: 76, bottom: 60, left: 304, right: 344 }}>{photo}</div>
+    <nav aria-label="Recipe" className="path-control">
+      <button type="button" className="path-segment" disabled={disabled} title={`${film.name}: show in Film list`} onClick={() => onReveal('film')}>
+        {film.name}
+      </button>
+      <span className="path-chevron" aria-hidden="true"><Icon name="chevronRight" size={12} strokeWidth={2.4} /></span>
+      <button type="button" className="path-segment secondary" disabled={disabled} title={scan ? 'Scanned, no paper: show Paper list' : `${paper.name}: show in Paper list`} onClick={() => onReveal('paper')}>
+        {scan ? 'Scanned' : paper.name}
+      </button>
+    </nav>
+  );
+}
 
-      <nav aria-label="Stocks" className="glass" style={{ position: 'absolute', top: 12, bottom: 12, left: 12, width: 280, borderRadius: 22, paddingTop: 12, display: 'flex', flexDirection: 'column', boxSizing: 'border-box', overflow: 'hidden' }}>
-        <div style={{ padding: '4px 20px 10px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-          <span className="t-subhead" style={{ fontWeight: 700, letterSpacing: '0.14em' }}>DICHROIC</span>
-          <span className="t-caption secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.fileName}</span>
+function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess }: LayoutProps) {
+  const currentGroup = GROUPS.find((g) => g.id === group)!;
+  const edited = engine.isEdited();
+  const [reveal, setReveal] = useState(0);
+  const onReveal = (kind: StockKind) => {
+    setSidebarKind(kind);
+    setReveal((n) => n + 1);
+  };
+  const inert = !hasPhoto;
+  const dim: React.CSSProperties = { opacity: hasPhoto ? 1 : EMPTY_OPACITY, transition: 'opacity 0.2s' };
+  return (
+    <div
+      style={{
+        position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)',
+        display: 'grid', gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0, 1fr) ${INSPECTOR_WIDTH}px`, gridTemplateRows: '52px minmax(0, 1fr)',
+      }}
+    >
+      <header className="window-toolbar" style={{ gridColumn: '1 / -1' }}>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 120, maxWidth: 380, flex: '0 1 auto' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em' }}>DICHROIC</span>
+          <span className="t-footnote secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={state.fileName}>{state.fileName ?? 'No photo'}</span>
+        </span>
+        <PressButton className="icon-btn plain" aria-label="Open Photo" aria-keyshortcuts="O" title="Open Photo (O)" onClick={onOpenFile}>
+          <Icon name="open" size={17} />
+        </PressButton>
+        <PressButton className="icon-btn plain" aria-label="Close Photo" title="Close Photo" disabled={!hasPhoto} onClick={(e) => onClose(e.currentTarget.getBoundingClientRect())}>
+          <Icon name="close" size={15} strokeWidth={2.4} />
+        </PressButton>
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+          {hasPhoto && <RecipePath state={state} onReveal={onReveal} disabled={!hasPhoto} />}
         </div>
+
+        <UndoButton state={state} className="icon-btn plain" size={17} />
+        <PressButton className="icon-btn plain" aria-label="Redo" aria-keyshortcuts={REDO_KEYS} title={`Redo (${APPLE ? '⇧⌘Z' : 'Ctrl+Y'})`} disabled={!state.history.canRedo} onClick={() => engine.redo()}>
+          <Icon name="redo" size={17} strokeWidth={2.2} />
+        </PressButton>
+        <span className="toolbar-sep" aria-hidden="true" />
+        <PressButton className="icon-btn plain" aria-label="Before / After" aria-keyshortcuts="\" title="Before / After (\)" aria-pressed={compare} disabled={!hasPhoto} onClick={() => setCompare(!compare)}>
+          <Icon name="compare" size={17} />
+        </PressButton>
+        <PressButton className="capsule prominent" style={{ marginLeft: 6 }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>
+          <Icon name="share" size={14} strokeWidth={2.2} /> Export
+        </PressButton>
+      </header>
+
+      <nav aria-label="Stocks" className="panel" inert={inert} style={{ ...dim, borderRight: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: 10 }}>
         <StockBrowser
           film={state.params.film}
           paper={state.params.paper}
@@ -361,63 +572,51 @@ function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose,
           onKindChange={setSidebarKind}
           onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
           scan={isScanMode(state.params)}
-          onBackground
+          process={state.params.process}
+          onProcess={onProcess}
+          dense
+          revealToken={reveal}
         />
       </nav>
 
-      <div style={{ position: 'absolute', top: 16, left: 304, right: 344, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div className="glass" style={{ pointerEvents: 'auto', height: 52, borderRadius: 9999, padding: 4, display: 'flex', alignItems: 'center', gap: 4, boxSizing: 'border-box' }}>
-          <PressButton className="capsule" style={{ background: 'transparent', fontWeight: 500 }} onClick={onOpenFile}>
-            <Icon name="open" size={18} /> Open
-          </PressButton>
-          <PressButton className="capsule" style={{ background: 'transparent', fontWeight: 500 }} onClick={(e) => onClose(e.currentTarget.getBoundingClientRect())}>
-            Close
-          </PressButton>
-          <span aria-hidden="true" style={{ width: 1, height: 22, background: 'rgba(255,255,255,0.14)' }} />
-          <PressButton className="capsule" style={{ background: compare ? 'rgba(255,255,255,0.18)' : 'transparent', fontWeight: 500 }} aria-pressed={compare} onClick={() => setCompare(!compare)}>
-            <Icon name="compare" size={18} /> Before / After
-          </PressButton>
-          <PressButton className="capsule prominent" style={{ marginLeft: 8 }} onClick={() => setSheet({ kind: 'export' })}>
-            <Icon name="share" size={16} strokeWidth={2.2} /> Export
-          </PressButton>
+      <main style={{ display: 'grid', gridTemplateRows: 'minmax(0, 1fr) 28px', minWidth: 0, minHeight: 0 }}>
+        <div style={{ position: 'relative', minHeight: 0 }}>
+          <div style={{ position: 'absolute', inset: hasPhoto ? 24 : 0 }}>{photo}</div>
         </div>
-      </div>
+        <div className="status-bar" role="status">
+          {state.frame ? <span className="tabular">Preview {state.frame.width} × {state.frame.height}</span> : <span>No photo open</span>}
+          <span aria-hidden="true" className="tertiary">·</span>
+          <span>{state.params.outputColorSpace}{isDisplayReferred(state.params.outputColorSpace) ? '' : ', shown without conversion'}</span>
+          {state.rendering && hasPhoto && (
+            <>
+              <span aria-hidden="true" className="tertiary">·</span>
+              <span style={{ color: 'var(--blue-text)' }}>Developing…</span>
+            </>
+          )}
+          <span style={{ marginLeft: 'auto' }}>Developed on this device</span>
+        </div>
+      </main>
 
-      <aside aria-label="Parameters" className="glass" style={{ position: 'absolute', top: 12, right: 12, width: 320, maxHeight: 'calc(100% - 24px)', borderRadius: 22, padding: 12, display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
-        <Segmented label="Parameter group" items={GROUP_ITEMS} value={group} onChange={setGroup} small />
-        <motion.div key={group} className="scroll-y" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={snappy} style={{ minHeight: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ borderRadius: 12, background: 'rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column' }}>
-            {visibleTools(currentGroup, state.params).map((tool, i) => (
-              <div key={tool.id} style={{ borderTop: i === 0 ? 0 : '1px solid rgba(255,255,255,0.08)' }}>
-                <InspectorTool tool={tool} ctx={ctx} />
-              </div>
+      <aside aria-label="Parameters" className="panel" inert={inert} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ borderBottom: '1px solid var(--hairline)', padding: '0 4px', flexShrink: 0 }}>
+          <GroupTabs label="Parameter group" idPrefix="wide-groups" items={groupItems} value={group} onChange={setGroup} small />
+        </div>
+        <motion.div key={group} id="wide-groups-panel" role="tabpanel" aria-labelledby={`wide-groups-tab-${group}`} className="scroll-y" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.14, ease: 'easeOut' }} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="pane-header">
+            <h2 className="t-headline" style={{ margin: 0 }}>{currentGroup.label}</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 12 }}>
+            {visibleTools(currentGroup, state.params).map((tool) => (
+              <InspectorTool key={tool.id} tool={tool} ctx={ctx} />
             ))}
           </div>
         </motion.div>
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '10px 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="t-caption secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="check" size={14} color="#30d158" strokeWidth={2.6} /> Parity-verified parameters
-          </span>
-          <PressButton className="capsule bordered" style={{ height: 30, padding: '0 12px', fontSize: '0.765rem', fontWeight: 500 }} disabled={!edited} onClick={() => engine.resetAll()}>
+        <div style={{ borderTop: '1px solid var(--hairline)', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <PressButton className="capsule bordered" disabled={!edited} onClick={() => engine.resetAll()}>
             Reset All
           </PressButton>
         </div>
       </aside>
-
-      <div style={{ position: 'absolute', bottom: 16, left: 304, right: 344, display: 'flex', justifyContent: 'center', gap: 8, pointerEvents: 'none' }}>
-        <div className="glass-clear t-caption" style={{ height: 30, padding: '0 14px', borderRadius: 9999, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-          <span style={{ fontWeight: 600 }}>{film.name}</span>
-          <span aria-hidden="true" style={{ opacity: 0.6 }}>→</span>
-          <span>{isScanMode(state.params) ? 'Scan' : paper.name}</span>
-          {state.frame && (
-            <>
-              <span aria-hidden="true" style={{ opacity: 0.5 }}>·</span>
-              <span className="tabular">Preview {state.frame.width} × {state.frame.height}</span>
-            </>
-          )}
-        </div>
-        <PreviewNote state={state} />
-      </div>
     </div>
   );
 }
