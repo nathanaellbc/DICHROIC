@@ -41,7 +41,9 @@ export function ExportContent({
     try {
       const file = mode === 'image' ? await engine.exportImage(format) : await engine.exportCube(Number(cubeSize));
       const result = await deliverFile(file);
-      if (result !== 'cancelled') onDone(result === 'shared' ? 'Exported' : `Saved ${file.name}`);
+      const limited = mode === 'image' ? engine.lastExportLimited : undefined;
+      const note = limited ? ` at ${limited.width} × ${limited.height} (diffusion filter size limit)` : '';
+      if (result !== 'cancelled') onDone(result === 'shared' ? `Exported${note}` : `Saved ${file.name}${note}`);
     } catch (error) {
       onError(error);
     } finally {

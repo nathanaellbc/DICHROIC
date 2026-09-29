@@ -9,14 +9,18 @@ import { Icon } from '../components/Icon';
 import { OptionRow, PressButton, Slider, Stepper, Switch } from '../components/controls';
 import { pressScale, snappy } from '../motion';
 import {
+  DIFFUSION_FAMILIES,
+  DIFFUSION_STRENGTH,
   choicePatch,
   decodeAllowed,
   formatPushPull,
+  formatStops,
   isModified,
   resetPatch,
   sliderPatch,
   sliderValue,
   valueText,
+  visibleTools,
 } from '../model/tools';
 import type { ChoiceTool, Tool, ToolGroup } from '../model/tools';
 
@@ -35,6 +39,7 @@ export function isLongChoice(tool: ChoiceTool): boolean {
 
 function toolEnabled(tool: Tool, params: RenderParams): boolean {
   if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
+  if (tool.kind === 'diffusion') return params[tool.enabledBy];
   if (tool.kind === 'toggle' && tool.field === 'inputCctfDecoding') return decodeAllowed(params.inputColorSpace);
   return tool.kind !== 'locked';
 }
@@ -46,15 +51,17 @@ export function ToolSwitch({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
     const allowed = tool.field !== 'inputCctfDecoding' || decodeAllowed(params.inputColorSpace);
     return <Switch label={tool.title} checked={params[tool.field]} disabled={!allowed} onChange={(v) => onPatch({ [tool.field]: v })} />;
   }
-  if (tool.kind === 'slider' && tool.enabledBy) {
+  if ((tool.kind === 'slider' || tool.kind === 'diffusion') && tool.enabledBy) {
     const field = tool.enabledBy;
-    return <Switch label={tool.title} checked={params[field]} onChange={(v) => onPatch({ [field]: v })} />;
+    // Menyalakan filter difusi yang strength-nya 0 langsung memberi 1/2 stop.
+    const onFilter = tool.kind === 'diffusion' && params[tool.strengthField] <= 0 ? { [tool.strengthField]: 0.5 } : {};
+    return <Switch label={tool.title} checked={params[field]} onChange={(v) => onPatch({ [field]: v, ...(v ? onFilter : {}) })} />;
   }
   return null;
 }
 
 export function ResetButton({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
-  const show = (tool.kind === 'slider' || tool.kind === 'stepper') && isModified(tool, ctx.params, ctx.defaults);
+  const show = (tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && isModified(tool, ctx.params, ctx.defaults);
   return (
     <motion.span
       initial={false}
@@ -126,7 +133,37 @@ export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
           </PressButton>
         );
       }
-      return <OptionRow label={tool.title} options={tool.options} value={params[tool.field]} onChange={(v) => onPatch(choicePatch(tool, v))} />;
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+          <OptionRow label={tool.title} options={tool.options} value={params[tool.field]} onChange={(v) => onPatch(choicePatch(tool, v, params))} />
+          {tool.note && <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>}
+        </div>
+      );
+    case 'diffusion': {
+      const enabled = params[tool.enabledBy];
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+          <OptionRow
+            label={`${tool.title} type`}
+            options={DIFFUSION_FAMILIES}
+            value={params[tool.familyField]}
+            onChange={(v) => onPatch({ [tool.familyField]: v, [tool.enabledBy]: true, ...(params[tool.strengthField] <= 0 ? { [tool.strengthField]: 0.5 } : {}) })}
+          />
+          <Slider
+            label={`${tool.title} strength`}
+            value={params[tool.strengthField]}
+            min={DIFFUSION_STRENGTH.min}
+            max={DIFFUSION_STRENGTH.max}
+            step={DIFFUSION_STRENGTH.step}
+            defaultValue={defaults[tool.strengthField]}
+            valueText={enabled ? `${formatStops(params[tool.strengthField])} stop` : 'Off'}
+            disabled={!enabled}
+            onChange={(v) => onPatch({ [tool.strengthField]: v })}
+          />
+          <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>
+        </div>
+      );
+    }
     case 'toggle': {
       const blocked = tool.field === 'inputCctfDecoding' && !decodeAllowed(params.inputColorSpace);
       return <p className="t-subhead secondary" style={{ margin: 0 }}>{blocked ? `Not available for ${params.inputColorSpace}.` : tool.note}</p>;
@@ -144,7 +181,7 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
   }, [selected]);
   return (
     <div role="group" aria-label={`${group.label} tools`} className="scroll-x" style={{ display: 'flex', gap: 4, margin: '0 -20px', padding: '2px 16px' }}>
-      {group.tools.map((tool) => {
+      {visibleTools(group, ctx.params).map((tool) => {
         const isSelected = tool.id === selected;
         const modified = isModified(tool, ctx.params, ctx.defaults);
         const dimmed = !toolEnabled(tool, ctx.params) || (tool.kind === 'toggle' && !ctx.params[tool.field]);
@@ -199,7 +236,7 @@ export function InspectorTool({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
           {locked && <Icon name="lock" size={13} />}
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {(tool.kind === 'slider' || tool.kind === 'stepper') && <span className="t-subhead secondary tabular">{valueText(tool, ctx.params)}</span>}
+          {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && <span className="t-subhead secondary tabular">{valueText(tool, ctx.params)}</span>}
           <ResetButton tool={tool} ctx={ctx} />
           <ToolSwitch tool={tool} ctx={ctx} />
         </span>

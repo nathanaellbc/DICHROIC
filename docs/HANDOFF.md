@@ -5,31 +5,37 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, rilis PWA)
+## Posisi sekarang (diperbarui 2026-09-29, batch parameter 2 + difusi)
 
-- **Branch:** `claude/admiring-galileo-1vwlrk`, dari `main` setelah PR #5 (UI).
+- **Batch parameter 2 dan difusi selesai** (spec Fase 2 §6b): DIR couplers,
+  preflash, mode proses scan film + empat film reversal, dan filter difusi
+  kamera/enlarger lewat FFT df64. Semua field kecuali `rgbToRawMethod` kini
+  `verified`. Gerbang baru: `test/parity/{dirParams,preflash,scanFilm,
+  diffusionParams,diffusionFft}.test.ts`, `test/diffusionBudget.test.ts`.
+- **UI:** grup keempat "Develop" (DIR + preflash), alat Process di grup Film,
+  Lens Filter / Enlarger di Texture. Mode scan menyembunyikan alat tahap
+  print dan slider Exposure mengatur exposure film langsung; memilih slide
+  film memindah ke Scan. Ekspor yang diperkecil karena memori difusi
+  diumumkan di toast.
+- **Toolchain Python** kini bisa dipasang di container Linux (lihat
+  `tools/README.md`, bagian Fase 2D) -- fixture baru dibangkitkan di sana.
+- **Belum:** uji di iPhone fisik (terutama kecepatan FFT df64: di
+  SwiftShader 360x240 ~6 s, di GPU sungguhan jauh lebih cepat tetapi belum
+  diukur), suite penuh 2x di NVIDIA (perbaikan NaN dan semua gerbang 2D).
+- **Tidak dibuka (tanpa oracle Python):** printer lights, HDR PQ/HLG,
+  ProcessNegative, bleach bypass, push/pull Experimental, grain model lain.
+
+### Rilis PWA (2026-09-29, PR #6)
+
 - **PWA selesai:** `src/sw.ts` (vite-plugin-pwa `injectManifest`) mem-precache
   seluruh aplikasi termasuk `data/` (~9,7 MB) dan menambahkan header
   COOP/COEP/CORP ke setiap respons, jadi RAW jalan juga di GitHub Pages.
-  `src/ui/pwa.ts`: pembaruan hanya diaktifkan saat tidak ada foto terbuka;
-  satu muat ulang untuk isolasi bila host tidak mengirim header (tidak
-  diulang bila browser tidak mendukungnya). Ikon dan 11 layar pembuka iPhone
-  dari `tools/gen_icons.mjs`. Deploy: `.github/workflows/deploy.yml` (Pages,
-  base `/<repo>/`) atau `public/_headers` (Cloudflare Pages/Netlify).
-- **Foto HP:** `io/metadata.ts` menerapkan Orientation EXIF (JPEG/PNG/TIFF)
-  dan memakai deskripsi ICC (Display P3 dari iPhone) sebagai saran colour
-  space. HEIC/AVIF/WebP lewat decoder browser (`ui/engine/browserDecode.ts`).
-  `image/heic` sengaja tidak ada di `accept`, supaya iOS mengonversi ke JPEG.
-- **Prewarm:** `Session.prewarm()` mengompilasi measured (grain hidup/mati)
-  dan lut dengan frame 8x8 lewat antrean render; UI memanggilnya setelah
-  `init`. `graphFor` kini berbagi `Promise` (graf duplikat hilang) dan
-  `exportCube` lewat antrean.
-- **Diverifikasi** di Chromium headless (SwiftShader): pasang, reload
-  offline, buka JPEG ber-Orientation 6 / WebP / DNG offline, isolasi dari
-  service worker di host tanpa header, subpath `/DICHROIC/`. Suite Session di
-  lavapipe: prewarm lulus; satu-satunya gagal tetap tile-vs-full 2,09e-6.
-- **Belum:** uji di iPhone fisik (WebGPU Safari, presisi df64 Metal, memori),
-  suite penuh 2x di NVIDIA setelah perbaikan NaN (lihat di bawah).
+  Deploy: `.github/workflows/deploy.yml` (Pages, base `/<repo>/`), situs di
+  https://nathanaellbc.github.io/DICHROIC/.
+- **Foto HP:** Orientation EXIF, saran colour space dari ICC, HEIC/AVIF/WebP
+  lewat decoder browser. **Prewarm** shader setelah `init`.
+- **Arah kontrol (PR #7):** Exposure utama dan filter C/M/Y dibalik di UI
+  (semantik kamar gelap), auto exposure hanya untuk input linear.
 
 ### UI versi pertama (2026-09-29, PR #5)
 
@@ -51,7 +57,7 @@ peta jalan untuk melanjutkan.
 | 2A, 2A.5, 2B, 2C | selesai | lihat rencana masing-masing |
 | UI versi pertama | **selesai** (compact + regular) | DESIGN.md pemilik proyek; kanvas Claude Design |
 | PWA (manifest, ikon, precache, hosting COOP/COEP) | **selesai** | spec induk §5.3; README "Installing and hosting" |
-| Batch parameter 2, difusi FFT | belum | spec Fase 2 §8 |
+| Batch parameter 2, difusi FFT | **selesai** | spec Fase 2 §6b |
 
 ## UI: peta cepat
 

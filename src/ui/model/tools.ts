@@ -4,9 +4,10 @@
  * parity Fase 2C (`tools/param_cases.py`, spec Fase 2 §6.1), misalnya unsharp
  * berhenti di 2,5 karena di atasnya derau f32 melewati ambang.
  */
-import type { FilmFormat, RenderParams } from '../../params/renderParams';
+import type { DiffusionFilterFamily, FilmFormat, RenderParams } from '../../params/renderParams';
+import { isSlideFilm } from './stocks';
 
-export type GroupId = 'film' | 'color' | 'texture';
+export type GroupId = 'film' | 'color' | 'darkroom' | 'texture';
 
 type NumericField = {
   [K in keyof RenderParams]: RenderParams[K] extends number ? K : never;
@@ -16,9 +17,10 @@ type BooleanField = {
 }[keyof RenderParams];
 
 export type IconName =
-  | 'exposure' | 'auto' | 'print' | 'negative' | 'pushPull' | 'format'
+  | 'exposure' | 'auto' | 'print' | 'negative' | 'pushPull' | 'format' | 'process'
   | 'dot' | 'input' | 'decode' | 'output'
-  | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion';
+  | 'couplers' | 'layers' | 'edge' | 'spread' | 'flash'
+  | 'halation' | 'grain' | 'seed' | 'glare' | 'sharpen' | 'diffusion' | 'enlargerFilter';
 
 interface ToolBase {
   id: string;
@@ -27,6 +29,11 @@ interface ToolBase {
   icon: IconName;
   /** Warna ikon identitas (filter C/M/Y). */
   tint?: string;
+  /**
+   * Fase 2D: visibilitas per mode proses. `print` = hanya saat mencetak
+   * (tahap print tidak ada saat scan film), `scan` = hanya saat scan.
+   */
+  mode?: 'print' | 'scan';
 }
 
 export interface SliderTool extends ToolBase {
@@ -74,9 +81,21 @@ export interface ChoiceOption<V extends string = string> {
 
 export interface ChoiceTool extends ToolBase {
   kind: 'choice';
-  field: 'filmFormat' | 'inputColorSpace' | 'outputColorSpace';
+  field: 'filmFormat' | 'inputColorSpace' | 'outputColorSpace' | 'process';
   options: readonly ChoiceOption[];
   note?: string;
+}
+
+/**
+ * Filter difusi (Fase 2D): jenis filter (4 family Python) dan kekuatannya
+ * dalam stop filter komersial, dengan sakelar sendiri.
+ */
+export interface DiffusionTool extends ToolBase {
+  kind: 'diffusion';
+  enabledBy: 'cameraDiffusionEnabled' | 'printDiffusionEnabled';
+  familyField: 'cameraDiffusionFamily' | 'printDiffusionFamily';
+  strengthField: 'cameraDiffusionStrength' | 'printDiffusionStrength';
+  note: string;
 }
 
 export interface LockedTool extends ToolBase {
@@ -84,7 +103,7 @@ export interface LockedTool extends ToolBase {
   note: string;
 }
 
-export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | LockedTool;
+export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | DiffusionTool | LockedTool;
 
 export interface ToolGroup {
   id: GroupId;
@@ -134,28 +153,55 @@ export const DECODE_WITHOUT_ORACLE: readonly string[] = [
   'Rec.709 Gamma 2.4',
 ];
 
+export const PROCESS_MODES: readonly ChoiceOption[] = [
+  { value: 'printSimulation', label: 'Print' },
+  { value: 'scanNegative', label: 'Scan' },
+];
+
+export const DIFFUSION_FAMILIES: readonly ChoiceOption<DiffusionFilterFamily>[] = [
+  { value: 'glimmerglass', label: 'Glimmerglass' },
+  { value: 'black_pro_mist', label: 'Black Pro-Mist' },
+  { value: 'pro_mist', label: 'Pro-Mist' },
+  { value: 'cinebloom', label: 'CineBloom' },
+];
+
 export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'film',
     label: 'Film',
     tools: [
-      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
-      { kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the negative. Best for RAW and linear files; phone photos are already exposed.' },
-      { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, colour and grain more than brightness.' },
+      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
+      { kind: 'slider', id: 'scanExposureEv', field: 'filmExposureEv', mode: 'scan', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Exposure of the film itself. Scanning has no print step, so this sets the brightness directly.' },
+      { kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the film. Best for RAW and linear files; phone photos are already exposed.' },
+      { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', mode: 'print', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, color and grain more than brightness.' },
       { kind: 'stepper', id: 'filmPushPullStops', field: 'filmPushPullStops', label: 'Push/Pull', title: 'Push / Pull', icon: 'pushPull', min: -2, max: 2, step: 0.5 },
       { kind: 'choice', id: 'filmFormat', field: 'filmFormat', label: 'Format', title: 'Film Format', icon: 'format', options: FILM_FORMATS, note: 'Smaller formats enlarge the grain and halation.' },
+      { kind: 'choice', id: 'process', field: 'process', label: 'Process', title: 'Process', icon: 'process', options: PROCESS_MODES, note: 'Print enlarges the negative onto paper. Scan digitizes the film itself: slides come out positive, negatives as orange negatives.' },
     ],
   },
   {
     id: 'color',
     label: 'Color',
     tools: [
-      { kind: 'slider', id: 'filterC', field: 'filterC', invert: true, label: 'Cyan', title: 'Cyan', icon: 'dot', tint: '#3CD3FE', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds cyan, − adds red.' },
-      { kind: 'slider', id: 'filterMShift', field: 'filterMShift', invert: true, label: 'Magenta', title: 'Magenta', icon: 'dot', tint: '#DB34F2', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds magenta, − adds green.' },
-      { kind: 'slider', id: 'filterYShift', field: 'filterYShift', invert: true, label: 'Yellow', title: 'Yellow', icon: 'dot', tint: '#FFD600', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds yellow, − adds blue.' },
+      { kind: 'slider', id: 'filterC', field: 'filterC', invert: true, mode: 'print', label: 'Cyan', title: 'Cyan', icon: 'dot', tint: '#3CD3FE', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds cyan, − adds red.' },
+      { kind: 'slider', id: 'filterMShift', field: 'filterMShift', invert: true, mode: 'print', label: 'Magenta', title: 'Magenta', icon: 'dot', tint: '#DB34F2', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds magenta, − adds green.' },
+      { kind: 'slider', id: 'filterYShift', field: 'filterYShift', invert: true, mode: 'print', label: 'Yellow', title: 'Yellow', icon: 'dot', tint: '#FFD600', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds yellow, − adds blue.' },
       { kind: 'choice', id: 'inputColorSpace', field: 'inputColorSpace', label: 'Input', title: 'Input Color Space', icon: 'input', options: INPUT_COLOR_SPACES },
       { kind: 'toggle', id: 'inputCctfDecoding', field: 'inputCctfDecoding', label: 'Decode', title: 'Decode Transfer Curve', icon: 'decode', note: 'Linearizes encoded input (like a JPEG) before exposing the film. Leave off for linear or RAW files.' },
       { kind: 'choice', id: 'outputColorSpace', field: 'outputColorSpace', label: 'Output', title: 'Output Color Space', icon: 'output', options: OUTPUT_COLOR_SPACES },
+    ],
+  },
+  {
+    id: 'darkroom',
+    label: 'Develop',
+    tools: [
+      { kind: 'slider', id: 'dirCouplersAmount', field: 'dirCouplersAmount', enabledBy: 'dirCouplersEnabled', label: 'Couplers', title: 'DIR Couplers', icon: 'couplers', min: 0, max: 1.4, step: 0.05, digits: 2, note: 'Development inhibitors built into the film. They lift color saturation and edge contrast; 1.00 is the film as designed.' },
+      { kind: 'slider', id: 'dirCouplersInhibitionInterlayer', field: 'dirCouplersInhibitionInterlayer', label: 'Interlayer', title: 'Interlayer Effect', icon: 'layers', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much each color layer holds back the others. Lower it for softer, less saturated color.' },
+      { kind: 'slider', id: 'dirCouplersInhibitionSameLayer', field: 'dirCouplersInhibitionSameLayer', label: 'Same Layer', title: 'Same-Layer Effect', icon: 'edge', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much each layer holds back itself: tonal contrast and edge sharpness.' },
+      { kind: 'slider', id: 'dirCouplersDiffusionUm', field: 'dirCouplersDiffusionUm', label: 'Spread', title: 'Inhibitor Spread', icon: 'spread', min: 0, max: 60, step: 1, digits: 0, unit: ' µm', note: 'How far the inhibitors travel in the emulsion. Wider gives broader edge effects.' },
+      { kind: 'slider', id: 'preflashExposure', field: 'preflashExposure', mode: 'print', label: 'Preflash', title: 'Preflash', icon: 'flash', min: 0, max: 1, step: 0.01, digits: 2, note: 'A faint, even exposure of the paper before printing. Opens up the shadows and lowers print contrast.' },
+      { kind: 'slider', id: 'preflashMFilterShift', field: 'preflashMFilterShift', invert: true, mode: 'print', label: 'Flash Magenta', title: 'Preflash Magenta', icon: 'dot', tint: '#DB34F2', min: -60, max: 60, step: 1, digits: 0, note: 'Tint of the preflash light. + adds magenta to the shadows, − adds green.' },
+      { kind: 'slider', id: 'preflashYFilterShift', field: 'preflashYFilterShift', invert: true, mode: 'print', label: 'Flash Yellow', title: 'Preflash Yellow', icon: 'dot', tint: '#FFD600', min: -60, max: 60, step: 1, digits: 0, note: 'Tint of the preflash light. + adds yellow to the shadows, − adds blue.' },
     ],
   },
   {
@@ -165,12 +211,37 @@ export const GROUPS: readonly ToolGroup[] = [
       { kind: 'slider', id: 'halationAmount', field: 'halationAmount', enabledBy: 'halationEnabled', label: 'Halation', title: 'Halation', icon: 'halation', min: 0, max: 2.5, step: 0.05, digits: 2 },
       { kind: 'slider', id: 'grainAmount', field: 'grainAmount', enabledBy: 'grainEnabled', label: 'Grain', title: 'Grain', icon: 'grain', min: 0, max: 2, step: 0.05, digits: 2 },
       { kind: 'stepper', id: 'grainSeed', field: 'grainSeed', label: 'Seed', title: 'Grain Seed', icon: 'seed', min: 1, max: 9999, step: 1 },
-      { kind: 'slider', id: 'glarePercent', field: 'glarePercent', enabledBy: 'glareEnabled', label: 'Glare', title: 'Scanner Glare', icon: 'glare', min: 0, max: 0.2, step: 0.005, digits: 3 },
+      { kind: 'slider', id: 'glarePercent', field: 'glarePercent', enabledBy: 'glareEnabled', mode: 'print', label: 'Glare', title: 'Scanner Glare', icon: 'glare', min: 0, max: 0.2, step: 0.005, digits: 3 },
       { kind: 'slider', id: 'scannerUnsharpAmount', field: 'scannerUnsharpAmount', label: 'Sharpen', title: 'Scanner Sharpening', icon: 'sharpen', min: 0, max: 2.5, step: 0.05, digits: 2 },
-      { kind: 'locked', id: 'diffusion', label: 'Diffusion', title: 'Diffusion Filter', icon: 'diffusion', note: 'Coming soon. Camera and enlarger diffusion need a GPU feature that isn’t ready yet.' },
+      { kind: 'diffusion', id: 'cameraDiffusion', enabledBy: 'cameraDiffusionEnabled', familyField: 'cameraDiffusionFamily', strengthField: 'cameraDiffusionStrength', label: 'Lens Filter', title: 'Lens Diffusion Filter', icon: 'diffusion', note: 'A mist or bloom filter on the camera lens: highlights glow and spread before they reach the film.' },
+      { kind: 'diffusion', id: 'printDiffusion', enabledBy: 'printDiffusionEnabled', familyField: 'printDiffusionFamily', strengthField: 'printDiffusionStrength', mode: 'print', label: 'Enlarger', title: 'Enlarger Diffusion Filter', icon: 'enlargerFilter', note: 'The same filter under the enlarger lens: shadows bleed softly into the print instead of highlights.' },
     ],
   },
 ];
+
+/** Stop filter komersial (0, 1/8 .. 2) untuk slider strength difusi. */
+export const DIFFUSION_STRENGTH = { min: 0, max: 2, step: 0.125 } as const;
+
+export function isScanMode(params: Pick<RenderParams, 'process'>): boolean {
+  return params.process === 'scanNegative';
+}
+
+/** Alat yang berlaku untuk mode proses saat ini (Fase 2D). */
+export function visibleTools(group: ToolGroup, params: Pick<RenderParams, 'process'>): Tool[] {
+  const mode = isScanMode(params) ? 'scan' : 'print';
+  return group.tools.filter((tool) => !tool.mode || tool.mode === mode);
+}
+
+/** Stop filter sebagai pecahan yang lazim di label filter: 1/8, 1/4, 1/2, 1, 2. */
+export function formatStops(value: number): string {
+  if (value <= 0) return '0';
+  const fractions: Array<[number, string]> = [[0.125, '⅛'], [0.25, '¼'], [0.375, '⅜'], [0.5, '½'], [0.625, '⅝'], [0.75, '¾'], [0.875, '⅞']];
+  const whole = Math.floor(value);
+  const rest = value - whole;
+  const frac = fractions.find(([f]) => Math.abs(f - rest) < 1e-6)?.[1] ?? '';
+  if (whole === 0) return frac || formatNumber(value, 3, false);
+  return `${whole}${frac}`;
+}
 
 export function findTool(id: string): Tool {
   for (const group of GROUPS) {
@@ -223,6 +294,10 @@ export function valueText(tool: Tool, params: RenderParams): string {
       return params[tool.field] ? 'On' : 'Off';
     case 'choice':
       return tool.options.find((o) => o.value === params[tool.field])?.label ?? String(params[tool.field]);
+    case 'diffusion': {
+      if (!params[tool.enabledBy] || params[tool.strengthField] <= 0) return 'Off';
+      return formatStops(params[tool.strengthField]);
+    }
     case 'locked':
       return '';
   }
@@ -236,6 +311,12 @@ export function isModified(tool: Tool, params: RenderParams, defaults: RenderPar
     case 'toggle':
     case 'choice':
       return params[tool.field] !== defaults[tool.field];
+    case 'diffusion':
+      return (
+        params[tool.enabledBy] !== defaults[tool.enabledBy] ||
+        params[tool.familyField] !== defaults[tool.familyField] ||
+        params[tool.strengthField] !== defaults[tool.strengthField]
+      );
     case 'locked':
       return false;
   }
@@ -251,6 +332,12 @@ export function resetPatch(tool: Tool, defaults: RenderParams): Partial<RenderPa
     case 'toggle':
     case 'choice':
       return { [tool.field]: defaults[tool.field] };
+    case 'diffusion':
+      return {
+        [tool.enabledBy]: defaults[tool.enabledBy],
+        [tool.familyField]: defaults[tool.familyField],
+        [tool.strengthField]: defaults[tool.strengthField],
+      };
     case 'locked':
       return {};
   }
@@ -260,10 +347,32 @@ export function decodeAllowed(inputColorSpace: string): boolean {
   return !DECODE_WITHOUT_ORACLE.includes(inputColorSpace);
 }
 
-/** Patch pilihan; input tanpa oracle decode ikut mematikan decode. */
-export function choicePatch(tool: ChoiceTool, value: string): Partial<RenderParams> {
+/** Film negatif bawaan saat kembali ke mode print dari slide film. */
+export const DEFAULT_NEGATIVE = 'kodak_portra_400';
+
+/**
+ * Patch pilihan. Input tanpa oracle decode ikut mematikan decode. Kembali ke
+ * mode print dengan slide film terpilih mengganti film ke negatif bawaan
+ * (film reversal hanya bisa di-scan).
+ */
+export function choicePatch(tool: ChoiceTool, value: string, params?: Pick<RenderParams, 'film'>): Partial<RenderParams> {
   if (tool.field === 'inputColorSpace' && !decodeAllowed(value)) return { inputColorSpace: value, inputCctfDecoding: false };
+  if (tool.field === 'process' && value === 'printSimulation' && params && isSlideFilm(params.film)) {
+    return { process: 'printSimulation', film: DEFAULT_NEGATIVE };
+  }
   return { [tool.field]: value } as Partial<RenderParams>;
+}
+
+/**
+ * Patch memilih stok (Fase 2D): slide film memindah proses ke scan; kembali
+ * ke negatif dari slide film memindah ke print. Negatif yang dipilih saat
+ * sudah scan tetap di-scan (scan negatif disengaja lewat alat Process).
+ */
+export function stockPatch(kind: 'film' | 'paper', id: string, params: Pick<RenderParams, 'film' | 'process'>): Partial<RenderParams> {
+  if (kind === 'paper') return { paper: id };
+  if (isSlideFilm(id)) return { film: id, process: 'scanNegative' };
+  if (isSlideFilm(params.film) && params.process === 'scanNegative') return { film: id, process: 'printSimulation' };
+  return { film: id };
 }
 
 /** Nilai slider tanpa galat pembulatan biner (0.1 + 0.2), dijepit ke rentang. */

@@ -505,6 +505,39 @@ Rencana dan status per task: `docs/superpowers/plans/2026-09-28-dichroic-phase2c
 
 ---
 
+## 6b. 2D — Batch parameter 2 dan difusi (2026-09-29, selesai)
+
+Setiap field dibuka lewat gerbang parity Python di jalur produksi
+(`buildRenderPlan`), ambang 1e-5 per piksel, tanpa pelonggaran.
+
+- **DIR couplers** (`dirCouplersEnabled/Amount/InhibitionSameLayer/
+  InhibitionInterlayer/DiffusionUm`). Matriks dan kurva sebelum DIR dihitung
+  host per render (`src/host/dirCouplers.ts`, binding `dirFrame`), jadi tidak
+  masuk kunci arena. `np.interp` diport persis (`binary_search_with_guess`):
+  pada amount besar `log_exposure_0` terlipat dan pencarian biner biasa
+  meleset 0.44. Rentang digerbangi `amount x max(inhibisi) <= 1.4` (lipatan
+  paling awal 1.45, Portra 800 Push 2; di atas itu derau f32 melewati ambang,
+  2e-5 pada amount 2) dan difusi 0..60 um; di luar itu plan menolak.
+- **Preflash** (`preflashExposure`, `preflashMFilterShift`,
+  `preflashYFilterShift`): vektor `_compute_raw_preflash` per render
+  (`src/host/preflash.ts`), ditambahkan setelah faktor midgray. Berlaku juga
+  di `.cube`.
+- **Mode proses** (`process: 'printSimulation' | 'scanNegative'`, OFX
+  `ProcessMode`; Python `io.scan_film`): rantai tanpa tahap print, scanner
+  membaca `cmy_film` dengan data FILM, tanpa glare. Membuka empat film
+  reversal (develop, DIR, dan grain profil `positive`). `ProcessNegative` OFX
+  tidak punya padanan Python dan tidak dibuka.
+- **Filter difusi** kamera dan enlarger (family, strength 0..2): konvolusi FFT
+  2D df64 di GPU (`src/shaders/fft.wgsl`, `stages/diffusionFft.ts`). FFT f32
+  tidak cukup (6e-5..5.5e-4 pada log10 di bayangan dalam di samping
+  highlight). Frame harus utuh; render penuh yang bidang FFT-nya melebihi
+  256 MB per bidang (atau batas binding device) diperkecil `Session` dan UI
+  memberi tahu ukuran ekspornya.
+
+**Tidak dibuka (tanpa oracle Python):** printer lights, keluaran HDR
+(PQ/HLG), `ProcessNegative`, bleach bypass, push/pull `Experimental`, model
+grain selain Production, `rgbToRawMethod` selain hanatos2025.
+
 ## 7. Testing
 
 - `npm test` tetap menjalankan seluruh suite; berkas baru mengikuti pola yang
