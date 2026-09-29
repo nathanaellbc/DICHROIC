@@ -59,6 +59,7 @@
  * numerik yang menutupnya ke ~3e-5 (dari >30x lebih besar sebelumnya).
  */
 
+import { nanmaxPerChannel } from './dirCouplers';
 import type { AssetBundle } from '../profiles/load';
 import { ArenaBuilder } from '../engine/arena';
 import type { Arenas } from '../engine/arena';
@@ -902,158 +903,6 @@ function addScannerPostDynamicData(
 }
 
 /**
- * Pencarian biner + interpolasi linear atas larik `(xp, fp)` naik --
- * replika host (f64) dari `np.interp` NumPy (bukan `fast_interp` Python,
- * yang dipakai `interpolate_exposure_to_density`/`developFilmDensity`).
- * `couplers.py::compute_density_curves_before_dir_couplers` memanggil
- * `np.interp` LANGSUNG (`import numpy as np`), bukan `fast_interp` --
- * kedua fungsi berbagi algoritma dasar yang sama (pencarian biner +
- * interpolasi linear, klem di kedua ujung ke `fp[0]`/`fp[-1]`), jadi
- * pencarian biner yang sama (identik dengan `curveExposureValue`/
- * `interpDensityCurve` WGSL) dipakai ulang di sini untuk KEDUANYA --
- * dibuktikan cocok terhadap fixture Python sampai ~1e-7 lewat skrip
- * host-math sekali-pakai sebelum WGSL ditulis (lih. task-13-report.md).
- *
- * `xp` TIDAK divalidasi naik monoton -- kalau hulu memberi array yang
- * tidak monoton, pencarian biner ini mereproduksi PERSIS perilaku
- * `np.interp` untuk kasus itu (keduanya berasumsi naik tanpa memeriksa),
- * bukan melempar galat atau mengurutkan ulang.
- */
-function npInterpOne(x: number, xp: ArrayLike<number>, fp: ArrayLike<number>): number {
-  const count = xp.length;
-  if (count === 1) return fp[0]!;
-  const first = xp[0]!;
-  const last = xp[count - 1]!;
-  if (x <= first) return fp[0]!;
-  if (x >= last) return fp[count - 1]!;
-  let lo = 0;
-  let hi = count - 1;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (xp[mid]! <= x) lo = mid;
-    else hi = mid;
-  }
-  const x0 = xp[lo]!;
-  const x1 = xp[hi]!;
-  const y0 = fp[lo]!;
-  const y1 = fp[hi]!;
-  const dx = x1 - x0;
-  const t = dx !== 0 ? (x - x0) / dx : 0;
-  return y0 + (y1 - y0) * t;
-}
-
-/** `np.nanmax(density_curves, axis=0)` -- max per kanal, NaN diabaikan. */
-function nanmaxPerChannel(densityCurves: ArrayLike<number>, count: number): [number, number, number] {
-  const out: [number, number, number] = [-Infinity, -Infinity, -Infinity];
-  for (let j = 0; j < count; j += 1) {
-    for (let c = 0; c < 3; c += 1) {
-      const v = densityCurves[j * 3 + c]!;
-      if (!Number.isNaN(v) && v > out[c]!) out[c] = v;
-    }
-  }
-  return out;
-}
-
-/**
- * Port `compute_dir_couplers_matrix(dir_couplers) * dir_couplers.amount`
- * (`model/couplers.py`). Tata letak KELUARAN: baris-mayor donor*3+penerima
- * -- SAMA dengan `contract('jk,km->jm', ...)` Python (`k`=donor, `m`=
- * penerima) dan dengan `correctionFromDensity` OFX (`dirFloats[kDirMatrix +
- * k*3+m]`, dibuktikan dari indeks `M[0],M[3],M[6]` yang dipakai untuk
- * keluaran kanal 0 di `SpektraDir.comp`).
- *
- * `inhibition_samelayer`/`inhibition_interlayer`/`amount` TIDAK diekspos
- * sebagai `CoreParams` dinamis -- `params_builder.py` (kedua repo hulu)
- * tidak pernah meng-override ketiganya dari default `DirCouplersParams`
- * (1.0/1.0/1.0) untuk konfigurasi manapun, jadi mereka konstanta host di
- * sini, bukan field arena/CoreParams. Baru perlu jadi dinamis kalau ada
- * kontrol UI "kekuatan DIR" di kemudian hari.
- */
-function computeDirCouplersMatrix(
-  gammaSameLayerRgb: ArrayLike<number>,
-  gammaRToGb: ArrayLike<number>,
-  gammaGToRb: ArrayLike<number>,
-  gammaBToRg: ArrayLike<number>,
-  inhibitionSameLayer: number,
-  inhibitionInterlayer: number,
-  amount: number,
-): Float32Array {
-  const m = new Float64Array(9);
-  m[0 * 3 + 0] = gammaSameLayerRgb[0]! * inhibitionSameLayer;
-  m[1 * 3 + 1] = gammaSameLayerRgb[1]! * inhibitionSameLayer;
-  m[2 * 3 + 2] = gammaSameLayerRgb[2]! * inhibitionSameLayer;
-  m[0 * 3 + 1]! += gammaRToGb[0]! * inhibitionInterlayer;
-  m[0 * 3 + 2]! += gammaRToGb[1]! * inhibitionInterlayer;
-  m[1 * 3 + 0]! += gammaGToRb[0]! * inhibitionInterlayer;
-  m[1 * 3 + 2]! += gammaGToRb[1]! * inhibitionInterlayer;
-  m[2 * 3 + 0]! += gammaBToRg[0]! * inhibitionInterlayer;
-  m[2 * 3 + 1]! += gammaBToRg[1]! * inhibitionInterlayer;
-  const out = new Float32Array(9);
-  for (let i = 0; i < 9; i += 1) out[i] = m[i]! * amount;
-  return out;
-}
-
-/**
- * Port `compute_density_curves_before_dir_couplers` (`model/couplers.py`)
- * -- kurva densitas "sebelum" efek coupler DIR, dihitung SEKALI per stock
- * (bukan per piksel): untuk setiap kanal keluaran `i`, kurva densitas
- * aslinya di-resample pada grid `logExposure` yang SAMA, tapi terhadap
- * sumbu-x yang sudah digeser oleh jumlah coupler yang "dilepas" tetangga-
- * tetangganya (`logExposure0`). Hasilnya tetap berbagi grid-x `logExposure`
- * yang sama dengan `densityCurves` asli -- shader hanya perlu mengganti
- * tabel-y yang dibaca `interpDensityCurve`, BUKAN pencarian binernya.
- *
- * `positive` (film pembalik/reversal) membalik tanda sebelum DAN sesudah
- * interpolasi (`-np.interp(..., -density_curves[:,i])`) dan memakai
- * "silver density" `nanmax - density_curves` alih-alih `density_curves`
- * apa adanya -- diimplementasikan untuk kelengkapan (baik untuk stock print
- * positif kelak), meski setiap fixture `cmy_film` gerbang Task 13 memakai
- * `kodak_portra_400` (`type: "negative"`, cabang `positive=false`, TIDAK
- * pernah menempuh cabang ini).
- */
-function computeDirDensityCurvesBeforeCouplers(
-  densityCurves: ArrayLike<number>,
-  logExposure: ArrayLike<number>,
-  matrix: ArrayLike<number>,
-  positive: boolean,
-  count: number,
-): Float32Array {
-  const silver = new Float64Array(count * 3);
-  if (positive) {
-    const maxPerChannel = nanmaxPerChannel(densityCurves, count);
-    for (let j = 0; j < count; j += 1) {
-      for (let c = 0; c < 3; c += 1) silver[j * 3 + c] = maxPerChannel[c]! - densityCurves[j * 3 + c]!;
-    }
-  } else {
-    for (let i = 0; i < count * 3; i += 1) silver[i] = densityCurves[i]!;
-  }
-
-  const logExposure0 = new Float64Array(count * 3); // [j*3+m]
-  for (let j = 0; j < count; j += 1) {
-    for (let m = 0; m < 3; m += 1) {
-      let acc = 0;
-      for (let k = 0; k < 3; k += 1) acc += silver[j * 3 + k]! * matrix[k * 3 + m]!;
-      logExposure0[j * 3 + m] = logExposure[j]! - acc;
-    }
-  }
-
-  const out = new Float32Array(count * 3);
-  for (let channel = 0; channel < 3; channel += 1) {
-    const xp = new Float64Array(count);
-    const fp = new Float64Array(count);
-    for (let j = 0; j < count; j += 1) {
-      xp[j] = logExposure0[j * 3 + channel]!;
-      fp[j] = positive ? -densityCurves[j * 3 + channel]! : densityCurves[j * 3 + channel]!;
-    }
-    for (let j = 0; j < count; j += 1) {
-      const y = npInterpOne(logExposure[j]!, xp, fp);
-      out[j * 3 + channel] = positive ? -y : y;
-    }
-  }
-  return out;
-}
-
-/**
  * Hasil pra-hitung arena: empat `ArenaBuilder` yang sudah terisi penuh tapi
  * BELUM menyentuh GPU. Dibangun `precomputeArenaData()`, dikonsumsi
  * `uploadArenas()`. Setiap builder hanya boleh di-`build()` sekali (dijaga
@@ -1189,33 +1038,23 @@ export function precomputeArenaData(
   if (!dirGammaSameLayerRgb || !dirGammaRToGb || !dirGammaGToRb || !dirGammaBToRg) {
     throw new Error(`Stock '${stockId}' tidak punya field gamma DIR coupler`);
   }
-  // `DirCouplersParams` default (`params_schema.py:130-141`) -- lih. komentar
-  // `computeDirCouplersMatrix` untuk kenapa ini konstanta host, bukan param dinamis.
-  const DIR_INHIBITION_SAMELAYER = 1.0;
-  const DIR_INHIBITION_INTERLAYER = 1.0;
-  const DIR_AMOUNT = 1.0;
-  const dirCouplersMatrix = computeDirCouplersMatrix(
-    dirGammaSameLayerRgb,
-    dirGammaRToGb,
-    dirGammaGToRb,
-    dirGammaBToRg,
-    DIR_INHIBITION_SAMELAYER,
-    DIR_INHIBITION_INTERLAYER,
-    DIR_AMOUNT,
-  );
+  // Fase 2D: matriks (`amount`, `inhibition_*`) dan kurva sebelum DIR
+  // dihitung PER RENDER oleh tahap DIR (`src/host/dirCouplers.ts`), karena
+  // ketiga pengalinya kini parameter pengguna. Yang tetap per stock: gamma
+  // preset (`_apply_film_specifics`), densitas maksimum, dan jenis profil.
   const dirIsPositive = stock.type === 'positive';
   const dirDensityMax = nanmaxPerChannel(curveStock.densityCurves, curveStock.logExposure.length);
-  const dirDensityCurvesBeforeCouplers = computeDirDensityCurvesBeforeCouplers(
-    curveStock.densityCurves,
-    curveStock.logExposure,
-    dirCouplersMatrix,
-    dirIsPositive,
-    curveStock.logExposure.length,
+  stockBuilder.add(
+    'dirGammas',
+    Float32Array.of(
+      dirGammaSameLayerRgb[0]!, dirGammaSameLayerRgb[1]!, dirGammaSameLayerRgb[2]!,
+      dirGammaRToGb[0]!, dirGammaRToGb[1]!,
+      dirGammaGToRb[0]!, dirGammaGToRb[1]!,
+      dirGammaBToRg[0]!, dirGammaBToRg[1]!,
+    ),
   );
-  stockBuilder.add('dirCouplersMatrix', dirCouplersMatrix);
   stockBuilder.add('dirDensityMax', Float32Array.from(dirDensityMax));
   stockBuilder.add('dirIsPositive', Float32Array.of(dirIsPositive ? 1 : 0));
-  stockBuilder.add('dirDensityCurvesBeforeCouplers', dirDensityCurvesBeforeCouplers);
 
   // --- Task 14 (Halation): back-reflection strength/sigma presets. Baked
   // per-stock by `tools/bake_web_assets.py::pack_stock` from

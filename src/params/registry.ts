@@ -61,6 +61,12 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   glarePercent: 'verified',
   // Fase 2C Task 6: param/unsharp_* (`test/parity/unsharp.test.ts`).
   scannerUnsharpAmount: 'verified',
+  // Fase 2D Task 1: param/dir_* (`test/parity/dirParams.test.ts`).
+  dirCouplersEnabled: 'verified',
+  dirCouplersAmount: 'verified',
+  dirCouplersInhibitionSameLayer: 'verified',
+  dirCouplersInhibitionInterlayer: 'verified',
+  dirCouplersDiffusionUm: 'verified',
 });
 
 export class UnverifiedParameterError extends Error {

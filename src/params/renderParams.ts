@@ -98,6 +98,16 @@ export interface RenderParams {
   glarePercent: number;
   /** Python: `scanner.unsharp_mask[1]` (amount, `:85`). */
   scannerUnsharpAmount: number;
+  /** Python: `film_render.dir_couplers.active` (`:131`). OFX: `dirCouplersAmount > 0`. */
+  dirCouplersEnabled: boolean;
+  /** Python: `film_render.dir_couplers.amount` (`:132`). OFX default 0 -- Python 1 (oracle). */
+  dirCouplersAmount: number;
+  /** Python: `film_render.dir_couplers.inhibition_samelayer` (`:133`). */
+  dirCouplersInhibitionSameLayer: number;
+  /** Python: `film_render.dir_couplers.inhibition_interlayer` (`:134`). */
+  dirCouplersInhibitionInterlayer: number;
+  /** Python: `film_render.dir_couplers.diffusion_size_um` (`:139`); 0 mematikan difusi (dan ekornya). */
+  dirCouplersDiffusionUm: number;
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
@@ -129,4 +139,9 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   glareEnabled: true,
   glarePercent: 0.03,
   scannerUnsharpAmount: 0.7,
+  dirCouplersEnabled: true,
+  dirCouplersAmount: 1,
+  dirCouplersInhibitionSameLayer: 1,
+  dirCouplersInhibitionInterlayer: 1,
+  dirCouplersDiffusionUm: 20,
 });

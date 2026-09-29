@@ -177,6 +177,40 @@ export function resolveEnlargerFilters(
   };
 }
 
+/**
+ * Batas atas `amount * max(inhibition_samelayer, inhibition_interlayer)`
+ * yang digerbangi (Fase 2D Task 1). Di atas ~1.45 kurva sebelum DIR
+ * terlipat (`log_exposure_0` tidak monoton; Portra 800 Push 2 paling awal,
+ * Vision3 500T paling akhir di 2.15): `np.interp` Python tidak bermakna di
+ * sana dan derau f32 GPU melewati ambang parity (2e-5 pada amount 2).
+ */
+export const DIR_MAX_EFFECTIVE = 1.4;
+
+/** Rentang DIR yang digerbangi `param/dir_*`. */
+export function validateDirCouplers(params: RenderParams): void {
+  const { dirCouplersAmount: amount, dirCouplersInhibitionSameLayer: same, dirCouplersInhibitionInterlayer: inter } = params;
+  const baseline = BASELINE_RENDER_PARAMS;
+  if (!(amount >= 0) || !(same >= 0) || !(inter >= 0)) {
+    throw new UnverifiedParameterError('dirCouplersAmount', amount, baseline.dirCouplersAmount, 'amount dan inhibisi DIR tidak boleh negatif');
+  }
+  if (amount * Math.max(same, inter) > DIR_MAX_EFFECTIVE + 1e-9) {
+    throw new UnverifiedParameterError(
+      'dirCouplersAmount',
+      amount,
+      baseline.dirCouplersAmount,
+      `amount x inhibisi maksimum ${DIR_MAX_EFFECTIVE} (kurva sebelum DIR terlipat di atasnya)`,
+    );
+  }
+  if (!(params.dirCouplersDiffusionUm >= 0) || params.dirCouplersDiffusionUm > 60) {
+    throw new UnverifiedParameterError(
+      'dirCouplersDiffusionUm',
+      params.dirCouplersDiffusionUm,
+      baseline.dirCouplersDiffusionUm,
+      'difusi DIR digerbangi 0..60 um',
+    );
+  }
+}
+
 export function buildRenderPlan(
   params: RenderParams,
   bundle: AssetBundle,
@@ -186,6 +220,7 @@ export function buildRenderPlan(
   validateRenderParams(params);
   validateStocks(bundle, params.film, params.paper);
   validateOutputColorSpace(bundle, params.outputColorSpace);
+  validateDirCouplers(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
@@ -311,10 +346,22 @@ function inputDecoder(bundle: AssetBundle, colorSpace: number): (value: number) 
  *   `CUBE_DISABLED_EFFECTS`.
  */
 function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFormatMm: number): FrameParams {
+  // Fase 2D Task 1: kimia DIR (matriks) berlaku di kedua keluarga; difusinya
+  // spasial, jadi `lut_mode` (`deactivate_spatial_effects`) menolkannya.
+  // `active=False` Python melewati koreksi sepenuhnya -- setara amount 0
+  // (matriks nol: kurva sebelum DIR = kurva asli, koreksi nol), digerbangi
+  // `param/dir_off`.
+  const dir = {
+    dirCouplersAmount: params.dirCouplersEnabled ? params.dirCouplersAmount : 0,
+    dirInhibitionSameLayer: params.dirCouplersInhibitionSameLayer,
+    dirInhibitionInterlayer: params.dirCouplersInhibitionInterlayer,
+    dirDiffusionUm: family === 'lut' || !params.dirCouplersEnabled ? 0 : params.dirCouplersDiffusionUm,
+  };
   if (family === 'lut') {
-    return { filmFormatMm, exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1 };
+    return { filmFormatMm, exposureCompensationEv: 0, printExposureCompensation: false, printExposure: 1, ...dir };
   }
   return {
+    ...dir,
     filmFormatMm,
     exposureCompensationEv: params.filmExposureEv,
     printExposureCompensation: true,
@@ -347,7 +394,8 @@ function measuredOverlapPx(params: RenderParams, bundle: AssetBundle, image: Pla
     halation: params.halationEnabled
       ? halationRadiusPx(pixelSizeUm, [firstSigma[0]!, firstSigma[1]!, firstSigma[2]!])
       : 0,
-    dir: dirRadiusPx(pixelSizeUm), // DIR spasial selalu aktif di keluarga measured
+    // DIR spasial aktif di keluarga measured kecuali difusi dinolkan (Fase 2D).
+    dir: dirRadiusPx(pixelSizeUm, params.dirCouplersEnabled ? params.dirCouplersDiffusionUm : 0),
     grain: params.grainEnabled,
     unsharp: params.scannerUnsharpAmount > 0,
   });

@@ -147,7 +147,23 @@ describe('buildRenderPlan -> FrameParams', () => {
       grainSeed: 1,
       grainAmount: 1,
       inputDecodeScale: 1,
+      dirCouplersAmount: 1,
+      dirInhibitionSameLayer: 1,
+      dirInhibitionInterlayer: 1,
+      dirDiffusionUm: 20,
     });
+  });
+
+  it('DIR: active=False -> amount 0 tanpa difusi; cube menolkan difusi; rentang lipatan ditolak', () => {
+    const off = buildRenderPlan({ ...BASELINE_RENDER_PARAMS, dirCouplersEnabled: false }, bundle, image('gray_ramp'), 'image');
+    expect(off.frame).toMatchObject({ dirCouplersAmount: 0, dirDiffusionUm: 0 });
+    const cube = buildRenderPlan({ ...BASELINE_RENDER_PARAMS, dirCouplersAmount: 1.2 }, bundle, image('gray_ramp'), 'cube');
+    expect(cube.frame).toMatchObject({ dirCouplersAmount: 1.2, dirDiffusionUm: 0 });
+    expect(() => buildRenderPlan({ ...BASELINE_RENDER_PARAMS, dirCouplersAmount: 1.5 }, bundle, image('gray_ramp'), 'image')).toThrow(/terlipat/);
+    expect(() =>
+      buildRenderPlan({ ...BASELINE_RENDER_PARAMS, dirCouplersAmount: 1.4, dirCouplersInhibitionInterlayer: 1.1 }, bundle, image('gray_ramp'), 'image'),
+    ).toThrow(/terlipat/);
+    expect(() => buildRenderPlan({ ...BASELINE_RENDER_PARAMS, dirCouplersDiffusionUm: 80 }, bundle, image('gray_ramp'), 'image')).toThrow(/0..60/);
   });
 
   it('exposure print mengikuti digest_params: measured mengompensasi, cube (lut_mode) tidak', () => {

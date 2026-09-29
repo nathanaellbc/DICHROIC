@@ -65,6 +65,16 @@ export interface FrameParams {
    * bila flag decode menyala. Baku 1.
    */
   inputDecodeScale?: number;
+  /**
+   * Fase 2D: `film_render.dir_couplers` Python -- `amount` (0 bila
+   * `active=False`), `inhibition_samelayer`, `inhibition_interlayer`, dan
+   * `diffusion_size_um` (0 mematikan difusi spasial, termasuk ekornya).
+   * Baku 1, 1, 1, 20.
+   */
+  dirCouplersAmount?: number;
+  dirInhibitionSameLayer?: number;
+  dirInhibitionInterlayer?: number;
+  dirDiffusionUm?: number;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

@@ -494,3 +494,63 @@ for _label, _slug, _key in (("Display P3", "display_p3", "Display P3"), ("ProPho
         python_overrides=(f"io.output_color_space = {_key!r}",),
         pre=lambda p, k=_key: setattr(p.io, "output_color_space", k),
     )
+
+# Fase 2D Task 1: DIR couplers. `dirCouplersEnabled` ->
+# `film_render.dir_couplers.active`; `dirCouplersAmount` -> `.amount`;
+# `dirCouplersInhibition{SameLayer,Interlayer}` -> `.inhibition_*`;
+# `dirCouplersDiffusionUm` -> `.diffusion_size_um` (0 mematikan difusi,
+# termasuk ekor). Kasus spasial memakai rezim ukuran piksel produksi
+# (`film_format_mm=0.4` -> 6.25 um/px pada 64 px), tempat difusi DIR benar-benar
+# bekerja; kasus `_lut` membuktikan kimia non-spasial di `.cube`.
+def _dir(**values: Any) -> Override:
+    def apply(p: Any) -> None:
+        for key, value in values.items():
+            setattr(p.film_render.dir_couplers, key, value)
+    return apply
+
+
+def _dir_case(image: str, family: str, render_params: dict[str, Any], python: dict[str, Any],
+              film_format_mm: float | None = None) -> ParamCase:
+    return ParamCase(
+        image=image, family=family,
+        render_params=render_params,
+        python_overrides=tuple(f"film_render.dir_couplers.{k} = {v!r}" for k, v in python.items()),
+        pre=_dir(**python),
+        film_format_mm=film_format_mm,
+    )
+
+
+PARAM_CASES.update({
+    "dir_off": _dir_case("color_patches", "deterministic", {"dirCouplersEnabled": False}, {"active": False}),
+    "dir_off_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersEnabled": False}, {"active": False}, 0.4),
+    "dir_amount0_5": _dir_case("color_patches", "deterministic", {"dirCouplersAmount": 0.5}, {"amount": 0.5}),
+    # Rentang digerbangi: amount x max(inhibition) <= 1.4. Di atas ~1.45
+    # `log_exposure_0` kurva sebelum DIR terlipat (Portra 800 Push 2 paling
+    # awal), `np.interp` Python tak bermakna di sana, dan derau f32 melewati
+    # ambang (terukur 2e-5 pada amount 2) -- `DIR_MAX_EFFECTIVE` di plan.ts.
+    "dir_amount1_4": _dir_case("log_gray_ramp", "deterministic", {"dirCouplersAmount": 1.4}, {"amount": 1.4}),
+    "dir_amount1_4_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersAmount": 1.4}, {"amount": 1.4}, 0.4),
+    "dir_amount1_4_lut": _dir_case("color_patches", "lut", {"dirCouplersAmount": 1.4}, {"amount": 1.4}),
+    "dir_inhibition_same0_5_inter0": _dir_case(
+        "color_patches", "deterministic",
+        {"dirCouplersInhibitionSameLayer": 0.5, "dirCouplersInhibitionInterlayer": 0.0},
+        {"inhibition_samelayer": 0.5, "inhibition_interlayer": 0.0},
+    ),
+    "dir_inhibition_same0_inter1_amount1_4_lut": _dir_case(
+        "log_gray_ramp", "lut",
+        {"dirCouplersAmount": 1.4, "dirCouplersInhibitionSameLayer": 0.0, "dirCouplersInhibitionInterlayer": 1.0},
+        {"amount": 1.4, "inhibition_samelayer": 0.0, "inhibition_interlayer": 1.0},
+    ),
+    "dir_diffusion0_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersDiffusionUm": 0.0}, {"diffusion_size_um": 0.0}, 0.4),
+    "dir_diffusion5_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersDiffusionUm": 5.0}, {"diffusion_size_um": 5.0}, 0.4),
+    "dir_diffusion60_px6um": _dir_case("impulse_highlight", "deterministic", {"dirCouplersDiffusionUm": 60.0}, {"diffusion_size_um": 60.0}, 0.4),
+})
+
+# Stock yang paling awal terlipat, pada batas atas rentang.
+PARAM_CASES["dir_amount1_4_portra800_push2"] = ParamCase(
+    image="log_gray_ramp", family="deterministic",
+    render_params={"dirCouplersAmount": 1.4},
+    python_overrides=("film_render.dir_couplers.amount = 1.4",),
+    pre=_dir(amount=1.4),
+    film="kodak_portra_800_push2",
+)
