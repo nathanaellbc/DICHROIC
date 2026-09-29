@@ -170,6 +170,21 @@ describe('RPC exportImage dan decode', () => {
     expect(Array.from(viaWorker.rgba)).toEqual(Array.from(direct.rgba));
   });
 
+  it('attach: decode lewat client sebelum init selesai, lalu init', async () => {
+    const { port1, port2 } = new MessageChannel();
+    ports.push(port1, port2);
+    let release: (s: SessionLike) => void = () => {};
+    serveSession(domPort(port2), () => new Promise<SessionLike>((r) => { release = r; }));
+    const client = SessionClient.attach(domPort(port1));
+    const initDone = client.init({ assetsBaseUrl: '/data' });
+    const png = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_gray8', 'input.png')));
+    const image = await client.decode(png, 'g.png');
+    expect(image.source.format).toBe('png');
+    release(new FakeSession());
+    await initDone;
+    expect(await client.exportCube(9)).toBe('LUT_3D_SIZE 9\n');
+  });
+
   it('decode lewat client mentransfer bytes dan memulihkan DecodeError', async () => {
     const client = await connect(new FakeSession());
     const png = new Uint8Array(readFileSync(join('test', 'fixtures', 'io', 'png_rgb8', 'input.png')));

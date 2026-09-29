@@ -5,31 +5,49 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, akhir 2C -- TITIK HENTI UI)
+## Posisi sekarang (diperbarui 2026-09-29, UI versi pertama)
 
-- **Branch:** `phase2c/params-batch1` (2C), di atas `claude/admiring-galileo-1vwlrk`
-  (2B + perbaikan df64 D3D12, PR [#3](https://github.com/nathanaellbc/DICHROIC/pull/3)).
-  Merge #3 dulu, lalu PR 2C.
-- **Mesin:** Windows 11, RTX 3060 Ti, Dawn/D3D12. Toolchain hulu di
-  `../upstream/` (lih. "Lingkungan sesi 2C" di bawah).
-- **Suite:** 2457 lulus, 2 dilewati, 0 gagal di 51 berkas, **hijau dua kali berurutan** (~260 s per run); `tsc` dan
-  `eslint` bersih.
-- **Perbaikan df64 D3D12 (2B):** run pertama di mesin ini gagal 11 gerbang IIR
-  karena D3D12 meruntuhkan df64 (self-test 8,9e-5; D3D11 lulus 1,4e-7).
-  Diperbaiki dengan penghalang optimasi `opq` di `gaussian.wgsl` (spec §6a.1).
-  Backend Vulkan tidak bisa dimuat Dawn di mesin ini (`vulkan-1.dll` Windows
-  Error 87).
+- **Branch:** `claude/admiring-galileo-1vwlrk`, dari `main` setelah PR #4 (2C).
+- **UI selesai versi pertama** (`src/ui/`): React 19 + Motion 12, iPhone-first
+  sesuai DESIGN.md (Apple HIG / Liquid Glass) yang diberikan pemilik proyek;
+  desain kanvas di Claude Design ("DICHROIC UI"). Jalankan: `npm run dev`
+  (tambahkan `-- --host` untuk membuka dari HP di jaringan yang sama).
+- **Perbaikan engine penting:** `printScan.wgsl` dan `scannerPost.wgsl`
+  mendeteksi NaN dengan `x != x`, yang dilipat jadi `false` oleh compiler
+  fast-math (lavapipe, SwiftShader; Metal di iPhone juga berisiko) -- gambar
+  keluar hitam di semua GPU kecuali D3D12/NVIDIA. Kini lewat pola bit
+  (`isNanBits`). Di lavapipe suite turun dari 226 gagal ke 1 (tile vs full
+  2,09e-6 terhadap 2e-6, derau f32 backend perangkat lunak; ambang tidak
+  diubah). **Konfirmasi suite hijau dua kali di mesin NVIDIA** -- aritmetika
+  untuk wavelength non-NaN identik, jadi harus tetap bit-identik.
+- **Diverifikasi** di Chromium headless (WebGPU SwiftShader): viewport iPhone
+  14 potret/lanskap dan 1440x900; buka JPEG dan DNG, semua alat, sheet stok,
+  ekspor PNG resolusi penuh (unduhan), discard, alert format tak didukung;
+  `vite build` dan `vite preview` bersih. **Belum** dicoba di iPhone fisik.
 
 | Sub-proyek | Status | Rencana |
 |---|---|---|
-| 2A tulang punggung (`Session`, `RenderParams`, `RenderPlan`, rantai produksi, `.cube`, RPC worker) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a-backbone.md` |
-| 2A.5 rezim resolusi produksi (blur IIR, apron dari sigma, self-test df64) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2a5-production-regime.md` |
-| 2B `io/` (decode JPEG/PNG/TIFF/EXR/RAW, encode PNG 8/16 + TIFF 16, `exportImage`, RPC `decode`) | selesai | `docs/superpowers/plans/2026-09-28-dichroic-phase2b-io.md` (Status 2B) |
-| 2C batch parameter 1 | **selesai**: 21 field `verified`, 7 `locked` (difusi, `rgbToRawMethod`) | `docs/superpowers/plans/2026-09-28-dichroic-phase2c-params-batch1.md` (Status 2C) |
-| UI | **titik henti**: minta dokumen desain dan panduan visual dari pemilik proyek dulu | — |
+| 2A, 2A.5, 2B, 2C | selesai | lihat rencana masing-masing |
+| UI versi pertama | **selesai** (compact + regular) | DESIGN.md pemilik proyek; kanvas Claude Design |
+| PWA (manifest, ikon, precache, hosting COOP/COEP) | belum | spec induk |
+| Batch parameter 2, difusi FFT | belum | spec Fase 2 §8 |
 
-Spec Fase 2: `docs/superpowers/specs/2026-09-28-dichroic-phase2-core-design.md`
-(§5.1 angka 2B, §6.1 hasil 2C, §6a.1 angka 2A.5).
+## UI: peta cepat
+
+- `src/ui/engine/engine.ts` -- jembatan ke `SessionClient` di worker (decode
+  sebelum `init` lewat `SessionClient.attach`, render pratinjau dikoalesikan,
+  pembanding asli, ekspor). Bebas React; diamati lewat `useSyncExternalStore`.
+- `src/ui/model/` -- katalog stok dan definisi alat (field, rentang yang
+  digerbangi 2C, format nilai); dijaga `test/ui/model.test.ts` agar sama
+  dengan manifest, registri, dan plan.
+- `src/ui/components/` -- kontrol iOS (slider seret relatif, switch,
+  segmented, stepper), Sheet (detent, seret), ActionSheet, Alert, PhotoView.
+- `src/ui/screens/` -- Start, Editor (compact/regular), Stocks, Export,
+  ToolControls.
+- Keputusan UI (bisa dibalik): tampilan (film, kertas, penyesuaian) dibawa
+  ke foto berikutnya, hanya colour space input yang milik berkas; pilihan
+  stok di sheet langsung dipratinjau, Cancel mengembalikan, seret-tutup =
+  Done; ekspor di HP lewat lembar Bagikan, di desktop unduhan.
 
 ## Cara kerja yang disepakati pemilik proyek
 

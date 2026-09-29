@@ -187,18 +187,30 @@ const kLog10E: f32 = 0.4342944819032518;
 // `density_to_light`, port sama seperti `printScan.wgsl`, arena berbeda).
 // ============================================================================
 
-fn computeDensitySpectral(cmy: vec3<f32>, wl: u32) -> f32 {
-  let o = ARENA_SCANNERCHANNELDENSITY_OFFSET + wl * 3u;
-  return cmy.r * dynamicArena[o] + cmy.g * dynamicArena[o + 1u] + cmy.b * dynamicArena[o + 2u]
-    + dynamicArena[ARENA_SCANNERBASEDENSITY_OFFSET + wl];
+// NaN dideteksi dari POLA BIT nilai yang baru dibaca dari arena, bukan dengan
+// `x != x`: WGSL mengizinkan compiler menganggap float tidak pernah NaN
+// (fast-math), dan lavapipe maupun SwiftShader memang melipat `x != x` jadi
+// `false`. NaN lalu merambat, eksposur print runtuh ke ~0 (`log_e_print` ~ -10)
+// dan gambar keluar hitam -- hanya backend yang kebetulan tidak melipatnya
+// (D3D12/NVIDIA) yang lolos gerbang. Operasi integer pada nilai hasil load
+// tidak bisa dilipat dengan asumsi itu; aritmetika tidak pernah menyentuh NaN.
+fn isNanBits(x: f32) -> bool {
+  return (bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u;
 }
 
-fn densityToLight(density: f32, lightAtWavelength: f32) -> f32 {
-  var transmitted = pow(10.0, -density) * lightAtWavelength;
-  if (transmitted != transmitted) {
-    transmitted = 0.0;
+// `compute_density_spectral` + `density_to_light` (NaN -> 0), sama seperti
+// `printScan.wgsl::spectralLight` tetapi atas densitas kertas di `dynamicArena`.
+fn spectralLight(cmy: vec3<f32>, wl: u32, lightAtWavelength: f32) -> f32 {
+  let o = ARENA_SCANNERCHANNELDENSITY_OFFSET + wl * 3u;
+  let c0 = dynamicArena[o];
+  let c1 = dynamicArena[o + 1u];
+  let c2 = dynamicArena[o + 2u];
+  let base = dynamicArena[ARENA_SCANNERBASEDENSITY_OFFSET + wl];
+  if (isNanBits(c0) || isNanBits(c1) || isNanBits(c2) || isNanBits(base)) {
+    return 0.0;
   }
-  return transmitted;
+  let density = cmy.r * c0 + cmy.g * c1 + cmy.b * c2 + base;
+  return pow(10.0, -density) * lightAtWavelength;
 }
 
 // `cmy_to_log_xyz` lalu `10**log_xyz` di `_density_to_rgb` adalah roundtrip
@@ -210,9 +222,8 @@ fn densityToXyz(cmy: vec3<f32>) -> vec3<f32> {
   let wavelengthCount = u32(dynamicArena[ARENA_SCANNERWAVELENGTHCOUNT_OFFSET]);
   var xyzSum = vec3<f32>(0.0);
   for (var wl: u32 = 0u; wl < wavelengthCount; wl = wl + 1u) {
-    let densitySpectral = computeDensitySpectral(cmy, wl);
     let illuminantAtWavelength = dynamicArena[ARENA_SCANNERILLUMINANT_OFFSET + wl];
-    let light = densityToLight(densitySpectral, illuminantAtWavelength);
+    let light = spectralLight(cmy, wl, illuminantAtWavelength);
     let co = wl * 3u;
     xyzSum += light * vec3<f32>(
       staticArena[ARENA_STANDARDOBSERVERCMFS_OFFSET + co],
