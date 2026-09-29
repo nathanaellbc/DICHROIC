@@ -34,6 +34,19 @@ describe('grup Lens', () => {
     expect(lens.tools[0]!.kind).toBe('lens');
   });
 
+  it('alat lensa tidak "diubah" hanya karena lens blur menyala; sakelarnya milik alat Lens', () => {
+    const lens = GROUPS.find((g) => g.id === 'lens')!;
+    const on = P();
+    for (const tool of lens.tools) {
+      if (tool.kind === 'lens') continue;
+      expect(isModified(tool, on, BASELINE_RENDER_PARAMS), tool.id).toBe(false);
+      // Tanpa enabledBy: tidak ada sakelar lens blur duplikat di tiap alat.
+      expect((tool as { enabledBy?: string }).enabledBy, tool.id).toBeUndefined();
+      expect((tool as { requires?: string }).requires, tool.id).toBe('lensBlurEnabled');
+    }
+    expect(isModified(slider('lensFocusDistanceM'), P({ lensFocusDistanceM: 5 }), BASELINE_RENDER_PARAMS)).toBe(true);
+  });
+
   it('sakelar lens blur: tidak termodifikasi di baseline, termodifikasi saat dinyalakan', () => {
     const tool = findTool('lensBlur');
     expect(isModified(tool, BASELINE_RENDER_PARAMS, BASELINE_RENDER_PARAMS)).toBe(false);

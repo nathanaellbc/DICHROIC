@@ -59,8 +59,8 @@ export function isLongChoice(tool: ChoiceTool): boolean {
 }
 
 function toolEnabled(tool: Tool, params: RenderParams): boolean {
+  if (tool.requires && !params[tool.requires]) return false;
   if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
-  if (tool.kind === 'stepper' && tool.field.startsWith('lens')) return params.lensBlurEnabled;
   if (tool.kind === 'diffusion') return params[tool.enabledBy];
   if (tool.kind === 'toggle' && tool.field === 'inputCctfDecoding') return decodeAllowed(params.inputColorSpace);
   return tool.kind !== 'locked';

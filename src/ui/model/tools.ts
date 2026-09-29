@@ -37,6 +37,13 @@ interface ToolBase {
    * (tahap print tidak ada saat scan film), `scan` = hanya saat scan.
    */
   mode?: 'print' | 'scan';
+  /**
+   * Alat hanya berlaku bila field ini menyala (alat lensa: `lensBlurEnabled`).
+   * Beda dari `enabledBy`: alat TIDAK punya sakelar sendiri dan sakelar itu
+   * tidak ikut dihitung sebagai "diubah" atau di-reset alat ini -- ia milik
+   * alat lain (Lens).
+   */
+  requires?: BooleanField;
 }
 
 export interface SliderTool extends ToolBase {
@@ -221,14 +228,14 @@ export const GROUPS: readonly ToolGroup[] = [
     label: 'Lens',
     tools: [
       { kind: 'lens', id: 'lensBlur', field: 'lensBlurEnabled', label: 'Lens', title: 'Lens Blur', icon: 'lens', note: `Defocus like a real lens, from a depth map estimated on this device. Tap “Pick Focus” then the subject. ${LENS_NOTE}` },
-      { kind: 'slider', id: 'lensFocusDistanceM', field: 'lensFocusDistanceM', enabledBy: 'lensBlurEnabled', scale: 'log10', label: 'Focus', title: 'Focus Distance', icon: 'focus', min: LENS_LIMITS.focusDistanceM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'How far the focused subject was from the camera. With the aperture and focal length, it sets how quickly the background falls out of focus.' },
-      { kind: 'stepper', id: 'lensFNumber', field: 'lensFNumber', label: 'Aperture', title: 'Aperture', icon: 'aperture', min: LENS_LIMITS.fNumber.min, max: LENS_LIMITS.fNumber.max, step: 1, values: F_STOPS },
-      { kind: 'slider', id: 'lensFocalLengthMm', field: 'lensFocalLengthMm', enabledBy: 'lensBlurEnabled', scale: 'log2', zeroAs: 'normalFocal', label: 'Focal Length', title: 'Focal Length', icon: 'focalLength', min: LENS_LIMITS.focalLengthMm.min, max: LENS_LIMITS.focalLengthMm.max, step: 0.01, digits: 0, unit: ' mm', note: 'Longer lenses blur the background more at the same aperture. Normal matches the film format.' },
-      { kind: 'slider', id: 'lensNearSharpM', field: 'lensNearSharpM', enabledBy: 'lensBlurEnabled', scale: 'log10', zeroAs: 'max', maxField: 'lensFocusDistanceM', label: 'Keep Sharp', title: 'Keep Sharp From', icon: 'nearSharp', min: LENS_LIMITS.nearSharpM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'Keeps everything from this distance to the focused subject sharp, for foregrounds that should stay crisp.' },
-      { kind: 'slider', id: 'lensForeground', field: 'lensForeground', enabledBy: 'lensBlurEnabled', label: 'Foreground', title: 'Foreground Blur', icon: 'foreground', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much the things in front of the subject blur. 1 is the lens itself; 0 keeps the foreground sharp.' },
-      { kind: 'stepper', id: 'lensBlades', field: 'lensBlades', label: 'Blades', title: 'Aperture Blades', icon: 'blades', min: 0, max: 9, step: 1, values: [0, 5, 6, 7, 8, 9] },
-      { kind: 'slider', id: 'lensBladeCurvature', field: 'lensBladeCurvature', enabledBy: 'lensBlurEnabled', label: 'Curvature', title: 'Blade Curvature', icon: 'curvature', min: 0, max: 1, step: 0.05, digits: 2, note: 'Straight blades draw polygons in out-of-focus highlights; curved blades round them off.' },
-      { kind: 'slider', id: 'lensCatEye', field: 'lensCatEye', enabledBy: 'lensBlurEnabled', label: 'Cat’s Eye', title: 'Cat’s Eye', icon: 'catEye', min: 0, max: 1, step: 0.05, digits: 2, note: 'Vignetting inside the lens clips highlights toward the corners into lemon shapes.' },
+      { kind: 'slider', id: 'lensFocusDistanceM', field: 'lensFocusDistanceM', requires: 'lensBlurEnabled', scale: 'log10', label: 'Focus', title: 'Focus Distance', icon: 'focus', min: LENS_LIMITS.focusDistanceM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'How far the focused subject was from the camera. With the aperture and focal length, it sets how quickly the background falls out of focus.' },
+      { kind: 'stepper', id: 'lensFNumber', field: 'lensFNumber', requires: 'lensBlurEnabled', label: 'Aperture', title: 'Aperture', icon: 'aperture', min: LENS_LIMITS.fNumber.min, max: LENS_LIMITS.fNumber.max, step: 1, values: F_STOPS },
+      { kind: 'slider', id: 'lensFocalLengthMm', field: 'lensFocalLengthMm', requires: 'lensBlurEnabled', scale: 'log2', zeroAs: 'normalFocal', label: 'Focal Length', title: 'Focal Length', icon: 'focalLength', min: LENS_LIMITS.focalLengthMm.min, max: LENS_LIMITS.focalLengthMm.max, step: 0.01, digits: 0, unit: ' mm', note: 'Longer lenses blur the background more at the same aperture. Normal matches the film format.' },
+      { kind: 'slider', id: 'lensNearSharpM', field: 'lensNearSharpM', requires: 'lensBlurEnabled', scale: 'log10', zeroAs: 'max', maxField: 'lensFocusDistanceM', label: 'Keep Sharp', title: 'Keep Sharp From', icon: 'nearSharp', min: LENS_LIMITS.nearSharpM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'Keeps everything from this distance to the focused subject sharp, for foregrounds that should stay crisp.' },
+      { kind: 'slider', id: 'lensForeground', field: 'lensForeground', requires: 'lensBlurEnabled', label: 'Foreground', title: 'Foreground Blur', icon: 'foreground', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much the things in front of the subject blur. 1 is the lens itself; 0 keeps the foreground sharp.' },
+      { kind: 'stepper', id: 'lensBlades', field: 'lensBlades', requires: 'lensBlurEnabled', label: 'Blades', title: 'Aperture Blades', icon: 'blades', min: 0, max: 9, step: 1, values: [0, 5, 6, 7, 8, 9] },
+      { kind: 'slider', id: 'lensBladeCurvature', field: 'lensBladeCurvature', requires: 'lensBlurEnabled', label: 'Curvature', title: 'Blade Curvature', icon: 'curvature', min: 0, max: 1, step: 0.05, digits: 2, note: 'Straight blades draw polygons in out-of-focus highlights; curved blades round them off.' },
+      { kind: 'slider', id: 'lensCatEye', field: 'lensCatEye', requires: 'lensBlurEnabled', label: 'Cat’s Eye', title: 'Cat’s Eye', icon: 'catEye', min: 0, max: 1, step: 0.05, digits: 2, note: 'Vignetting inside the lens clips highlights toward the corners into lemon shapes.' },
     ],
   },
   {
