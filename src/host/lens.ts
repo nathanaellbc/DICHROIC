@@ -25,7 +25,7 @@
  * terang, lalu bahu kurva dan halation bekerja padanya.
  */
 
-import type { FilmFormat } from '../params/renderParams';
+import type { FilmFormat, RenderParams } from '../params/renderParams';
 
 /** Lensa "normal" per format: kira-kira diagonal bingkai, dibulatkan ke lensa yang ada. */
 export const NORMAL_FOCAL_MM: Readonly<Record<FilmFormat, number>> = Object.freeze({
@@ -177,6 +177,22 @@ export interface LensSettings {
   /** 0 = bidang fokus (perilaku lensa sendiri). */
   nearSharpM: number;
   foreground: number;
+}
+
+/** Field `lens*` `RenderParams` -> `LensSettings` (plan dan readout UI). */
+export function lensSettings(params: RenderParams): LensSettings {
+  return {
+    focusX: params.lensFocusX,
+    focusY: params.lensFocusY,
+    focusDistanceM: params.lensFocusDistanceM,
+    focalLengthMm: params.lensFocalLengthMm,
+    fNumber: params.lensFNumber,
+    blades: params.lensBlades,
+    bladeCurvature: params.lensBladeCurvature,
+    catEye: params.lensCatEye,
+    nearSharpM: params.lensNearSharpM,
+    foreground: params.lensForeground,
+  };
 }
 
 /** Setelan per render yang dibaca tahap `lensBlur` (`FrameParams.lens`). */

@@ -42,6 +42,22 @@ export const VARIANTS: Readonly<Record<DepthBackend, ModelVariant>> = {
   wasm: { id: 'int8', file: 'onnx/model_quantized.onnx', bytes: 27_258_801 },
 };
 
+/**
+ * Biner WASM ONNX Runtime per build (`depthGpu.worker.ts` memakai build
+ * WebGPU/asyncify, `depthCpu.worker.ts` build WASM polos). Diunduh sekali ke
+ * cache kedalaman bersama bobot, jadi ikut dihitung dalam ukuran unduhan
+ * pertama yang ditampilkan ke pengguna.
+ */
+export const RUNTIME_BYTES: Readonly<Record<DepthBackend, number>> = {
+  webgpu: 26_781_914,
+  wasm: 14_239_897,
+};
+
+/** Ukuran unduhan pertama di backend ini: bobot + runtime. */
+export function firstDownloadBytes(backend: DepthBackend): number {
+  return VARIANTS[backend].bytes + RUNTIME_BYTES[backend];
+}
+
 export const DEPTH_CACHE = 'dichroic.depth.v1';
 
 export function variantUrl(v: ModelVariant): string {

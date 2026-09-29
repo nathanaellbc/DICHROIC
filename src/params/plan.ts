@@ -26,15 +26,16 @@ import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
 import type { CameraSettings } from '../host/cameraDevelop';
-import { LENS_LIMITS, resolveLensFrame } from '../host/lens';
-import type { DepthMap, LensSettings } from '../host/lens';
+import { LENS_LIMITS, lensSettings, resolveLensFrame } from '../host/lens';
+import type { DepthMap } from '../host/lens';
 import { decodeWithLut } from '../host/colorDecode';
 import type { EnlargerFilterState } from '../host/enlarger';
 import type { PrintScanArenaOptions, ScanFilmArenaOptions } from '../host/spectral';
 import type { AssetBundle } from '../profiles/load';
+import { FILM_FORMAT_LONG_EDGE_MM } from './filmFormat';
 import { UnverifiedParameterError, validateRenderParams } from './registry';
 import { BASELINE_RENDER_PARAMS } from './renderParams';
-import type { FilmFormat, ProcessMode, RenderParams } from './renderParams';
+import type { ProcessMode, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
 
@@ -77,17 +78,9 @@ export interface RenderPlan {
   frame: FrameParams;
 }
 
-/** `filmFormatLongEdgeMm` OFX (`SpektraVulkanRenderer.cpp:2008`), mm sisi panjang. */
-export const FILM_FORMAT_LONG_EDGE_MM: Readonly<Record<FilmFormat, number>> = Object.freeze({
-  standard8: 4.8,
-  super8: 5.79,
-  standard16: 10.26,
-  super16: 12.52,
-  standard35: 35,
-  super35: 24.89,
-  standard65: 52.48,
-  imax70: 70.41,
-});
+// Tabel format film dan `lensSettings` tinggal di modul ringan supaya UI bisa
+// memakainya tanpa menarik modul GPU yang diimpor plan ini.
+export { FILM_FORMAT_LONG_EDGE_MM } from './filmFormat';
 
 /**
  * Push/pull mode `Standard`: pengali gamma kurva film dari waktu develop ECN-2
@@ -347,20 +340,7 @@ export function validateLens(params: RenderParams): void {
   check('lensForeground', inRange(params.lensForeground, 0, 1), '0..1');
 }
 
-export function lensSettings(params: RenderParams): LensSettings {
-  return {
-    focusX: params.lensFocusX,
-    focusY: params.lensFocusY,
-    focusDistanceM: params.lensFocusDistanceM,
-    focalLengthMm: params.lensFocalLengthMm,
-    fNumber: params.lensFNumber,
-    blades: params.lensBlades,
-    bladeCurvature: params.lensBladeCurvature,
-    catEye: params.lensCatEye,
-    nearSharpM: params.lensNearSharpM,
-    foreground: params.lensForeground,
-  };
-}
+export { lensSettings } from '../host/lens';
 
 export function buildRenderPlan(
   params: RenderParams,
