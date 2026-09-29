@@ -21,7 +21,7 @@ import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
 import { stockInfo } from '../model/stocks';
-import { GROUPS, choicePatch, findTool, valueText } from '../model/tools';
+import { GROUPS, choicePatch, findTool, isScanMode, stockPatch, valueText, visibleTools } from '../model/tools';
 import type { ChoiceTool, GroupId } from '../model/tools';
 import { snappy } from '../motion';
 import { ExportContent, ListPickerContent } from './Export';
@@ -31,7 +31,7 @@ import { InspectorTool, ResetButton, ToolChips, ToolControl, ToolSwitch } from '
 import type { ToolContext } from './ToolControls';
 
 type SheetState =
-  | { kind: 'stocks'; stockKind: StockKind; before: Pick<RenderParams, 'film' | 'paper'> }
+  | { kind: 'stocks'; stockKind: StockKind; before: Pick<RenderParams, 'film' | 'paper' | 'process'> }
   | { kind: 'export' }
   | { kind: 'list'; toolId: string }
   | null;
@@ -47,7 +47,7 @@ export interface EditorProps {
 
 export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }: EditorProps) {
   const [group, setGroup] = useState<GroupId>('film');
-  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ film: 'printExposureEv', color: 'filterC', texture: 'halationAmount' });
+  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
   const [compare, setCompare] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
@@ -61,7 +61,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   };
 
   const openStocks = (stockKind: StockKind = 'film') =>
-    setSheet({ kind: 'stocks', stockKind, before: { film: state.params.film, paper: state.params.paper } });
+    setSheet({ kind: 'stocks', stockKind, before: { film: state.params.film, paper: state.params.paper, process: state.params.process } });
 
   const onClose = (anchor: DOMRect) => {
     if (engine.isEdited()) setDiscardAnchor(anchor);
@@ -71,7 +71,10 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const listTool = sheet?.kind === 'list' ? (findTool(sheet.toolId) as ChoiceTool) : undefined;
   const film = stockInfo(state.params.film);
   const paper = stockInfo(state.params.paper);
-  const photoLabel = `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
+  const scan = isScanMode(state.params);
+  const photoLabel = scan
+    ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
+    : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
   const photo = (
     <PhotoView frame={state.frame} original={state.original} compare={compare} rendering={state.rendering} photoKey={state.fileName ?? 'photo'} label={photoLabel} />
   );
@@ -113,7 +116,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
             paper={state.params.paper}
             kind={sheet.stockKind}
             onKindChange={(stockKind) => setSheet({ ...sheet, stockKind })}
-            onPick={(kind, id) => engine.setParams(kind === 'film' ? { film: id } : { paper: id })}
+            onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
+            scan={isScanMode(state.params)}
           />
         )}
       </Sheet>
@@ -156,7 +160,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         }
       >
         {listTool && (
-          <ListPickerContent options={listTool.options} value={state.params[listTool.field]} onPick={(v) => engine.setParams(choicePatch(listTool, v))} />
+          <ListPickerContent options={listTool.options} value={state.params[listTool.field]} onPick={(v) => engine.setParams(choicePatch(listTool, v, state.params))} />
         )}
       </Sheet>
 
@@ -215,7 +219,11 @@ function CompactLayout({ state, ctx, group, setGroup, toolByGroup, setToolByGrou
   }, []);
 
   const currentGroup = GROUPS.find((g) => g.id === group)!;
-  const tool = findTool(toolByGroup[group]);
+  // Alat terpilih yang tidak berlaku di mode proses ini (mis. Exposure print
+  // saat scan) jatuh ke padanannya / alat pertama yang terlihat.
+  const visible = visibleTools(currentGroup, state.params);
+  const selectedTool = findTool(toolByGroup[group]);
+  const tool = visible.includes(selectedTool) ? selectedTool : (visible.find((t) => t.label === selectedTool.label) ?? visible[0]!);
   const film = stockInfo(state.params.film);
 
   const topBarTop = 'calc(max(var(--safe-top), 12px) + 4px)';
@@ -242,7 +250,7 @@ function CompactLayout({ state, ctx, group, setGroup, toolByGroup, setToolByGrou
         <PressButton
           className="capsule glass"
           style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, padding: '0 12px', fontSize: '0.882rem' }}
-          aria-label={`Film stock: ${film.name}. Change stock`}
+          aria-label={`Film stock: ${film.name}${isScanMode(state.params) ? ', scanned' : ''}. Change stock`}
           onClick={() => openStocks('film')}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{film.short}</span>
@@ -323,7 +331,8 @@ function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose,
           paper={state.params.paper}
           kind={sidebarKind}
           onKindChange={setSidebarKind}
-          onPick={(kind, id) => engine.setParams(kind === 'film' ? { film: id } : { paper: id })}
+          onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
+          scan={isScanMode(state.params)}
           onBackground
         />
       </nav>
@@ -350,7 +359,7 @@ function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose,
         <Segmented label="Parameter group" items={GROUP_ITEMS} value={group} onChange={setGroup} small />
         <motion.div key={group} className="scroll-y" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={snappy} style={{ minHeight: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ borderRadius: 12, background: 'rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column' }}>
-            {currentGroup.tools.map((tool, i) => (
+            {visibleTools(currentGroup, state.params).map((tool, i) => (
               <div key={tool.id} style={{ borderTop: i === 0 ? 0 : '1px solid rgba(255,255,255,0.08)' }}>
                 <InspectorTool tool={tool} ctx={ctx} />
               </div>
@@ -371,7 +380,7 @@ function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose,
         <div className="glass-clear t-caption" style={{ height: 30, padding: '0 14px', borderRadius: 9999, display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
           <span style={{ fontWeight: 600 }}>{film.name}</span>
           <span aria-hidden="true" style={{ opacity: 0.6 }}>→</span>
-          <span>{paper.name}</span>
+          <span>{isScanMode(state.params) ? 'Scan' : paper.name}</span>
           {state.frame && (
             <>
               <span aria-hidden="true" style={{ opacity: 0.5 }}>·</span>

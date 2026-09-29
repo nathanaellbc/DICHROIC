@@ -17,6 +17,9 @@ import type { RenderParams } from './renderParams';
 export type FieldStatus = 'verified' | 'locked';
 
 export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = Object.freeze({
+  // Fase 2D Task 3: param/scan_* (`test/parity/scanFilm.test.ts`). Pasangan
+  // mode dan jenis film divalidasi `validateStocks` (plan.ts).
+  process: 'verified',
   // Fase 2C Task 8: param/stock_* (`test/parity/stocks.test.ts`). Pasangan
   // dan jenis stock divalidasi `validateStocks` (plan.ts; butuh aset).
   film: 'verified',
@@ -50,17 +53,29 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   grainAmount: 'verified',
   grainSeed: 'verified',
   filmFormat: 'verified',
-  cameraDiffusionEnabled: 'locked',
-  cameraDiffusionFamily: 'locked',
-  cameraDiffusionStrength: 'locked',
-  printDiffusionEnabled: 'locked',
-  printDiffusionFamily: 'locked',
-  printDiffusionStrength: 'locked',
+  // Fase 2D Task 4: param/diffusion_* (`test/parity/diffusionParams.test.ts`),
+  // konvolusi FFT df64 (`stages/diffusionFft.ts`).
+  cameraDiffusionEnabled: 'verified',
+  cameraDiffusionFamily: 'verified',
+  cameraDiffusionStrength: 'verified',
+  printDiffusionEnabled: 'verified',
+  printDiffusionFamily: 'verified',
+  printDiffusionStrength: 'verified',
   glareEnabled: 'verified',
   // Fase 2C Task 6: param/glare_*, grain_* (`test/parity/glare.test.ts`).
   glarePercent: 'verified',
   // Fase 2C Task 6: param/unsharp_* (`test/parity/unsharp.test.ts`).
   scannerUnsharpAmount: 'verified',
+  // Fase 2D Task 1: param/dir_* (`test/parity/dirParams.test.ts`).
+  dirCouplersEnabled: 'verified',
+  dirCouplersAmount: 'verified',
+  dirCouplersInhibitionSameLayer: 'verified',
+  dirCouplersInhibitionInterlayer: 'verified',
+  dirCouplersDiffusionUm: 'verified',
+  // Fase 2D Task 2: param/preflash_* (`test/parity/preflash.test.ts`).
+  preflashExposure: 'verified',
+  preflashMFilterShift: 'verified',
+  preflashYFilterShift: 'verified',
 });
 
 export class UnverifiedParameterError extends Error {

@@ -19,6 +19,7 @@
  * di bawah adalah loop terbalik manual yang setara, tanpa menaikkan target lib.
  */
 
+import type { DiffusionFilterConfig } from '../host/diffusionFilter';
 import { CORE_PARAMS_BYTES, writeCoreParams } from './params';
 import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
@@ -65,6 +66,29 @@ export interface FrameParams {
    * bila flag decode menyala. Baku 1.
    */
   inputDecodeScale?: number;
+  /**
+   * Fase 2D: `film_render.dir_couplers` Python -- `amount` (0 bila
+   * `active=False`), `inhibition_samelayer`, `inhibition_interlayer`, dan
+   * `diffusion_size_um` (0 mematikan difusi spasial, termasuk ekornya).
+   * Baku 1, 1, 1, 20.
+   */
+  dirCouplersAmount?: number;
+  dirInhibitionSameLayer?: number;
+  dirInhibitionInterlayer?: number;
+  dirDiffusionUm?: number;
+  /**
+   * Fase 2D: `enlarger.preflash_exposure` dan shift filter M/Y preflash
+   * Python. Baku 0 (preflash mati).
+   */
+  preflashExposure?: number;
+  preflashMFilterShift?: number;
+  preflashYFilterShift?: number;
+  /**
+   * Fase 2D Task 4: `camera.diffusion_filter` dan `enlarger.diffusion_filter`
+   * Python bila aktif (tahap `diffusionFft`). Tidak ada = tidak aktif.
+   */
+  cameraDiffusion?: DiffusionFilterConfig;
+  printDiffusion?: DiffusionFilterConfig;
 }
 
 /** Python `CameraParams.film_format_mm` default (35 mm). */

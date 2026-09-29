@@ -17,6 +17,7 @@ export function StockBrowser({
   kind,
   onKindChange,
   onBackground,
+  scan = false,
 }: {
   film: string;
   paper: string;
@@ -25,6 +26,8 @@ export function StockBrowser({
   onKindChange: (kind: StockKind) => void;
   /** Daftar di atas latar gelap (sidebar) vs di sheet. */
   onBackground?: boolean;
+  /** Fase 2D: mode scan -- tidak ada kertas; daftar kertas dinonaktifkan. */
+  scan?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const sections = (kind === 'film' ? FILM_SECTIONS : PAPER_SECTIONS)
@@ -59,8 +62,12 @@ export function StockBrowser({
         {query === '' && (
           <p className="t-footnote secondary" style={{ margin: '0 4px -8px' }}>
             {kind === 'film'
-              ? 'Every negative is printed to a neutral grey, so films differ subtly: in color, contrast and grain. For a bigger change in look, try Paper.'
-              : 'The paper sets contrast, color and the depth of the blacks. Cinema print films give the strongest look.'}
+              ? scan
+                ? 'Scanning shows the film itself. Slides come out as positives; color negatives come out orange and inverted.'
+                : 'Every negative is printed to a neutral grey, so films differ subtly: in color, contrast and grain. For a bigger change in look, try Paper.'
+              : scan
+                ? 'Nothing is printed while Process is set to Scan. Choose a color negative, or set Process to Print in the Film tools, to use paper.'
+                : 'The paper sets contrast, color and the depth of the blacks. Cinema print films give the strongest look.'}
           </p>
         )}
         {sections.map((section) => (
@@ -68,16 +75,17 @@ export function StockBrowser({
             <h3 className="list-header">{section.title}</h3>
             <div className={onBackground ? 'list on-bg' : 'list'} role="radiogroup" aria-label={section.title}>
               {section.stocks.map((stock) => {
-                const selected = !section.locked && stock.id === chosen;
+                const paperOff = kind === 'paper' && scan;
+                const selected = !section.locked && stock.id === chosen && !paperOff;
                 return (
                   <button
                     key={stock.id}
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    disabled={section.locked}
+                    disabled={section.locked || paperOff}
                     className="row"
-                    style={{ opacity: section.locked ? 0.55 : 1, minHeight: 60 }}
+                    style={{ opacity: section.locked || paperOff ? 0.45 : 1, minHeight: 60 }}
                     onClick={() => onPick(kind, stock.id)}
                   >
                     <span className="row-body">

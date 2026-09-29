@@ -35,7 +35,18 @@ export type FilmFormat =
   | 'standard65'
   | 'imax70';
 
+/**
+ * `ProcessMode` OFX. `printSimulation`: negatif dicetak ke kertas lalu
+ * di-scan (topologi default Python). `scanNegative`: film di-scan langsung
+ * (`io.scan_film=True`) -- untuk film reversal hasilnya positif (slide),
+ * untuk film negatif hasilnya negatif oranye. `ProcessNegative` OFX tidak
+ * punya padanan Python dan tidak dibuka.
+ */
+export type ProcessMode = 'printSimulation' | 'scanNegative';
+
 export interface RenderParams {
+  /** OFX `process`; Python `io.scan_film` (Fase 2D Task 3). */
+  process: ProcessMode;
   /** Python: `film_stock` argumen `init_params`. */
   film: string;
   /** Python: `print_stock` argumen `init_params`. */
@@ -98,9 +109,26 @@ export interface RenderParams {
   glarePercent: number;
   /** Python: `scanner.unsharp_mask[1]` (amount, `:85`). */
   scannerUnsharpAmount: number;
+  /** Python: `film_render.dir_couplers.active` (`:131`). OFX: `dirCouplersAmount > 0`. */
+  dirCouplersEnabled: boolean;
+  /** Python: `film_render.dir_couplers.amount` (`:132`). OFX default 0 -- Python 1 (oracle). */
+  dirCouplersAmount: number;
+  /** Python: `film_render.dir_couplers.inhibition_samelayer` (`:133`). */
+  dirCouplersInhibitionSameLayer: number;
+  /** Python: `film_render.dir_couplers.inhibition_interlayer` (`:134`). */
+  dirCouplersInhibitionInterlayer: number;
+  /** Python: `film_render.dir_couplers.diffusion_size_um` (`:139`); 0 mematikan difusi (dan ekornya). */
+  dirCouplersDiffusionUm: number;
+  /** Python: `enlarger.preflash_exposure` (`:81`). OFX 0..1. */
+  preflashExposure: number;
+  /** Python: `enlarger.preflash_m_filter_shift` (`:83`), Kodak CC. */
+  preflashMFilterShift: number;
+  /** Python: `enlarger.preflash_y_filter_shift` (`:82`), Kodak CC. */
+  preflashYFilterShift: number;
 }
 
 export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
+  process: 'printSimulation',
   film: 'kodak_portra_400',
   paper: 'kodak_portra_endura',
   rgbToRawMethod: 'hanatos2025',
@@ -129,4 +157,12 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   glareEnabled: true,
   glarePercent: 0.03,
   scannerUnsharpAmount: 0.7,
+  dirCouplersEnabled: true,
+  dirCouplersAmount: 1,
+  dirCouplersInhibitionSameLayer: 1,
+  dirCouplersInhibitionInterlayer: 1,
+  dirCouplersDiffusionUm: 20,
+  preflashExposure: 0,
+  preflashMFilterShift: 0,
+  preflashYFilterShift: 0,
 });

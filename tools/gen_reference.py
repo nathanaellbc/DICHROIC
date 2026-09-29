@@ -562,8 +562,26 @@ def encoded_patches() -> np.ndarray:
     return np.repeat(colors[None, :, :], 8, axis=0)
 
 
+def lamp_scene(width: int = 128, height: int = 96) -> np.ndarray:
+    """Fase 2D Task 4 (difusi FFT): adegan malam 128x96 -- gradien warna,
+    pita bayangan dalam (0.001), dan dua lampu terang (40 dan 25) di samping
+    bayangan. Radius kernel difusi mencapai klem `min(h, w) // 2 - 1 = 47`, dan
+    kontras 4e4:1 membuat FFT f32 gagal jelas di bayangan (derau pembulatan
+    energi lampu), jadi gerbang ini membuktikan presisi df64 -- deterministik."""
+    y, x = np.mgrid[0:height, 0:width].astype(np.float64)
+    img = np.empty((height, width, 3), dtype=np.float64)
+    img[..., 0] = 0.02 + 0.30 * (x / width)
+    img[..., 1] = 0.03 + 0.20 * (y / height)
+    img[..., 2] = 0.05 + 0.10 * ((x + y) / (width + height))
+    img[:, : width // 8, :] = 0.001
+    img[height // 3 : height // 3 + 4, width // 2 : width // 2 + 4, :] = [40.0, 36.0, 28.0]
+    img[2 * height // 3 : 2 * height // 3 + 3, width // 8 + 2 : width // 8 + 5, :] = [25.0, 22.0, 30.0]
+    return img
+
+
 PARAM_IMAGES = {
     **CASES,
+    "lamp_scene": lamp_scene,
     "grain_dense_patch": grain_dense_patch,
     "identity_lattice_17": identity_lattice_17,
     "flat_patch": flat_patch,
@@ -641,6 +659,8 @@ def _build_param_case_params(case):
         raise ValueError(f"keluarga tidak dikenal: {case.family}")
     if case.film_format_mm is not None:
         raw.camera.film_format_mm = case.film_format_mm
+    if case.scan_film:
+        raw.io.scan_film = True
     if case.pre is not None:
         case.pre(raw)
     params = digest_params(raw)
@@ -649,6 +669,7 @@ def _build_param_case_params(case):
     assert not params.settings.preview_mode, "referensi tidak boleh preview_mode"
     if case.family != "stochastic":
         assert not params.film_render.grain.active and not params.print_render.glare.active
+    assert params.io.scan_film == case.scan_film
     return params
 
 
@@ -662,7 +683,9 @@ def _generate_param_case(name: str, case_dir: Path) -> None:
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "input.f32").write_bytes(np.ascontiguousarray(image, dtype="<f4").tobytes())
     written = []
-    for tap in TAPS:
+    # Scan film (Fase 2D): topologi Python `CMY_FILM -> RGB_OUT`, tanpa tap print.
+    taps = [t for t in TAPS if not (case.scan_film and t in (Tap.LOG_E_PRINT, Tap.CMY_PRINT))]
+    for tap in taps:
         result = _run_param_tap(case, image, tap)
         arr = np.ascontiguousarray(result, dtype="<f4")
         (case_dir / f"{tap}.f32").write_bytes(arr.tobytes())

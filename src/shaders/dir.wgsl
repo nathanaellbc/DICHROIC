@@ -84,6 +84,10 @@
 @group(0) @binding(3) var<storage, read_write> pairBDst: array<vec4<f32>>;
 @group(0) @binding(4) var<uniform> params: CoreParams;
 @group(0) @binding(5) var<storage, read> stockArena: array<f32>;
+// Fase 2D: matriks DIR (9 float, baris donor) lalu kurva sebelum DIR
+// (`exposureCount * 3`), dihitung host per render (`src/host/dirCouplers.ts`)
+// karena `amount`/`inhibition_*` kini parameter pengguna.
+@group(0) @binding(6) var<storage, read> dirFrame: array<f32>;
 
 const kOpComputeCorrection: u32 = 0u;
 const kOpResolve: u32 = 5u;
@@ -118,7 +122,7 @@ fn curveExposureValue(i: u32) -> f32 {
 }
 
 fn dirDensityCurveAt(i: u32, channel: u32) -> f32 {
-  return stockArena[ARENA_DIRDENSITYCURVESBEFORECOUPLERS_OFFSET + i * 3u + channel];
+  return dirFrame[9u + i * 3u + channel];
 }
 
 // Port `interpDensityCurve` `SpektraDir.comp:133-153` -- LINEAR SAJA, tanpa
@@ -272,7 +276,7 @@ fn silverDensity(densityCmy: vec3<f32>) -> vec3<f32> {
 }
 
 fn dirMatrixAt(donor: u32, receiver: u32) -> f32 {
-  return stockArena[ARENA_DIRCOUPLERSMATRIX_OFFSET + donor * 3u + receiver];
+  return dirFrame[donor * 3u + receiver];
 }
 
 // Port `correctionFromDensity` `SpektraDir.comp:246-253` --

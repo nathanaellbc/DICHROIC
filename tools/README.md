@@ -672,3 +672,35 @@ tap, dan `case.json` yang mencatat `renderParams` (patch TS yang dibaca
 `baseline_gray_ramp`, `baseline_gray_ramp_lut`, `baseline_hard_edge_px6um`
 bit-identik dengan `gray_ramp`, `gray_ramp_lut`, `hard_edge_px6um` untuk
 keenam tap.
+
+## Fase 2D — batch parameter 2 dan difusi (lingkungan Linux)
+
+Toolchain disiapkan 2026-09-29 di container Linux tanpa GPU: `../upstream/`
+dengan commit hulu yang sama (`3bb2c2d` / `86476af`), Python 3.13 (`uv venv`),
+versi paket persis Step 4 plus `Pillow==12.3.0 tifffile==2026.3.3 imagecodecs`.
+Bukti kesetaraan: kasus `gray_ramp`, `hard_edge_diffusion_camera`, dan empat
+kasus `param/` dibangkitkan ulang bit-identik untuk semua tap deterministik
+(hanya `rgb_out` stokastik yang berubah, seperti biasa).
+
+```bash
+U=../upstream
+SPEKTRAFILM_PY=$U/spektrafilm SPEKTRAFILM_OFX=$U/spektrafilm-ofx \
+  $U/.venv-ref/bin/python tools/gen_reference.py \
+  --out test/fixtures --param-case <nama> --manifest
+```
+
+Kasus baru di `tools/param_cases.py`:
+
+- `dir_*` -- `film_render.dir_couplers` (`active`, `amount`, `inhibition_*`,
+  `diffusion_size_um`), termasuk rezim ukuran piksel produksi (`_px6um`),
+  `lut_mode`, dan stock yang paling awal terlipat (Portra 800 Push 2).
+- `preflash_*` -- `enlarger.preflash_exposure` dan shift M/Y preflash.
+- `scan_*` -- `io.scan_film = True` (`ParamCase.scan_film`): generator
+  melewati tap print (`log_e_print`, `cmy_print`) yang tidak ada di topologi
+  itu. Empat film reversal plus scan negatif; satu kasus statistik grain
+  reversal.
+- `diffusion_*` -- `camera.diffusion_filter` / `enlarger.diffusion_filter`
+  (family, strength). Citra baru `lamp_scene` (128x96, kontras 4e4:1) membawa
+  radius ke klem `min(h, w) // 2 - 1`; di sana FFT f32 meleset 6e-5..5.5e-4
+  pada log10 (diukur dengan `scipy.fft` float32), jadi gerbangnya membuktikan
+  presisi df64 engine.

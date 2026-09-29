@@ -6,6 +6,8 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { midgrayTablesFrom, printMidgrayFactor } from '../../host/printExposure';
 import type { MidgrayTables } from '../../host/printExposure';
+import { preflashRaw } from '../../host/preflash';
+import type { PreflashTables } from '../../host/preflash';
 import source from '../../shaders/printScan.wgsl?raw';
 
 /**
@@ -37,6 +39,23 @@ function printFrameValues(
     memo.set(key, factor);
   }
   return Float32Array.of(factor, frame.printExposure ?? 1, 0, 0);
+}
+
+/** Fase 2D: vektor raw preflash (`printFrame.preflash`), di-memo per setelan. */
+function preflashValues(tables: PreflashTables, frame: Readonly<FrameParams>, memo: Map<string, Float32Array>): Float32Array {
+  const settings = {
+    exposure: frame.preflashExposure ?? 0,
+    mFilterShift: frame.preflashMFilterShift ?? 0,
+    yFilterShift: frame.preflashYFilterShift ?? 0,
+  };
+  const key = `${settings.exposure}|${settings.mFilterShift}|${settings.yFilterShift}`;
+  let values = memo.get(key);
+  if (!values) {
+    const raw = preflashRaw(tables, settings);
+    values = Float32Array.of(raw[0], raw[1], raw[2], 0);
+    memo.set(key, values);
+  }
+  return values;
 }
 
 /**
@@ -78,6 +97,14 @@ export function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Sta
   let tables: MidgrayTables | undefined;
   const srgbColorSpace = arenas.dynamic.values('printMidgrayColorSpace')[0]!;
   const memo = new Map<string, number>();
+  const preflashMemo = new Map<string, Float32Array>();
+  const preflashTables: PreflashTables = {
+    lightSource: arenas.dynamic.values('enlargerLightSource'),
+    customEnlargerFilters: arenas.dynamic.values('customEnlargerFilters'),
+    neutralCmy: arenas.dynamic.values('enlargerNeutralCmy'),
+    baseDensity: arenas.stock.values('baseDensity'),
+    printLinearSensitivity: arenas.dynamic.values('printLinearSensitivity'),
+  };
 
   return {
     name: 'printScan:expose',
@@ -90,13 +117,13 @@ export function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Sta
       );
       const printFrame = ctx.device.createBuffer({
         label: 'printScan:printFrame',
-        size: 16,
+        size: 32,
         usage: gpuBufferUsage.UNIFORM,
         mappedAtCreation: true,
       });
-      new Float32Array(printFrame.getMappedRange()).set(
-        printFrameValues(tables, srgbColorSpace, ctx.params, ctx.frame, memo),
-      );
+      const frameView = new Float32Array(printFrame.getMappedRange());
+      frameView.set(printFrameValues(tables, srgbColorSpace, ctx.params, ctx.frame, memo), 0);
+      frameView.set(preflashValues(preflashTables, ctx.frame, preflashMemo), 4);
       printFrame.unmap();
 
       const bindGroup = ctx.device.createBindGroup({

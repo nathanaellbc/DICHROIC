@@ -17,8 +17,10 @@ export interface StockInfo {
 export interface StockSection {
   title: string;
   stocks: StockInfo[];
-  /** Stok terlihat tetapi belum bisa dipilih (reversal: batch parameter 2). */
+  /** Stok terlihat tetapi belum bisa dipilih. */
   locked?: boolean;
+  /** Film reversal: hanya bisa di-scan langsung (`process: 'scanNegative'`). */
+  scanOnly?: boolean;
   footer?: string;
 }
 
@@ -58,8 +60,8 @@ export const FILM_SECTIONS: readonly StockSection[] = [
   },
   {
     title: 'Slide film',
-    locked: true,
-    footer: 'Slide films unlock once reversal processing is verified against the reference.',
+    scanOnly: true,
+    footer: 'Slides are scanned directly, without a print. Choosing one switches Process to Scan.',
     stocks: [
       s('kodak_ektachrome_100', 'Kodak', 'Ektachrome 100', 'Reversal · ISO 100'),
       s('kodak_kodachrome_64', 'Kodak', 'Kodachrome 64', 'Reversal · ISO 64'),
@@ -105,4 +107,9 @@ export function matchesQuery(stock: StockInfo, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return `${stock.name} ${stock.detail}`.toLowerCase().includes(q);
+}
+
+/** Film reversal (slide): hanya ada mode scan untuknya. */
+export function isSlideFilm(id: string): boolean {
+  return FILM_SECTIONS.some((section) => section.scanOnly && section.stocks.some((stock) => stock.id === id));
 }

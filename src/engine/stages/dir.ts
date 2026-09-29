@@ -6,6 +6,8 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { GaussianBlur, validInputRect } from '../gaussian';
 import { dirRadiusPx } from '../spatialRadius';
+import { DEFAULT_DIR_SETTINGS, dirFrameValues } from '../../host/dirCouplers';
+import type { FrameParams } from '../graph';
 import source from '../../shaders/dir.wgsl?raw';
 
 /**
@@ -119,8 +121,35 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
   const blur = GaussianBlur.shared(device);
 
 
-  const DIFFUSION_SIZE_UM = 20.0; // `DirCouplersParams.diffusion_size_um` default, konstanta skema.
   const DIFFUSION_TAIL_UM = 200.0; // `DirCouplersParams.diffusion_tail_um` default, konstanta skema.
+  const DEFAULT_DIFFUSION_SIZE_UM = 20.0; // `DirCouplersParams.diffusion_size_um` default.
+
+  // Fase 2D: `dirFrame` (binding 6) -- matriks dan kurva sebelum DIR untuk
+  // `amount`/`inhibition_*` render ini, dihitung host dari gamma stock.
+  // Di-memo per kombinasi supaya render ter-tile tidak menghitung ulang.
+  const gammas = arenas.stock.values('dirGammas');
+  const densityCurves = arenas.stock.values('densityCurves');
+  const packedExposure = arenas.stock.values('curveExposure');
+  const logExposure = new Float32Array(packedExposure.length / 2);
+  for (let i = 0; i < logExposure.length; i += 1) logExposure[i] = packedExposure[i * 2]!;
+  const positive = arenas.stock.values('dirIsPositive')[0]! > 0.5;
+  const memo = new Map<string, Float32Array>();
+  function frameValues(frame: Readonly<FrameParams>): Float32Array {
+    const settings = {
+      amount: frame.dirCouplersAmount ?? DEFAULT_DIR_SETTINGS.amount,
+      inhibitionSameLayer: frame.dirInhibitionSameLayer ?? DEFAULT_DIR_SETTINGS.inhibitionSameLayer,
+      inhibitionInterlayer: frame.dirInhibitionInterlayer ?? DEFAULT_DIR_SETTINGS.inhibitionInterlayer,
+    };
+    const key = `${settings.amount}|${settings.inhibitionSameLayer}|${settings.inhibitionInterlayer}`;
+    let values = memo.get(key);
+    if (!values) {
+      values = dirFrameValues(gammas, densityCurves, logExposure, positive, settings);
+      memo.set(key, values);
+    }
+    return values;
+  }
+  const diffusionUmOf = (frame: Readonly<FrameParams>) =>
+    spatialDiffusionActive ? (frame.dirDiffusionUm ?? DEFAULT_DIFFUSION_SIZE_UM) : 0;
 
   return {
     name: 'dir',
@@ -133,7 +162,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
     // Fase 2A.5: radius dari sigma blur sebenarnya (lih. `spatialRadius.ts`).
     spatialRadiusPx: spatialDiffusionActive
       ? (params, frame) =>
-          dirRadiusPx((frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1))
+          dirRadiusPx((frame.filmFormatMm * 1000) / Math.max(params.fullWidth, params.fullHeight, 1), diffusionUmOf(frame))
       : 0,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       const { width, height } = ctx.params;
@@ -148,8 +177,21 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
       // Fase 2A.5: format film dari `ctx.frame` (dulu konstanta 35.0 di sini).
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
       const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
-      const diffusionSizePixel = spatialDiffusionActive ? DIFFUSION_SIZE_UM / pixelSizeUm : 0;
-      const diffusionTailPixel = spatialDiffusionActive ? DIFFUSION_TAIL_UM / pixelSizeUm : 0;
+      // Python: `diffusion_size_um > 0` menyalakan KEDUA skala (dasar dan ekor).
+      const diffusionUm = diffusionUmOf(ctx.frame);
+      const spatial = diffusionUm > 0;
+      const diffusionSizePixel = spatial ? diffusionUm / pixelSizeUm : 0;
+      const diffusionTailPixel = spatial ? DIFFUSION_TAIL_UM / pixelSizeUm : 0;
+
+      const dirValues = frameValues(ctx.frame);
+      const dirFrameBuffer = ctx.device.createBuffer({
+        label: 'dir:frame',
+        size: dirValues.byteLength,
+        usage: gpuBufferUsage.STORAGE,
+        mappedAtCreation: true,
+      });
+      new Float32Array(dirFrameBuffer.getMappedRange()).set(dirValues);
+      dirFrameBuffer.unmap();
 
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
       const activeHeight =
@@ -161,7 +203,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
         const overridden: CoreParams = {
           ...ctx.params,
           slot0: operation,
-          slot1: spatialDiffusionActive ? 1 : 0,
+          slot1: spatial ? 1 : 0,
           slot2: 0,
         };
         const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
@@ -183,6 +225,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
             { binding: 3, resource: { buffer: b3 } },
             { binding: 4, resource: { buffer: paramsBuffer } },
             { binding: 5, resource: { buffer: arenas.stock.buffer } },
+            { binding: 6, resource: { buffer: dirFrameBuffer } },
           ],
         });
         const pass = encoder.beginComputePass({ label: 'dir' });
@@ -202,7 +245,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
       const geometry = { bufferWidth: width, bufferHeight: height, rect: validInputRect(ctx.params) };
       const size = diffusionSizePixel;
       blur.encode(encoder, { ...geometry, src: corrRaw, dst: corrBase, scratch: junk, sigma: [size, size, size] });
-      if (spatialDiffusionActive) {
+      if (spatial) {
         const tail = diffusionTailPixel;
         blur.encodeExponential(encoder, {
           ...geometry,

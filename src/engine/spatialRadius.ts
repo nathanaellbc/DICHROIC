@@ -56,9 +56,14 @@ export function halationRadiusPx(pixelSizeUm: number, firstSigmaUm: Vec3): numbe
   return Math.max(...core, ...tail, ...bounce);
 }
 
-/** DIR (`couplers.py:104`): Gaussian 20 um + ekor eksponensial 200 um. */
-export function dirRadiusPx(pixelSizeUm: number): number {
-  return Math.max(blurSupportPx(20 / pixelSizeUm), exponentialSupportPx(200 / pixelSizeUm));
+/**
+ * DIR (`couplers.py:104`): Gaussian `diffusion_size_um` (baku 20) + ekor
+ * eksponensial 200 um. `diffusion_size_um <= 0` mematikan keduanya (Python
+ * menolkan ukuran ekor bersamaan).
+ */
+export function dirRadiusPx(pixelSizeUm: number, diffusionUm = 20): number {
+  if (!(diffusionUm > 0)) return 0;
+  return Math.max(blurSupportPx(diffusionUm / pixelSizeUm), exponentialSupportPx(200 / pixelSizeUm));
 }
 
 /**

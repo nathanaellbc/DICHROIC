@@ -56,6 +56,9 @@ class ParamCase:
     # amount` (`SpektraGrain.comp::applyGrainControls`), lalu tap hilir
     # dijalankan dengan `inject = cmy_film`.
     grain_amount: float | None = None
+    # Fase 2D Task 3: `io.scan_film = True` (film di-scan langsung, tanpa
+    # print). Tap print (`log_e_print`, `cmy_print`) tidak ada di topologi ini.
+    scan_film: bool = False
 
 
 def film_push_pull_gamma(stops: float) -> float:
@@ -494,3 +497,195 @@ for _label, _slug, _key in (("Display P3", "display_p3", "Display P3"), ("ProPho
         python_overrides=(f"io.output_color_space = {_key!r}",),
         pre=lambda p, k=_key: setattr(p.io, "output_color_space", k),
     )
+
+# Fase 2D Task 1: DIR couplers. `dirCouplersEnabled` ->
+# `film_render.dir_couplers.active`; `dirCouplersAmount` -> `.amount`;
+# `dirCouplersInhibition{SameLayer,Interlayer}` -> `.inhibition_*`;
+# `dirCouplersDiffusionUm` -> `.diffusion_size_um` (0 mematikan difusi,
+# termasuk ekor). Kasus spasial memakai rezim ukuran piksel produksi
+# (`film_format_mm=0.4` -> 6.25 um/px pada 64 px), tempat difusi DIR benar-benar
+# bekerja; kasus `_lut` membuktikan kimia non-spasial di `.cube`.
+def _dir(**values: Any) -> Override:
+    def apply(p: Any) -> None:
+        for key, value in values.items():
+            setattr(p.film_render.dir_couplers, key, value)
+    return apply
+
+
+def _dir_case(image: str, family: str, render_params: dict[str, Any], python: dict[str, Any],
+              film_format_mm: float | None = None) -> ParamCase:
+    return ParamCase(
+        image=image, family=family,
+        render_params=render_params,
+        python_overrides=tuple(f"film_render.dir_couplers.{k} = {v!r}" for k, v in python.items()),
+        pre=_dir(**python),
+        film_format_mm=film_format_mm,
+    )
+
+
+PARAM_CASES.update({
+    "dir_off": _dir_case("color_patches", "deterministic", {"dirCouplersEnabled": False}, {"active": False}),
+    "dir_off_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersEnabled": False}, {"active": False}, 0.4),
+    "dir_amount0_5": _dir_case("color_patches", "deterministic", {"dirCouplersAmount": 0.5}, {"amount": 0.5}),
+    # Rentang digerbangi: amount x max(inhibition) <= 1.4. Di atas ~1.45
+    # `log_exposure_0` kurva sebelum DIR terlipat (Portra 800 Push 2 paling
+    # awal), `np.interp` Python tak bermakna di sana, dan derau f32 melewati
+    # ambang (terukur 2e-5 pada amount 2) -- `DIR_MAX_EFFECTIVE` di plan.ts.
+    "dir_amount1_4": _dir_case("log_gray_ramp", "deterministic", {"dirCouplersAmount": 1.4}, {"amount": 1.4}),
+    "dir_amount1_4_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersAmount": 1.4}, {"amount": 1.4}, 0.4),
+    "dir_amount1_4_lut": _dir_case("color_patches", "lut", {"dirCouplersAmount": 1.4}, {"amount": 1.4}),
+    "dir_inhibition_same0_5_inter0": _dir_case(
+        "color_patches", "deterministic",
+        {"dirCouplersInhibitionSameLayer": 0.5, "dirCouplersInhibitionInterlayer": 0.0},
+        {"inhibition_samelayer": 0.5, "inhibition_interlayer": 0.0},
+    ),
+    "dir_inhibition_same0_inter1_amount1_4_lut": _dir_case(
+        "log_gray_ramp", "lut",
+        {"dirCouplersAmount": 1.4, "dirCouplersInhibitionSameLayer": 0.0, "dirCouplersInhibitionInterlayer": 1.0},
+        {"amount": 1.4, "inhibition_samelayer": 0.0, "inhibition_interlayer": 1.0},
+    ),
+    "dir_diffusion0_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersDiffusionUm": 0.0}, {"diffusion_size_um": 0.0}, 0.4),
+    "dir_diffusion5_px6um": _dir_case("hard_edge", "deterministic", {"dirCouplersDiffusionUm": 5.0}, {"diffusion_size_um": 5.0}, 0.4),
+    "dir_diffusion60_px6um": _dir_case("impulse_highlight", "deterministic", {"dirCouplersDiffusionUm": 60.0}, {"diffusion_size_um": 60.0}, 0.4),
+})
+
+# Stock yang paling awal terlipat, pada batas atas rentang.
+PARAM_CASES["dir_amount1_4_portra800_push2"] = ParamCase(
+    image="log_gray_ramp", family="deterministic",
+    render_params={"dirCouplersAmount": 1.4},
+    python_overrides=("film_render.dir_couplers.amount = 1.4",),
+    pre=_dir(amount=1.4),
+    film="kodak_portra_800_push2",
+)
+
+# Fase 2D Task 2: preflash. `preflashExposure` -> `enlarger.preflash_exposure`,
+# `preflash{M,Y}FilterShift` -> `enlarger.preflash_{m,y}_filter_shift`.
+# `digest_params` tidak menyentuh ketiganya; preflash berlaku juga di lut_mode.
+def _preflash(**values: Any) -> Override:
+    def apply(p: Any) -> None:
+        for key, value in values.items():
+            setattr(p.enlarger, key, value)
+    return apply
+
+
+def _preflash_case(image: str, family: str, render_params: dict[str, Any], python: dict[str, Any],
+                   post: Override | None = None) -> ParamCase:
+    return ParamCase(
+        image=image, family=family,
+        render_params=render_params,
+        python_overrides=tuple(f"enlarger.{k} = {v!r}" for k, v in python.items()),
+        pre=_preflash(**python),
+        post=post,
+    )
+
+
+PARAM_CASES.update({
+    "preflash_0_2": _preflash_case("color_patches", "deterministic", {"preflashExposure": 0.2}, {"preflash_exposure": 0.2}),
+    "preflash_1": _preflash_case("log_gray_ramp", "deterministic", {"preflashExposure": 1.0}, {"preflash_exposure": 1.0}),
+    "preflash_0_5_m30_y_minus40": _preflash_case(
+        "color_patches", "deterministic",
+        {"preflashExposure": 0.5, "preflashMFilterShift": 30.0, "preflashYFilterShift": -40.0},
+        {"preflash_exposure": 0.5, "preflash_m_filter_shift": 30.0, "preflash_y_filter_shift": -40.0},
+    ),
+    "preflash_0_3_m_minus60_y60_lut": _preflash_case(
+        "log_gray_ramp", "lut",
+        {"preflashExposure": 0.3, "preflashMFilterShift": -60.0, "preflashYFilterShift": 60.0},
+        {"preflash_exposure": 0.3, "preflash_m_filter_shift": -60.0, "preflash_y_filter_shift": 60.0},
+    ),
+})
+
+# Filter C enlarger ikut ke preflash (Python: `c_filter_neutral` yang sama).
+PARAM_CASES["preflash_0_4_with_filter_c15"] = _preflash_case(
+    "color_patches", "deterministic",
+    {"preflashExposure": 0.4, "filterC": 15.0},
+    {"preflash_exposure": 0.4},
+    post=lambda p: setattr(p.enlarger, "c_filter_neutral", p.enlarger.c_filter_neutral + 15.0),
+)
+
+
+# Fase 2D Task 3: scan film (`process: "scanNegative"` -> `io.scan_film = True`).
+# Film reversal (slide) -> positif; film negatif -> negatif oranye. Tanpa
+# glare (`scanning.py`: `glare = None`), grain ber-`positive_film` untuk reversal.
+def _scan_case(film: str, image: str, family: str, render_params: dict[str, Any] | None = None,
+               python: tuple[str, ...] = (), pre: Override | None = None,
+               film_format_mm: float | None = None, realizations: int = 0) -> ParamCase:
+    return ParamCase(
+        image=image, family=family, film=film,
+        render_params={"process": "scanNegative", **(render_params or {})},
+        python_overrides=("io.scan_film = True", *python),
+        pre=pre, film_format_mm=film_format_mm, realizations=realizations,
+        scan_film=True,
+    )
+
+
+PARAM_CASES.update({
+    "scan_velvia100": _scan_case("fujifilm_velvia_100", "color_patches", "deterministic"),
+    "scan_provia100f_log": _scan_case("fujifilm_provia_100f", "log_gray_ramp", "deterministic"),
+    "scan_ektachrome100_lut": _scan_case("kodak_ektachrome_100", "color_patches", "lut"),
+    "scan_kodachrome64_px6um": _scan_case("kodak_kodachrome_64", "hard_edge", "deterministic", film_format_mm=0.4),
+    "scan_portra400_negative": _scan_case("kodak_portra_400", "color_patches", "deterministic"),
+    "scan_velvia100_film_plus1": _scan_case(
+        "fujifilm_velvia_100", "gray_ramp", "deterministic",
+        {"filmExposureEv": 1.0}, ("camera.exposure_compensation_ev = 1.0",),
+        pre=lambda p: setattr(p.camera, "exposure_compensation_ev", 1.0),
+    ),
+    "scan_velvia100_dir_amount0_5_p3": _scan_case(
+        "fujifilm_velvia_100", "color_patches", "deterministic",
+        {"dirCouplersAmount": 0.5, "outputColorSpace": "Display P3"},
+        ("film_render.dir_couplers.amount = 0.5", "io.output_color_space = 'Display P3'"),
+        pre=lambda p: (setattr(p.film_render.dir_couplers, "amount", 0.5), setattr(p.io, "output_color_space", "Display P3")),
+    ),
+    "scan_velvia100_grain_flat": _scan_case("fujifilm_velvia_100", "flat_patch", "stochastic", realizations=16),
+})
+
+# Fase 2D Task 4: filter difusi (konvolusi FFT df64 di engine). `camera*` ->
+# `camera.diffusion_filter`, `print*` -> `enlarger.diffusion_filter`
+# (`active`, `filter_family`, `strength`). `lamp_scene` 128x96 membawa radius
+# ke klem 47 px dan kontras 4e4:1 (FFT f32 gagal di sana); kasus `_px6um`
+# di ukuran piksel produksi; `_lut` membuktikan lut_mode mematikan difusi.
+def _diffusion(site: str, family: str, strength: float) -> Override:
+    def apply(p: Any) -> None:
+        target = p.camera.diffusion_filter if site == "camera" else p.enlarger.diffusion_filter
+        target.active = True
+        target.filter_family = family
+        target.strength = strength
+    return apply
+
+
+def _diffusion_case(image: str, family_case: str, sites: dict[str, tuple[str, float]],
+                    film_format_mm: float | None = None) -> ParamCase:
+    render_params: dict[str, Any] = {}
+    overrides: list[str] = []
+    applies: list[Override] = []
+    for site, (family, strength) in sites.items():
+        prefix = "camera" if site == "camera" else "print"
+        render_params.update({
+            f"{prefix}DiffusionEnabled": True,
+            f"{prefix}DiffusionFamily": family,
+            f"{prefix}DiffusionStrength": strength,
+        })
+        target = "camera" if site == "camera" else "enlarger"
+        overrides.append(f"{target}.diffusion_filter = (active=True, {family!r}, strength={strength})")
+        applies.append(_diffusion(site, family, strength))
+    return ParamCase(
+        image=image, family=family_case,
+        render_params=render_params,
+        python_overrides=tuple(overrides),
+        pre=lambda p, fns=tuple(applies): [fn(p) for fn in fns] and None,
+        film_format_mm=film_format_mm,
+    )
+
+
+PARAM_CASES.update({
+    "diffusion_camera_glimmerglass_0_125": _diffusion_case("lamp_scene", "deterministic", {"camera": ("glimmerglass", 0.125)}),
+    "diffusion_camera_black_pro_mist_1": _diffusion_case("lamp_scene", "deterministic", {"camera": ("black_pro_mist", 1.0)}),
+    "diffusion_camera_pro_mist_0_5": _diffusion_case("lamp_scene", "deterministic", {"camera": ("pro_mist", 0.5)}),
+    "diffusion_camera_cinebloom_2": _diffusion_case("lamp_scene", "deterministic", {"camera": ("cinebloom", 2.0)}),
+    "diffusion_print_cinebloom_1": _diffusion_case("lamp_scene", "deterministic", {"print": ("cinebloom", 1.0)}),
+    "diffusion_print_glimmerglass_2": _diffusion_case("lamp_scene", "deterministic", {"print": ("glimmerglass", 2.0)}),
+    "diffusion_both_pro_mist_bpm": _diffusion_case(
+        "lamp_scene", "deterministic", {"camera": ("pro_mist", 0.25), "print": ("black_pro_mist", 0.5)},
+    ),
+    "diffusion_camera_cinebloom_1_px6um": _diffusion_case("impulse_highlight", "deterministic", {"camera": ("cinebloom", 1.0)}, 0.4),
+    "diffusion_camera_black_pro_mist_1_lut": _diffusion_case("color_patches", "lut", {"camera": ("black_pro_mist", 1.0)}),
+})

@@ -5,6 +5,7 @@ import { createCurveDevelopStage } from './stages/curveDevelop';
 import { createDirStage } from './stages/dir';
 import { createGrainStage } from './stages/grain';
 import { createDiffusionStage } from './stages/diffusion';
+import { createDiffusionFftStage } from './stages/diffusionFft';
 import { createPrintExposureStage, createPrintDevelopStage } from './stages/printScan';
 import { createScannerPostStage } from './stages/scannerPost';
 import type { Arenas } from './arena';
@@ -99,7 +100,56 @@ import type { ChainSpec } from '../params/plan';
  * `family: 'measured'` adalah rantai 11 tahap; `grain: false` menghapus
  * tahap grain (keluarga `<case>` deterministik, `measuredChain.test.ts`).
  */
+/**
+ * Fase 2D Task 3 (`io.scan_film`): film di-scan langsung. Topologi Python
+ * `CMY_FILM -> RGB_OUT` lewat `scanning.scan_film` -- ketiga tahap print
+ * (exposure enlarger, difusi enlarger, develop kertas) TIDAK dibangun sama
+ * sekali (modul WGSL-nya butuh entri arena print yang tidak ada di mode ini);
+ * tahap scanner yang SAMA membaca `cmy_film` dengan data scanner FILM di
+ * arena dynamic (`precomputeArenaData(..., { scanFilm: true })`).
+ */
+/**
+ * Fase 2D Task 4: situs difusi memakai konvolusi FFT df64 bila aktif; bila
+ * mati tetap tahap identitas (`bypassConvolution`) yang menjaga semantik
+ * linear/log antar-tahap persis seperti sebelumnya.
+ */
+function cameraDiffusionStage(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage {
+  return spec.cameraDiffusion
+    ? createDiffusionFftStage(device, 'camera')
+    : createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true });
+}
+
+function printDiffusionStage(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage {
+  return spec.printDiffusion
+    ? createDiffusionFftStage(device, 'print')
+    : createDiffusionStage(device, arenas, 'print', { bypassConvolution: true });
+}
+
 export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
+  if (!spec.scan) return buildPrintChain(device, arenas, spec);
+  if (spec.family === 'lut') {
+    if (spec.grain) throw new Error('buildChain: grain tidak sah di keluarga lut (lut_mode mematikan efek stokastik).');
+    return [
+      createMaterializeActiveRegionStage(device),
+      createFilmExposureStage(device, arenas),
+      createCurveDevelopStage(device, arenas),
+      createDirStage(device, arenas, { spatialDiffusionActive: false }),
+      createScannerPostStage(device, arenas),
+    ];
+  }
+  return [
+    createMaterializeActiveRegionStage(device),
+    createFilmExposureStage(device, arenas),
+    cameraDiffusionStage(device, arenas, spec),
+    createHalationStage(device, arenas),
+    createCurveDevelopStage(device, arenas),
+    createDirStage(device, arenas),
+    ...(spec.grain ? [createGrainStage(device, arenas)] : []),
+    createScannerPostStage(device, arenas),
+  ];
+}
+
+function buildPrintChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
   if (spec.family === 'lut') {
     if (spec.grain) {
       throw new Error('buildChain: grain tidak sah di keluarga lut (lut_mode mematikan efek stokastik).');
@@ -117,13 +167,13 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): 
   return [
     createMaterializeActiveRegionStage(device),
     createFilmExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'camera', { bypassConvolution: true }),
+    cameraDiffusionStage(device, arenas, spec),
     createHalationStage(device, arenas),
     createCurveDevelopStage(device, arenas),
     createDirStage(device, arenas),
     ...(spec.grain ? [createGrainStage(device, arenas)] : []),
     createPrintExposureStage(device, arenas),
-    createDiffusionStage(device, arenas, 'print', { bypassConvolution: true }),
+    printDiffusionStage(device, arenas, spec),
     createPrintDevelopStage(device, arenas),
     createScannerPostStage(device, arenas),
   ];

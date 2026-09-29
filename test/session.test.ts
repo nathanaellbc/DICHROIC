@@ -209,9 +209,9 @@ describe('Session: prewarm', () => {
     await warm.prewarm();
     const graphs = (warm as unknown as { graphs: Map<string, unknown> }).graphs;
     expect([...graphs.keys()].map((k) => k.split('|').slice(1).join('|')).sort()).toEqual([
-      'lut|grain=false',
-      'measured|grain=false',
-      'measured|grain=true',
+      'lut|grain=false|scan=false|dc=false|dp=false',
+      'measured|grain=false|scan=false|dc=false|dp=false',
+      'measured|grain=true|scan=false|dc=false|dp=false',
     ]);
     const cold = await sharedSession();
     for (const s of [warm, cold]) {

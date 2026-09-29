@@ -1,0 +1,35 @@
+{
+  "name": "param/scan_velvia100_film_plus1",
+  "height": 16,
+  "width": 32,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "fujifilm_velvia_100",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "process": "scanNegative",
+    "filmExposureEv": 1.0
+  },
+  "pythonOverrides": [
+    "io.scan_film = True",
+    "camera.exposure_compensation_ev = 1.0"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

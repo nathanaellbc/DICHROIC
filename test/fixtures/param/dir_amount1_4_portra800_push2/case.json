@@ -1,0 +1,41 @@
+{
+  "name": "param/dir_amount1_4_portra800_push2",
+  "height": 16,
+  "width": 32,
+  "family": "deterministic",
+  "stochastic": false,
+  "film": "kodak_portra_800_push2",
+  "print": "kodak_portra_endura",
+  "renderParams": {
+    "dirCouplersAmount": 1.4
+  },
+  "pythonOverrides": [
+    "film_render.dir_couplers.amount = 1.4"
+  ],
+  "taps": [
+    {
+      "tap": "rgb_pre",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_film",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_film",
+      "channels": 3
+    },
+    {
+      "tap": "log_e_print",
+      "channels": 3
+    },
+    {
+      "tap": "cmy_print",
+      "channels": 3
+    },
+    {
+      "tap": "rgb_out",
+      "channels": 3
+    }
+  ]
+}

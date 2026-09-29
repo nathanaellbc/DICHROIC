@@ -32,7 +32,7 @@ export function Segmented<V extends string>({
 }) {
   const pillId = useId();
   return (
-    <div role="group" aria-label={label} className={small ? 'segmented small' : 'segmented'}>
+    <div role="group" aria-label={label} className={`segmented${small ? ' small' : ''}${items.length >= 4 ? ' dense' : ''}`}>
       {items.map((item) => {
         const selected = item.value === value;
         return (

@@ -101,6 +101,10 @@ export class Engine {
   #client: SessionClient | undefined;
   #ready: Promise<void> | undefined;
   #openToken = 0;
+  /** Ukuran gambar asli yang terbuka (untuk membandingkan ukuran ekspor). */
+  #imageSize: { width: number; height: number } | undefined;
+  /** Ekspor terakhir lebih kecil dari aslinya (difusi, Fase 2D). */
+  lastExportLimited: { width: number; height: number } | undefined;
   #inFlight = false;
   #dirty = false;
 
@@ -156,12 +160,14 @@ export class Engine {
       const image: DecodedImage = viaBrowser ? await decodeWithBrowser(file, file.name) : await decodeInWorker(client, bytes, file);
       if (!stillCurrent()) return;
       const original = originalFrame(image, PREVIEW_MAX_LONG_EDGE);
+      const imageSize = { width: image.width, height: image.height };
       const input = suggestedInput(image);
 
       if (this.#state.engine !== 'ready') this.#set({ opening: { name: file.name, stage: 'Preparing the darkroom…' } });
       await this.#ready;
       if (!stillCurrent()) return;
       await client.open(image);
+      this.#imageSize = imageSize;
       // Tampilan (film, kertas, penyesuaian) dibawa ke foto berikutnya; hanya
       // colour space input dan auto exposure yang milik berkas.
       const params = { ...this.#state.params, ...input };
@@ -266,6 +272,11 @@ export class Engine {
 
   async exportImage(format: ExportFormat): Promise<File> {
     const bytes = await this.#client!.exportImage(format);
+    // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
+    // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
+    const size = await this.#client!.lastFullSize();
+    const full = this.#imageSize;
+    this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
     const name = `${baseName(this.#state.fileName)}-dichroic.${EXT[format]}`;
     return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: MIME[format] });
   }

@@ -20,10 +20,13 @@ import {
   snap,
   sliderPatch,
   sliderValue,
+  stockPatch,
   suggestedInput,
+  visibleTools,
+  formatStops,
   valueText,
 } from '../../src/ui/model/tools';
-import type { ChoiceTool, SliderTool } from '../../src/ui/model/tools';
+import type { ChoiceTool, DiffusionTool, SliderTool } from '../../src/ui/model/tools';
 
 interface Manifest {
   stocks: Array<{ id: string; type: string }>;
@@ -37,14 +40,14 @@ const films = Object.keys(manifest.neutralPrintFilters.table[papers[0]!]!);
 const type = (id: string) => manifest.stocks.find((s) => s.id === id)?.type;
 
 describe('katalog stok UI == manifest', () => {
-  it('film yang bisa dipilih = semua film negatif di database netral', () => {
-    const expected = films.filter((id) => type(id) === 'negative').sort();
-    expect(selectableIds(FILM_SECTIONS).sort()).toEqual(expected);
+  it('film yang bisa dipilih = semua film di database netral (negatif dan reversal)', () => {
+    expect(selectableIds(FILM_SECTIONS).sort()).toEqual([...films].sort());
   });
 
-  it('film terkunci = semua film reversal', () => {
-    const locked = FILM_SECTIONS.filter((s) => s.locked).flatMap((s) => s.stocks.map((x) => x.id)).sort();
-    expect(locked).toEqual(films.filter((id) => type(id) === 'positive').sort());
+  it('bagian scan-only = semua film reversal (Fase 2D), tidak ada yang terkunci', () => {
+    const scanOnly = FILM_SECTIONS.filter((s) => s.scanOnly).flatMap((s) => s.stocks.map((x) => x.id)).sort();
+    expect(scanOnly).toEqual(films.filter((id) => type(id) === 'positive').sort());
+    expect(FILM_SECTIONS.some((s) => s.locked)).toBe(false);
   });
 
   it('kertas = kunci database netral', () => {
@@ -65,7 +68,8 @@ describe('alat UI == permukaan parameter engine', () => {
   it('setiap field yang diubah alat berstatus verified', () => {
     for (const tool of tools) {
       if (tool.kind === 'locked') continue;
-      expect(FIELD_STATUS[tool.field], tool.id).toBe('verified');
+      const fields = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : [tool.field];
+      for (const field of fields) expect(FIELD_STATUS[field], tool.id).toBe('verified');
       if (tool.kind === 'slider' && tool.enabledBy) expect(FIELD_STATUS[tool.enabledBy], tool.id).toBe('verified');
     }
   });
@@ -117,7 +121,7 @@ describe('format, snap, patch', () => {
 
   it('slider terbalik: rentang simetris, + di UI = field negatif (semantik kamar gelap)', () => {
     const inverted = GROUPS.flatMap((g) => g.tools).filter((t): t is SliderTool => t.kind === 'slider' && !!t.invert);
-    expect(inverted.map((t) => t.field).sort()).toEqual(['filterC', 'filterMShift', 'filterYShift', 'printExposureEv']);
+    expect(inverted.map((t) => t.field).sort()).toEqual(['filterC', 'filterMShift', 'filterYShift', 'preflashMFilterShift', 'preflashYFilterShift', 'printExposureEv']);
     for (const tool of inverted) expect(tool.min, tool.id).toBe(-tool.max);
     const exposure = findTool('printExposureEv') as SliderTool;
     expect(sliderPatch(exposure, 1)).toEqual({ printExposureEv: -1 });
@@ -137,5 +141,54 @@ describe('format, snap, patch', () => {
     expect(suggestedInput({ suggestedColorSpace: 'sRGB', encoding: 'encoded' })).toEqual({ inputColorSpace: 'sRGB', inputCctfDecoding: true, autoExposure: false });
     expect(suggestedInput({ suggestedColorSpace: 'ACES2065-1', encoding: 'linear' })).toEqual({ inputColorSpace: 'ACES2065-1', inputCctfDecoding: false, autoExposure: true });
     expect(suggestedInput({ suggestedColorSpace: 'Linear Rec.709', encoding: 'linear' })).toEqual({ inputColorSpace: 'Linear Rec.709', inputCctfDecoding: false, autoExposure: true });
+  });
+});
+
+describe('mode proses dan stok (Fase 2D)', () => {
+  it('slide film memindah ke scan; kembali ke negatif memindah ke print; negatif tetap scan bila disengaja', () => {
+    expect(stockPatch('film', 'fujifilm_velvia_100', { film: 'kodak_portra_400', process: 'printSimulation' })).toEqual({
+      film: 'fujifilm_velvia_100',
+      process: 'scanNegative',
+    });
+    expect(stockPatch('film', 'kodak_gold_200', { film: 'fujifilm_velvia_100', process: 'scanNegative' })).toEqual({
+      film: 'kodak_gold_200',
+      process: 'printSimulation',
+    });
+    expect(stockPatch('film', 'kodak_gold_200', { film: 'kodak_portra_400', process: 'scanNegative' })).toEqual({ film: 'kodak_gold_200' });
+    expect(stockPatch('paper', 'kodak_2383', { film: 'kodak_portra_400', process: 'printSimulation' })).toEqual({ paper: 'kodak_2383' });
+  });
+
+  it('Process -> Print dengan slide film mengganti ke negatif bawaan', () => {
+    const process = findTool('process') as ChoiceTool;
+    expect(choicePatch(process, 'printSimulation', { film: 'kodak_ektachrome_100' })).toEqual({ process: 'printSimulation', film: 'kodak_portra_400' });
+    expect(choicePatch(process, 'scanNegative', { film: 'kodak_portra_400' })).toEqual({ process: 'scanNegative' });
+  });
+
+  it('alat per mode: scan menyembunyikan tahap print dan memakai exposure film', () => {
+    const film = GROUPS.find((g) => g.id === 'film')!;
+    const print = visibleTools(film, { process: 'printSimulation' }).map((t) => t.id);
+    const scan = visibleTools(film, { process: 'scanNegative' }).map((t) => t.id);
+    expect(print).toContain('printExposureEv');
+    expect(print).not.toContain('scanExposureEv');
+    expect(scan).toContain('scanExposureEv');
+    expect(scan).not.toContain('printExposureEv');
+    expect(scan).not.toContain('filmExposureEv');
+    const color = GROUPS.find((g) => g.id === 'color')!;
+    expect(visibleTools(color, { process: 'scanNegative' }).map((t) => t.id)).toEqual(['inputColorSpace', 'inputCctfDecoding', 'outputColorSpace']);
+  });
+
+  it('filter difusi: nilai dalam stop, Off saat mati, reset mengembalikan ketiganya', () => {
+    const lens = findTool('cameraDiffusion') as DiffusionTool;
+    const on = { ...BASELINE_RENDER_PARAMS, cameraDiffusionEnabled: true, cameraDiffusionStrength: 0.25, cameraDiffusionFamily: 'cinebloom' as const };
+    expect(valueText(lens, on)).toBe('¼');
+    expect(valueText(lens, BASELINE_RENDER_PARAMS)).toBe('Off');
+    expect(isModified(lens, on, BASELINE_RENDER_PARAMS)).toBe(true);
+    expect(resetPatch(lens, BASELINE_RENDER_PARAMS)).toEqual({
+      cameraDiffusionEnabled: false,
+      cameraDiffusionFamily: 'black_pro_mist',
+      cameraDiffusionStrength: 0.5,
+    });
+    expect(formatStops(1.5)).toBe('1½');
+    expect(formatStops(2)).toBe('2');
   });
 });
