@@ -538,6 +538,58 @@ Setiap field dibuka lewat gerbang parity Python di jalur produksi
 (PQ/HLG), `ProcessNegative`, bleach bypass, push/pull `Experimental`, model
 grain selain Production, `rgbToRawMethod` selain hanatos2025.
 
+## 6c. Ekstensi di luar spektrafilm (2026-09-29)
+
+Permintaan pemilik proyek: "untuk implementasi save gunakan cara dari
+aplikasi EMULSION, tambahkan juga menu camera raw control seperti EMULSION
+beserta lens blur nya". Kode EMULSION ditulis ulang, tidak diimpor (batas
+lisensi `test/boundary.test.ts`).
+
+**Status field `extension`** (`src/params/registry.ts`): field tanpa oracle
+Python. Tidak digerbangi parity; digerbangi referensi JS f64 dan sifat, lewat
+penanda `@extends <field>` di test (dijaga `renderParams.test.ts`). UI hanya
+mengizinkan `extension` di grup yang menyatakannya (Camera, Lens), dijaga
+`test/ui/model.test.ts`. Kubus `.cube` mematikan keduanya (camera raw
+mengukur pivot dari isi gambar, lens blur butuh peta kedalaman foto).
+
+- **Ekspor gaya EMULSION** -- JPEG/WebP/AVIF lewat `OffscreenCanvas` di
+  worker bila probing MIME lolos, PNG8/16 dan TIFF16 encoder sendiri; render
+  dan encode saat lembar dibuka sehingga Save to Photos memanggil
+  `navigator.share` di dalam gestur (syarat iOS).
+- **Camera Raw** (`host/cameraDevelop.ts`, binding 7 `filmExposure.wgsl`):
+  WB von Kries CAT02, tint, tone di sekitar pivot rata-rata log, saturasi
+  penjaga luminans, sebelum rgb->raw. Netral = dilewati persis. Gerbang
+  `test/cameraDevelop.test.ts` (GPU vs JS f64 <= 1e-5 log10).
+- **Lens blur** (`host/lens.ts`, `stages/lensBlur.ts`): CoC thin-lens linear
+  di disparitas dengan dua jangkar (jauh = tak hingga, jarak fokus dalam
+  meter), gather setengah resolusi, bilah iris, cat's eye; disisipkan setelah
+  `filmExposure`, sebelum difusi kamera (urutan `camera.lens_blur_um`
+  Python), hanya bila `lensBlurEnabled` DAN ada peta kedalaman. Gerbang
+  `test/lensBlur.test.ts`.
+- **Estimasi kedalaman** (`src/depth/`): Depth Anything V2 Small (Apache-2.0;
+  Base/Large CC-BY-NC) lewat `onnxruntime-web` (MIT), di perangkat. fp16 di
+  WebGPU (`shader-f16`) atau int8 di WASM; iOS/HP memakai WASM, masukan 392 px,
+  worker ditutup tiap foto. Bobot dipatok ke satu revisi Hugging Face dan
+  disimpan di cache `dichroic.depth.v1` bersama runtime WASM ORT (dikecualikan
+  dari precache service worker). Unduhan pertama: 76 MB (WebGPU) / 41 MB
+  (WASM), hanya atas perintah pengguna. Pra- dan pasca-proses
+  (`refine.ts`: resample kubik ber-antialias, tensor ImageNet, upsample
+  bilateral bersama, normalisasi persentil 0,5/99,5) digerbangi di Node
+  (`test/depth/refine.test.ts`).
+- **UI** grup Lens: `DepthController` (`src/ui/engine/depthController.ts`,
+  status idle / needs-download / working / ready / error, token per foto;
+  `test/ui/depthController.test.ts`), Pick Focus + reticle di `PhotoView`,
+  slider berskala log (jarak fokus, batas tajam dekat, panjang fokus dengan
+  0 = lensa normal), stepper sepertiga stop dan bilah iris, readout kedalaman
+  ruang. `normalizePatch` menjaga batas tajam dekat <= jarak fokus.
+
+**Belum diverifikasi:** inferensi model asli di browser (Hugging Face
+diblokir di container sesi sebelumnya; di sesi Windows alur sampai kartu
+unduhan diverifikasi di Chrome headless, unduhan 76 MB belum dijalankan),
+kecepatan di iPhone fisik.
+
+---
+
 ## 7. Testing
 
 - `npm test` tetap menjalankan seluruh suite; berkas baru mengikuti pola yang

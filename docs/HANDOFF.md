@@ -5,92 +5,41 @@ kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, fitur gaya EMULSION — SEDANG DIKERJAKAN)
+## Posisi sekarang (diperbarui 2026-09-29, fitur gaya EMULSION — SELESAI)
 
 Permintaan pemilik: "untuk implementasi save gunakan cara dari aplikasi
 EMULSION, tambahkan juga menu camera raw control seperti EMULSION beserta lens
-blur nya". Branch `claude/admiring-galileo-1vwlrk`, BELUM ada PR (dorong apa
-adanya atas permintaan pemilik). Semua kode EMULSION ditulis ulang, tidak
-diimpor (batas lisensi `test/boundary.test.ts`; EMULSION tanpa lisensi, jadi
-membawa pendekatannya ke DICHROIC GPL adalah keputusan pemilik).
+blur nya". Ringkasan teknis di spec Fase 2 §6c. Semua kode EMULSION ditulis
+ulang, tidak diimpor.
 
-**Selesai dan teruji (commit 8a31e18, 2f1721f, af9e016):**
+**Selesai dan teruji:** ekspor gaya EMULSION, Camera Raw, engine lens blur
+(commit 8a31e18, 2f1721f, af9e016), lalu di sesi Windows (NVIDIA/D3D12):
 
-1. **Ekspor gaya EMULSION** -- `src/io/canvasEncode.ts`, `Session.renderExport`
-   / `exportFormats` / `exportImage(format, {longEdge, quality})`,
-   `src/ui/screens/Export.tsx`, `src/ui/share.ts`, `src/ui/model/exportSizes.ts`.
-   JPEG/WebP/AVIF lewat `OffscreenCanvas.convertToBlob` di worker, ditawarkan
-   hanya bila probing MIME lolos; PNG8/16 + TIFF16 tetap encoder sendiri.
-   Render+encode berjalan saat lembar dibuka (debounce), jadi Save to Photos
-   memanggil `navigator.share` sinkron di dalam gestur (syarat iOS); ukuran
-   berkas terukur; detent 2048/4096/8192 + Source (batas kanvas iOS 16,7 MP
-   untuk lossy); nama ASCII `<foto> - <film> on <kertas>.<ext>`; preferensi
-   `localStorage['dichroic.export.v1']`. Bias pembulatan +0,5 pratinjau
-   dihapus (kuantisasi = PNG8). Tes: `test/session.test.ts`,
-   `test/ui/export.test.ts`, `test/rpc.test.ts`.
-2. **Camera Raw** -- `src/host/cameraDevelop.ts`, binding 7 `CameraFrame` di
-   `filmExposure.wgsl` (setelah decode input, sebelum rgb->raw). WB von Kries
-   CAT02 (K + tint Duv 0,02, 5500 K = identitas), tone luminans di sekitar
-   pivot rata-rata log (diukur di plan), saturasi penjaga luminans. Status
-   field baru **`extension`** di `registry.ts` (tanpa oracle Python; penanda
-   `@extends` di test, dijaga `renderParams.test.ts`). Netral = dilewati persis.
-   Gerbang: `test/cameraDevelop.test.ts` (GPU vs referensi JS f64, <= 1e-5
-   log10 di `log_e_film`). UI: grup baru **Camera** (grup pertama).
-3. **Engine lens blur** -- `src/host/lens.ts` (thin-lens CoC linear di
-   disparitas, DOF, zona tajam dekat), `src/shaders/lensBlur.wgsl` +
-   `src/engine/stages/lensBlur.ts` (gather near/far setengah resolusi, grid
-   <= 1536, mip rgba16float, tile 16 + dilate, bilah iris, cat's eye; piksel
-   dalam fokus bit-identik). Disisipkan setelah `filmExposure`, sebelum difusi
-   kamera (urutan `camera.lens_blur_um` Python), HANYA bila
-   `lensBlurEnabled` dan ada peta kedalaman (`Session.setDepthMap`, RPC
-   mentransfer data). Field `lens*` berstatus `extension`. Gerbang:
-   `test/lensBlur.test.ts` (rumus thin-lens, bit-identik dalam fokus, cakram =
-   diameter CoC dengan energi 0,9..1,1, oklusi dekat/jauh).
+- `src/depth/` tersambung: `Engine` membangun guide kedalaman sebelum
+  `open`, `DepthController` (status + token per foto) mengestimasi saat lens
+  blur dinyalakan; unduhan model hanya atas perintah (76 MB WebGPU / 41 MB
+  WASM ditampilkan dari `firstDownloadBytes`).
+- UI grup **Lens** (setelah Camera): kartu status/unduh, Pick Focus + reticle
+  (`PhotoView.focus`), jarak fokus dan batas tajam dekat (log10), panjang
+  fokus (log2, 0 = normal), bukaan (sepertiga stop), bilah iris,
+  kelengkungan, cat's eye, foreground, readout near/far/hyperfocal. Alat
+  lensa memakai `requires` (bukan `enabledBy`).
+- `vite.config.ts`: runtime WASM ORT dikecualikan dari precache,
+  `onnxruntime-web` dari pra-bundling.
+- Tes baru: `test/depth/refine.test.ts`, `test/ui/depthController.test.ts`,
+  `test/ui/lensModel.test.ts`. Dua ekspektasi basi diperbaiki (kunci graf
+  prewarm `|lb=`, header `.cube` kini dari daftar plan).
+- Verifikasi Chrome headless (390x844, WebGPU, cross-origin isolated) lewat
+  `playwright-core` + Chrome terpasang: buka foto, grup Lens, kartu unduhan,
+  stepper, slider log, tanpa galat console.
 
-**Didorong apa adanya, BELUM tersambung/teruji (commit handoff ini):**
+**Belum:**
 
-- `src/depth/` -- Depth Anything V2 Small (Apache-2.0) lewat
-  `onnxruntime-web` 1.30 (MIT, sudah di `package.json`): `model.ts`
-  (varian fp16 WebGPU 49,6 MB / int8 WASM 27,3 MB, revisi HF dipatok,
-  bucket `dichroic.depth.v1`, `fetchCached` streaming ke cache),
-  `refine.ts` (resample kubik, tensor ImageNet, upsample bilateral bersama,
-  normalisasi persentil 0,5/99,5), `workerCore.ts` + `depthGpu.worker.ts` /
-  `depthCpu.worker.ts`, `estimate.ts` (`buildGuide` dari `DecodedImage`,
-  `DepthEstimator`). Lolos `tsc`; belum ada tes dan belum dipanggil UI.
-  Hugging Face diblokir proxy container cloud, jadi model asli belum pernah
-  dijalankan -- uji di browser sungguhan.
-- `TO_REC709` / `srgbEncode` di `src/ui/engine/display.ts` kini diekspor
-  (dipakai `buildGuide`).
-
-**Langkah berikutnya (urut):**
-
-1. `Engine` (`src/ui/engine/engine.ts`): di `openFile`, SEBELUM
-   `client.open(image)` (yang mentransfer `rgba`), simpan
-   `buildGuide(image, coarse ? 1024 : 1536)`; reset status kedalaman dan
-   `lensFocusX/Y` = 0,5 per foto. State `depth`: idle / needs-download(MB) /
-   working(progress) / ready(backend, variant, ms) / error. Saat
-   `lensBlurEnabled` menyala: `estimate(allowDownload:false)`;
-   `DepthNotCachedError` -> needs-download; tombol Download ->
-   `estimate(true)`; hasil -> `client.setDepthMap({width,height,data})` lalu
-   `requestRender()`.
-2. UI grup **Lens**: alat `kind: 'lens'` (sakelar + kartu status/unduh +
-   tombol "Pick focus point" + readout near/far/hyperfocal dari
-   `lensReadout`), slider fokus (log10 0,3..100 m), panjang fokus (log2
-   8..600, 0 = normal `NORMAL_FOCAL_MM`), bukaan (indeks `F_STOPS`), keep
-   sharp from, foreground, bilah (0/5..9), kelengkungan, cat's eye. Butuh
-   `SliderTool.scale` (log10/log2/fstop) dan stepper dengan daftar nilai.
-   `test/ui/model.test.ts` mengizinkan `extension` hanya di grup `camera` --
-   perluas ke `lens`.
-3. `PhotoView`: mode fokus -- ketuk -> `setParams({lensFocusX, lensFocusY})`
-   (koordinat relatif `rect`), tampilkan reticle.
-4. `vite.config.ts`: `globIgnores` + `/ort-wasm[^/]*\.wasm$/` (jangan precache
-   runtime ORT; ia masuk cache kedalaman), `optimizeDeps.exclude`
-   `onnxruntime-web`.
-5. Tes `src/depth/refine.ts` di Node; verifikasi Playwright lembar ekspor dan
-   grup Camera/Lens (lebar 390 px: segmented kini 5-6 item).
-6. Docs spec (bagian ekstensi di luar spektrafilm), suite penuh lavapipe
-   (kegagalan lama yang diketahui: tile-vs-full 2,086e-6 > 2e-6), PR ke
-   `main`, merge tanpa minta izin (instruksi pemilik), cek deploy Pages.
+1. Unduhan model asli (76 MB dari Hugging Face) dan inferensi di browser
+   sungguhan belum pernah dijalankan -- perlu izin pemilik untuk mengunduh.
+2. Uji di iPhone fisik (kecepatan FFT df64, kedalaman WASM int8 392 px).
+3. Uji suite penuh lavapipe (kegagalan lama yang diketahui: tile-vs-full
+   2,086e-6 > 2e-6).
 
 ## Posisi sebelumnya (2026-09-29, batch parameter 2 + difusi)
 
