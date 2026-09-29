@@ -22,6 +22,9 @@
  *   IFD1     (thumbnail) dibuang: thumbnail asli tidak menampilkan hasil edit.
  */
 
+/** Batas isi APP1 EXIF JPEG: panjang segmen 65535 dikurangi panjang (2) dan awalan `Exif` + 2 NUL (6). */
+export const EXIF_APP1_MAX_BYTES = 65535 - 2 - 6;
+
 export interface ExifRewrite {
   width: number;
   height: number;
@@ -221,6 +224,22 @@ function fromHeif(bytes: Uint8Array): Uint8Array | undefined {
 
 function isHeif(bytes: Uint8Array): boolean {
   return bytes.length >= 12 && ascii(bytes, 4, 4) === 'ftyp';
+}
+
+/**
+ * EXIF berkas asli dalam bentuk bersih dan ringkas (`rewriteExif`), untuk
+ * disimpan bersama gambar ter-decode sampai ekspor. Ukuran piksel ditulis
+ * ulang saat ekspor. DNG/TIFF: berkasnya sendiri struktur TIFF, jadi hanya
+ * tag terpilih yang disimpan, bukan seluruh berkas.
+ */
+export function captureExif(bytes: Uint8Array): Uint8Array | undefined {
+  const tiff = extractExif(bytes);
+  if (!tiff) return undefined;
+  try {
+    return rewriteExif(tiff, { width: 0, height: 0, srgb: true, maxBytes: EXIF_APP1_MAX_BYTES });
+  } catch {
+    return undefined;
+  }
 }
 
 /** Struktur TIFF EXIF dari berkas asli, atau `undefined` bila tidak ada. */

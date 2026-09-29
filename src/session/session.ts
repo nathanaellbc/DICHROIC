@@ -23,6 +23,9 @@ import { precomputeArenaData, uploadArenas } from '../host/spectral';
 import type { ArenaPlan } from '../host/spectral';
 import type { DecodedImage } from '../io/decoded';
 import { encodePng, encodeTiff16 } from '../io/encode';
+import { EXIF_APP1_MAX_BYTES, exifForTiff, rewriteExif } from '../io/exif';
+import { buildIccProfile } from '../io/icc';
+import { encodeJpeg } from '../io/jpegEncoder';
 import { CANVAS_FORMATS, offscreenCanvasEncoder, rgbToRgba8 } from '../io/canvasEncode';
 import type { CanvasEncoder, CanvasFormat } from '../io/canvasEncode';
 import { formatCube, identityLattice } from '../io/cube';
@@ -43,15 +46,20 @@ import type { ScaledImage } from './downscale';
 export type RenderQuality = 'full' | 'preview';
 
 /**
- * Format ekspor gambar. PNG 8/16-bit dan TIFF 16-bit tak terkompresi (spec
- * Fase 2 §5) memakai encoder kita sendiri -- selalu tersedia, nilai persis.
- * JPEG/WebP/AVIF (ekspor gaya EMULSION) memakai encoder kanvas browser dan
- * hanya ditawarkan bila probing membuktikan browser menghasilkannya
- * (`exportFormats`).
+ * Format ekspor gambar. PNG 8/16-bit, TIFF 16-bit tak terkompresi (spec Fase
+ * 2 §5), dan JPEG (`io/jpegEncoder.ts`) memakai encoder kita sendiri --
+ * selalu tersedia, resolusi native tanpa batas kanvas iOS, dengan profil ICC
+ * colour space keluaran dan EXIF asli. WebP/AVIF memakai encoder kanvas
+ * browser dan hanya ditawarkan bila probing membuktikan browser
+ * menghasilkannya (`exportFormats`).
  */
 export type ExportFormat = 'png8' | 'png16' | 'tiff16' | CanvasFormat;
 export const LOSSLESS_EXPORT_FORMATS: readonly ExportFormat[] = ['png8', 'png16', 'tiff16'];
-export const EXPORT_FORMATS: readonly ExportFormat[] = [...LOSSLESS_EXPORT_FORMATS, ...CANVAS_FORMATS];
+/** Format dengan encoder sendiri (selalu ada). */
+export const NATIVE_EXPORT_FORMATS: readonly ExportFormat[] = [...LOSSLESS_EXPORT_FORMATS, 'jpeg'];
+/** Format lewat encoder kanvas browser. */
+const BROWSER_EXPORT_FORMATS: readonly CanvasFormat[] = CANVAS_FORMATS.filter((f) => f !== 'jpeg');
+export const EXPORT_FORMATS: readonly ExportFormat[] = [...NATIVE_EXPORT_FORMATS, ...BROWSER_EXPORT_FORMATS];
 
 export interface ExportOptions {
   /**
@@ -511,12 +519,23 @@ export class Session {
   }
 
   /**
-   * Format ekspor yang bisa dihasilkan di sini: lossless selalu, lossy hanya
-   * yang lolos probing encoder kanvas.
+   * Format ekspor yang bisa dihasilkan di sini: PNG/TIFF/JPEG selalu,
+   * WebP/AVIF hanya yang lolos probing encoder kanvas.
    */
   async exportFormats(): Promise<ExportFormat[]> {
     const lossy = this.canvasEncoder ? await this.canvasEncoder.probe() : [];
-    return [...LOSSLESS_EXPORT_FORMATS, ...CANVAS_FORMATS.filter((f) => lossy.includes(f))];
+    return [...NATIVE_EXPORT_FORMATS, ...BROWSER_EXPORT_FORMATS.filter((f) => lossy.includes(f))];
+  }
+
+  /** Profil ICC per label colour space keluaran (deterministik, jadi di-cache). */
+  readonly #icc = new Map<string, Uint8Array | undefined>();
+
+  private iccFor(label: string): Uint8Array | undefined {
+    if (!this.#icc.has(label)) {
+      const spec = this.bundle.manifest.outputColorSpaces[label];
+      this.#icc.set(label, spec ? buildIccProfile(spec, label) : undefined);
+    }
+    return this.#icc.get(label);
   }
 
   /**
@@ -565,7 +584,7 @@ export class Session {
     if (!EXPORT_FORMATS.includes(format)) {
       throw new RangeError(`Format ekspor tidak dikenal: ${String(format)} (pilihan: ${EXPORT_FORMATS.join(', ')}).`);
     }
-    const canvasFormat = (CANVAS_FORMATS as readonly string[]).includes(format) ? (format as CanvasFormat) : undefined;
+    const canvasFormat = (BROWSER_EXPORT_FORMATS as readonly string[]).includes(format) ? (format as CanvasFormat) : undefined;
     if (canvasFormat && !this.canvasEncoder) {
       throw new RangeError(`Format ${format} butuh encoder kanvas browser, yang tidak tersedia di sini.`);
     }
@@ -575,8 +594,23 @@ export class Session {
       const colorSpace = outputColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
       return this.canvasEncoder!.encode(rgbToRgba8(rgb, width, height), width, height, canvasFormat, options.quality ?? 1, colorSpace);
     }
-    if (format === 'tiff16') return encodeTiff16(rgb, width, height);
-    return encodePng(rgb, width, height, format === 'png8' ? 8 : 16);
+    const icc = this.iccFor(outputColorSpace);
+    const exif = this.#image?.exif;
+    const exifOptions = { width, height, srgb: outputColorSpace === 'sRGB' };
+    if (format === 'jpeg') {
+      const quality = Math.min(100, Math.max(1, Math.round((options.quality ?? 1) * 100)));
+      const app1 = exif && rewriteExif(exif, { ...exifOptions, maxBytes: EXIF_APP1_MAX_BYTES });
+      return encodeJpeg(rgb, width, height, { quality, ...(icc ? { icc } : {}), ...(app1 ? { exif: app1 } : {}) });
+    }
+    if (format === 'tiff16') {
+      const tiffExif = exif && exifForTiff(exif, exifOptions);
+      return encodeTiff16(rgb, width, height, { ...(icc ? { icc } : {}), ...(tiffExif ? { exif: tiffExif } : {}) });
+    }
+    const pngExif = exif && rewriteExif(exif, exifOptions);
+    return encodePng(rgb, width, height, format === 'png8' ? 8 : 16, {
+      ...(icc ? { icc, iccName: outputColorSpace } : {}),
+      ...(pngExif ? { exif: pngExif } : {}),
+    });
   }
 
   dispose(): void {

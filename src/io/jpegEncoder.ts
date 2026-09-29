@@ -19,6 +19,7 @@
  * Diproses per baris MCU: memori tambahan hanya satu strip, bukan salinan
  * gambar penuh.
  */
+import { EXIF_APP1_MAX_BYTES } from './exif';
 
 export interface JpegOptions {
   /** 1..100, skala libjpeg. */
@@ -29,8 +30,8 @@ export interface JpegOptions {
   icc?: Uint8Array;
 }
 
-/** Batas isi APP1 EXIF: panjang segmen 65535 dikurangi panjang (2) dan `Exif\0\0` (6). */
-export const JPEG_MAX_EXIF_BYTES = 65535 - 2 - 6;
+/** Batas isi APP1 EXIF (lihat `exif.ts`). */
+export const JPEG_MAX_EXIF_BYTES = EXIF_APP1_MAX_BYTES;
 const ICC_CHUNK_BYTES = 65535 - 2 - 14;
 /** Kualitas mulai dari sini memakai 4:4:4. */
 const FULL_CHROMA_QUALITY = 90;

@@ -5,6 +5,7 @@
 import type { DecodedImage } from './decoded';
 import { detectFormat, type ImageFormat } from './detect';
 import { DecodeError } from './errors';
+import { captureExif } from './exif';
 import { applyOrientation, colorSpaceForIcc, readMetadata } from './metadata';
 import type { RawDecodeOptions } from './raw';
 
@@ -33,15 +34,16 @@ const DECODERS: Partial<Record<ImageFormat, () => Promise<Decoder>>> = {
 };
 
 /**
- * Orientation EXIF diterapkan dan deskripsi ICC dipakai sebagai saran colour
- * space (lihat `metadata.ts`). Decoder per format sendiri tetap mengembalikan
+ * Orientation EXIF diterapkan, deskripsi ICC dipakai sebagai saran colour
+ * space (lihat `metadata.ts`), dan EXIF disimpan untuk ekspor (`exif.ts`). Decoder per format sendiri tetap mengembalikan
  * piksel apa adanya -- itulah yang digerbangi terhadap Pillow/tifffile.
  */
 function withMetadata(image: DecodedImage, bytes: Uint8Array, format: ImageFormat): DecodedImage {
   const meta = readMetadata(bytes, format);
   const suggested = image.encoding === 'encoded' && meta.iccDescription ? colorSpaceForIcc(meta.iccDescription) : undefined;
   const oriented = applyOrientation(image, meta.orientation);
-  return suggested ? { ...oriented, suggestedColorSpace: suggested } : oriented;
+  const exif = image.exif ?? captureExif(bytes);
+  return { ...oriented, ...(suggested ? { suggestedColorSpace: suggested } : {}), ...(exif ? { exif } : {}) };
 }
 
 async function runDecoder(format: ImageFormat, bytes: Uint8Array, name: string | undefined, options: DecodeOptions): Promise<DecodedImage> {
@@ -65,7 +67,9 @@ export async function decodeImage(bytes: Uint8Array, name?: string, options: Dec
   const format = detectFormat(bytes);
   if (format !== 'unknown') return withMetadata(await runDecoder(format, bytes, name, options), bytes, format);
   try {
-    return await runDecoder('raw', bytes, name, options);
+    const image = await runDecoder('raw', bytes, name, options);
+    const exif = captureExif(bytes);
+    return exif ? { ...image, exif } : image;
   } catch (error) {
     const reason = error instanceof DecodeError ? error.reason : String(error);
     throw new DecodeError('unknown', `magic bytes tidak dikenali, dan LibRaw juga menolaknya (${reason})`);

@@ -42,20 +42,43 @@ function context(width: number, height: number, colorSpace: PredefinedColorSpace
   return canvas.getContext('2d', settings);
 }
 
+/**
+ * Kanvas baca terbesar per langkah. iOS menolak kanvas di atas 16,7 MP
+ * (`canvasLimits`), sedangkan HEIC iPhone 15 ke atas 24 MP (48 MP untuk
+ * HEIF Max): foto dibaca per strip horizontal lewat kanvas kecil, jadi
+ * resolusi native tetap utuh dan memori kanvas puncak kecil (~4 MP).
+ */
+export const STRIP_MAX_PIXELS = 4_194_304;
+
+/** Pembagian baris `height` menjadi strip `[y, rows]` untuk lebar `width`. */
+export function stripRows(width: number, height: number, maxPixels = STRIP_MAX_PIXELS): Array<[number, number]> {
+  const rows = Math.max(1, Math.min(height, Math.floor(maxPixels / Math.max(1, width))));
+  const out: Array<[number, number]> = [];
+  for (let y = 0; y < height; y += rows) out.push([y, Math.min(rows, height - y)]);
+  return out;
+}
+
 export async function decodeWithBrowser(blob: Blob, name?: string): Promise<DecodedImage> {
   // `from-image`: orientasi EXIF/HEIF diterapkan browser.
   const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image', colorSpaceConversion: 'default' });
   try {
     const { width, height } = bitmap;
-    const ctx = context(width, height, 'display-p3') ?? context(width, height, 'srgb');
+    const strips = stripRows(width, height);
+    const maxRows = strips[0]![1];
+    const ctx = context(width, maxRows, 'display-p3') ?? context(width, maxRows, 'srgb');
     if (!ctx) throw new Error('kanvas 2D tidak tersedia');
-    ctx.drawImage(bitmap, 0, 0);
-    // Browser tanpa dukungan P3 mengabaikan permintaan ini dan memberi sRGB.
-    const pixels = ctx.getImageData(0, 0, width, height, { colorSpace: 'display-p3' });
-    const p3 = pixels.colorSpace === 'display-p3';
-    const data = pixels.data;
     const rgba = new Float32Array(width * height * 4);
-    for (let i = 0; i < rgba.length; i += 1) rgba[i] = data[i]! / 255;
+    let p3 = false;
+    for (const [y, rows] of strips) {
+      ctx.clearRect(0, 0, width, maxRows);
+      ctx.drawImage(bitmap, 0, y, width, rows, 0, 0, width, rows);
+      // Browser tanpa dukungan P3 mengabaikan permintaan ini dan memberi sRGB.
+      const pixels = ctx.getImageData(0, 0, width, rows, { colorSpace: 'display-p3' });
+      p3 = pixels.colorSpace === 'display-p3';
+      const data = pixels.data;
+      const base = y * width * 4;
+      for (let i = 0; i < data.length; i += 1) rgba[base + i] = data[i]! / 255;
+    }
     return {
       width,
       height,
