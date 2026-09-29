@@ -1,9 +1,16 @@
 /**
  * Penulis TIFF baseline RGB 16-bit tak terkompresi (spec Fase 2 §5: tanpa
  * dependensi). Little-endian, satu strip, tag wajib TIFF 6 baseline
- * (termasuk resolusi 72 dpi) plus `Software`.
+ * (termasuk resolusi 72 dpi) plus `Software`. Opsional: profil ICC (tag
+ * 34675) dan EXIF (tag deskriptif IFD0 + ExifIFD/GPS dari `exifForTiff`).
  */
+import type { RawTiffEntry, exifForTiff } from './exif';
 import { DICHROIC_VERSION } from '../version';
+
+export interface TiffExtras {
+  icc?: Uint8Array;
+  exif?: NonNullable<ReturnType<typeof exifForTiff>>;
+}
 
 const SHORT = 3;
 const LONG = 4;
@@ -14,10 +21,15 @@ interface Entry {
   tag: number;
   type: number;
   values: number[] | Uint8Array;
+  /** Nilai mentah little-endian (tag EXIF/ICC); `values` diabaikan. */
+  raw?: RawTiffEntry;
 }
 
+const TAG_ICC = 34675;
+const UNDEFINED = 7;
+
 /** `samples`: RGB 16-bit rapat, `width * height * 3`. */
-export function encodeTiff16(samples: Uint16Array, width: number, height: number): Uint8Array {
+export function encodeTiff16(samples: Uint16Array, width: number, height: number, extras: TiffExtras = {}): Uint8Array {
   const pixelBytes = width * height * 6;
   const software = new TextEncoder().encode(`DICHROIC ${DICHROIC_VERSION}\0`);
   const entries: Entry[] = [
@@ -36,7 +48,11 @@ export function encodeTiff16(samples: Uint16Array, width: number, height: number
     { tag: 296, type: SHORT, values: [2] }, // inci
     { tag: 305, type: ASCII, values: software },
   ];
-  const size = (e: Entry) => (e.type === SHORT ? 2 : e.type === RATIONAL ? 4 : e.type === ASCII ? 1 : 4) * e.values.length;
+  const rawEntry = (raw: RawTiffEntry): Entry => ({ tag: raw.tag, type: raw.type, values: [], raw });
+  if (extras.exif) for (const raw of extras.exif.ifd0) entries.push(rawEntry(raw));
+  if (extras.icc) entries.push(rawEntry({ tag: TAG_ICC, type: UNDEFINED, count: extras.icc.length, value: extras.icc }));
+  entries.sort((a, b) => a.tag - b.tag);
+  const size = (e: Entry) => (e.raw ? e.raw.value.length : (e.type === SHORT ? 2 : e.type === RATIONAL ? 4 : e.type === ASCII ? 1 : 4) * e.values.length);
 
   const ifdAt = 8;
   const ifdSize = 2 + entries.length * 12 + 4;
@@ -47,8 +63,17 @@ export function encodeTiff16(samples: Uint16Array, width: number, height: number
     extraAt += size(e) + (size(e) & 1); // offset nilai harus genap (word boundary)
     return at;
   });
+  // Blok ExifIFD/GPS setelah nilai-nilai IFD0; pointer-nya di-relokasi ke sana.
+  const placed = extras.exif?.place(extraAt);
+  if (placed) {
+    for (const raw of placed.ifd0) {
+      const i = entries.findIndex((e) => e.tag === raw.tag);
+      if (i >= 0) entries[i] = rawEntry(raw);
+    }
+    extraAt += placed.block.length + (placed.block.length & 1);
+  }
   const dataAt = extraAt;
-  entries[5]!.values = [dataAt];
+  entries.find((e) => e.tag === 273)!.values = [dataAt];
 
   const out = new Uint8Array(dataAt + pixelBytes);
   const view = new DataView(out.buffer);
@@ -59,9 +84,14 @@ export function encodeTiff16(samples: Uint16Array, width: number, height: number
     const p = ifdAt + 2 + i * 12;
     view.setUint16(p, e.tag, true);
     view.setUint16(p + 2, e.type, true);
-    view.setUint32(p + 4, e.type === RATIONAL ? e.values.length / 2 : e.values.length, true);
     const target = extraOffsets[i]! < 0 ? p + 8 : extraOffsets[i]!;
     if (extraOffsets[i]! >= 0) view.setUint32(p + 8, target, true);
+    if (e.raw) {
+      view.setUint32(p + 4, e.raw.count, true);
+      out.set(e.raw.value, target);
+      return;
+    }
+    view.setUint32(p + 4, e.type === RATIONAL ? e.values.length / 2 : e.values.length, true);
     for (let k = 0; k < e.values.length; k += 1) {
       const v = e.values[k]!;
       if (e.type === SHORT) view.setUint16(target + k * 2, v, true);
@@ -70,6 +100,7 @@ export function encodeTiff16(samples: Uint16Array, width: number, height: number
     }
   });
   view.setUint32(ifdAt + 2 + entries.length * 12, 0, true); // tidak ada IFD berikutnya
+  if (placed) out.set(placed.block, dataAt - placed.block.length - (placed.block.length & 1));
 
   for (let i = 0; i < samples.length; i += 1) view.setUint16(dataAt + i * 2, samples[i]!, true);
   return out;

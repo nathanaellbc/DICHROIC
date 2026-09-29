@@ -59,6 +59,21 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
+/*
+ * iOS 26, app terpasang di Home Screen (standalone, `viewport-fit=cover` +
+ * status bar `black-translucent`): WebKit melaporkan `100%` dan `100dvh`
+ * sebagai tinggi layar DIKURANGI inset atas (status bar), jadi di bawah
+ * tersisa pita kosong setinggi status bar (~59 pt di iPhone ber-Dynamic
+ * Island, 15 ke atas). Hanya `100lvh` yang melaporkan tinggi layar fisik.
+ * Elemen fixed berjangkar di viewport layout yang sama pendeknya, jadi
+ * tepi bawahnya diturunkan sebesar selisihnya -- 0 bila tidak ada bug.
+ * Dibatasi ke mode terpasang: tab Safari tetap memakai viewport dinamis.
+ */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html { height: 100lvh; }
+  .backdrop, .alert-scrim { bottom: calc(100dvh - 100lvh); }
+  .sheet:not(.centered) { bottom: calc(100dvh - 100lvh); }
+}
 body {
   overflow: hidden;
   /* Aplikasi, bukan dokumen: tekan-tahan tidak memilih teks, ketuk tanpa jeda zoom. */

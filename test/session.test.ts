@@ -4,6 +4,7 @@ import { Session } from '../src/session/session';
 import { RenderSupersededError, SessionStateError } from '../src/session/errors';
 import type { RenderResult } from '../src/session/session';
 import { UnverifiedParameterError } from '../src/params/registry';
+import { BASELINE_RENDER_PARAMS } from '../src/params/renderParams';
 import type { RenderParams } from '../src/params/renderParams';
 import type { DecodedImage } from '../src/io/decoded';
 import { compareRgb, expectWithinTolerance, loadCase, loadInputAsRgba, loadTap } from './parity/compare';
@@ -18,6 +19,9 @@ import { quantize } from '../src/io/encode';
 import type { ExportFormat } from '../src/session/session';
 import { rgbToRgba8 } from '../src/io/canvasEncode';
 import type { CanvasEncoder } from '../src/io/canvasEncode';
+import { extractExif } from '../src/io/exif';
+import { decodeJpegPixels } from '../src/io/jpegDecoder';
+import { readMetadata } from '../src/io/metadata';
 
 /**
  * Gerbang ujung-ke-ujung lewat facade `Session` (Fase 2A Task 5): gambar
@@ -315,14 +319,44 @@ describe('Session: exportImage (rencana 2B Task 7)', () => {
     }
   });
 
-  it('format tidak dikenal -> RangeError; lossy tanpa encoder kanvas -> RangeError', async () => {
+  it('format tidak dikenal -> RangeError; WebP/AVIF tanpa encoder kanvas -> RangeError', async () => {
     await expect(session.exportImage('gif' as ExportFormat)).rejects.toBeInstanceOf(RangeError);
-    // Node tidak punya OffscreenCanvas: JPEG/WebP/AVIF tidak ditawarkan.
-    expect(await session.exportFormats()).toEqual(['png8', 'png16', 'tiff16']);
-    await expect(session.exportImage('jpeg')).rejects.toBeInstanceOf(RangeError);
+    // Node tidak punya OffscreenCanvas: WebP/AVIF tidak ditawarkan; JPEG encoder sendiri.
+    expect(await session.exportFormats()).toEqual(['png8', 'png16', 'tiff16', 'jpeg']);
+    await expect(session.exportImage('webp')).rejects.toBeInstanceOf(RangeError);
   });
 
-  it('JPEG/WebP/AVIF lewat encoder kanvas suntikan: piksel 8-bit render penuh, kualitas, ruang warna', async () => {
+  it('JPEG encoder sendiri: resolusi render penuh, q100 nyaris lossless, ICC + EXIF asli', async () => {
+    // EXIF sumber minimal (LE): Make "Apl" + Orientation 6.
+    const exif = Uint8Array.from([0x49, 0x49, 42, 0, 8, 0, 0, 0, 2, 0, 0x0f, 0x01, 2, 0, 4, 0, 0, 0, 0x41, 0x70, 0x6c, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0]);
+    session.open({ ...gradientImage(96, 64), exif });
+    session.setParams({ outputColorSpace: 'Display P3' });
+    try {
+      const full = await session.render('full');
+      const jpg = await session.exportImage('jpeg');
+      const px = decodeJpegPixels(jpg);
+      expect([px.width, px.height]).toEqual([96, 64]);
+      const q = quantize(full.rgb, 8);
+      let se = 0;
+      for (let i = 0; i < q.length; i += 1) se += (px.data[i]! - q[i]!) ** 2;
+      expect(10 * Math.log10((255 * 255) / (se / q.length))).toBeGreaterThan(45);
+      const meta = readMetadata(jpg, 'jpeg');
+      expect(meta.iccDescription).toBe('Display P3');
+      expect(meta.orientation).toBe(1); // piksel sudah tegak
+      const out = extractExif(jpg)!;
+      expect(String.fromCharCode(...out.subarray(0, 2))).toBe('II');
+      // Kualitas lebih rendah = berkas lebih kecil.
+      expect((await session.exportImage('jpeg', { quality: 0.8 })).length).toBeLessThan(jpg.length);
+      // PNG/TIFF membawa profil yang sama.
+      expect(readMetadata(await session.exportImage('png8'), 'png').iccDescription).toBe('Display P3');
+      expect(readMetadata(await session.exportImage('tiff16'), 'tiff').iccDescription).toBe('Display P3');
+      expect(extractExif(await session.exportImage('png16'))).toBeDefined();
+    } finally {
+      session.setParams({ outputColorSpace: BASELINE_RENDER_PARAMS.outputColorSpace });
+    }
+  });
+
+  it('WebP/AVIF lewat encoder kanvas suntikan: piksel 8-bit render penuh, kualitas, ruang warna', async () => {
     const calls: unknown[][] = [];
     const encoder: CanvasEncoder = {
       probe: async () => ['jpeg', 'avif'],
@@ -334,10 +368,13 @@ describe('Session: exportImage (rencana 2B Task 7)', () => {
     const s = await sharedSession({ canvasEncoder: encoder });
     s.open(gradientImage(40, 24));
     expect(await s.exportFormats()).toEqual(['png8', 'png16', 'tiff16', 'jpeg', 'avif']);
-    expect(await s.exportImage('jpeg', { quality: 0.8 })).toEqual(Uint8Array.of(1, 2, 3));
+    expect(await s.exportImage('avif', { quality: 0.8 })).toEqual(Uint8Array.of(1, 2, 3));
     const full = await s.render('full');
     const [pixels, width, height, format, quality, colorSpace] = calls[0]!;
-    expect([width, height, format, quality, colorSpace]).toEqual([40, 24, 'jpeg', 0.8, 'srgb']);
+    expect([width, height, format, quality, colorSpace]).toEqual([40, 24, 'avif', 0.8, 'srgb']);
+    // JPEG tidak lewat kanvas.
+    await s.exportImage('jpeg');
+    expect(calls).toHaveLength(1);
     expect(pixels).toEqual(rgbToRgba8(full.rgb, 40, 24));
     s.setParams({ outputColorSpace: 'Display P3' });
     await s.exportImage('avif');

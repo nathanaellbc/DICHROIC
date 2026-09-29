@@ -13,6 +13,7 @@
 import { detectFormat } from '../../io/detect';
 import { DecodeError } from '../../io/errors';
 import type { DecodedImage } from '../../io/decoded';
+import { captureExif } from '../../io/exif';
 import { BASELINE_RENDER_PARAMS } from '../../params/renderParams';
 import type { RenderParams } from '../../params/renderParams';
 import { SessionClient } from '../../session/client';
@@ -61,6 +62,11 @@ export interface EngineState {
 const FALLBACK_DEPTH_PROFILE: DepthProfile = { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
 
 type Listener = () => void;
+
+function withExif(image: DecodedImage, bytes: Uint8Array): DecodedImage {
+  const exif = captureExif(bytes);
+  return exif ? { ...image, exif } : image;
+}
 
 export const EXPORT_MIME: Record<ExportFormat, string> = {
   png8: 'image/png',
@@ -204,7 +210,9 @@ export class Engine {
       if (!stillCurrent()) return;
       const viaBrowser = format === 'unknown' && isBrowserImage(bytes);
       this.#set({ opening: { name: file.name, stage: format === 'raw' || (format === 'unknown' && !viaBrowser) ? 'Decoding RAW…' : 'Decoding…' } });
-      const image: DecodedImage = viaBrowser ? await decodeWithBrowser(file, file.name) : await decodeInWorker(client, bytes, file);
+      // HEIC lewat decoder browser: EXIF (kamera, lensa, GPS) diambil dari
+      // berkas aslinya supaya tetap ikut ke ekspor.
+      const image: DecodedImage = viaBrowser ? withExif(await decodeWithBrowser(file, file.name), bytes) : await decodeInWorker(client, bytes, file);
       if (!stillCurrent()) return;
       const original = originalFrame(image, PREVIEW_MAX_LONG_EDGE);
       const imageSize = { width: image.width, height: image.height };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isBrowserImage } from '../../src/ui/engine/browserDecode';
+import { STRIP_MAX_PIXELS, isBrowserImage, stripRows } from '../../src/ui/engine/browserDecode';
 
 const bytes = (s: string, pad = 16) => {
   const out = new Uint8Array(Math.max(pad, s.length));
@@ -33,5 +33,26 @@ describe('isBrowserImage', () => {
     expect(isBrowserImage(bytes('BM'))).toBe(true);
     expect(isBrowserImage(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]))).toBe(false);
     expect(isBrowserImage(bytes('RIFF', 4))).toBe(false);
+  });
+});
+
+describe('stripRows (HEIC per strip, di bawah batas kanvas iOS)', () => {
+  it('menutup semua baris tanpa celah/tumpang tindih; tiap strip <= batas', () => {
+    for (const [w, h] of [[5712, 4284], [8064, 6048], [4284, 5712], [1, 1], [100, 3], [70000, 2]] as const) {
+      const strips = stripRows(w, h);
+      let next = 0;
+      for (const [y, rows] of strips) {
+        expect(y).toBe(next);
+        expect(rows).toBeGreaterThan(0);
+        if (w <= STRIP_MAX_PIXELS) expect(w * rows).toBeLessThanOrEqual(STRIP_MAX_PIXELS);
+        next = y + rows;
+      }
+      expect(next, `${w}x${h}`).toBe(h);
+    }
+  });
+
+  it('iPhone 48 MP: kanvas strip jauh di bawah 16,7 MP', () => {
+    const [[, rows]] = stripRows(8064, 6048) as [[number, number]];
+    expect(8064 * rows).toBeLessThan(16_777_216 / 3);
   });
 });

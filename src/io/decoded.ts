@@ -14,6 +14,11 @@ export interface DecodedImage {
   rgba: Float32Array;
   suggestedColorSpace: string;
   encoding: 'encoded' | 'linear';
+  /**
+   * EXIF berkas asli, bersih dan ringkas (`io/exif.ts` `captureExif`):
+   * dibawa ke berkas ekspor. Tidak ada untuk format tanpa EXIF.
+   */
+  exif?: Uint8Array;
   source: {
     /** `browser`: decoder gambar bawaan browser (HEIC, AVIF, WebP; lihat `ui/engine/browserDecode.ts`). */
     format: 'jpeg' | 'png' | 'tiff' | 'exr' | 'raw' | 'browser' | 'fixture';
