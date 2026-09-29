@@ -10,6 +10,7 @@ const PATHS: Record<UiIconName, string> = {
   exposure: 'M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   auto: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8.5 16l3.5-9 3.5 9M9.8 13h4.4',
   print: 'M7 8V3h10v5M17 16h4v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6h4M7 13h10v8H7z',
+  negative: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 3v18M12 7.5h5M12 12h8.5M12 16.5h5',
   pushPull: 'M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4',
   format: 'M4 5h16v14H4zM4 9h16M4 15h16M8 5v4M12 5v4M16 5v4M8 15v4M12 15v4M16 15v4',
   dot: 'M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14',

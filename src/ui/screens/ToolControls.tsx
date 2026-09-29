@@ -14,6 +14,8 @@ import {
   formatPushPull,
   isModified,
   resetPatch,
+  sliderPatch,
+  sliderValue,
   valueText,
 } from '../model/tools';
 import type { ChoiceTool, Tool, ToolGroup } from '../model/tools';
@@ -71,20 +73,28 @@ export function ResetButton({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
 export function ToolControl({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
   const { params, defaults, onPatch } = ctx;
   switch (tool.kind) {
-    case 'slider':
-      return (
+    case 'slider': {
+      const slider = (
         <Slider
           label={tool.title}
-          value={params[tool.field]}
+          value={sliderValue(tool, params)}
           min={tool.min}
           max={tool.max}
           step={tool.step}
-          defaultValue={defaults[tool.field]}
+          defaultValue={sliderValue(tool, defaults)}
           valueText={valueText(tool, params)}
           disabled={!toolEnabled(tool, params)}
-          onChange={(v) => onPatch({ [tool.field]: v })}
+          onChange={(v) => onPatch(sliderPatch(tool, v))}
         />
       );
+      if (!tool.note) return slider;
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {slider}
+          <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>
+        </div>
+      );
+    }
     case 'stepper': {
       const v = params[tool.field];
       const isSeed = tool.field === 'grainSeed';
