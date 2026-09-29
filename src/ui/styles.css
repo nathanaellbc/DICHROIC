@@ -109,6 +109,13 @@ html, body, #root {
  * tepi bawahnya diturunkan sebesar selisihnya -- 0 bila tidak ada bug.
  * Dibatasi ke mode terpasang: tab Safari tetap memakai viewport dinamis.
  */
+/*
+ * `#root` jadi containing block: `main { position: absolute; inset: 0 }`
+ * mengikuti tingginya (100lvh di mode terpasang), bukan initial containing
+ * block yang sependek viewport layout -- tanpa ini panel bawah berhenti
+ * setinggi status bar di atas tepi layar.
+ */
+#root { position: relative; }
 @media (display-mode: standalone), (display-mode: fullscreen) {
   html { height: 100lvh; }
   .backdrop, .alert-scrim { bottom: calc(100dvh - 100lvh); }
