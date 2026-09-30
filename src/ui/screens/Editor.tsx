@@ -180,7 +180,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         y: state.params.lensFocusY,
         show: group === 'lens' && state.params.lensBlurEnabled,
         picking,
-        // Mode fokus (EMULSION): tiap ketukan memindah fokus; tetap di mode ini sampai Done.
+        // Focus point and depth-of-field mask follow a held drag until Done.
         onPick: (lensFocusX, lensFocusY) => engine.setParams({ lensFocusX, lensFocusY }),
         onCancel: () => setPickingFocus(false),
       }}

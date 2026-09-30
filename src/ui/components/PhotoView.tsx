@@ -35,8 +35,8 @@ function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperti
 }
 
 /**
- * Titik fokus lens blur (koordinat 0..1 relatif foto). `picking`: ketukan
- * berikutnya memilih subjek (pembanding dan intip asli dimatikan selama itu).
+ * Titik fokus lens blur (koordinat 0..1 relatif foto). `picking`: tahan dan
+ * seret memilih subjek secara langsung; pembanding/intip asli dimatikan.
  */
 export interface FocusOverlay {
   x: number;
@@ -126,7 +126,10 @@ export function PhotoView({
   const holdTimer = useRef(0);
   const splitDrag = useRef(false);
   const pointers = useRef(new Map<number, Point>());
+  const focusFrame = useRef(0);
+  const pendingFocus = useRef<{ point: Point; pick: FocusOverlay['onPick'] } | null>(null);
   const gesture = useRef<
+    | { kind: 'focus'; pointerId: number }
     | { kind: 'pan'; x: number; y: number; view: View; moved: boolean }
     | { kind: 'pinch'; dist: number; mid: Point; view: View }
     | { kind: 'tap'; x: number; y: number; moved: boolean }
@@ -258,6 +261,31 @@ export function PhotoView({
   };
 
   const picking = focus?.picking === true;
+  const cancelFocusUpdate = () => {
+    cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = 0;
+    pendingFocus.current = null;
+  };
+  const flushFocusUpdate = () => {
+    const pending = pendingFocus.current;
+    cancelFocusUpdate();
+    if (pending) pending.pick(pending.point.x, pending.point.y);
+  };
+  const pickAt = (p: Point) => {
+    if (!focus) return;
+    const uv = toPhoto(p.x, p.y);
+    const point = { x: Number(clamp01(uv.x).toFixed(4)), y: Number(clamp01(uv.y).toFixed(4)) };
+    setAim(point);
+    // Coalesce pointer samples: depth selection and render parameters update
+    // together once per display frame, with the last position flushed on release.
+    pendingFocus.current = { point, pick: focus.onPick };
+    if (!focusFrame.current) focusFrame.current = requestAnimationFrame(flushFocusUpdate);
+  };
+  useEffect(() => () => {
+    cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = 0;
+    pendingFocus.current = null;
+  }, [picking, photoKey]);
   // Bidik keyboard dimulai dari titik fokus sekarang tiap kali mode pilih dibuka.
   const cursor = picking && focus ? (aim ?? { x: focus.x, y: focus.y }) : null;
   useEffect(() => {
@@ -294,6 +322,7 @@ export function PhotoView({
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
     if (pointers.current.size === 2) {
+      cancelFocusUpdate();
       // Pinch dua jari: batalkan seret/intip/pembagi yang sempat dimulai.
       const [a, b] = twoPointers();
       window.clearTimeout(holdTimer.current);
@@ -304,8 +333,11 @@ export function PhotoView({
     }
     if (pointers.current.size > 2) return;
     if (picking) {
-      // Fokus dipilih saat dilepas, kecuali ternyata menggeser foto yang diperbesar.
-      gesture.current = view.s > 1 ? { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false } : { kind: 'tap', x: p.x, y: p.y, moved: false };
+      const uv = toPhoto(p.x, p.y);
+      // Start only on the photo; captured drags can then reach its edges.
+      if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
+      gesture.current = { kind: 'focus', pointerId: e.pointerId };
+      pickAt(p);
       return;
     }
     if (compare) {
@@ -322,6 +354,10 @@ export function PhotoView({
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
     const g = gesture.current;
+    if (g?.kind === 'focus' && picking && g.pointerId === e.pointerId) {
+      pickAt(p);
+      return;
+    }
     if (g?.kind === 'pinch' && pointers.current.size >= 2) {
       const [a, b] = twoPointers();
       const dist = Math.hypot(a.x - b.x, a.y - b.y);
@@ -349,10 +385,14 @@ export function PhotoView({
   const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const tracked = pointers.current.delete(e.pointerId);
-    if (tracked && e.type === 'pointerup' && picking && focus && (g?.kind === 'tap' || g?.kind === 'pan') && !g.moved) {
-      const p = toPhoto(g.x, g.y);
-      // Ketukan di luar foto (di bingkai hitam) tidak memilih apa pun.
-      if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) focus.onPick(Number(p.x.toFixed(4)), Number(p.y.toFixed(4)));
+    if (tracked && g?.kind === 'focus' && g.pointerId === e.pointerId) {
+      if (e.type === 'pointerup' && picking) {
+        pickAt(local(e.clientX, e.clientY));
+        flushFocusUpdate();
+      } else {
+        cancelFocusUpdate();
+        setAim(null);
+      }
     }
     // Pinch yang tinggal satu jari berhenti; gestur satu jari berakhir saat dilepas.
     if (g?.kind !== 'pinch' || pointers.current.size < 2) gesture.current = null;
@@ -362,7 +402,7 @@ export function PhotoView({
     if (tracked && pointers.current.size === 0) settleView();
   };
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, [role=slider]')) return;
+    if (picking || (e.target as HTMLElement).closest('button, [role=slider]')) return;
     const p = local(e.clientX, e.clientY);
     stopReturn();
     setView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
@@ -380,7 +420,7 @@ export function PhotoView({
       ref={areaRef}
       tabIndex={picking ? 0 : -1}
       role={picking ? 'application' : undefined}
-      aria-label={picking ? 'Focus point. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
+      aria-label={picking ? 'Focus point. Hold and drag to select. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
       onKeyDown={onKeyDown}
       style={{ position: 'absolute', inset: 0, overflow: 'visible', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : zoomed && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
@@ -444,12 +484,12 @@ export function PhotoView({
             )}
             {focus && (focus.show || picking) && (
               // Penanda fokus seperti EMULSION: lingkaran 30 px bertepi putih
-              // dengan titik tengah, berpindah dengan pegas ke titik ketukan.
+              // dengan titik tengah. Saat memilih, langsung mengikuti pointer.
               <motion.div
                 aria-hidden="true"
                 initial={false}
                 animate={{ left: sx((cursor ?? focus).x), top: sy((cursor ?? focus).y) }}
-                transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.6 }}
+                transition={picking ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 40, mass: 0.6 }}
                 style={{
                   position: 'absolute', width: 30, height: 30, marginLeft: -15, marginTop: -15, boxSizing: 'border-box',
                   border: '1.5px solid #fff', borderRadius: '50%', pointerEvents: 'none',
@@ -462,7 +502,7 @@ export function PhotoView({
             )}
             {picking && (
               <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                Tap to focus · grey is outside the depth of field
+                Hold & drag to focus · grey is outside focus
               </span>
             )}
             {peek && !compare && !picking && (
