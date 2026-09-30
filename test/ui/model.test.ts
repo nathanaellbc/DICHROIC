@@ -107,6 +107,7 @@ describe('alat UI == permukaan parameter engine', () => {
       cameraWhites: CAMERA_LIMITS.whites,
       cameraBlacks: CAMERA_LIMITS.blacks,
       cameraSaturation: CAMERA_LIMITS.saturation,
+      cameraHsvSaturation: CAMERA_LIMITS.hsvSaturation,
       cameraSoftenDetail: { min: 0, max: 1 },
     };
     for (const tool of camera.tools) {

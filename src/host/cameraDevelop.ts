@@ -44,6 +44,7 @@ export const CAMERA_LIMITS = {
   whites: { min: -2, max: 2 },
   blacks: { min: -2, max: 2 },
   saturation: { min: 0, max: 2 },
+  hsvSaturation: { min: 0, max: 2 },
 } as const;
 
 /** Pusat dan lebar masker logistik, dalam stop dari pivot. */
@@ -65,6 +66,7 @@ export interface CameraSettings {
   whites: number;
   blacks: number;
   saturation: number;
+  hsvSaturation: number;
 }
 
 export const NEUTRAL_CAMERA: Readonly<CameraSettings> = Object.freeze({
@@ -77,6 +79,7 @@ export const NEUTRAL_CAMERA: Readonly<CameraSettings> = Object.freeze({
   whites: 0,
   blacks: 0,
   saturation: 1,
+  hsvSaturation: 1,
 });
 
 export function isNeutralCamera(s: CameraSettings): boolean {
@@ -256,7 +259,7 @@ export const CAMERA_FRAME_FLOATS = 24;
 
 /**
  * Isi uniform `CameraFrame`: tiga baris matriks WB (primer input), bobot
- * luminans + pivot, tone, lalu (blacks, saturasi, aktif, exposure gain). Netral -> semua
+ * wb0.w = HSV S gain, luminans + pivot, tone, lalu (blacks, saturasi, aktif, exposure gain). Netral -> semua
  * nol termasuk flag aktif, dan shader melewati tahap ini persis.
  */
 export function cameraFrameValues(
@@ -268,7 +271,7 @@ export function cameraFrameValues(
   if (!settings || isNeutralCamera(settings)) return out;
   const wb = whiteBalanceRgb(rgbToXyz, settings.whiteBalanceK, settings.tint);
   const w = lumaWeights(rgbToXyz);
-  out.set([wb[0], wb[1], wb[2], 0, wb[3], wb[4], wb[5], 0, wb[6], wb[7], wb[8], 0], 0);
+  out.set([wb[0], wb[1], wb[2], settings.hsvSaturation, wb[3], wb[4], wb[5], 0, wb[6], wb[7], wb[8], 0], 0);
   out.set([w[0], w[1], w[2], pivot], 12);
   out.set([2 ** settings.contrast, settings.highlights, settings.shadows, settings.whites], 16);
   out.set([settings.blacks, settings.saturation, 1, 2 ** settings.exposureEv], 20);
@@ -294,5 +297,21 @@ export function cameraDevelopPixel(rgb: readonly [number, number, number], frame
   const yOut = developLuma(y, tone);
   const gain = yOut / Math.max(y, LUMA_FLOOR);
   const s = frame[21]!;
-  return [0, 1, 2].map((k) => Math.max(yOut + s * (c[k]! * gain - yOut), 0) * frame[23]!) as [number, number, number];
+  const developed = [0, 1, 2].map((k) => Math.max(yOut + s * (c[k]! * gain - yOut), 0) * frame[23]!) as [number, number, number];
+  return hsvSaturationPixel(developed, frame[3]!);
+}
+
+/**
+ * Isolate HSV channel 2: S' = clamp(S * gain, 0, 1), preserving H and
+ * V = max(R,G,B). The max-minus-chroma form avoids a hue conversion and
+ * supports HDR V > 1. Input is nonnegative, developed linear input RGB.
+ * HSV Value is not luminance: perceived brightness can still change.
+ */
+export function hsvSaturationPixel(rgb: readonly [number, number, number], gain: number): [number, number, number] {
+  if (gain === 1) return [...rgb];
+  const value = Math.max(...rgb);
+  const chroma = value - Math.min(...rgb);
+  if (chroma === 0) return [...rgb];
+  const scale = Math.min(Math.max(gain, 0), value / chroma);
+  return rgb.map((c) => Math.max(value - (value - c) * scale, 0)) as [number, number, number];
 }

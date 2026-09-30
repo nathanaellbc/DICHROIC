@@ -40,6 +40,7 @@
 // saturasi. `flags.z == 0` -> DILEWATI persis (nilai netral), jadi gerbang
 // parity Python tidak tersentuh.
 struct CameraFrame {
+  // xyz = WB row; w = isolated HSV saturation gain
   wb0: vec4<f32>,
   wb1: vec4<f32>,
   wb2: vec4<f32>,
@@ -156,6 +157,16 @@ fn developLuma(y: f32) -> f32 {
   return pivot * exp2(t);
 }
 
+// HSV channel 2 gain, preserving Hue and HDR Value without extra passes.
+fn hsvSaturation(rgb: vec3<f32>, gain: f32) -> vec3<f32> {
+  if (gain == 1.0) { return rgb; }
+  let value = max(max(rgb.r, rgb.g), rgb.b);
+  let chroma = value - min(min(rgb.r, rgb.g), rgb.b);
+  if (chroma == 0.0) { return rgb; }
+  let scale = min(max(gain, 0.0), value / chroma);
+  return max(vec3<f32>(value) - (vec3<f32>(value) - rgb) * scale, vec3<f32>(0.0));
+}
+
 fn cameraDevelop(rgb: vec3<f32>) -> vec3<f32> {
   if (cameraFrame.flags.z == 0.0) {
     return rgb;
@@ -164,7 +175,8 @@ fn cameraDevelop(rgb: vec3<f32>) -> vec3<f32> {
   let y = dot(cameraFrame.luma.xyz, c);
   let yOut = developLuma(y);
   let gain = yOut / max(y, 1.0e-7);
-  return max(vec3<f32>(yOut) + cameraFrame.flags.y * (c * gain - vec3<f32>(yOut)), vec3<f32>(0.0)) * cameraFrame.flags.w;
+  let developed = max(vec3<f32>(yOut) + cameraFrame.flags.y * (c * gain - vec3<f32>(yOut)), vec3<f32>(0.0)) * cameraFrame.flags.w;
+  return hsvSaturation(developed, cameraFrame.wb0.w);
 }
 
 // Baca satu matriks 3x3 row-major dari `arena` mulai `base`, kalikan `rgb`.

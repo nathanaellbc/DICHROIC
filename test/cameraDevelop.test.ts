@@ -1,6 +1,7 @@
-// @extends cameraExposureEv cameraWhiteBalanceK cameraTint cameraContrast cameraHighlights cameraShadows cameraWhites cameraBlacks cameraSaturation -- ekstensi "Camera Raw", digerbangi terhadap referensi JS
+// @extends cameraExposureEv cameraWhiteBalanceK cameraTint cameraContrast cameraHighlights cameraShadows cameraWhites cameraBlacks cameraSaturation cameraHsvSaturation -- ekstensi "Camera Raw", digerbangi terhadap referensi JS
 import { describe, it, expect } from 'vitest';
 import {
+  hsvSaturationPixel,
   cameraDevelopPixel,
   cameraFrameValues,
   developLuma,
@@ -18,6 +19,9 @@ import { buildRenderPlan, validateCamera } from '../src/params/plan';
 import { BASELINE_RENDER_PARAMS } from '../src/params/renderParams';
 import type { RenderParams } from '../src/params/renderParams';
 import { sharedResources } from './parity/run';
+import { Session } from '../src/session/session';
+import { findTool, sliderPatch, sliderRange, valueText } from '../src/ui/model/tools';
+import type { SliderTool } from '../src/ui/model/tools';
 
 /**
  * "Camera Raw" bukan bagian spektrafilm, jadi tidak ada oracle Python. Dua
@@ -43,6 +47,35 @@ const PRINT = {
 const PROPHOTO_TO_XYZ = [0.7976749, 0.1351917, 0.0313534, 0.2880402, 0.7118741, 0.0000857, 0, 0, 0.82521];
 
 describe('Camera Raw: matematika host', () => {
+  it('HSV S gain preserves Hue and Value, clamps saturation, and retains HDR headroom', () => {
+    const hsv = (rgb: readonly number[]) => {
+      const v = Math.max(...rgb), min = Math.min(...rgb), d = v - min;
+      const [r, g, b] = rgb as [number, number, number];
+      const h = d === 0 ? 0 : ((v === r ? (g - b) / d : v === g ? 2 + (b - r) / d : 4 + (r - g) / d) + 6) % 6;
+      return [h, v === 0 ? 0 : d / v, v] as const;
+    };
+    for (const rgb of [[0.8, 0.6, 0.4], [0.4, 0.8, 0.6], [0.6, 0.4, 0.8], [4, 1, 2], [0, 0, 0], [2, 2, 2], [1e-9, 3e-9, 2e-9]] as const) {
+      for (const gain of [0, 0.5, 1, 1.5, 2]) {
+        const out = hsvSaturationPixel(rgb, gain);
+        const before = hsv(rgb), after = hsv(out);
+        expect(after[2]).toBeCloseTo(before[2], 12);
+        expect(after[1]).toBeCloseTo(Math.min(before[1] * gain, 1), 12);
+        if (after[1] > 0) expect(after[0]).toBeCloseTo(before[0], 12);
+        if (gain === 1) expect(out).toEqual(rgb);
+      }
+    }
+    expect(hsvSaturationPixel([4, 1, 2], 2)[2]).toBeCloseTo(4 / 3, 12);
+    expect(() => validateCamera({ ...BASELINE_RENDER_PARAMS, cameraHsvSaturation: 2.01 })).toThrow(RangeError);
+    expect(() => validateCamera({ ...BASELINE_RENDER_PARAMS, cameraHsvSaturation: NaN })).toThrow(RangeError);
+  });
+
+  it('HSV UI maps neutral 100 and range 0..200 to channel gain', () => {
+    const tool = findTool('cameraHsvSaturation') as SliderTool;
+    expect(sliderRange(tool, BASELINE_RENDER_PARAMS)).toEqual({ min: 0, max: 200, step: 1 });
+    expect(sliderPatch(tool, 150)).toEqual({ cameraHsvSaturation: 1.5 });
+    expect(valueText(tool, BASELINE_RENDER_PARAMS)).toBe('100');
+  });
+
   it('exposure in stops doubles linear RGB without clipping HDR values', () => {
     const rgb = [0.125, 0.25, 2] as const;
     for (const exposureEv of [-5, -1, 1, 5]) {
@@ -135,6 +168,10 @@ function colourImage(width: number, height: number): { width: number; height: nu
 
 describe('Camera Raw: tahap GPU == referensi JS', () => {
   const SETTINGS: Array<Partial<RenderParams>> = [
+    { cameraHsvSaturation: 0 },
+    { cameraHsvSaturation: 0.5 },
+    { cameraHsvSaturation: 2 },
+    { cameraHsvSaturation: 1.7, cameraExposureEv: 2, cameraWhiteBalanceK: 3200, cameraSaturation: 0.7 },
     { cameraExposureEv: 1 },
     { cameraExposureEv: -5 },
     { cameraExposureEv: 5, cameraHighlights: -1, cameraWhiteBalanceK: 6500 },
@@ -173,4 +210,26 @@ describe('Camera Raw: tahap GPU == referensi JS', () => {
     }
     expect(maxAbs, `log_e_film max ${maxAbs.toExponential(3)}`).toBeLessThanOrEqual(1e-5);
   }, 120_000);
+});
+
+describe('HSV Saturation: cached Session rendering', () => {
+  it('updates an already rendered neutral preview, reaches full output, and resets exactly', async () => {
+    const { engine, bundle } = await sharedResources(STOCK_ID, PRINT);
+    const session = await Session.create({ assetsBaseUrl: 'public/data', engine, bundle,
+      arenaProvider: { get: async (_key, inputs) => (await sharedResources(inputs.stockId, inputs.printScan)).arenas } });
+    try {
+      session.open({ ...colourImage(64, 48), suggestedColorSpace: 'sRGB', encoding: 'linear', source: { format: 'fixture', bitDepth: 32 } });
+      session.setParams({ autoExposure: false, grainEnabled: false, glareEnabled: false, inputColorSpace: 'sRGB', inputCctfDecoding: false });
+      const before = await session.render('preview');
+      session.setParams({ cameraHsvSaturation: 1.8 });
+      const after = await session.render('preview');
+      expect(Math.max(...after.rgb.map((v, i) => Math.abs(v - before.rgb[i]!)))).toBeGreaterThan(0.01);
+      const full = await session.render('full');
+      expect(full.rgb).toEqual(after.rgb);
+      session.setParams({ cameraHsvSaturation: 1 });
+      const restored = await session.render('preview');
+      expect(restored.rgb).toEqual(before.rgb);
+      expect(restored.paramsVersion).toBeGreaterThan(after.paramsVersion);
+    } finally { session.dispose(); }
+  }, 120000);
 });

@@ -271,6 +271,7 @@ const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max
   ['cameraWhites', CAMERA_LIMITS.whites],
   ['cameraBlacks', CAMERA_LIMITS.blacks],
   ['cameraSaturation', CAMERA_LIMITS.saturation],
+  ['cameraHsvSaturation', CAMERA_LIMITS.hsvSaturation],
   ['cameraSoftenDetail', { min: 0, max: 1 }],
 ];
 
@@ -294,6 +295,7 @@ export function cameraSettings(params: RenderParams): CameraSettings {
     whites: params.cameraWhites,
     blacks: params.cameraBlacks,
     saturation: params.cameraSaturation,
+    hsvSaturation: params.cameraHsvSaturation,
   };
 }
 

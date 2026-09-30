@@ -146,6 +146,8 @@ export interface RenderParams {
   cameraBlacks: number;
   /** Saturasi di sekitar luminans, 0..2. */
   cameraSaturation: number;
+  /** Isolated HSV S gain in linear input RGB, 0..2; 1 is identity. */
+  cameraHsvSaturation: number;
   /** Input detail attenuation, 0..1; zero bypasses the spatial stage. */
   cameraSoftenDetail: number;
 
@@ -223,6 +225,7 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   cameraWhites: 0,
   cameraBlacks: 0,
   cameraSaturation: 1,
+  cameraHsvSaturation: 1,
   cameraSoftenDetail: 0,
   lensBlurEnabled: false,
   lensFocusX: 0.5,

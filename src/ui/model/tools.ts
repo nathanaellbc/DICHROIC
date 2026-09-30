@@ -232,6 +232,7 @@ export const GROUPS: readonly ToolGroup[] = [
       { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', section: 'Light', relativeCenter: 0, label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the brightest end of the tonal range.' },
       { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', section: 'Light', relativeCenter: 0, label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the darkest end; true black stays black.' },
       { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', section: 'Color', relativeCenter: 1, label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 0, note: 'Color intensity before film, preserving luminance.' },
+      { kind: 'slider', id: 'cameraHsvSaturation', field: 'cameraHsvSaturation', section: 'Color', displayMultiplier: 100, label: 'HSV Sat', title: 'HSV Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 0, note: 'Adjusts only HSV Saturation. 100 is neutral; Hue and Value stay fixed. Perceived brightness may change.' },
       { kind: 'slider', id: 'cameraSoftenDetail', field: 'cameraSoftenDetail', section: 'Detail', displayMultiplier: 100, label: 'Soften', title: 'Soften Detail', icon: 'diffusion', min: 0, max: 1, step: 0.01, digits: 0, note: 'Softens harsh digital texture while protecting strong edges. Applied before film and grain.' },
     ],
   },

@@ -282,6 +282,10 @@ The panel follows the basic photographic workflow described in [Adobe Camera Raw
 
 Lens focus dragging previews a cached depth mask capped at 768 pixels on its long edge, composited over the existing high resolution photo. Source detail and export resolution stay unchanged. Pointer movement updates provisional focus locally; releasing the pointer commits the final focus and requests the expensive film/blur render once. Pinch and pointer cancellation discard provisional edits. A synthetic 4096x2048 preview benchmark in local Edge measured about 231 ms per old full-frame focus check versus 3.2 ms per prepared mask update; this is not an iPhone device benchmark.
 
+## HSV Saturation
+
+Camera → Color → HSV Saturation isolates the HSV S channel: 0–200 scales S by 0–2, with 100 neutral. Hue and Value (`max(R,G,B)`) stay fixed at this operation; saturation stops at 1, while HDR Value above 1 is retained. This runs in decoded linear input RGB after other Camera color/tone controls and before film. HSV Value is not luminance, so perceived brightness can change, and subsequent film processing can change hue/brightness. Neutral bypasses exactly; preview and full image export use the same camera uniform without adding a GPU pass or scratch buffer. Like the existing Camera develop controls, it is excluded from CUBE export. This is an isolated S gain, not a custom HSV curve or a claim of pixel parity with Resolve's working color spaces.
+
 ## Soften Detail
 
 Camera → Detail → Soften Detail (0–100) attenuates harsh input texture before camera develop, film exposure, and grain. Zero omits the stage exactly. The implementation is an independent Gaussian-weighted self-guided filter on log input luminance, with color-space luminance weights, bounded scalar RGB corrections, and a maximum 90% blend. Strong edges receive less smoothing; this is not exact reversal of baked phone sharpening or a dedicated halo reconstruction algorithm. The four separable WebGPU passes reuse two compact vec2 scratch buffers through the render graph pool.
