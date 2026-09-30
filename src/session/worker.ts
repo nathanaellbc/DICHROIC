@@ -77,5 +77,7 @@ function serializeError(e: unknown): RpcError {
 // Entry browser: hanya aktif di dalam Dedicated Worker (punya importScripts).
 const scope = globalThis as unknown as { importScripts?: unknown } & MessagePortLike;
 if (typeof scope.importScripts === 'function') {
-  serveSession(scope, (init) => Session.create({ assetsBaseUrl: init.assetsBaseUrl }));
+  serveSession(scope, (init) => Session.create({ assetsBaseUrl: init.assetsBaseUrl,
+    onDeviceLost: (error) => scope.postMessage({ id: 0, ok: false, error: serializeError(error) }),
+  }));
 }

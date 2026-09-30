@@ -26,7 +26,7 @@ import { encodePng, encodeTiff16 } from '../io/encode';
 import { EXIF_APP1_MAX_BYTES, exifForTiff, rewriteExif } from '../io/exif';
 import { buildIccProfile } from '../io/icc';
 import { encodeJpeg } from '../io/jpegEncoder';
-import { CANVAS_FORMATS, offscreenCanvasEncoder, rgbToRgba8 } from '../io/canvasEncode';
+import { CANVAS_FORMATS, offscreenCanvasEncoder } from '../io/canvasEncode';
 import type { CanvasEncoder, CanvasFormat } from '../io/canvasEncode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
@@ -42,8 +42,22 @@ import type { AssetBundle } from '../profiles/load';
 import { RenderSupersededError, SessionStateError } from './errors';
 import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
 import type { ScaledImage } from './downscale';
+import { originalFrame, rgbToCanvas } from '../io/display';
+import type { Frame } from '../io/display';
+import { buildGuide } from '../depth/estimate';
+import type { Guide } from '../depth/estimate';
+import { assertImageBudget, IMAGE_RGBA_BUDGET } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
+
+export interface PreparedPhoto {
+  original: Frame;
+  guide: Guide;
+  preview: RenderResult;
+  width: number;
+  height: number;
+  params: RenderParams;
+}
 
 /**
  * Format ekspor gambar. PNG 8/16-bit, TIFF 16-bit tak terkompresi (spec Fase
@@ -86,6 +100,7 @@ export interface RenderResult {
   quality: RenderQuality;
   /** Versi parameter saat render dimulai; UI membuang hasil yang versinya basi. */
   paramsVersion: number;
+  outputColorSpace?: string;
 }
 
 /**
@@ -104,6 +119,7 @@ export interface ArenaProvider {
 }
 
 export interface SessionOptions {
+  onDeviceLost?: (error: Error) => void;
   assetsBaseUrl: string;
   engine?: EngineDevice;
   bundle?: AssetBundle;
@@ -213,6 +229,7 @@ export class Session {
   #paramsVersion = 0;
   #image: DecodedImage | undefined;
   #imageId = 0;
+  #photoId = 0;
   #preview: { imageId: number; image: ScaledImage } | undefined;
   /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
   #depth: DepthMap | undefined;
@@ -220,6 +237,7 @@ export class Session {
   #disposed = false;
   /** Antrean terbaru-menang: paling banyak satu render berjalan dan satu menunggu. */
   #busy = false;
+  private readonly idleWaiters = new Set<() => void>();
   #pending: PendingRender | undefined;
   /**
    * Satu hasil terakhir per kualitas. Slot `full` menampung render penuh
@@ -227,6 +245,11 @@ export class Session {
    */
   readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
   private readonly graphs = new Map<string, Promise<RenderGraph>>();
+  private graphArenaKey: string | undefined;
+  private cleanupPending = false;
+  private staged: { id: number; image: DecodedImage; params: RenderParams; backup?: {
+    image: DecodedImage | undefined; params: RenderParams; depth: DepthMap | undefined; photoId: number;
+  } } | undefined;
 
   private constructor(
     private readonly engine: EngineDevice,
@@ -253,7 +276,7 @@ export class Session {
     }
     engine ??= await acquireDevice();
     const selfTest = await runPrecisionSelfTest(engine.device);
-    return new Session(
+    const session = new Session(
       engine,
       bundle,
       opts.arenaProvider ?? owned!,
@@ -262,6 +285,13 @@ export class Session {
       Object.freeze({ iirPrecisionOk: selfTest.ok, iirMaxAbsError: selfTest.maxAbsError }),
       opts.canvasEncoder ?? (typeof OffscreenCanvas !== 'undefined' ? offscreenCanvasEncoder : undefined),
     );
+    void engine.device.lost.then((info) => {
+      if (session.#disposed) return;
+      const error = new SessionStateError(`The GPU device was lost (${info.reason}): ${info.message}. Reopen the photo to retry.`);
+      session.dispose();
+      opts.onDeviceLost?.(error);
+    });
+    return session;
   }
 
   get params(): Readonly<RenderParams> {
@@ -294,6 +324,7 @@ export class Session {
 
   open(image: DecodedImage): void {
     this.assertAlive();
+    assertImageBudget(image.width, image.height);
     if (image.rgba.length !== image.width * image.height * 4) {
       throw new RangeError(
         `DecodedImage ${image.width}x${image.height} butuh ${image.width * image.height * 4} float RGBA, ` +
@@ -301,6 +332,7 @@ export class Session {
       );
     }
     this.#image = image;
+    this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
     this.#depth = undefined;
@@ -313,8 +345,9 @@ export class Session {
    * (0 = tak hingga), baris atas-ke-bawah, orientasi sama dengan gambar.
    * Resolusinya bebas (diambil bilinear). `null` menghapusnya.
    */
-  setDepthMap(map: DepthMap | null): void {
+  setDepthMap(map: DepthMap | null, photoId?: number): void {
     this.assertAlive();
+    if (photoId !== undefined && photoId !== this.#photoId) throw new RenderSupersededError();
     if (map) {
       const { width, height, data } = map;
       if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) || data.length !== width * height) {
@@ -323,6 +356,65 @@ export class Session {
     }
     this.#depth = map ?? undefined;
     this.#depthId += 1;
+  }
+
+  /** Prepare and render a candidate without replacing the current photo. */
+  stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto> {
+    this.assertAlive();
+    this.discardOpen(this.staged?.id ?? -1);
+    const params = applyParamsPatch(this.#params, patch);
+    validateStocks(this.bundle, params.film, params.paper, params.process);
+    // The previous source is retained until a replacement commits. Bound
+    // their combined storage, too, so cancellation remains affordable.
+    assertImageBudget(image.width, image.height, 16, IMAGE_RGBA_BUDGET - (this.#image?.rgba.byteLength ?? 0));
+    if (image.rgba.length !== image.width * image.height * 4) throw new RangeError('Invalid photo dimensions.');
+    const staged = { id, image, params };
+    this.staged = staged;
+    return this.enqueue(async () => {
+      if (this.staged !== staged) throw new RenderSupersededError();
+      if (this.#image) {
+        this.#cache.delete('full');
+        this.clearResources();
+      }
+      const original = originalFrame(image, this.previewMaxLongEdge);
+      const guide = buildGuide(image, guideMaxEdge);
+      const frame = boxDownscale(image.rgba, image.width, image.height, this.previewMaxLongEdge);
+      const { rgb } = await this.renderFrameWithPlan(frame, params, 'image', null);
+      if (this.staged !== staged) throw new RenderSupersededError();
+      return { original, guide, width: image.width, height: image.height, params,
+        preview: { width: frame.width, height: frame.height, rgb, quality: 'preview', paramsVersion: this.#paramsVersion } };
+    });
+  }
+
+  commitOpen(id: number): void {
+    const staged = this.staged;
+    if (!staged || staged.id !== id) throw new RenderSupersededError();
+    staged.backup = { image: this.#image, params: this.#params, depth: this.#depth, photoId: this.#photoId };
+    this.open(staged.image);
+    this.#photoId = id;
+    this.#params = staged.params;
+    this.#paramsVersion += 1;
+  }
+
+  finishOpen(id: number): void {
+    if (this.staged?.id === id) this.staged = undefined;
+  }
+
+  discardOpen(id: number): void {
+    const staged = this.staged;
+    if (staged?.id !== id) return;
+    if (staged.backup) {
+      this.#image = staged.backup.image;
+      this.#photoId = staged.backup.photoId;
+      this.#params = staged.backup.params;
+      this.#depth = staged.backup.depth;
+      this.#imageId += 1;
+      this.#paramsVersion += 1;
+      this.#depthId += 1;
+      this.#preview = undefined;
+      this.#cache.clear();
+    }
+    this.staged = undefined;
   }
 
   /** Ada peta kedalaman untuk foto terbuka. */
@@ -417,6 +509,9 @@ export class Session {
 
   private release(): void {
     this.#busy = false;
+    if (this.cleanupPending) this.clearResources();
+    for (const resolve of this.idleWaiters) resolve();
+    this.idleWaiters.clear();
     const next = this.#pending;
     this.#pending = undefined;
     if (next) {
@@ -427,7 +522,8 @@ export class Session {
 
   private async execute(quality: RenderQuality, longEdge?: number): Promise<RenderResult> {
     this.assertAlive();
-    const image = this.#image!;
+    const image = this.#image;
+    if (!image) throw new SessionStateError('The photo was closed.');
     const params = this.#params;
     const paramsVersion = this.#paramsVersion;
     const key = this.cacheKey(quality, longEdge);
@@ -436,8 +532,8 @@ export class Session {
         ? this.previewImage()
         : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
     const rgb = await this.renderFrame(frame, params, 'image');
-    const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion };
-    if (!this.#disposed) this.#cache.set(quality, { key, result });
+    const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion, outputColorSpace: params.outputColorSpace };
+    if (!this.#disposed && key === this.cacheKey(quality, longEdge)) this.#cache.set(quality, { key, result });
     return result;
   }
 
@@ -588,14 +684,17 @@ export class Session {
     if (canvasFormat && !this.canvasEncoder) {
       throw new RangeError(`Format ${format} butuh encoder kanvas browser, yang tidak tersedia di sini.`);
     }
-    const outputColorSpace = this.#params.outputColorSpace;
-    const { rgb, width, height } = await this.renderForExport(options.longEdge);
+    const imageId = this.#imageId;
+    const exif = this.#image?.exif;
+    const result = await this.renderForExport(options.longEdge);
+    if (imageId !== this.#imageId) throw new RenderSupersededError();
+    const { rgb, width, height } = result;
+    const outputColorSpace = result.outputColorSpace ?? this.#params.outputColorSpace;
     if (canvasFormat) {
       const colorSpace = outputColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
-      return this.canvasEncoder!.encode(rgbToRgba8(rgb, width, height), width, height, canvasFormat, options.quality ?? 1, colorSpace);
+      return this.canvasEncoder!.encode(rgbToCanvas(rgb, width, height, outputColorSpace, colorSpace, this.bundle.manifest.outputColorSpaces), width, height, canvasFormat, options.quality ?? 1, colorSpace);
     }
     const icc = this.iccFor(outputColorSpace);
-    const exif = this.#image?.exif;
     const exifOptions = { width, height, srgb: outputColorSpace === 'sRGB' };
     if (format === 'jpeg') {
       const quality = Math.min(100, Math.max(1, Math.round((options.quality ?? 1) * 100)));
@@ -613,16 +712,35 @@ export class Session {
     });
   }
 
+  /** Release photo resources after any active GPU job has completed. */
+  close(): Promise<void> {
+    this.staged = undefined;
+    this.#pending?.reject(new RenderSupersededError());
+    this.#pending = undefined;
+    this.#image = undefined;
+    this.#photoId = 0;
+    this.#imageId += 1;
+    this.#preview = undefined;
+    this.#depth = undefined;
+    this.#depthId += 1;
+    this.#cache.clear();
+    this.cleanupPending = true;
+    if (!this.#busy) this.clearResources();
+    return this.#busy ? new Promise((resolve) => this.idleWaiters.add(resolve)) : Promise.resolve();
+  }
+
+  private clearResources(): void {
+    this.cleanupPending = false;
+    for (const graph of this.graphs.values()) void graph.then((g) => g.dispose(), () => {});
+    this.graphs.clear();
+    this.graphArenaKey = undefined;
+    this.ownedArenas?.destroy();
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
-    this.#pending?.reject(new SessionStateError('Session di-dispose() sebelum render ini dimulai.'));
-    this.#pending = undefined;
-    this.#cache.clear();
-    for (const graph of this.graphs.values()) void graph.then((g) => g.dispose(), () => {});
-    this.graphs.clear();
-    this.ownedArenas?.destroy();
-    this.#image = undefined;
+    this.close();
   }
 
   /** Render satu frame lewat rencana `mode`; keluaran 3 kanal rapat. */
@@ -638,8 +756,9 @@ export class Session {
     frame: { width: number; height: number; rgba: Float32Array },
     params: RenderParams,
     mode: RenderMode,
+    depth: DepthMap | null | undefined = this.#depth,
   ): Promise<{ rgb: Float32Array; plan: RenderPlan }> {
-    const plan = buildRenderPlan(params, this.bundle, frame, mode, mode === 'image' && this.#depth ? { depth: this.#depth } : {});
+    const plan = buildRenderPlan(params, this.bundle, frame, mode, mode === 'image' && depth ? { depth } : {});
     const graph = await this.graphFor(plan);
     this.assertAlive();
     const rgba = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
@@ -655,12 +774,27 @@ export class Session {
    * permintaan bersamaan untuk kunci yang sama berbagi satu graf alih-alih
    * membangun dua (yang kedua dulu tertimpa tanpa di-dispose).
    */
-  private graphFor(plan: RenderPlan): Promise<RenderGraph> {
+  private async graphFor(plan: RenderPlan): Promise<RenderGraph> {
+    // All graph use is serialized by enqueue(). A new filter/stock variant
+    // can safely retire the previous arenas and their dependent graphs here.
+    if (this.graphArenaKey !== plan.arenaKey) {
+      if (this.graphArenaKey !== undefined) this.clearResources();
+      this.graphArenaKey = plan.arenaKey;
+    }
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
       `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}`;
     const existing = this.graphs.get(key);
-    if (existing) return existing;
+    if (existing) {
+      this.graphs.delete(key);
+      this.graphs.set(key, existing);
+      return existing;
+    }
+    if (this.graphs.size >= 4) {
+      const oldest = this.graphs.entries().next().value!;
+      this.graphs.delete(oldest[0]);
+      (await oldest[1]).dispose();
+    }
     const building = (async () => {
       const arenas = await this.arenas.get(plan.arenaKey, plan.arenaInputs);
       const graph = new RenderGraph(this.engine);

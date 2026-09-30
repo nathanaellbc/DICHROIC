@@ -13,6 +13,7 @@ import type { PanInfo } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { popSpring, sheetSpring } from '../motion';
+import { activateModal } from '../modalFocus';
 
 export type Detent = 'medium' | 'large';
 
@@ -62,9 +63,7 @@ export function Sheet(props: SheetProps) {
 
 function useFocusReturn(ref: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    ref.current?.focus({ preventScroll: true });
-    return () => previous?.focus?.({ preventScroll: true });
+    if (ref.current) return activateModal(ref.current);
   }, [ref]);
 }
 

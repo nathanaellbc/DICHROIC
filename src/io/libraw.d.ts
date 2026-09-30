@@ -15,6 +15,7 @@ declare module 'libraw-wasm/dist/libraw.js' {
   export interface LibRawInstance {
     open(bytes: Uint8Array, settings: Record<string, unknown>): void;
     imageData(): LibRawImage | undefined;
+    delete(): void;
   }
   export interface LibRawModule {
     LibRaw: new () => LibRawInstance;

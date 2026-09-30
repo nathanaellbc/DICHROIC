@@ -477,137 +477,139 @@ export class RenderGraph {
     // alasan terukur" yang aturan proyek ini minta. Ukur ulang di sini kalau
     // profil produksi sungguhan (bukan fixture test) suatu hari menunjukkan
     // gambaran berbeda.
-    let front = device.createBuffer({ label: 'ping', size: bytes, usage: PING_PONG_USAGE });
-    let back = device.createBuffer({ label: 'pong', size: bytes, usage: PING_PONG_USAGE });
-    // `input.buffer` bertipe `ArrayBufferLike` (bisa `SharedArrayBuffer`) di
-    // definisi lib TS terbaru, sementara `writeBuffer` mensyaratkan
-    // `ArrayBuffer` non-shared. `input` di sini SELALU `Float32Array` biasa
-    // yang pemanggil bangun sendiri (lih. graph.test.ts) — tidak pernah
-    // shared — jadi cast ini menyempitkan tipe, bukan mengubah perilaku.
-    device.queue.writeBuffer(
-      front,
-      0,
-      input.buffer as ArrayBuffer,
-      input.byteOffset,
-      input.byteLength,
-    );
-
-    const paramsBuffer = device.createBuffer({
-      label: 'coreParams',
-      size: CORE_PARAMS_BYTES,
-      usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
-    });
-    const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
-    writeCoreParams(params, staging);
-    device.queue.writeBuffer(paramsBuffer, 0, staging);
-
-    // Task 19b: `remainingSpatialRadius` -- SATU-SATUNYA state baru loop ini
-    // butuh. Dimulai dari jumlah `spatialRadiusPx` SEMUA tahap yang akan
-    // benar-benar berjalan (0..stopAt, BUKAN seluruh `this.stages` -- tahap
-    // setelah titik `collect` tidak pernah dieksekusi, jadi radiusnya tidak
-    // pernah "dikonsumsi" apa pun dan tidak boleh ikut dijumlahkan, persis
-    // upstream yang HANYA menjumlahkan `xRadius` efek yang `xPath` true).
-    // Tetap 0 (dan karena itu `inflateActiveRect` di bawah selalu no-op,
-    // mengembalikan `centerRect` yang SAMA setiap tahap) ketika
-    // `!shrinkApron` -- lih. dokumentasi parameter itu.
-    let remainingSpatialRadius = 0;
-    if (shrinkApron) {
-      for (let i = 0; i <= stopAt; i += 1) {
-        remainingSpatialRadius += resolveSpatialRadius(this.stages[i]!, params, frame);
-      }
-    }
-    const centerRect: ActiveRect = {
-      x: params.activeOriginX,
-      y: params.activeOriginY,
-      width: params.activeWidth,
-      height: params.activeHeight,
+    const transient: GPUBuffer[] = [];
+    const allocate = (descriptor: GPUBufferDescriptor): GPUBuffer => {
+      const buffer = device.createBuffer(descriptor);
+      transient.push(buffer);
+      return buffer;
     };
+    try {
+      let front = allocate({ label: 'ping', size: bytes, usage: PING_PONG_USAGE });
+      let back = allocate({ label: 'pong', size: bytes, usage: PING_PONG_USAGE });
+      // `input.buffer` bertipe `ArrayBufferLike` (bisa `SharedArrayBuffer`) di
+      // definisi lib TS terbaru, sementara `writeBuffer` mensyaratkan
+      // `ArrayBuffer` non-shared. `input` di sini SELALU `Float32Array` biasa
+      // yang pemanggil bangun sendiri (lih. graph.test.ts) — tidak pernah
+      // shared — jadi cast ini menyempitkan tipe, bukan mengubah perilaku.
+      device.queue.writeBuffer(
+        front,
+        0,
+        input.buffer as ArrayBuffer,
+        input.byteOffset,
+        input.byteLength,
+      );
 
-    // Task 19b: uniform buffer CoreParams KECIL per tahap, dipakai HANYA
-    // saat `shrinkApron` (satu per tahap 0..stopAt, active rect BERBEDA
-    // tiap tahap) -- lih. dokumentasi `Stage.spatialRadiusPx` untuk kenapa
-    // ini HARUS buffer terpisah (bukan menulis ulang `paramsBuffer` yang
-    // sama berkali-kali): `queue.writeBuffer` berkali-kali ke SATU buffer
-    // sebelum SATU `submit()` di akhir fungsi ini akan membuat hanya
-    // penulisan TERAKHIR yang terlihat GPU untuk SELURUH command buffer
-    // (semua penulisan itu terjadi sebelum submit manapun dieksekusi) --
-    // menulis ke buffer BARU per tahap sepenuhnya aman terlepas urutan itu,
-    // karena tiap buffer hanya ditulis SEKALI, sebelum `submit()` mana pun.
-    // Dikumpulkan di sini untuk di-`destroy()` setelah `submit()`, bukan
-    // sebelumnya (destroy sebelum GPU selesai memakainya adalah use-after-
-    // destroy).
-    const perStageParamsBuffers: GPUBuffer[] = [];
+      const paramsBuffer = allocate({
+        label: 'coreParams',
+        size: CORE_PARAMS_BYTES,
+        usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
+      });
+      const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
+      writeCoreParams(params, staging);
+      device.queue.writeBuffer(paramsBuffer, 0, staging);
 
-    const encoder = device.createCommandEncoder({ label: 'graph' });
-    for (let i = 0; i <= stopAt; i += 1) {
-      const stage = this.stages[i]!;
-      let stageParams = params;
-      let stageParamsBuffer = paramsBuffer;
-
+      // Task 19b: `remainingSpatialRadius` -- SATU-SATUNYA state baru loop ini
+      // butuh. Dimulai dari jumlah `spatialRadiusPx` SEMUA tahap yang akan
+      // benar-benar berjalan (0..stopAt, BUKAN seluruh `this.stages` -- tahap
+      // setelah titik `collect` tidak pernah dieksekusi, jadi radiusnya tidak
+      // pernah "dikonsumsi" apa pun dan tidak boleh ikut dijumlahkan, persis
+      // upstream yang HANYA menjumlahkan `xRadius` efek yang `xPath` true).
+      // Tetap 0 (dan karena itu `inflateActiveRect` di bawah selalu no-op,
+      // mengembalikan `centerRect` yang SAMA setiap tahap) ketika
+      // `!shrinkApron` -- lih. dokumentasi parameter itu.
+      let remainingSpatialRadius = 0;
       if (shrinkApron) {
-        const rect = inflateActiveRect(centerRect, remainingSpatialRadius, params.width, params.height);
-        stageParams = {
-          ...params,
-          activeOriginX: rect.x,
-          activeOriginY: rect.y,
-          activeWidth: rect.width,
-          activeHeight: rect.height,
-        };
+        for (let i = 0; i <= stopAt; i += 1) {
+          remainingSpatialRadius += resolveSpatialRadius(this.stages[i]!, params, frame);
+        }
+      }
+      const centerRect: ActiveRect = {
+        x: params.activeOriginX,
+        y: params.activeOriginY,
+        width: params.activeWidth,
+        height: params.activeHeight,
+      };
 
-        const stageParamsStaging = new ArrayBuffer(CORE_PARAMS_BYTES);
-        writeCoreParams(stageParams, stageParamsStaging);
-        stageParamsBuffer = device.createBuffer({
-          label: `coreParams:${stage.name}`,
-          size: CORE_PARAMS_BYTES,
-          usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
+      // Task 19b: uniform buffer CoreParams KECIL per tahap, dipakai HANYA
+      // saat `shrinkApron` (satu per tahap 0..stopAt, active rect BERBEDA
+      // tiap tahap) -- lih. dokumentasi `Stage.spatialRadiusPx` untuk kenapa
+      // ini HARUS buffer terpisah (bukan menulis ulang `paramsBuffer` yang
+      // sama berkali-kali): `queue.writeBuffer` berkali-kali ke SATU buffer
+      // sebelum SATU `submit()` di akhir fungsi ini akan membuat hanya
+      // penulisan TERAKHIR yang terlihat GPU untuk SELURUH command buffer
+      // (semua penulisan itu terjadi sebelum submit manapun dieksekusi) --
+      // menulis ke buffer BARU per tahap sepenuhnya aman terlepas urutan itu,
+      // karena tiap buffer hanya ditulis SEKALI, sebelum `submit()` mana pun.
+      // Dikumpulkan di sini untuk di-`destroy()` setelah `submit()`, bukan
+      // sebelumnya (destroy sebelum GPU selesai memakainya adalah use-after-
+      // destroy).
+
+      const encoder = device.createCommandEncoder({ label: 'graph' });
+      for (let i = 0; i <= stopAt; i += 1) {
+        const stage = this.stages[i]!;
+        let stageParams = params;
+        let stageParamsBuffer = paramsBuffer;
+
+        if (shrinkApron) {
+          const rect = inflateActiveRect(centerRect, remainingSpatialRadius, params.width, params.height);
+          stageParams = {
+            ...params,
+            activeOriginX: rect.x,
+            activeOriginY: rect.y,
+            activeWidth: rect.width,
+            activeHeight: rect.height,
+          };
+
+          const stageParamsStaging = new ArrayBuffer(CORE_PARAMS_BYTES);
+          writeCoreParams(stageParams, stageParamsStaging);
+          stageParamsBuffer = allocate({
+            label: `coreParams:${stage.name}`,
+            size: CORE_PARAMS_BYTES,
+            usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
+          });
+          device.queue.writeBuffer(stageParamsBuffer, 0, stageParamsStaging);
+
+          // Port `consumeSpatialRadius(xRadius)` hulu -- dipanggil SETELAH
+          // tahap ini (yaitu berlaku mulai tahap BERIKUTNYA), persis
+          // `SpektraVulkanRenderer.cpp`'s tujuh call-site (:6444-6604), yang
+          // semuanya muncul SETELAH dispatch efek terkait, bukan sebelumnya.
+          remainingSpatialRadius = Math.max(0, remainingSpatialRadius - resolveSpatialRadius(stage, params, frame));
+        }
+
+        stage.encode(encoder, {
+          device,
+          params: stageParams,
+          frame,
+          paramsBuffer: stageParamsBuffer,
+          source: front,
+          dest: back,
+          scratch: (label, scratchBytes) => this.scratch(label, scratchBytes),
         });
-        device.queue.writeBuffer(stageParamsBuffer, 0, stageParamsStaging);
-        perStageParamsBuffers.push(stageParamsBuffer);
-
-        // Port `consumeSpatialRadius(xRadius)` hulu -- dipanggil SETELAH
-        // tahap ini (yaitu berlaku mulai tahap BERIKUTNYA), persis
-        // `SpektraVulkanRenderer.cpp`'s tujuh call-site (:6444-6604), yang
-        // semuanya muncul SETELAH dispatch efek terkait, bukan sebelumnya.
-        remainingSpatialRadius = Math.max(0, remainingSpatialRadius - resolveSpatialRadius(stage, params, frame));
+        // Ping-pong: keadaan yang baru ditulis tahap ini (ke `dest`/`back`)
+        // menjadi `source` tahap berikutnya. Menghilangkan baris ini membuat
+        // setiap tahap membaca ulang buffer masukan asli yang tak tersentuh —
+        // graph.test.ts membuktikan ini lewat tahap yang MENGUBAH nilai
+        // (bukan sekadar menyalinnya), sehingga hasil akhir yang salah
+        // benar-benar terlihat, bukan cuma kebetulan identik dengan input.
+        [front, back] = [back, front];
       }
 
-      stage.encode(encoder, {
-        device,
-        params: stageParams,
-        frame,
-        paramsBuffer: stageParamsBuffer,
-        source: front,
-        dest: back,
-        scratch: (label, scratchBytes) => this.scratch(label, scratchBytes),
+      const readback = allocate({
+        label: 'readback',
+        size: bytes,
+        usage: gpuBufferUsage.COPY_DST | gpuBufferUsage.MAP_READ,
       });
-      // Ping-pong: keadaan yang baru ditulis tahap ini (ke `dest`/`back`)
-      // menjadi `source` tahap berikutnya. Menghilangkan baris ini membuat
-      // setiap tahap membaca ulang buffer masukan asli yang tak tersentuh —
-      // graph.test.ts membuktikan ini lewat tahap yang MENGUBAH nilai
-      // (bukan sekadar menyalinnya), sehingga hasil akhir yang salah
-      // benar-benar terlihat, bukan cuma kebetulan identik dengan input.
-      [front, back] = [back, front];
+      encoder.copyBufferToBuffer(front, 0, readback, 0, bytes);
+      device.queue.submit([encoder.finish()]);
+
+      await readback.mapAsync(gpuMapMode.READ);
+      const result = new Float32Array(readback.getMappedRange().slice(0));
+      readback.unmap();
+
+      return result;
+    } finally {
+      for (const buffer of transient) buffer.destroy();
     }
-
-    const readback = device.createBuffer({
-      label: 'readback',
-      size: bytes,
-      usage: gpuBufferUsage.COPY_DST | gpuBufferUsage.MAP_READ,
-    });
-    encoder.copyBufferToBuffer(front, 0, readback, 0, bytes);
-    device.queue.submit([encoder.finish()]);
-
-    await readback.mapAsync(gpuMapMode.READ);
-    const result = new Float32Array(readback.getMappedRange().slice(0));
-    readback.unmap();
-
-    readback.destroy();
-    paramsBuffer.destroy();
-    for (const buffer of perStageParamsBuffers) buffer.destroy();
-    front.destroy();
-    back.destroy();
-
-    return result;
   }
 
   /**

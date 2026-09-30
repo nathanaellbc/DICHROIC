@@ -8,6 +8,8 @@ import type { UiIconName } from '../components/Icon';
 import { PressButton } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { popSpring } from '../motion';
+import { useEffect, useRef } from 'react';
+import { activateModal } from '../modalFocus';
 
 const KINDS: ReadonlyArray<{ icon: UiIconName; color: string; title: string; detail: string }> = [
   { icon: 'photo', color: '#0091ff', title: 'Photos', detail: 'JPEG, PNG' },
@@ -15,7 +17,7 @@ const KINDS: ReadonlyArray<{ icon: UiIconName; color: string; title: string; det
   { icon: 'camera', color: '#ff9230', title: 'Camera RAW', detail: 'DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more' },
 ];
 
-export function StartScreen({ onChoose, wide, engineReady }: { onChoose: () => void; wide: boolean; engineReady: boolean }) {
+export function StartScreen({ onChoose, wide, engineReady, engineFailed, enginePaused }: { onChoose: () => void; wide: boolean; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
   return (
     <div
       style={{
@@ -58,7 +60,7 @@ export function StartScreen({ onChoose, wide, engineReady }: { onChoose: () => v
             <Icon name="photo" size={20} strokeWidth={2.2} /> Choose Photo
           </PressButton>
           <p className="t-footnote secondary" style={{ margin: 0, textAlign: 'center' }}>
-            {engineReady ? 'Darkroom ready.' : 'Preparing the darkroom…'} Requires WebGPU.
+            {enginePaused ? 'Darkroom paused until you choose a photo.' : engineFailed ? 'Darkroom stopped. Choose a photo to retry.' : engineReady ? 'Darkroom ready.' : 'Preparing the darkroom…'} Requires WebGPU.
           </p>
         </div>
       </div>
@@ -67,13 +69,19 @@ export function StartScreen({ onChoose, wide, engineReady }: { onChoose: () => v
 }
 
 export function OpeningCard({ opening, onCancel }: { opening?: { name: string; stage: string }; onCancel: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const open = opening !== undefined;
+  useEffect(() => { if (open && ref.current) return activateModal(ref.current); }, [open]);
   return (
     <AnimatePresence>
       {opening && (
         <>
           <motion.div className="alert-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden="true" />
           <motion.div
-            role="status"
+            ref={ref}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Opening photo"
             aria-live="polite"
             className="alert"
             style={{ x: '-50%', y: '-50%', width: 270, alignItems: 'center', padding: '24px 20px 20px', gap: 14 }}
@@ -81,6 +89,7 @@ export function OpeningCard({ opening, onCancel }: { opening?: { name: string; s
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
             transition={popSpring}
+            onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
           >
             <span style={{ color: '#0091ff' }}><Spinner size={44} /></span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

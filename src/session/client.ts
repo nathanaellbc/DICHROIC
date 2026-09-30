@@ -17,21 +17,27 @@ import type { DepthMap } from '../host/lens';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
 
 export class SessionClient {
   #nextId = 1;
   readonly #pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
+  #failure: Error | undefined;
+  readonly #onMessage = (event: { data?: unknown }) => {
+    const response = event.data as RpcResponse;
+    if (response.id === 0 && !response.ok) { this.shutdown(rehydrateError(response.error)); return; }
+    const entry = this.#pending.get(response.id);
+    if (!entry) return;
+    this.#pending.delete(response.id);
+    if (response.ok) entry.resolve(response.result);
+    else entry.reject(rehydrateError(response.error));
+  };
+  readonly #onError = (event: { message?: string }) => this.shutdown(new Error(event.message || 'The image worker stopped responding. Reopen the photo to retry.'));
 
-  private constructor(private readonly port: MessagePortLike) {
-    port.addEventListener('message', (event) => {
-      const response = event.data as RpcResponse;
-      const entry = this.#pending.get(response.id);
-      if (!entry) return;
-      this.#pending.delete(response.id);
-      if (response.ok) entry.resolve(response.result);
-      else entry.reject(rehydrateError(response.error));
-    });
+  private constructor(private readonly port: MessagePortLike, private readonly onFailure?: (error: Error) => void) {
+    port.addEventListener('message', this.#onMessage);
+    port.addEventListener('error', this.#onError);
+    port.addEventListener('messageerror', this.#onError);
     port.start?.();
   }
 
@@ -47,8 +53,8 @@ export class SessionClient {
    * `Session.create` (aset, device, self-test) masih berjalan -- UI memakainya
    * agar berkas pertama didekode bersamaan dengan persiapan engine.
    */
-  static attach(port: MessagePortLike): SessionClient {
-    return new SessionClient(port);
+  static attach(port: MessagePortLike, onFailure?: (error: Error) => void): SessionClient {
+    return new SessionClient(port, onFailure);
   }
 
   /** Inisialisasi `Session` di worker; sekali per client. */
@@ -70,9 +76,21 @@ export class SessionClient {
     return this.call('open', [image], transferablesOf(image)) as Promise<void>;
   }
 
+  close(): Promise<void> {
+    return this.call('close', []) as Promise<void>;
+  }
+
+  stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto> {
+    return this.call('stageOpen', [id, image, patch, guideMaxEdge], transferablesOf(image)) as Promise<PreparedPhoto>;
+  }
+
+  commitOpen(id: number): Promise<void> { return this.call('commitOpen', [id]) as Promise<void>; }
+  finishOpen(id: number): Promise<void> { return this.call('finishOpen', [id]) as Promise<void>; }
+  discardOpen(id: number): Promise<void> { return this.call('discardOpen', [id]) as Promise<void>; }
+
   /** Peta kedalaman lens blur; `data` DITRANSFER (buffer pemanggil ter-detach). */
-  setDepthMap(map: DepthMap | null): Promise<void> {
-    return this.call('setDepthMap', [map], map ? transferablesOf(map) : []) as Promise<void>;
+  setDepthMap(map: DepthMap | null, photoId?: number): Promise<void> {
+    return this.call('setDepthMap', photoId === undefined ? [map] : [map, photoId], map ? transferablesOf(map) : []) as Promise<void>;
   }
 
   setParams(patch: Partial<RenderParams>): Promise<void> {
@@ -120,15 +138,33 @@ export class SessionClient {
     return this.call('exportImage', options === undefined ? [format] : [format, options]) as Promise<Uint8Array>;
   }
 
-  dispose(): Promise<void> {
-    return this.call('dispose', []) as Promise<void>;
+  async dispose(): Promise<void> {
+    try { await this.call('dispose', []); }
+    finally { this.shutdown(new SessionStateError('Session client was disposed.'), false); }
+  }
+
+  shutdown(error: Error, notify = true): void {
+    if (this.#failure) return;
+    this.#failure = error;
+    for (const entry of this.#pending.values()) entry.reject(error);
+    this.#pending.clear();
+    this.port.removeEventListener?.('message', this.#onMessage);
+    this.port.removeEventListener?.('error', this.#onError);
+    this.port.removeEventListener?.('messageerror', this.#onError);
+    this.port.terminate?.();
+    if (notify) this.onFailure?.(error);
   }
 
   private call(method: SessionMethod | 'init' | 'decode', args: unknown[], transfer: Transferable[] = []): Promise<unknown> {
+    if (this.#failure) return Promise.reject(this.#failure);
     const id = this.#nextId++;
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
-      this.port.postMessage({ id, method, args }, transfer);
+      try { this.port.postMessage({ id, method, args }, transfer); }
+      catch (error) {
+        this.#pending.delete(id);
+        reject(error);
+      }
     });
   }
 }

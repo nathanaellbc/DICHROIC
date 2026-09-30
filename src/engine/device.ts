@@ -89,7 +89,10 @@ export async function getNavigatorGpu(): Promise<GPU> {
   // test, jadi berkas kedua yang mengakuisisi device di worker yang sama
   // memanggil `create()` untuk kedua kalinya. Memoisasi ini membuat kedua sisi
   // (browser dan Node) punya semantik yang sama: satu instance GPU per proses.
-  dawnGpu ??= importDawn().then((mod) => (mod as { create(flags: string[]): GPU }).create([]));
+  dawnGpu ??= importDawn().then((mod) => {
+    const adapter = typeof process === 'undefined' ? undefined : process.env.DICHROIC_DAWN_ADAPTER;
+    return (mod as { create(flags: string[]): GPU }).create(adapter ? [`adapter=${adapter}`] : []);
+  });
   return dawnGpu;
 }
 

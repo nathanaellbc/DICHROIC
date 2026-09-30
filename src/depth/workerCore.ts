@@ -12,19 +12,12 @@
  */
 
 import type * as Ort from 'onnxruntime-web';
-import { DEPTH_CACHE, VARIANTS, fetchCached, variantUrl } from './model';
+import { DEPTH_CACHE, VARIANTS, DepthAssetNotCachedError, fetchCached, variantUrl } from './model';
 import type { DepthBackend } from './model';
 import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB, rgbaFrom, toModelTensor } from './refine';
 import type { DepthRequest, DepthResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
-
-class NotCachedError extends Error {
-  constructor() {
-    super('The depth model is not on this device yet.');
-    this.name = 'NotCachedError';
-  }
-}
 
 /** Pasang handler pesan worker untuk satu build ONNX Runtime. */
 export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: number): void {
@@ -33,10 +26,11 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
 
   const post = (msg: DepthResponse, transfer: Transferable[] = []) => self.postMessage(msg, transfer);
 
-  function loadRuntime(id: number): Promise<void> {
+  function loadRuntime(id: number, allowDownload: boolean): Promise<void> {
     runtimeReady ??= (async () => {
       const wasm = await fetchCached(new URL(ortWasmUrl, self.location.href).href, runtimeBytes, (loaded, total) =>
         post({ type: 'progress', id, phase: 'runtime', loaded, total }),
+        allowDownload,
       );
       ort.env.wasm.wasmBinary = wasm;
       // Thread butuh SharedArrayBuffer, yang butuh cross-origin isolation.
@@ -56,10 +50,12 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
         const variant = VARIANTS[backend];
         const url = variantUrl(variant);
         if (!allowDownload) {
-          const cache = await caches.open(DEPTH_CACHE).catch(() => null);
-          if (!(await cache?.match(url))) throw new NotCachedError();
+          const cache = await globalThis.caches?.open(DEPTH_CACHE).catch(() => null);
+          const runtimeUrl = new URL(ortWasmUrl, self.location.href).href;
+          if (!(await cache?.match(url)) || (!runtimeReady && !(await cache?.match(runtimeUrl)))) throw new DepthAssetNotCachedError();
         }
-        const bytes = await fetchCached(url, variant.bytes, (loaded, total) => post({ type: 'progress', id, phase: 'model', loaded, total }));
+        await loadRuntime(id, allowDownload);
+        const bytes = await fetchCached(url, variant.bytes, (loaded, total) => post({ type: 'progress', id, phase: 'model', loaded, total }), allowDownload);
         post({ type: 'progress', id, phase: 'compile', loaded: 0, total: 1 });
         return ort.InferenceSession.create(new Uint8Array(bytes), {
           executionProviders: [backend],
@@ -82,31 +78,34 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
     const input = new ort.Tensor('float32', toModelTensor(rgb, mw, mh), [1, 3, mh, mw]);
     post({ type: 'progress', id: req.id, phase: 'infer', loaded: 0, total: 1 });
     const t0 = performance.now();
-    const out = await s.run({ [s.inputNames[0]!]: input });
-    const inferMs = performance.now() - t0;
-    const tensor = out[s.outputNames[0]!]!;
-    const raw = (await tensor.getData()) as Float32Array;
-    const dims = tensor.dims;
-    const oh = dims[dims.length - 2]!;
-    const ow = dims[dims.length - 1]!;
-    input.dispose();
-    tensor.dispose();
-    return { raw, ow, oh, rgb, mw, mh, inferMs };
+    let out: Ort.InferenceSession.ReturnType | undefined;
+    try {
+      out = await s.run({ [s.inputNames[0]!]: input });
+      const inferMs = performance.now() - t0;
+      const tensor = out[s.outputNames[0]!]!;
+      const raw = ((await tensor.getData()) as Float32Array).slice();
+      const dims = tensor.dims;
+      return { raw, ow: dims[dims.length - 1]!, oh: dims[dims.length - 2]!, rgb, mw, mh, inferMs };
+    } finally {
+      input.dispose();
+      if (out) for (const tensor of Object.values(out)) tensor.dispose();
+    }
   }
 
   self.onmessage = async (e: MessageEvent<DepthRequest>) => {
     const req = e.data;
     if (req.type !== 'estimate') return;
     try {
-      await loadRuntime(req.id);
       let backend: DepthBackend = req.backend;
       let result: Awaited<ReturnType<typeof infer>>;
       try {
         result = await infer(backend, req);
       } catch (err) {
-        if (err instanceof NotCachedError || backend === 'wasm') throw err;
+        if (err instanceof DepthAssetNotCachedError || backend === 'wasm') throw err;
         // Jalur GPU bisa gagal belakangan (kernel tidak ada, device hilang); CPU selalu ada.
+        const failed = sessions.get('webgpu');
         sessions.delete('webgpu');
+        if (failed) await failed.then((s) => s.release(), () => {}).catch(() => {});
         console.warn('[depth] WebGPU failed, falling back to WebAssembly:', err);
         backend = 'wasm';
         result = await infer(backend, req);
@@ -126,7 +125,7 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
       post({
         type: 'error',
         id: req.id,
-        code: err instanceof NotCachedError ? 'not-cached' : 'failed',
+        code: err instanceof DepthAssetNotCachedError ? 'not-cached' : 'failed',
         message: err instanceof Error ? err.message : String(err),
       });
     }

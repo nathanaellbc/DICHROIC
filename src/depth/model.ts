@@ -129,10 +129,18 @@ export async function isModelCached(backend: DepthBackend): Promise<boolean> {
  * sekaligus, cukup untuk membuat tab HP dibunuh. Cache yang menolak (kuota,
  * mode privat) bukan galat: unduh ulang ke memori.
  */
+export class DepthAssetNotCachedError extends Error {
+  constructor() {
+    super('The depth model and runtime are not on this device yet.');
+    this.name = 'DepthAssetNotCachedError';
+  }
+}
+
 export async function fetchCached(
   url: string,
   expectedBytes: number,
   onProgress?: (loaded: number, total: number) => void,
+  allowDownload = true,
 ): Promise<ArrayBuffer> {
   let cache: Cache | null = null;
   try {
@@ -142,6 +150,7 @@ export async function fetchCached(
   } catch {
     cache = null;
   }
+  if (!allowDownload) throw new DepthAssetNotCachedError();
   const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
   if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
   const total = Number(res.headers.get('content-length')) || expectedBytes;

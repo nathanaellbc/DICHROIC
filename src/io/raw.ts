@@ -18,6 +18,7 @@
 import type { LibRawModule } from 'libraw-wasm/dist/libraw.js';
 import type { DecodedImage } from './decoded';
 import { dcrawGammaCurve, invertDcrawCurve } from './dcrawGamma';
+import { assertImageBudget } from './budget';
 
 export interface RawDecodeOptions {
   /** Biner `libraw.wasm`. Wajib di Node (loader Emscripten hanya bisa `fetch` di browser). */
@@ -74,37 +75,39 @@ export async function decodeRaw(bytes: Uint8Array, name?: string, options: RawDe
   const libraw = await loadLibRaw(options.wasmBinary);
   const instance = new libraw.LibRaw();
   lastLibRawMessage = '';
-  let image;
   try {
     // LibRaw boleh menahan referensi ke buffer; salinan menjaga masukan pemanggil.
     instance.open(bytes.slice(), { ...LIBRAW_SETTINGS });
-    image = instance.imageData();
+    const image = instance.imageData();
+    if (!image) throw new Error(lastLibRawMessage.trim() || 'LibRaw tidak menghasilkan gambar');
+    const { width, height, colors, bits, data } = image;
+    assertImageBudget(width, height, 16 + colors * 2);
+    if (bits !== 16 || !(data instanceof Uint16Array)) throw new Error(`LibRaw mengembalikan ${bits}-bit, bukan 16-bit`);
+    if (colors !== 1 && colors !== 3) throw new Error(`LibRaw mengembalikan ${colors} kanal`);
+    const n = width * height;
+    if (data.length < n * colors) throw new Error('data LibRaw terpotong');
+
+    const toLinear = linearFromEncoded();
+    const rgba = new Float32Array(n * 4);
+    for (let i = 0; i < n; i += 1) {
+      const s = i * colors;
+      rgba[i * 4] = toLinear[data[s]!]!;
+      rgba[i * 4 + 1] = toLinear[data[s + (colors === 3 ? 1 : 0)]!]!;
+      rgba[i * 4 + 2] = toLinear[data[s + (colors === 3 ? 2 : 0)]!]!;
+      rgba[i * 4 + 3] = 1;
+    }
+    return {
+      width,
+      height,
+      rgba,
+      suggestedColorSpace: 'ACES2065-1',
+      encoding: 'linear',
+      source: { format: 'raw', bitDepth: 16, ...(name === undefined ? {} : { name }) },
+    };
   } catch (error) {
     const reason = lastLibRawMessage.trim() || (error instanceof Error ? error.message : 'LibRaw menolak berkas');
     throw new Error(reason);
+  } finally {
+    instance.delete();
   }
-  if (!image) throw new Error(lastLibRawMessage.trim() || 'LibRaw tidak menghasilkan gambar');
-  const { width, height, colors, bits, data } = image;
-  if (bits !== 16 || !(data instanceof Uint16Array)) throw new Error(`LibRaw mengembalikan ${bits}-bit, bukan 16-bit`);
-  if (colors !== 1 && colors !== 3) throw new Error(`LibRaw mengembalikan ${colors} kanal`);
-  const n = width * height;
-  if (data.length < n * colors) throw new Error('data LibRaw terpotong');
-
-  const toLinear = linearFromEncoded();
-  const rgba = new Float32Array(n * 4);
-  for (let i = 0; i < n; i += 1) {
-    const s = i * colors;
-    rgba[i * 4] = toLinear[data[s]!]!;
-    rgba[i * 4 + 1] = toLinear[data[s + (colors === 3 ? 1 : 0)]!]!;
-    rgba[i * 4 + 2] = toLinear[data[s + (colors === 3 ? 2 : 0)]!]!;
-    rgba[i * 4 + 3] = 1;
-  }
-  return {
-    width,
-    height,
-    rgba,
-    suggestedColorSpace: 'ACES2065-1',
-    encoding: 'linear',
-    source: { format: 'raw', bitDepth: 16, ...(name === undefined ? {} : { name }) },
-  };
 }

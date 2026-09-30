@@ -1,6 +1,7 @@
 # Dependensi dan hasil build.
 node_modules/
 dist/
+artifacts/
 *.tsbuildinfo
 
 # Bytecode Python dari tools/ (bake_web_assets, gen_reference, compare_cpp).

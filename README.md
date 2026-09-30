@@ -195,6 +195,42 @@ npm run build      # production bundle in dist/
 npm run preview    # serve dist/ with the same headers
 ```
 
+Use Node.js 22.13 or newer. Closing a photo releases its worker, including
+the decoder heap and GPU resources; choosing another photo starts it again.
+Decoders reject images that exceed their memory budget with a request to
+open a smaller version. This budget bounds supported allocations, rather
+than guaranteeing a particular browser's total memory consumption.
+
+### Checking changes
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm audit --audit-level=moderate
+```
+
+Tests use fresh, serialized processes for Dawn GPU tests. Set
+`DICHROIC_TEST_GROUP=cpu` or `gpu` to run either group. Codec encoder checks
+require Python with NumPy, Pillow, tifffile and OpenImageIO; point
+`DICHROIC_REF_PYTHON` at that interpreter. CI installs and requires the
+oracle environment, runs both groups, and blocks deployment on failures.
+On Windows, `DICHROIC_DAWN_ADAPTER="Microsoft Basic Render Driver"` selects
+WARP for a reproducible software GPU check.
+
+`tools/browser_smoke.mjs` checks a fresh Chrome profile against a running
+server. It requires Chrome and `playwright-core`, either locally installed
+or under the package directory selected by `DICHROIC_PLAYWRIGHT_ROOT`.
+Set `DICHROIC_SMOKE_URL` to the server URL. Run with `--depth --offline`
+against a production preview to exercise explicit depth downloads, cached
+inference, photo close/reopen, and offline PWA loading. Add `--gpu-depth`
+to use desktop backend selection instead of the emulated mobile CPU policy.
+Generated screenshots and test reports go to the ignored `artifacts/` directory.
+
+See [the fixes and verification record](docs/PROJECT_FIXES.md) for the
+findings addressed and the remaining hardware validation limits.
+
 DICHROIC needs WebGPU (Safari on iOS 26+, current Chrome, Edge or Firefox).
 RAW decoding uses shared WASM memory, so the page must be cross-origin
 isolated: the dev and preview servers send `Cross-Origin-Opener-Policy:

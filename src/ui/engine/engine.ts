@@ -17,21 +17,20 @@ import { captureExif } from '../../io/exif';
 import { BASELINE_RENDER_PARAMS } from '../../params/renderParams';
 import type { RenderParams } from '../../params/renderParams';
 import { SessionClient } from '../../session/client';
-import { PREVIEW_MAX_LONG_EDGE } from '../../session/downscale';
 import { RenderSupersededError } from '../../session/errors';
 import type { ExportFormat, ExportOptions } from '../../session/session';
 import { isScanMode, suggestedInput } from '../model/tools';
 import { stockInfo } from '../model/stocks';
 import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
-import { DepthEstimator, buildGuide } from '../../depth/estimate';
+import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
 import { depthProfile, firstDownloadBytes } from '../../depth/model';
 import type { DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
 import type { DepthState } from './depthController';
-import { canvasColorSpaceFor, originalFrame, rgbToPixels, type Frame } from './display';
+import { canvasColorSpaceFor, rgbToPixels, type Frame } from './display';
 
-export type EngineStatus = 'connecting' | 'ready' | 'unsupported' | 'failed';
+export type EngineStatus = 'connecting' | 'ready' | 'unsupported' | 'failed' | 'paused';
 export type Phase = 'idle' | 'opening' | 'editing';
 
 export interface AppError {
@@ -94,6 +93,9 @@ export function describeError(error: unknown, fileName?: string): AppError {
     if (error.format === 'raw' && /COOP|cross-origin/i.test(error.reason)) {
       return { title, message: 'RAW files need this page to be served with cross-origin isolation. Open DICHROIC from its installed address.' };
     }
+    if (/memory limit|decoding memory|melebihi batas/i.test(error.reason)) {
+      return { title, message: 'This photo exceeds the decoding memory limit. Open a smaller version of the photo.' };
+    }
     return { title, message: `The ${error.format.toUpperCase()} file looks damaged, or uses a feature that isn’t supported yet.` };
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -130,22 +132,29 @@ export class Engine {
   #client: SessionClient | undefined;
   #ready: Promise<void> | undefined;
   #openToken = 0;
+  #paramsRevision = 0;
+  #photoGeneration = 0;
+  #photoId = 0;
+  #confirmedParams: RenderParams = { ...BASELINE_RENDER_PARAMS };
+  readonly #pendingPatches = new Map<number, Partial<RenderParams>>();
   /** Ukuran gambar asli yang terbuka (untuk membandingkan ukuran ekspor). */
   #imageSize: { width: number; height: number } | undefined;
   /** Ekspor terakhir lebih kecil dari aslinya (difusi, Fase 2D). */
   lastExportLimited: { width: number; height: number } | undefined;
-  #inFlight = false;
+  #inFlight: number | undefined;
   #dirty = false;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
   readonly #depth = new DepthController({
     estimate: async (guide, allowDownload, onProgress) => {
+      const token = this.#photoGeneration;
       const profile = await this.#profile();
+      if (token !== this.#photoGeneration) throw new DepthCancelledError();
       this.#estimator ??= new DepthEstimator();
       return this.#estimator.estimate(guide, { allowDownload, profile, onProgress });
     },
     deliver: async (map) => {
-      await this.#client!.setDepthMap(map);
+      await this.#client!.setDepthMap(map, this.#photoId);
       this.requestRender();
     },
     downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend),
@@ -176,33 +185,59 @@ export class Engine {
   /** Menyalakan worker dan menyiapkan `Session` (aset, device WebGPU, self-test). */
   start(): void {
     if (this.#client) return;
-    const worker = new Worker(new URL('../../session/worker.ts', import.meta.url), { type: 'module', name: 'dichroic-session' });
-    const client = SessionClient.attach(worker);
+    this.#set({ engine: 'connecting', error: undefined });
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('../../session/worker.ts', import.meta.url), { type: 'module', name: 'dichroic-session' });
+    } catch (error) {
+      this.#set({ engine: 'failed', error: describeError(error) });
+      return;
+    }
+    const client = SessionClient.attach(worker, (error) => {
+      if (this.#client !== client) return;
+      this.#client = undefined;
+      this.#openToken += 1;
+      this.#photoGeneration += 1;
+      this.#pendingPatches.clear();
+      this.#depth.reset(undefined);
+      this.#imageSize = undefined;
+      this.#dirty = false;
+      this.#set({ engine: 'failed', phase: 'idle', frame: undefined, original: undefined,
+        fileName: undefined, opening: undefined, rendering: false, error: describeError(error) });
+    });
     this.#client = client;
     const assetsBaseUrl = new URL(`${import.meta.env.BASE_URL}data`, window.location.href).href;
     this.#ready = client.init({ assetsBaseUrl }).then(
       async () => {
+        if (this.#client !== client) return;
+        await client.setParams(this.#confirmedParams);
         const diagnostics = await client.getDiagnostics();
+        if (this.#client !== client) return;
         this.#set({ engine: 'ready', precisionOk: diagnostics.iirPrecisionOk });
         // Shader dikompilasi selagi pengguna memilih foto. Render pertama
         // menunggu varian yang sedang dikompilasi (yang memang ia butuhkan)
         // dan menyalip sisanya; prewarm yang tersalip atau gagal tidak fatal.
         client.prewarm().catch(() => {});
       },
-      (error: unknown) => {
+    ).catch((error: unknown) => {
+        if (this.#client !== client) throw error;
+        this.#client = undefined;
+        client.shutdown(error instanceof Error ? error : new Error(String(error)), false);
         const unsupported = error instanceof Error && error.name === 'WebGPUUnavailableError';
         this.#set({ engine: unsupported ? 'unsupported' : 'failed', error: unsupported ? undefined : describeError(error) });
         throw error;
-      },
-    );
+      });
     this.#ready.catch(() => {});
   }
 
   async openFile(file: File): Promise<void> {
+    if (!this.#client) this.start();
     const client = this.#client;
     if (!client) return;
     const token = ++this.#openToken;
     const stillCurrent = () => token === this.#openToken;
+    const previousPhase = this.#state.fileName && this.#state.frame ? 'editing' : 'idle';
+    this.#dirty = false;
     this.#set({ phase: 'opening', opening: { name: file.name, stage: 'Reading…' }, error: undefined });
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -214,52 +249,72 @@ export class Engine {
       // berkas aslinya supaya tetap ikut ke ekspor.
       const image: DecodedImage = viaBrowser ? withExif(await decodeWithBrowser(file, file.name), bytes) : await decodeInWorker(client, bytes, file);
       if (!stillCurrent()) return;
-      const original = originalFrame(image, PREVIEW_MAX_LONG_EDGE);
-      const imageSize = { width: image.width, height: image.height };
       const input = suggestedInput(image);
-
-      // Gambar yang dilihat jaringan kedalaman dibangun SEBELUM `open`, yang
-      // mentransfer `image.rgba` ke worker.
-      const guide = buildGuide(image, (await this.#profile()).guideMaxEdge);
+      const profile = await this.#profile();
       if (!stillCurrent()) return;
 
       if (this.#state.engine !== 'ready') this.#set({ opening: { name: file.name, stage: 'Preparing the darkroom…' } });
       await this.#ready;
       if (!stillCurrent()) return;
-      await client.open(image);
-      this.#imageSize = imageSize;
-      this.#depth.reset(guide);
       // Tampilan (film, kertas, penyesuaian, lensa) dibawa ke foto berikutnya;
       // colour space input, auto exposure, dan titik fokus milik berkas.
       const fileParams = { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
-      const params = { ...this.#state.params, ...fileParams };
-      await client.setParams(fileParams);
+      this.#set({ opening: { name: file.name, stage: 'Developing…' } });
+      const prepared = await client.stageOpen(token, image, fileParams, profile.guideMaxEdge);
+      if (!stillCurrent()) { await client.discardOpen(token); return; }
+      await client.commitOpen(token);
+      if (!stillCurrent()) { await client.discardOpen(token); return; }
+      const { params, original, guide, preview } = prepared;
+      this.#photoGeneration += 1;
+      this.#photoId = token;
+      this.#confirmedParams = params;
+      this.#pendingPatches.clear();
+      this.#imageSize = { width: prepared.width, height: prepared.height };
+      this.#depth.reset(guide);
+      this.#paramsRevision += 1;
       this.#set({
         params,
         defaults: { ...BASELINE_RENDER_PARAMS, ...input },
         original,
         fileName: file.name,
-        opening: { name: file.name, stage: 'Developing…' },
+        frame: { width: preview.width, height: preview.height,
+          pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
+        phase: 'editing', opening: undefined,
       });
-      await this.#renderOnce();
-      if (!stillCurrent()) return;
-      this.#set({ phase: 'editing', opening: undefined });
+      void client.finishOpen(token).catch(() => {});
       if (params.lensBlurEnabled) this.#depth.ensure();
     } catch (error) {
+      void client.discardOpen(token).catch(() => {});
       if (!stillCurrent()) return;
-      this.#set({ phase: this.#state.frame && this.#state.phase === 'editing' ? 'editing' : 'idle', opening: undefined, error: describeError(error, file.name) });
+      this.#set({ phase: previousPhase, opening: undefined, error: describeError(error, file.name) });
+      if (previousPhase === 'editing') this.requestRender();
     }
   }
 
   cancelOpening(): void {
+    void this.#client?.discardOpen(this.#openToken).catch(() => {});
     this.#openToken += 1;
     this.#set({ phase: this.#state.fileName && this.#state.frame ? 'editing' : 'idle', opening: undefined });
+    if (this.#state.phase === 'editing') this.requestRender();
   }
 
   closePhoto(): void {
     this.#openToken += 1;
+    this.#photoGeneration += 1;
+    this.#pendingPatches.clear();
+    this.#refreshParams();
     this.#depth.reset(undefined);
-    this.#set({ phase: 'idle', frame: undefined, original: undefined, fileName: undefined, opening: undefined });
+    this.#dirty = false;
+    this.#imageSize = undefined;
+    this.lastExportLimited = undefined;
+    const client = this.#client;
+    this.#client = undefined;
+    this.#ready = undefined;
+    // Retire the worker after its GPU job drains. Termination also releases
+    // LibRaw's retained WASM heap and the loaded asset bundle.
+    if (client) void client.close().then(() => client.dispose()).catch((error: unknown) =>
+      client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
+    this.#set({ engine: 'paused', phase: 'idle', rendering: false, frame: undefined, original: undefined, fileName: undefined, opening: undefined });
   }
 
   dismissError(): void {
@@ -275,15 +330,34 @@ export class Engine {
     const client = this.#client;
     if (!client) return;
     const previous = this.#state.params;
+    const token = this.#photoGeneration;
+    const revision = ++this.#paramsRevision;
+    this.#pendingPatches.set(revision, patch);
     this.#set({ params: { ...previous, ...patch } });
     client.setParams(patch).then(
       () => {
+        if (token !== this.#photoGeneration) return;
+        this.#pendingPatches.delete(revision);
+        this.#confirmedParams = { ...this.#confirmedParams, ...patch };
+        this.#refreshParams();
         this.requestRender();
         // Lens blur baru berarti setelah ada peta kedalaman.
         if (patch.lensBlurEnabled === true) this.#depth.ensure();
       },
-      (error: unknown) => this.#set({ params: previous, error: describeError(error) }),
+      (error: unknown) => {
+        if (token !== this.#photoGeneration) return;
+        this.#pendingPatches.delete(revision);
+        this.#paramsRevision += 1;
+        this.#refreshParams();
+        this.#set({ error: describeError(error) });
+      },
     );
+  }
+
+  #refreshParams(): void {
+    let params = { ...this.#confirmedParams };
+    for (const patch of this.#pendingPatches.values()) params = { ...params, ...patch };
+    this.#set({ params });
   }
 
   /** Pengguna menyetujui unduhan model kedalaman. */
@@ -306,8 +380,8 @@ export class Engine {
   }
 
   requestRender(): void {
-    if (this.#state.phase === 'idle') return;
-    if (this.#inFlight) {
+    if (this.#state.phase !== 'editing') return;
+    if (this.#inFlight === this.#photoGeneration) {
       this.#dirty = true;
       return;
     }
@@ -315,31 +389,40 @@ export class Engine {
   }
 
   async #renderLoop(): Promise<void> {
-    this.#inFlight = true;
+    const token = this.#openToken;
+    const generation = this.#photoGeneration;
+    this.#inFlight = generation;
     this.#set({ rendering: true });
     try {
       do {
         this.#dirty = false;
         await this.#renderOnce();
-      } while (this.#dirty);
+      } while (this.#dirty && token === this.#openToken && this.#state.phase === 'editing');
     } catch (error) {
-      this.#set({ error: describeError(error) });
+      if (token === this.#openToken) this.#set({ error: describeError(error) });
     } finally {
-      this.#inFlight = false;
-      this.#set({ rendering: false });
+      if (this.#inFlight === generation) {
+        this.#inFlight = undefined;
+        this.#set({ rendering: false });
+        if (this.#dirty && this.#state.phase === 'editing') this.requestRender();
+      }
     }
   }
 
   async #renderOnce(): Promise<void> {
     const client = this.#client!;
+    const token = this.#openToken;
+    const revision = this.#paramsRevision;
+    const outputColorSpace = this.#state.params.outputColorSpace;
     try {
       const result = await client.render('preview');
+      if (token !== this.#openToken || revision !== this.#paramsRevision || this.#state.phase !== 'editing') return;
       this.#set({
         frame: {
           width: result.width,
           height: result.height,
-          pixels: rgbToPixels(result.rgb, result.width, result.height),
-          colorSpace: canvasColorSpaceFor(this.#state.params.outputColorSpace),
+          pixels: rgbToPixels(result.rgb, result.width, result.height, outputColorSpace),
+          colorSpace: canvasColorSpaceFor(outputColorSpace),
         },
       });
     } catch (error) {
@@ -364,7 +447,9 @@ export class Engine {
    * lebih kecil dari yang diminta (Fase 2D).
    */
   async renderExport(longEdge: number | undefined, requested: { width: number; height: number }): Promise<{ width: number; height: number; limited: boolean }> {
+    const token = this.#openToken;
     const size = await this.#client!.renderExport(longEdge);
+    if (token !== this.#openToken) throw new RenderSupersededError();
     const limited = size.width < requested.width || size.height < requested.height;
     this.lastExportLimited = limited ? size : undefined;
     return { ...size, limited };
@@ -379,20 +464,27 @@ export class Engine {
   }
 
   async exportImage(format: ExportFormat, options?: ExportOptions): Promise<File> {
+    const token = this.#openToken;
+    const name = this.exportName(EXPORT_EXT[format]);
     const bytes = await this.#client!.exportImage(format, options);
+    if (token !== this.#openToken) throw new RenderSupersededError();
     if (!options) {
       // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk
       // device diperkecil `Session` (Fase 2D) -- beri tahu pengguna.
       const size = await this.#client!.lastFullSize();
+      if (token !== this.#openToken) throw new RenderSupersededError();
       const full = this.#imageSize;
       this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
     }
-    return new File([bytes as Uint8Array<ArrayBuffer>], this.exportName(EXPORT_EXT[format]), { type: EXPORT_MIME[format] });
+    return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: EXPORT_MIME[format] });
   }
 
   async exportCube(size: number): Promise<File> {
+    const token = this.#openToken;
+    const name = this.exportName('cube', `${size}`);
     const text = await this.#client!.exportCube(size);
-    return new File([text], this.exportName('cube', `${size}`), { type: 'text/plain' });
+    if (token !== this.#openToken) throw new RenderSupersededError();
+    return new File([text], name, { type: 'text/plain' });
   }
 }
 

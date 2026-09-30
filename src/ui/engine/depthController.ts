@@ -64,6 +64,7 @@ export class DepthController {
   reset(guide: Guide | undefined): void {
     this.#clearStall();
     this.#token += 1;
+    if (this.#state.status === 'working' || guide === undefined) this.deps.cancel?.();
     this.#guide = guide;
     this.#set({ status: 'idle' });
   }

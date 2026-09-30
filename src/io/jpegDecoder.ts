@@ -26,6 +26,8 @@
 export const JPEG_MAX_PIXELS = 250_000_000;
 
 // Urutan zig-zag -> indeks natural (baris-mayor 8x8).
+import { assertImageBudget } from './budget';
+
 const ZIGZAG = new Uint8Array([
   0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5,
   12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28,
@@ -219,6 +221,7 @@ function readFrame(data: Uint8Array, at: number, len: number, progressive: boole
   if (precision !== 8) throw new Error(`presisi sampel ${precision}-bit belum didukung`);
   const height = u16(data, at + 1);
   const width = u16(data, at + 3);
+  assertImageBudget(width, height, 32);
   const count = data[at + 5]!;
   if (height === 0) throw new Error('tinggi 0 (marker DNL) belum didukung');
   if (width === 0) throw new Error('lebar 0 tidak sah');

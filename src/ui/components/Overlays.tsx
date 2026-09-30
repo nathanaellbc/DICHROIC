@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { popSpring } from '../motion';
 import { Icon } from './Icon';
 import type { UiIconName } from './Icon';
+import { activateModal } from '../modalFocus';
 
 export interface SheetAction {
   label: string;
@@ -31,7 +32,7 @@ export function ActionSheet({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (open) ref.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    if (open && ref.current) return activateModal(ref.current);
   }, [open]);
   const left = anchor ? Math.min(Math.max(12, anchor.left), window.innerWidth - 282) : 16;
   const top = anchor ? anchor.bottom + 8 : 100;
@@ -43,6 +44,7 @@ export function ActionSheet({
           <motion.div
             ref={ref}
             role="alertdialog"
+            aria-modal="true"
             aria-label={message}
             className="popover"
             style={{ left, top, transformOrigin: anchor ? `${anchor.left + anchor.width / 2 - left}px -8px` : 'top left' }}
@@ -81,9 +83,9 @@ export function Alert({
   onDismiss: () => void;
   actionLabel?: string;
 }) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (open) buttonRef.current?.focus({ preventScroll: true });
+    if (open && ref.current) return activateModal(ref.current);
   }, [open]);
   return (
     <AnimatePresence>
@@ -91,6 +93,7 @@ export function Alert({
         <>
           <motion.div className="alert-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden="true" />
           <motion.div
+            ref={ref}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="alert-title"
@@ -101,12 +104,13 @@ export function Alert({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
             transition={popSpring}
+            onKeyDown={(e) => { if (e.key === 'Escape') onDismiss(); }}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <h2 id="alert-title" className="t-headline" style={{ margin: 0 }}>{title}</h2>
               <p id="alert-message" className="t-footnote" style={{ margin: 0, color: 'rgba(235,235,245,0.75)' }}>{message}</p>
             </div>
-            <button ref={buttonRef} type="button" className="capsule" onClick={onDismiss}>{actionLabel}</button>
+            <button type="button" className="capsule" onClick={onDismiss}>{actionLabel}</button>
           </motion.div>
         </>
       )}

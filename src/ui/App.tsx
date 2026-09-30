@@ -67,7 +67,7 @@ export function App() {
           </motion.main>
         ) : (
           <motion.main key="start" style={{ position: 'absolute', inset: 0 }} initial={{ opacity: 0, scale: 0.985 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.01 }} transition={fade}>
-            <StartScreen onChoose={picker.pick} wide={wide} engineReady={state.engine === 'ready'} />
+            <StartScreen onChoose={picker.pick} wide={wide} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
           </motion.main>
         )}
       </AnimatePresence>

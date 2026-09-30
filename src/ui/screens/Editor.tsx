@@ -227,7 +227,7 @@ function PreviewNote({ state }: { state: EngineState }) {
   if (isDisplayReferred(state.params.outputColorSpace)) return null;
   return (
     <span className="glass-clear t-caption" style={{ padding: '4px 10px', borderRadius: 9999 }}>
-      Preview shows {state.params.outputColorSpace} values without conversion
+      Preview converts {state.params.outputColorSpace} to sRGB
     </span>
   );
 }
@@ -396,7 +396,7 @@ function WideLayout({ state, ctx, group, setGroup, compare, setCompare, onClose,
         </motion.div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.10)', padding: '10px 4px 2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span className="t-caption secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="check" size={14} color="#30d158" strokeWidth={2.6} /> Parity-verified parameters
+            <Icon name="check" size={14} color="#30d158" strokeWidth={2.6} /> Film parity verified · Camera Raw and Lens extensions
           </span>
           <PressButton className="capsule bordered" style={{ height: 30, padding: '0 12px', fontSize: '0.765rem', fontWeight: 500 }} disabled={!edited} onClick={() => engine.resetAll()}>
             Reset All

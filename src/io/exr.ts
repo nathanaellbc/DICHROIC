@@ -19,6 +19,7 @@
  */
 import parseExr from 'parse-exr';
 import type { DecodedImage } from './decoded';
+import { assertImageBudget } from './budget';
 
 const FLOAT_TYPE = 1015;
 
@@ -183,6 +184,9 @@ function checkChannels(channels: ExrChannel[]): { gray: boolean; pixelType: numb
 
 export function decodeExr(bytes: Uint8Array, name?: string): DecodedImage {
   const header = readHeader(bytes);
+  if (!header.dataWindow) throw new Error('EXR data window is missing');
+  const [x0, y0, x1, y1] = header.dataWindow;
+  assertImageBudget(x1 - x0 + 1, y1 - y0 + 1, 32);
   if (header.flags & 0x18) throw new Error('EXR multi-part atau deep belum didukung');
   const { gray, pixelType } = checkChannels(header.channels);
 

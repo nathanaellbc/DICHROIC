@@ -8,6 +8,7 @@
  * hanya dipakai untuk format yang memang tidak bisa dibuka lewat `io/`.
  */
 import type { DecodedImage } from '../../io/decoded';
+import { assertImageBudget } from '../../io/budget';
 
 const HEIF_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1', 'avif', 'avis']);
 
@@ -63,6 +64,7 @@ export async function decodeWithBrowser(blob: Blob, name?: string): Promise<Deco
   const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image', colorSpaceConversion: 'default' });
   try {
     const { width, height } = bitmap;
+    assertImageBudget(width, height, 20);
     const strips = stripRows(width, height);
     const maxRows = strips[0]![1];
     const ctx = context(width, maxRows, 'display-p3') ?? context(width, maxRows, 'srgb');

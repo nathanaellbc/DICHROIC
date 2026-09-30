@@ -19,7 +19,7 @@ import type { ServeOptions } from '../src/session/worker';
 function domPort(port: NodeMessagePort): MessagePortLike {
   return {
     postMessage: (msg, transfer) => port.postMessage(msg, transfer as never),
-    addEventListener: (_type, listener) => port.on('message', (data) => listener({ data })),
+    addEventListener: (type, listener) => { if (type === 'message') port.on('message', (data) => listener({ data })); },
     start: () => port.start(),
   };
 }
@@ -46,6 +46,11 @@ async function connect(fake: SessionLike, options?: ServeOptions): Promise<Sessi
 }
 
 class FakeSession implements SessionLike {
+  close() {}
+  stageOpen(): Promise<never> { return Promise.reject(new Error('unused')); }
+  commitOpen() {}
+  finishOpen() {}
+  discardOpen() {}
   calls: Array<[string, unknown[]]> = [];
   renderDelays: number[] = [];
   lastRgb: Float32Array | undefined;

@@ -17,6 +17,7 @@
  */
 import { unzlibSync } from 'fflate';
 import type { DecodedImage } from './decoded';
+import { assertImageBudget, IMAGE_BLOCK_BUDGET } from './budget';
 
 const T = {
   width: 256, height: 257, bitsPerSample: 258, compression: 259, photometric: 262,
@@ -26,6 +27,7 @@ const T = {
 } as const;
 
 const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4, 16: 8 };
+const DECODE_TAGS = new Set<number>(Object.values(T));
 
 /** Batas piksel: header rusak tidak boleh memicu alokasi raksasa. */
 export const TIFF_MAX_PIXELS = 250_000_000;
@@ -56,8 +58,10 @@ function readIfd(r: Reader, offset: number): Tags {
   for (let i = 0; i < count; i += 1) {
     const e = offset + 2 + i * 12;
     const tag = r.u16(e);
+    if (!DECODE_TAGS.has(tag)) continue;
     const type = r.u16(e + 2);
     const n = r.u32(e + 4);
+    if (n > 1_000_000) throw new Error('TIFF metadata exceeds the decoding memory limit');
     const size = TYPE_SIZE[type];
     if (size === undefined) continue; // tipe tak dikenal: tag diabaikan (TIFF 6 §2)
     const at = size * n <= 4 ? e + 8 : r.u32(e + 8);
@@ -187,9 +191,11 @@ function decompress(compression: number, src: Uint8Array, expected: number): Uin
       return lzwDecode(src, expected);
     case 8:
     case 32946: {
-      const out = unzlibSync(src);
-      if (out.length < expected) throw new Error('data Deflate terpotong');
-      return out.subarray(0, expected);
+      // An explicit output buffer disables fflate's automatic expansion.
+      // One sentinel byte also detects data larger than the declared block.
+      const out = unzlibSync(src, { out: new Uint8Array(expected + 1) });
+      if (out.length !== expected) throw new Error('data Deflate length does not match the strip/tile');
+      return out;
     }
     case 32773:
       return packBitsDecode(src, expected);
@@ -273,6 +279,7 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
   if (bpsAll.some((b) => b !== bps)) throw new Error('BitsPerSample berbeda antar kanal belum didukung');
   const sampleFormat = first(tags, T.sampleFormat, 1);
   const compression = first(tags, T.compression, 1);
+  if (![1, 5, 8, 32946, 32773].includes(compression)) throw new Error(`kompresi TIFF ${compression} belum didukung`);
   const photometric = first(tags, T.photometric, spp >= 3 ? 2 : 1);
   const planar = first(tags, T.planarConfig, 1);
   const predictor = first(tags, T.predictor, 1);
@@ -287,7 +294,8 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
   else if (photometric === 2) colorChannels = 3;
   else if (photometric === 3) colorChannels = 1;
   else throw new Error(`PhotometricInterpretation ${photometric} (mis. CMYK/YCbCr/Lab) belum didukung`);
-  if (spp < colorChannels) throw new Error('SamplesPerPixel lebih kecil dari kanal warna');
+  if (spp < colorChannels || spp > colorChannels + 1) throw new Error('Unsupported SamplesPerPixel channel layout');
+  assertImageBudget(width, height);
   if (photometric === 3 && (isFloat || bps > 16)) throw new Error('TIFF palet harus integer 8/16-bit');
   if (photometric === 0 && isFloat) throw new Error('WhiteIsZero float tidak didukung');
   if (planar !== 1 && planar !== 2) throw new Error(`PlanarConfiguration ${planar} tidak sah`);
@@ -312,8 +320,28 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
   const chunkSamples = planar === 2 ? 1 : spp;
   if (offsets.length < across * down * planes) throw new Error('jumlah strip/tile kurang dari yang dibutuhkan');
 
-  // Sampel mentah (numerik) per piksel per kanal, baris-mayor.
-  const samples = new Float64Array(width * height * spp);
+  // Validate every block before allocating the full sample image.
+  for (let index = 0; index < across * down * planes; index += 1) {
+    const ty = Math.floor(index / across) % down;
+    const rows = tiled ? ch : Math.min(ch, height - ty * ch);
+    const expected = rows * cw * chunkSamples * bytesPerSample;
+    if (!Number.isSafeInteger(expected) || ((compression !== 1 || predictor !== 1) && expected > IMAGE_BLOCK_BUDGET)) throw new Error('TIFF strip/tile exceeds the decoding memory limit');
+    const count = counts?.[index] ?? (compression === 1 ? expected : undefined);
+    if (count === undefined) throw new Error('StripByteCounts tidak ada');
+    r.check(offsets[index]!, count);
+    if (compression === 1 && count < expected) throw new Error('data strip/tile terpotong');
+  }
+
+  // Normalize each block directly into the final image. A full Float64
+  // sample image would more than triple decoder memory for ordinary RGB.
+  const map = tags.get(T.colorMap);
+  const entries = 2 ** bps;
+  if (photometric === 3 && (!map || map.length < entries * 3)) throw new Error('ColorMap palet tidak ada atau terlalu pendek');
+  const n = width * height;
+  const rgba = new Float32Array(n * 4);
+  if (!hasAlpha) for (let i = 0; i < n; i += 1) rgba[i * 4 + 3] = 1;
+  const maxValue = 2 ** bps - 1;
+  const norm = (v: number) => (isFloat ? v : v / maxValue);
   for (let plane = 0; plane < planes; plane += 1) {
     for (let ty = 0; ty < down; ty += 1) {
       for (let tx = 0; tx < across; tx += 1) {
@@ -326,7 +354,8 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
         if (count === undefined) throw new Error('StripByteCounts tidak ada');
         r.check(off, count);
         // Salinan: predictor menulis di tempat, dan berkas masukan tidak boleh berubah.
-        const chunk = decompress(compression, bytes.subarray(off, off + count), expected).slice();
+        const decoded = decompress(compression, bytes.subarray(off, off + count), expected);
+        const chunk = compression === 1 && predictor !== 1 ? decoded.slice() : decoded;
         if (predictor === 2) undoHorizontal(chunk, rows, rowSamples, chunkSamples, bytesPerSample, le);
         if (predictor === 3) undoFloatingPoint(chunk, rows, rowSamples, chunkSamples, bytesPerSample, le);
 
@@ -345,46 +374,22 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
               } else {
                 v = bps === 8 ? chunk[at]! : bps === 16 ? view.getUint16(at, le) : view.getUint32(at, le);
               }
-              samples[(iy * width + ix) * spp + (planar === 2 ? plane : s)] = v;
+              const channel = planar === 2 ? plane : s;
+              const pixel = (iy * width + ix) * 4;
+              if (channel < colorChannels) {
+                if (photometric === 3) {
+                  rgba[pixel] = map![v]! / 65535;
+                  rgba[pixel + 1] = map![entries + v]! / 65535;
+                  rgba[pixel + 2] = map![2 * entries + v]! / 65535;
+                } else if (colorChannels === 1) {
+                  const value = norm(photometric === 0 ? maxValue - v : v);
+                  rgba[pixel] = value; rgba[pixel + 1] = value; rgba[pixel + 2] = value;
+                } else rgba[pixel + channel] = norm(v);
+              } else if (hasAlpha) rgba[pixel + 3] = norm(v);
             }
           }
         }
       }
-    }
-  }
-
-  const n = width * height;
-  const rgba = new Float32Array(n * 4);
-  const maxValue = 2 ** bps - 1;
-  const norm = (v: number) => (isFloat ? v : v / maxValue);
-  let bitDepth = bps;
-  if (photometric === 3) {
-    const map = tags.get(T.colorMap);
-    const entries = 2 ** bps;
-    if (!map || map.length < entries * 3) throw new Error('ColorMap palet tidak ada atau terlalu pendek');
-    bitDepth = 16;
-    for (let i = 0; i < n; i += 1) {
-      const idx = samples[i * spp]!;
-      rgba[i * 4] = map[idx]! / 65535;
-      rgba[i * 4 + 1] = map[entries + idx]! / 65535;
-      rgba[i * 4 + 2] = map[2 * entries + idx]! / 65535;
-      rgba[i * 4 + 3] = hasAlpha ? norm(samples[i * spp + 1]!) : 1;
-    }
-  } else {
-    for (let i = 0; i < n; i += 1) {
-      const s = i * spp;
-      if (colorChannels === 1) {
-        const raw = samples[s]!;
-        const v = norm(photometric === 0 ? maxValue - raw : raw);
-        rgba[i * 4] = v;
-        rgba[i * 4 + 1] = v;
-        rgba[i * 4 + 2] = v;
-      } else {
-        rgba[i * 4] = norm(samples[s]!);
-        rgba[i * 4 + 1] = norm(samples[s + 1]!);
-        rgba[i * 4 + 2] = norm(samples[s + 2]!);
-      }
-      rgba[i * 4 + 3] = hasAlpha ? norm(samples[s + colorChannels]!) : 1;
     }
   }
 
@@ -394,6 +399,6 @@ export function decodeTiff(bytes: Uint8Array, name?: string): DecodedImage {
     rgba,
     suggestedColorSpace: isFloat ? 'Linear Rec.709' : 'sRGB',
     encoding: isFloat ? 'linear' : 'encoded',
-    source: { format: 'tiff', bitDepth, ...(name === undefined ? {} : { name }) },
+    source: { format: 'tiff', bitDepth: photometric === 3 ? 16 : bps, ...(name === undefined ? {} : { name }) },
   };
 }

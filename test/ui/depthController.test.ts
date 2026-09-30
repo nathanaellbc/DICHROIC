@@ -53,6 +53,14 @@ const result = (w: number): DepthResult => ({
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('DepthController', () => {
+  it('cancels active estimation when the photo is closed', () => {
+    const { controller, cancelled } = harness();
+    controller.reset(guide());
+    controller.ensure();
+    controller.reset(undefined);
+    expect(cancelled).toHaveLength(1);
+    expect(controller.state.status).toBe('idle');
+  });
   it('mulai idle; ensure tanpa foto tidak memanggil estimasi', () => {
     const { controller, calls } = harness();
     expect(controller.state).toEqual({ status: 'idle' });

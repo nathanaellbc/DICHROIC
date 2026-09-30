@@ -12,7 +12,7 @@
  *   saran, sama seperti `suggestedColorSpace` lain -- profilnya sendiri tidak
  *   diterapkan.
  */
-import { unzlibSync } from 'fflate';
+import { inflateBounded } from './inflateBounded';
 import type { DecodedImage } from './decoded';
 import type { ImageFormat } from './detect';
 
@@ -156,7 +156,7 @@ function pngMetadata(bytes: Uint8Array): ImageMetadata {
       // nama profil (1..79 byte), NUL, metode kompresi (0 = zlib), data.
       if (nul > 0 && body[nul + 1] === 0) {
         try {
-          iccText = iccDescription(unzlibSync(body.subarray(nul + 2)));
+          iccText = iccDescription(inflateBounded(body.subarray(nul + 2), 4 * 1024 * 1024));
         } catch {
           iccText = undefined;
         }

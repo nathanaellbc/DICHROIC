@@ -1,0 +1,56 @@
+name: Checks
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Install codec oracles
+        run: python -m pip install numpy==2.5.3 Pillow==12.3.0 tifffile==2026.9.9 OpenImageIO==3.1.17.0
+      - name: Require oracle environment
+        run: |
+          python -c "import sys; print('DICHROIC_REF_PYTHON=' + sys.executable)" >> "$GITHUB_ENV"
+          python -c "import numpy, PIL, tifffile, OpenImageIO"
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm audit --audit-level=moderate
+      - name: CPU, codecs and fixtures
+        run: npm test -- --reporter=dot
+        env:
+          DICHROIC_TEST_GROUP: cpu
+      - run: npm run build
+
+  gpu:
+    # Dawn's Windows D3D12/WARP backend. Reference tolerances remain strict;
+    # numerical/backend failures block deployment instead of being skipped.
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Serialized Dawn GPU parity
+        run: npm test -- --reporter=dot
+        env:
+          DICHROIC_TEST_GROUP: gpu
+          DICHROIC_DAWN_ADAPTER: Microsoft Basic Render Driver

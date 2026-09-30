@@ -8,12 +8,17 @@
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
 import type { DepthMap } from '../host/lens';
-import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
-  setDepthMap(map: DepthMap | null): void;
+  close(): void | Promise<void>;
+  stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto>;
+  commitOpen(id: number): void;
+  finishOpen(id: number): void;
+  discardOpen(id: number): void;
+  setDepthMap(map: DepthMap | null, photoId?: number): void;
   setParams(patch: Partial<RenderParams>): void;
   getParams(): RenderParams;
   getDiagnostics(): SessionDiagnostics;
@@ -54,7 +59,9 @@ export type RpcResponse = { id: number; ok: true; result: unknown } | { id: numb
 /** Bentuk minimal port: `MessagePort`/`Worker`/`DedicatedWorkerGlobalScope` DOM. */
 export interface MessagePortLike {
   postMessage(message: unknown, transfer?: Transferable[]): void;
-  addEventListener(type: 'message', listener: (event: { data: unknown }) => void): void;
+  addEventListener(type: 'message' | 'error' | 'messageerror', listener: (event: { data?: unknown; message?: string }) => void): void;
+  removeEventListener?(type: 'message' | 'error' | 'messageerror', listener: (event: { data?: unknown; message?: string }) => void): void;
+  terminate?(): void;
   start?(): void;
 }
 

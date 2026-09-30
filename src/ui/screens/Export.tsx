@@ -20,7 +20,6 @@ import { Icon } from '../components/Icon';
 import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { engine } from '../engine/engine';
-import { isDisplayReferred } from '../engine/display';
 import { canvasLimits, longEdgeDetents } from '../model/exportSizes';
 import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
 
@@ -276,9 +275,9 @@ export function ExportContent({
                 </div>
               </div>
               <p className="list-footer t-footnote">
-                {info.lossy
+                {format === 'webp' || format === 'avif'
                   ? `Tagged ${outputColorSpace === 'Display P3' ? 'Display P3' : 'sRGB'} by the browser’s encoder.`
-                  : `No ICC profile is embedded yet, so other apps read the file as ${isDisplayReferred(outputColorSpace) ? 'sRGB' : 'untagged RGB'}.`}{' '}
+                  : `An embedded ICC profile identifies ${outputColorSpace} for other apps.`}{' '}
                 Change the color space in Color › Output.
               </p>
             </div>

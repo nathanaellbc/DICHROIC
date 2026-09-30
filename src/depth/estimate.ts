@@ -4,7 +4,7 @@
  */
 import type { DecodedImage } from '../io/decoded';
 import { boxDownscale } from '../session/downscale';
-import { TO_REC709, srgbEncode } from '../ui/engine/display';
+import { TO_REC709, srgbEncode, rgbToCanvas } from '../io/display';
 import type { DepthBackend, DepthProfile } from './model';
 import type { DepthPhase, DepthRequest, DepthResponse } from './protocol';
 
@@ -55,6 +55,11 @@ export function buildGuide(image: DecodedImage, maxEdge: number): Guide {
   const n = width * height;
   const out = new Uint8ClampedArray(n * 4);
   if (image.encoding !== 'linear') {
+    if (image.suggestedColorSpace !== 'sRGB') {
+      const rgb = new Float32Array(n * 3);
+      for (let i = 0; i < n; i += 1) rgb.set(rgba.subarray(i * 4, i * 4 + 3), i * 3);
+      return { rgba: rgbToCanvas(rgb, width, height, image.suggestedColorSpace), width, height };
+    }
     for (let i = 0; i < n; i += 1) {
       out[i * 4] = rgba[i * 4]! * 255;
       out[i * 4 + 1] = rgba[i * 4 + 1]! * 255;
