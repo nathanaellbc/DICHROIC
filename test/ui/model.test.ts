@@ -107,6 +107,7 @@ describe('alat UI == permukaan parameter engine', () => {
       cameraWhites: CAMERA_LIMITS.whites,
       cameraBlacks: CAMERA_LIMITS.blacks,
       cameraSaturation: CAMERA_LIMITS.saturation,
+      cameraSoftenDetail: { min: 0, max: 1 },
     };
     for (const tool of camera.tools) {
       if (tool.kind !== 'slider' || !(tool.field in limits)) continue;

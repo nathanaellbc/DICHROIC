@@ -146,6 +146,8 @@ export interface RenderParams {
   cameraBlacks: number;
   /** Saturasi di sekitar luminans, 0..2. */
   cameraSaturation: number;
+  /** Input detail attenuation, 0..1; zero bypasses the spatial stage. */
+  cameraSoftenDetail: number;
 
   // Lens blur (`host/lens.ts`, `stages/lensBlur.ts`): defocus sintetis dari
   // peta kedalaman Depth Anything V2 yang diestimasi di perangkat. Tanpa peta
@@ -221,6 +223,7 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   cameraWhites: 0,
   cameraBlacks: 0,
   cameraSaturation: 1,
+  cameraSoftenDetail: 0,
   lensBlurEnabled: false,
   lensFocusX: 0.5,
   lensFocusY: 0.5,

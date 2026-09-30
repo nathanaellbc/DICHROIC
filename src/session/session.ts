@@ -488,11 +488,11 @@ export class Session {
       if (cached) {
         this.#previewCache.delete(key);
         this.#previewCache.set(key, cached);
-        return Promise.resolve({ ...cached, paramsVersion: this.#paramsVersion });
+        return Promise.resolve(cached.paramsVersion === this.#paramsVersion ? cached : { ...cached, paramsVersion: this.#paramsVersion });
       }
     }
     const hit = this.#cache.get(quality);
-    if (hit && hit.key === key) return Promise.resolve({ ...hit.result, paramsVersion: this.#paramsVersion });
+    if (hit && hit.key === key) return Promise.resolve(hit.result.paramsVersion === this.#paramsVersion ? hit.result : { ...hit.result, paramsVersion: this.#paramsVersion });
     return this.enqueue(() => this.execute(quality, longEdge));
   }
 

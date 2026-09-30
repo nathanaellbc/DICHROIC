@@ -26,7 +26,7 @@ export type IconName =
   | 'focus' | 'aperture' | 'focalLength' | 'nearSharp' | 'foreground' | 'blades' | 'curvature' | 'catEye';
 
 interface ToolBase {
-  section?: 'White Balance' | 'Light' | 'Color';
+  section?: 'White Balance' | 'Light' | 'Color' | 'Detail';
   id: string;
   label: string;
   title: string;
@@ -53,6 +53,7 @@ interface ToolBase {
 }
 
 export interface SliderTool extends ToolBase {
+  displayMultiplier?: number;
   /** Relative -100..100 display; keeps the validated processing domain intact. */
   relativeCenter?: number;
   kind: 'slider';
@@ -231,6 +232,7 @@ export const GROUPS: readonly ToolGroup[] = [
       { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', section: 'Light', relativeCenter: 0, label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the brightest end of the tonal range.' },
       { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', section: 'Light', relativeCenter: 0, label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the darkest end; true black stays black.' },
       { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', section: 'Color', relativeCenter: 1, label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 0, note: 'Color intensity before film, preserving luminance.' },
+      { kind: 'slider', id: 'cameraSoftenDetail', field: 'cameraSoftenDetail', section: 'Detail', displayMultiplier: 100, label: 'Soften', title: 'Soften Detail', icon: 'diffusion', min: 0, max: 1, step: 0.01, digits: 0, note: 'Softens harsh digital texture while protecting strong edges. Applied before film and grain.' },
     ],
   },
   {
@@ -361,6 +363,7 @@ export function formatPushPull(stops: number): string {
 /** Nilai slider di ruang UI (lihat `SliderTool.invert`). */
 export function sliderValue(tool: SliderTool, params: RenderParams): number {
   const v = params[tool.field];
+  if (tool.displayMultiplier) return v * tool.displayMultiplier;
   if (tool.relativeCenter !== undefined) {
     const centre = tool.relativeCenter;
     return 100 * (v - centre) / (v < centre ? centre - tool.min : tool.max - centre);
@@ -370,6 +373,7 @@ export function sliderValue(tool: SliderTool, params: RenderParams): number {
 
 /** Patch field dari nilai slider di ruang UI. */
 export function sliderPatch(tool: SliderTool, value: number): Partial<RenderParams> {
+  if (tool.displayMultiplier) return { [tool.field]: Math.min(tool.max, Math.max(tool.min, value / tool.displayMultiplier)) };
   if (tool.relativeCenter !== undefined) {
     const centre = tool.relativeCenter;
     const v = Math.min(100, Math.max(-100, value));
@@ -542,6 +546,7 @@ function dynamicMax(tool: SliderTool, params: RenderParams): number {
 
 /** Rentang slider dalam ruang posisi (log bila `scale`). */
 export function sliderRange(tool: SliderTool, params: RenderParams): { min: number; max: number; step: number } {
+  if (tool.displayMultiplier) return { min: tool.min * tool.displayMultiplier, max: tool.max * tool.displayMultiplier, step: tool.step * tool.displayMultiplier };
   if (tool.relativeCenter !== undefined) return { min: -100, max: 100, step: 1 };
   if (!tool.scale) return { min: tool.min, max: tool.max, step: tool.step };
   const min = toPosition(tool, tool.min);

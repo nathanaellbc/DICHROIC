@@ -39,6 +39,7 @@ import type { TileSpec } from './tiling';
  * foto sungguhan pada fixture 64 px.
  */
 export interface FrameParams {
+  softenDetail?: { amount: number; luma: readonly number[] };
   filmFormatMm: number;
   /**
    * Fase 2C: `camera.exposure_compensation_ev` Python (EV kompensasi, TANPA

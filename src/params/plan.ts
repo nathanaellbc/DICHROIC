@@ -26,6 +26,7 @@ import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
 import type { CameraSettings } from '../host/cameraDevelop';
+import { softenKernel } from '../host/softenDetail';
 import { LENS_LIMITS, lensSettings, resolveLensFrame } from '../host/lens';
 import type { DepthMap } from '../host/lens';
 import { decodeWithLut } from '../host/colorDecode';
@@ -40,6 +41,7 @@ import type { ProcessMode, RenderParams } from './renderParams';
 export type RenderMode = 'image' | 'cube';
 
 export interface ChainSpec {
+  softenDetail?: boolean;
   family: 'measured' | 'lut';
   /** Tahap grain disertakan. Selalu `false` untuk `lut`. */
   grain: boolean;
@@ -107,6 +109,7 @@ export interface PlanImage {
 
 const CUBE_DISABLED_EFFECTS = [
   'camera raw',
+  'soften detail',
   'lens blur',
   'halation',
   'grain',
@@ -268,6 +271,7 @@ const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max
   ['cameraWhites', CAMERA_LIMITS.whites],
   ['cameraBlacks', CAMERA_LIMITS.blacks],
   ['cameraSaturation', CAMERA_LIMITS.saturation],
+  ['cameraSoftenDetail', { min: 0, max: 1 }],
 ];
 
 export function validateCamera(params: RenderParams): void {
@@ -388,7 +392,8 @@ export function buildRenderPlan(
       };
 
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
-  const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm);
+  const softenDetail = family === 'measured' && params.cameraSoftenDetail > 0;
+  const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm) + (softenDetail ? 2 * softenKernel(Math.max(image.width, image.height)).radius : 0);
 
   const inputColorSpace = validateInputColorSpace(bundle, params.inputColorSpace, params.inputCctfDecoding);
   // Auto-exposure diukur dari gambar ter-decode (bila decode), tapi Python
@@ -424,6 +429,7 @@ export function buildRenderPlan(
       ...(cameraDiffusion ? { cameraDiffusion: true } : {}),
       ...(printDiffusion ? { printDiffusion: true } : {}),
       ...(lensBlur ? { lensBlur: true } : {}),
+      ...(softenDetail ? { softenDetail: true } : {}),
     },
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
@@ -433,6 +439,10 @@ export function buildRenderPlan(
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
       inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
       ...(camera ? { camera } : {}),
+      ...(softenDetail ? { softenDetail: {
+        amount: params.cameraSoftenDetail,
+        luma: lumaWeights(Array.from({ length: 9 }, (_, i) => bundle.staticTable('inputMeterXyzMatrices')[inputColorSpace * 9 + i]!)),
+      } } : {}),
       ...(lensBlur
         ? {
             lens: resolveLensFrame(
