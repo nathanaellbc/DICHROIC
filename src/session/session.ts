@@ -862,7 +862,7 @@ export class Session {
     }
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}`;
+      `|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) {
       this.graphs.delete(key);

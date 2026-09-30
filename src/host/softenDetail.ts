@@ -1,6 +1,8 @@
 /** Gaussian-weighted, self-guided detail attenuation; reference for the GPU stage. */
 export function softenKernel(edge: number): { sigma: number; radius: number; weights: number[] } {
-  const sigma = Math.max(0.35, Math.min(4, 1.5 * edge / 4096));
+  // A subpixel kernel collapsed toward identity on the 1024px fit preview.
+  // Keep an effective preview footprint while retaining the native scale above it.
+  const sigma = Math.max(0.85, Math.min(4, 1.5 * edge / 4096));
   const radius = Math.ceil(2 * sigma);
   const weights = Array.from({ length: 2 * radius + 1 }, (_, i) => Math.exp(-0.5 * ((i - radius) / sigma) ** 2));
   const sum = weights.reduce((a, b) => a + b, 0);
@@ -24,7 +26,7 @@ export function softenDetailReference(rgba: Float32Array, width: number, height:
     const before = Math.expm1(intensity[i]!);
     const after = Math.expm1(ma[i]! * intensity[i]! + mb[i]!);
     const gain = before > 1e-6 ? Math.min(1.25, Math.max(0.8, after / before)) : 1;
-    for (let c = 0; c < 3; c++) out[i * 4 + c] = rgba[i * 4 + c]! * (1 + amount * 0.75 * (gain - 1));
+    for (let c = 0; c < 3; c++) out[i * 4 + c] = rgba[i * 4 + c]! * (1 + amount * 0.9 * (gain - 1));
   }
   return out;
 }

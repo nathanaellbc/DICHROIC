@@ -33,5 +33,5 @@ fn intensity(rgb: vec3<f32>) -> f32 { return log(1.0 + max(0.0, dot(cfg.luma.xyz
  let coefficients = sum / total; let i = index(vec2<i32>(gid.xy)); let rgb = source[i].rgb; let v = intensity(rgb); let before = exp(v)-1.0;
  let after = exp(coefficients.x*v+coefficients.y)-1.0;
  var gain = 1.0; if(before > 1e-6) { gain = clamp(after/before, 0.8, 1.25); }
- dest[i] = vec4<f32>(rgb * mix(1.0, gain, cfg.control.x*0.75), source[i].a);
+ dest[i] = vec4<f32>(rgb * mix(1.0, gain, cfg.control.x*0.9), source[i].a);
 }

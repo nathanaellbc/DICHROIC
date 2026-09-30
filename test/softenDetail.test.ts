@@ -10,6 +10,7 @@ import { sharedResources } from './parity/run';
 import { buildChain } from '../src/engine/chain';
 import { findTool, sliderPatch, sliderRange, valueText } from '../src/ui/model/tools';
 import type { SliderTool } from '../src/ui/model/tools';
+import { Session } from '../src/session/session';
 
 function input(width = 64, height = 48): Float32Array {
   const data = new Float32Array(width * height * 4);
@@ -21,6 +22,39 @@ function input(width = 64, height = 48): Float32Array {
 }
 const luma = [0.2126, 0.7152, 0.0722];
 describe('Soften Detail', () => {
+  it('enabling after a neutral Session render builds a filtered graph; disabling restores the original', async () => {
+    const print = { printStockId: 'kodak_portra_endura', enlargerFilters: { cFilterNeutral: 0, mFilterNeutral: 51.56801468495496, mFilterShift: 0, yFilterNeutral: 52.53400422349596, yFilterShift: 0 } };
+    const { engine, bundle } = await sharedResources('kodak_portra_400', print);
+    const session = await Session.create({ assetsBaseUrl: 'public/data', engine, bundle,
+      arenaProvider: { get: async (_key, inputs) => (await sharedResources(inputs.stockId, inputs.printScan)).arenas } });
+    try {
+      session.open({ width: 64, height: 48, rgba: input(), suggestedColorSpace: 'sRGB', encoding: 'encoded', source: { format: 'fixture', bitDepth: 32 } });
+      session.setParams({ autoExposure: false, grainEnabled: false, glareEnabled: false, inputColorSpace: 'sRGB', inputCctfDecoding: true });
+      const before = await session.render('preview');
+      session.setParams({ cameraSoftenDetail: 1 });
+      const after = await session.render('preview');
+      let difference = 0;
+      for (let i = 0; i < before.rgb.length; i++) difference = Math.max(difference, Math.abs(after.rgb[i]! - before.rgb[i]!));
+      expect(difference).toBeGreaterThan(0.001);
+      session.setParams({ cameraSoftenDetail: 0 });
+      const restored = await session.render('preview');
+      expect(restored.rgb).toEqual(before.rgb);
+      expect(restored.paramsVersion).toBeGreaterThan(after.paramsVersion);
+    } finally { session.dispose(); }
+  }, 120000);
+  it('max strength measurably attenuates fine texture in the fit preview, with a gradual slider response', () => {
+    const data = input();
+    const i = (24 * 64 + 12) * 4;
+    const detail = (out: Float32Array) => Math.abs(out[i]! - out[i + 4]!);
+    for (const edge of [512, 1024, 2048, 4096, 8192]) {
+      const half = softenDetailReference(data, 64, 48, 0.5, edge);
+      const full = softenDetailReference(data, 64, 48, 1, edge);
+      expect(detail(full) / detail(data), `preview edge ${edge}`).toBeLessThan(0.4);
+      expect(detail(half)).toBeGreaterThan(detail(full));
+      expect(detail(half)).toBeLessThan(detail(data));
+      expect(full[(24 * 64 + 40) * 4]! - full[(24 * 64 + 20) * 4]!).toBeGreaterThan(0.5);
+    }
+  });
   it('UI exposes 0..100 and maps reset/default to a true bypass', () => {
     const tool = findTool('cameraSoftenDetail') as SliderTool;
     expect(sliderRange(tool, BASELINE_RENDER_PARAMS)).toEqual({ min: 0, max: 100, step: 1 });
