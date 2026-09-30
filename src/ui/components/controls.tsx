@@ -148,7 +148,7 @@ export function Switch({
 }) {
   return (
     <button type="button" role="switch" className="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)}>
-      <motion.span className="switch-knob" initial={false} animate={{ x: checked ? 20 : 0 }} transition={snappy} />
+      <span className="switch-knob" />
     </button>
   );
 }
