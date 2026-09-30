@@ -392,7 +392,7 @@ export class Session {
     this.assertAlive();
     this.discardOpen(this.staged?.id ?? -1);
     const params = applyParamsPatch(this.#params, patch);
-    validateStocks(this.bundle, params.film, params.paper, params.filmEnabled ? params.process : 'scanNegative');
+    validateStocks(this.bundle, params.film, params.paper, params.process);
     // The previous source is retained until a replacement commits. Bound
     // their combined storage, too, so cancellation remains affordable.
     assertImageBudget(image.width, image.height, 16, imageMemoryBudget() - (this.#image?.rgba.byteLength ?? 0));
@@ -456,7 +456,7 @@ export class Session {
   setParams(patch: Partial<RenderParams>): void {
     this.assertAlive();
     const next = applyParamsPatch(this.#params, patch);
-    validateStocks(this.bundle, next.film, next.paper, next.filmEnabled ? next.process : 'scanNegative');
+    validateStocks(this.bundle, next.film, next.paper, next.process);
     this.#params = next;
     this.#paramsVersion += 1;
   }
@@ -862,7 +862,7 @@ export class Session {
     }
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|off=${plan.chain.filmOff ?? false}|paper=${plan.chain.paperOnly ?? false}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
+      `|off=${plan.chain.filmOff ?? false}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) {
       this.graphs.delete(key);

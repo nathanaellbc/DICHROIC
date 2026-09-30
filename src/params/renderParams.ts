@@ -51,8 +51,6 @@ export interface RenderParams {
   film: string;
   /** Bypass film and paper simulation; preserve Camera and Lens controls. */
   filmEnabled: boolean;
-  /** Apply the selected paper directly when film simulation is off. */
-  paperOnly: boolean;
   /** Python: `print_stock` argumen `init_params`. */
   paper: string;
   /** Python: `settings.rgb_to_raw_method` (`:222`). OFX default `Hanatos2026` -- tidak digerbangi. */
@@ -186,7 +184,6 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   process: 'printSimulation',
   film: 'kodak_portra_400',
   filmEnabled: true,
-  paperOnly: false,
   paper: 'kodak_portra_endura',
   rgbToRawMethod: 'hanatos2025',
   inputColorSpace: 'ProPhoto RGB',

@@ -40,7 +40,6 @@ import type { TileSpec } from './tiling';
  */
 export interface FrameParams {
   cameraOutput?: Float32Array;
-  paperDirectMatrix?: Float32Array;
   softenDetail?: { amount: number; luma: readonly number[] };
   filmFormatMm: number;
   /**

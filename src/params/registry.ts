@@ -92,7 +92,6 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   cameraSaturation: 'extension',
   cameraHsvSaturation: 'extension',
   filmEnabled: 'extension',
-  paperOnly: 'extension',
   cameraSoftenDetail: 'extension',
   // Ekstensi lens blur (`test/lensBlur.test.ts`, referensi JS + sifat).
   lensBlurEnabled: 'extension',
