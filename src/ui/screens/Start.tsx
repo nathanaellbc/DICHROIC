@@ -60,7 +60,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           transition: 'border-color 0.15s, background-color 0.15s',
         }}
       >
-        <span aria-hidden="true" style={{ width: 52, height: 52, borderRadius: 12, background: over ? 'var(--blue-fill)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background-color 0.15s' }}>
+        <span aria-hidden="true" style={{ width: 52, height: 52, borderRadius: 'var(--r-list)', background: over ? 'var(--blue-fill)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background-color 0.15s' }}>
           <Icon name="photo" size={28} strokeWidth={2} color="#fff" />
         </span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -71,7 +71,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           <span className="t-footnote secondary" style={{ fontWeight: 600 }}>Supported files</span>
           {KINDS.map((k) => (
             <span key={k.title} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
-              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--fill)', color: 'var(--label-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 'var(--r-control)', background: 'var(--fill)', color: 'var(--label-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Icon name={k.icon} size={14} />
               </span>
               <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

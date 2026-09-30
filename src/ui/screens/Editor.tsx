@@ -349,7 +349,7 @@ const COMPACT_CONTROL_HEIGHT = 108;
 function PreviewNote({ state }: { state: EngineState }) {
   if (isDisplayReferred(state.params.outputColorSpace)) return null;
   return (
-    <span className="glass-clear t-caption" style={{ padding: '4px 10px', borderRadius: 6 }}>
+    <span className="glass-clear t-caption" style={{ padding: '4px 10px', borderRadius: 'var(--r-control)' }}>
       Preview converts {state.params.outputColorSpace} to sRGB
     </span>
   );

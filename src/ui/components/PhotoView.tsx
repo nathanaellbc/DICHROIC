@@ -374,8 +374,8 @@ export function PhotoView({
                 >
                   <Icon name="compare" size={18} />
                 </div>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, right: rect.width - sx(split) + 8, padding: '4px 10px', borderRadius: 6, fontWeight: 600, opacity: split > 0.12 ? 1 : 0 }}>Before</span>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: sx(split) + 8, padding: '4px 10px', borderRadius: 6, fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
+                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, right: rect.width - sx(split) + 8, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600, opacity: split > 0.12 ? 1 : 0 }}>Before</span>
+                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: sx(split) + 8, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
               </>
             )}
             {focus && (focus.show || picking) && (
@@ -397,12 +397,12 @@ export function PhotoView({
               </motion.div>
             )}
             {picking && (
-              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 6, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Tap to focus · grey is outside the depth of field
               </span>
             )}
             {peek && !compare && !picking && (
-              <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 6, fontWeight: 600 }}>Original</span>
+              <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600 }}>Original</span>
             )}
             <AnimatePresence>
               {slow && (
@@ -412,7 +412,7 @@ export function PhotoView({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  style={{ position: 'absolute', right: 10, bottom: 10, height: 30, padding: '0 12px 0 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
+                  style={{ position: 'absolute', right: 10, bottom: 10, height: 30, padding: '0 12px 0 8px', borderRadius: 'var(--r-control)', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
                 >
                   <Spinner size={16} /> Developing
                 </motion.span>
@@ -427,7 +427,7 @@ export function PhotoView({
           className="glass-clear t-footnote tabular"
           title="Fit to view (double-click)"
           onClick={() => setView(FIT)}
-          style={{ position: 'absolute', top: 10, right: 10, height: 28, padding: '0 10px', borderRadius: 6, border: 0, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          style={{ position: 'absolute', top: 10, right: 10, height: 28, padding: '0 10px', borderRadius: 'var(--r-control)', border: 0, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
         >
           {Math.round(view.s * 100)}% <span className="secondary">· Fit</span>
         </button>

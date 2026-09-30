@@ -94,7 +94,7 @@ export function ResetButton({ tool, ctx, compact }: { tool: Tool; ctx: ToolConte
       transition={snappy}
       style={{ display: 'inline-flex', overflow: 'hidden', flexShrink: 0 }}
     >
-      <PressButton className={compact ? 'icon-btn plain' : 'icon-btn'} style={compact ? { width: 22, height: 22, borderRadius: 5 } : undefined} aria-label={`Reset ${tool.title}`} title={`Reset ${tool.title}`} tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => ctx.onPatch(resetPatch(tool, ctx.defaults))}>
+      <PressButton className={compact ? 'icon-btn plain' : 'icon-btn'} style={compact ? { width: 22, height: 22, borderRadius: 'var(--r-inline)' } : undefined} aria-label={`Reset ${tool.title}`} title={`Reset ${tool.title}`} tabIndex={show ? 0 : -1} aria-hidden={!show} onClick={() => ctx.onPatch(resetPatch(tool, ctx.defaults))}>
         <Icon name="reset" size={compact ? 13 : 18} strokeWidth={2.2} />
       </PressButton>
     </motion.span>
@@ -361,11 +361,11 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
                 boxShadow: modified ? 'inset 0 0 0 2px #0091ff' : 'inset 0 0 0 0px #0091ff',
               }}
               transition={snappy}
-              style={{ position: 'relative', width: 46, height: 46, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'relative', width: 46, height: 46, borderRadius: 'var(--r-list)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <Icon name={tool.icon} size={22} color={isSelected ? '#000' : tool.tint ?? (dimmed ? 'rgba(235,235,245,0.45)' : '#fff')} />
               {tool.kind === 'locked' && (
-                <span aria-hidden="true" style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 6, background: 'var(--bg-elevated-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span aria-hidden="true" style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 'var(--r-control)', background: 'var(--bg-elevated-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name="lock" size={10} strokeWidth={2.8} />
                 </span>
               )}

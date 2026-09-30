@@ -214,6 +214,12 @@ components:
 
 ## Overview
 
+### Lucide icons and softer controls (2026-09-30)
+
+All UI icons, including the spinner, use statically imported Lucide React components through the shared `Icon` adapter. They retain existing sizes, colours, accessible control labels and stroke weights. Control/field radii are 8px on desktop and 12px on compact layouts; list, menu and dialog radii are 10/12/14px on desktop and 14/14/18px on compact layouts. Dense inline controls use 7px/8px. Panel geometry and phone corner continuity stay unchanged. These values supersede the older radius scale below.
+
+Vertical scrolling uses a transparent track and a slim rounded neutral thumb, brighter on hover or keyboard focus. Chromium/WebKit use a 6px gutter with a 2px visible thumb; other browsers use their thin scrollbar. Scrolling remains available with mouse, touch and keyboard.
+
 ### Editor zoom and frosted chrome (2026-09-30)
 
 The photo preview has no inset border on desktop. Zoomed pixels extend beyond the fitted preview area behind the editor chrome; only the outer app window clips them. Fit still shows the full photo, and zoom, pan, comparison and focus selection keep their existing coordinates.

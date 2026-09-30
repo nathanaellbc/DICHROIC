@@ -146,10 +146,5 @@ export function Toast({ message, icon }: { message: string | null; icon?: UiIcon
 }
 
 export function Spinner({ size = 20 }: { size?: number }): ReactNode {
-  return (
-    <svg className="spinner" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(235,235,245,0.25)" strokeWidth="3" />
-      <path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
+  return <Icon name="loader" size={size} className="spinner" />;
 }
