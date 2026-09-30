@@ -29,8 +29,11 @@ cold asset and shader setup; numerical parity thresholds were not changed.
 
 ## Memory policy
 
-The common decoded-image allocation budget is 512 MiB, with conservative
-per-format bytes-per-pixel estimates for intermediate buffers. Compressed
+The decoded-image allocation budget adapts to the device: 2 GiB on desktop
+with at least 8 GiB reported RAM (or no RAM hint), 1 GiB with 4 GiB reported
+RAM or an unknown-memory phone/tablet, and 512 MiB with at most 2 GiB reported
+RAM. This admits ordinary 24/48 MP desktop photos without downsampling;
+per-format bytes-per-pixel estimates still account for intermediate buffers. Compressed
 TIFF blocks are limited to 64 MiB and PNG ICC metadata to 4 MiB. Candidate
 and current Float32 source images must fit the combined replacement budget.
 Large unsupported images fail with a smaller-photo message before the

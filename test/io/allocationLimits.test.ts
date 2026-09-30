@@ -3,7 +3,7 @@ import { zlibSync } from 'fflate';
 import { encode } from 'fast-png';
 import { decodePng } from '../../src/io/png';
 import { inflateBounded } from '../../src/io/inflateBounded';
-import { assertImageBudget } from '../../src/io/budget';
+import { assertImageBudget, imageMemoryBudget, IMAGE_RGBA_BUDGET } from '../../src/io/budget';
 import { decodeTiff } from '../../src/io/tiff';
 import { buildTiff, RGB_TAGS, type Entry } from './tiffBuilder';
 
@@ -32,9 +32,43 @@ describe('decoder allocation limits', () => {
   });
 
   it('rejects oversized and nonintegral dimensions', () => {
-    expect(() => assertImageBudget(8000, 6000)).toThrow(/memory limit/);
+    expect(() => assertImageBudget(100000, 10000)).toThrow(/memory limit/);
     expect(() => assertImageBudget(1.5, 2)).toThrow(/memory limit/);
     expect(() => assertImageBudget(6000, 4000)).not.toThrow();
+  });
+
+  it('admits native 24 and 48 MP sources on desktop without removing the ceiling', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Desktop', deviceMemory: 8 });
+    for (const bytesPerPixel of [16, 20, 22, 24, 32]) {
+      expect(() => assertImageBudget(6000, 4000, bytesPerPixel)).not.toThrow();
+      expect(() => assertImageBudget(8064, 6048, bytesPerPixel)).not.toThrow();
+    }
+    expect(() => assertImageBudget(8144, 5424, 32)).not.toThrow(); // Reported JPEG.
+    expect(() => assertImageBudget(5120, 7168, 22)).not.toThrow(); // Reported RGB16 ARW.
+    expect(() => assertImageBudget(5120, 7168, 16, imageMemoryBudget() - 8144 * 5424 * 16)).not.toThrow();
+    // Replacing a 48 MP source retains both Float32 images until success.
+    expect(() => assertImageBudget(8064, 6048, 16, imageMemoryBudget() - 8064 * 6048 * 16)).not.toThrow();
+    expect(() => assertImageBudget(10000, 8000, 32)).toThrow(/memory limit/);
+  });
+
+  it.each([
+    [{ deviceMemory: 2 }, 512],
+    [{ deviceMemory: 4 }, 1024],
+    [{ deviceMemory: 8 }, 2048],
+    [{ userAgent: 'iPhone' }, 1024],
+    [{ userAgent: 'Macintosh', maxTouchPoints: 5 }, 1024],
+    [{ userAgent: 'Desktop' }, 2048],
+    [{ deviceMemory: 0, userAgent: 'Desktop' }, 2048],
+  ])('uses a bounded budget for device %j', (navigator, mib) => {
+    vi.stubGlobal('navigator', navigator);
+    expect(imageMemoryBudget()).toBe(mib * 1024 * 1024);
+  });
+
+  it('honours a smaller explicit budget and rejects invalid allocation estimates', () => {
+    expect(() => assertImageBudget(8000, 6000, 16, 512 * 1024 * 1024)).toThrow(/memory limit/);
+    expect(() => assertImageBudget(1, 1, -1)).toThrow(/memory limit/);
+    expect(() => assertImageBudget(1, 1, Infinity)).toThrow(/memory limit/);
+    expect(imageMemoryBudget()).toBe(IMAGE_RGBA_BUDGET);
   });
 
   it.each([

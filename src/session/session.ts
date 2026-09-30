@@ -46,7 +46,7 @@ import { originalFrame, rgbToCanvas } from '../io/display';
 import type { Frame } from '../io/display';
 import { buildGuide } from '../depth/estimate';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, IMAGE_RGBA_BUDGET } from '../io/budget';
+import { assertImageBudget, imageMemoryBudget } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -389,7 +389,7 @@ export class Session {
     validateStocks(this.bundle, params.film, params.paper, params.process);
     // The previous source is retained until a replacement commits. Bound
     // their combined storage, too, so cancellation remains affordable.
-    assertImageBudget(image.width, image.height, 16, IMAGE_RGBA_BUDGET - (this.#image?.rgba.byteLength ?? 0));
+    assertImageBudget(image.width, image.height, 16, imageMemoryBudget() - (this.#image?.rgba.byteLength ?? 0));
     if (image.rgba.length !== image.width * image.height * 4) throw new RangeError('Invalid photo dimensions.');
     const staged = { id, image, params };
     this.staged = staged;
