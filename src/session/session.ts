@@ -14,7 +14,7 @@
 
 import { acquireDevice } from '../engine/device';
 import type { EngineDevice } from '../engine/device';
-import { RenderGraph } from '../engine/graph';
+import { RenderGraph, ScratchPool, returnFreedMemory } from '../engine/graph';
 import { runPrecisionSelfTest } from '../engine/precisionSelfTest';
 import { Tap } from '../engine/taps';
 import type { Arenas } from '../engine/arena';
@@ -247,9 +247,17 @@ export class Session {
   private readonly graphs = new Map<string, Promise<RenderGraph>>();
   private graphArenaKey: string | undefined;
   private cleanupPending = false;
+  private exportCleanupPending = false;
+  private exportVersion = 0;
   private staged: { id: number; image: DecodedImage; params: RenderParams; backup?: {
     image: DecodedImage | undefined; params: RenderParams; depth: DepthMap | undefined; photoId: number;
   } } | undefined;
+  /**
+   * Scratch GPU bersama semua graf: render berurutan (antrean di atas), jadi
+   * satu pool cukup, dan mengganti stok/filter (graf baru) tidak menggandakan
+   * scratch seukuran frame. Dilepas setelah setiap render penuh (`execute`).
+   */
+  #scratch: ScratchPool | undefined;
 
   private constructor(
     private readonly engine: EngineDevice,
@@ -307,6 +315,21 @@ export class Session {
    * Ukuran render penuh terakhir (Fase 2D): lebih kecil dari gambar bila
    * difusi memaksa `fitForDiffusion`. UI membandingkannya setelah ekspor.
    */
+  /**
+   * Lembar Ekspor ditutup: lepas render penuh yang di-cache (RGB f32 seukuran
+   * foto) dan scratch GPU. Seperti EMULSION, hasil ekspor hanya dipegang
+   * selama dialognya terbuka.
+   */
+  releaseExport(): void {
+    this.#cache.delete('full');
+    this.exportVersion += 1;
+    this.exportCleanupPending = true;
+    if (!this.#busy) {
+      this.#scratch?.release();
+      this.exportCleanupPending = false;
+    }
+  }
+
   lastFullSize(): { width: number; height: number } | undefined {
     const hit = this.#cache.get('full');
     return hit ? { width: hit.result.width, height: hit.result.height } : undefined;
@@ -510,6 +533,10 @@ export class Session {
   private release(): void {
     this.#busy = false;
     if (this.cleanupPending) this.clearResources();
+    else if (this.exportCleanupPending) {
+      this.#scratch?.release();
+      this.exportCleanupPending = false;
+    }
     for (const resolve of this.idleWaiters) resolve();
     this.idleWaiters.clear();
     const next = this.#pending;
@@ -526,14 +553,25 @@ export class Session {
     if (!image) throw new SessionStateError('The photo was closed.');
     const params = this.#params;
     const paramsVersion = this.#paramsVersion;
+    const exportVersion = this.exportVersion;
     const key = this.cacheKey(quality, longEdge);
     const frame =
       quality === 'preview'
         ? this.previewImage()
         : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
-    const rgb = await this.renderFrame(frame, params, 'image');
+    let rgb: Float32Array;
+    try {
+      rgb = await this.renderFrame(frame, params, 'image');
+    } finally {
+      // Scratch seukuran foto penuh tidak dibiarkan menetap setelah ekspor:
+      // pratinjau berikutnya hanya butuh sepotong kecilnya.
+      if (quality === 'full') {
+        this.#scratch?.release();
+        returnFreedMemory(this.engine.device);
+      }
+    }
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion, outputColorSpace: params.outputColorSpace };
-    if (!this.#disposed && key === this.cacheKey(quality, longEdge)) this.#cache.set(quality, { key, result });
+    if (!this.#disposed && key === this.cacheKey(quality, longEdge) && (quality !== 'full' || exportVersion === this.exportVersion)) this.#cache.set(quality, { key, result });
     return result;
   }
 
@@ -734,6 +772,9 @@ export class Session {
     for (const graph of this.graphs.values()) void graph.then((g) => g.dispose(), () => {});
     this.graphs.clear();
     this.graphArenaKey = undefined;
+    this.#scratch?.release();
+    this.#scratch = undefined;
+    this.exportCleanupPending = false;
     this.ownedArenas?.destroy();
   }
 
@@ -761,12 +802,13 @@ export class Session {
     const plan = buildRenderPlan(params, this.bundle, frame, mode, mode === 'image' && depth ? { depth } : {});
     const graph = await this.graphFor(plan);
     this.assertAlive();
-    const rgba = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
+    const rgb = await graph.run(frame.rgba, plan.core, Tap.RGB_OUT, {
       maxBufferBytes: this.engine.maxStorageBufferBindingSize,
       overlap: plan.overlap,
       frame: plan.frame,
+      output: 'rgb',
     });
-    return { rgb: packRgb(rgba, frame.width * frame.height), plan };
+    return { rgb, plan };
   }
 
   /**
@@ -797,7 +839,8 @@ export class Session {
     }
     const building = (async () => {
       const arenas = await this.arenas.get(plan.arenaKey, plan.arenaInputs);
-      const graph = new RenderGraph(this.engine);
+      this.#scratch ??= new ScratchPool(this.engine.device);
+      const graph = new RenderGraph(this.engine, this.#scratch);
       for (const stage of buildChain(this.engine.device, arenas, plan.chain)) graph.addStage(stage);
       return graph;
     })();
@@ -822,14 +865,4 @@ function baselineArenaInputs(bundle: AssetBundle): { key: string; inputs: ArenaI
   // Rencana baseline hanya butuh dimensi untuk bagian arena; gambar 1x1 cukup.
   const plan = buildRenderPlan(BASELINE_RENDER_PARAMS, bundle, { width: 1, height: 1, rgba: new Float32Array(4) }, 'cube');
   return { key: plan.arenaKey, inputs: plan.arenaInputs };
-}
-
-function packRgb(rgba: Float32Array, pixels: number): Float32Array {
-  const rgb = new Float32Array(pixels * 3);
-  for (let p = 0; p < pixels; p += 1) {
-    rgb[p * 3] = rgba[p * 4]!;
-    rgb[p * 3 + 1] = rgba[p * 4 + 1]!;
-    rgb[p * 3 + 2] = rgba[p * 4 + 2]!;
-  }
-  return rgb;
 }

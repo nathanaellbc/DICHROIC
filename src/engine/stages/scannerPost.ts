@@ -244,9 +244,13 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
       // penuh (BUKAN skalar seperti scratch glare di atas), PERSIS pola
       // `rawA`/`rawB`/dst `dir.ts`/`halation.ts`.
       const pixelBytes = width * height * 4 * FLOAT_BYTES;
+      // Pra-blur dan blur-X glare sudah selesai dibaca (glareBlurY) sebelum
+      // blur unsharp berjalan, jadi keduanya menampung blur unsharp (slot
+      // yang sama, dibesarkan ke 16 byte/px). `glareBlurred` masih dibaca
+      // scanPreUnsharp, jadi `preUnsharp` mendapat buffer sendiri.
       const preUnsharp = ctx.scratch('scannerPost:preUnsharp', pixelBytes);
-      const unsharpBlurXOut = ctx.scratch('scannerPost:unsharpBlurXOut', pixelBytes);
-      const unsharpBlurred = ctx.scratch('scannerPost:unsharpBlurred', pixelBytes);
+      const unsharpBlurXOut = ctx.scratch('scannerPost:glarePreBlur', pixelBytes);
+      const unsharpBlurred = ctx.scratch('scannerPost:glareBlurX', pixelBytes);
 
       const kernelData = buildUnsharpKernelBuffer(UNSHARP_SIGMA_PX);
       const unsharpKernelBuffer = ctx.device.createBuffer({

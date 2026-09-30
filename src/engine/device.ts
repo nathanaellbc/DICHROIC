@@ -127,8 +127,15 @@ export async function acquireDevice(): Promise<EngineDevice> {
     throw new WebGPUUnavailableError(`navigator.gpu tidak ada (${String(cause)})`);
   }
 
-  const adapter = await gpu.requestAdapter({ powerPreference: 'high-performance' });
-  if (!adapter) throw new WebGPUUnavailableError('tidak ada adapter yang cocok');
+  // Sebagian browser/driver mengembalikan null untuk preferensi daya tertentu
+  // padahal adapter bawaan ada; coba sekali lagi tanpa preferensi.
+  const adapter =
+    (await gpu.requestAdapter({ powerPreference: 'high-performance' })) ?? (await gpu.requestAdapter());
+  if (!adapter) {
+    throw new WebGPUUnavailableError(
+      'navigator.gpu ada, tetapi tidak ada adapter yang cocok (akselerasi grafis mati, atau GPU/driver diblokir browser)',
+    );
+  }
 
   // Kualitas di atas performa: minta ukuran binding sebesar yang diizinkan
   // adapter, agar render full-frame tidak perlu di-tile lebih awal dari

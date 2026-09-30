@@ -44,6 +44,11 @@ interface ToolBase {
    * alat lain (Lens).
    */
   requires?: BooleanField;
+  /**
+   * Alat punya tempat sendiri di luar deretan grupnya (Process: di pemilih
+   * stok, di samping Film/Paper) -- tetap di model, tidak ikut dirender grup.
+   */
+  elsewhere?: true;
 }
 
 export interface SliderTool extends ToolBase {
@@ -144,6 +149,7 @@ export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | Diffusio
 export interface ToolGroup {
   id: GroupId;
   label: string;
+  icon: IconName | 'camera';
   tools: readonly Tool[];
 }
 
@@ -212,6 +218,7 @@ export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'camera',
     label: 'Camera',
+    icon: 'camera',
     tools: [
       { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', label: 'Temp', title: 'White Balance', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, unit: ' K', note: 'The light the scene was under. 5500 K leaves the picture as it is; lower corrects warm (tungsten) light toward blue, higher corrects cool light toward amber.' },
       { kind: 'slider', id: 'cameraTint', field: 'cameraTint', label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 2, note: 'The light’s green–magenta error. + says the light was green (fluorescent) and adds magenta; − the opposite.' },
@@ -226,6 +233,7 @@ export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'lens',
     label: 'Lens',
+    icon: 'lens',
     tools: [
       { kind: 'lens', id: 'lensBlur', field: 'lensBlurEnabled', label: 'Lens', title: 'Lens Blur', icon: 'lens', note: `Defocus like a real lens, from a depth map estimated on this device. Tap “Pick Focus” then the subject. ${LENS_NOTE}` },
       { kind: 'slider', id: 'lensFocusDistanceM', field: 'lensFocusDistanceM', requires: 'lensBlurEnabled', scale: 'log10', label: 'Focus', title: 'Focus Distance', icon: 'focus', min: LENS_LIMITS.focusDistanceM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'How far the focused subject was from the camera. With the aperture and focal length, it sets how quickly the background falls out of focus.' },
@@ -241,6 +249,7 @@ export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'film',
     label: 'Film',
+    icon: 'format',
     tools: [
       { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
       { kind: 'slider', id: 'scanExposureEv', field: 'filmExposureEv', mode: 'scan', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Exposure of the film itself. Scanning has no print step, so this sets the brightness directly.' },
@@ -248,12 +257,13 @@ export const GROUPS: readonly ToolGroup[] = [
       { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', mode: 'print', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, color and grain more than brightness.' },
       { kind: 'stepper', id: 'filmPushPullStops', field: 'filmPushPullStops', label: 'Push/Pull', title: 'Push / Pull', icon: 'pushPull', min: -2, max: 2, step: 0.5 },
       { kind: 'choice', id: 'filmFormat', field: 'filmFormat', label: 'Format', title: 'Film Format', icon: 'format', options: FILM_FORMATS, note: 'Smaller formats enlarge the grain and halation.' },
-      { kind: 'choice', id: 'process', field: 'process', label: 'Process', title: 'Process', icon: 'process', options: PROCESS_MODES, note: 'Print enlarges the negative onto paper. Scan digitizes the film itself: slides come out positive, negatives as orange negatives.' },
+      { kind: 'choice', id: 'process', field: 'process', elsewhere: true, label: 'Process', title: 'Process', icon: 'process', options: PROCESS_MODES, note: 'Print enlarges the negative onto paper. Scan digitizes the film itself: slides come out positive, negatives as orange negatives.' },
     ],
   },
   {
     id: 'color',
     label: 'Color',
+    icon: 'tint',
     tools: [
       { kind: 'slider', id: 'filterC', field: 'filterC', invert: true, mode: 'print', label: 'Cyan', title: 'Cyan', icon: 'dot', tint: '#3CD3FE', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds cyan, − adds red.' },
       { kind: 'slider', id: 'filterMShift', field: 'filterMShift', invert: true, mode: 'print', label: 'Magenta', title: 'Magenta', icon: 'dot', tint: '#DB34F2', min: -50, max: 50, step: 1, digits: 0, note: 'Color balance of the print. + adds magenta, − adds green.' },
@@ -266,6 +276,7 @@ export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'darkroom',
     label: 'Develop',
+    icon: 'couplers',
     tools: [
       { kind: 'slider', id: 'dirCouplersAmount', field: 'dirCouplersAmount', enabledBy: 'dirCouplersEnabled', label: 'Couplers', title: 'DIR Couplers', icon: 'couplers', min: 0, max: 1.4, step: 0.05, digits: 2, note: 'Development inhibitors built into the film. They lift color saturation and edge contrast; 1.00 is the film as designed.' },
       { kind: 'slider', id: 'dirCouplersInhibitionInterlayer', field: 'dirCouplersInhibitionInterlayer', label: 'Interlayer', title: 'Interlayer Effect', icon: 'layers', min: 0, max: 1, step: 0.05, digits: 2, note: 'How much each color layer holds back the others. Lower it for softer, less saturated color.' },
@@ -279,6 +290,7 @@ export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'texture',
     label: 'Texture',
+    icon: 'grain',
     tools: [
       { kind: 'slider', id: 'halationAmount', field: 'halationAmount', enabledBy: 'halationEnabled', label: 'Halation', title: 'Halation', icon: 'halation', min: 0, max: 2.5, step: 0.05, digits: 2 },
       { kind: 'slider', id: 'grainAmount', field: 'grainAmount', enabledBy: 'grainEnabled', label: 'Grain', title: 'Grain', icon: 'grain', min: 0, max: 2, step: 0.05, digits: 2 },
@@ -298,10 +310,10 @@ export function isScanMode(params: Pick<RenderParams, 'process'>): boolean {
   return params.process === 'scanNegative';
 }
 
-/** Alat yang berlaku untuk mode proses saat ini (Fase 2D). */
+/** Alat grup yang berlaku untuk mode proses saat ini (Fase 2D), tanpa alat `elsewhere`. */
 export function visibleTools(group: ToolGroup, params: Pick<RenderParams, 'process'>): Tool[] {
   const mode = isScanMode(params) ? 'scan' : 'print';
-  return group.tools.filter((tool) => !tool.mode || tool.mode === mode);
+  return group.tools.filter((tool) => !tool.elsewhere && (!tool.mode || tool.mode === mode));
 }
 
 /** Stop filter sebagai pecahan yang lazim di label filter: 1/8, 1/4, 1/2, 1, 2. */

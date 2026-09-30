@@ -1,44 +1,93 @@
 /*
- * DICHROIC UI -- token dan gaya dasar (DESIGN.md: Apple HIG, Liquid Glass).
- * Warna: nilai dark-mode sistem. Tipografi: gaya teks iOS (Dynamic Type),
- * dalam rem terhadap ukuran Body 17 pt; di Safari `-apple-system-body`
- * mengikuti ukuran teks pilihan pengguna.
+ * DICHROIC UI -- token dan gaya dasar (DESIGN.md). Dunia visual: aplikasi pro
+ * Apple yang matang (Photos for Mac, Final Cut Pro): panel grafit solid yang
+ * menempel ke tepi jendela, garis pemisah 1 px, radius kecil, satu aksen biru.
+ *
+ * Dua kepadatan menurut size class (`html[data-size]`, dipasang App):
+ * - compact (iPhone): ukuran iOS (Dynamic Type, target sentuh 44 pt);
+ * - regular (desktop, iPad lanskap): kepadatan macOS (teks 13 px, kontrol 28 px).
+ * Warna: nilai dark-mode sistem, sama di keduanya.
  */
 
 :root {
   color-scheme: dark;
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  /* SF di perangkat Apple; Inter (self-host) di tempat lain, supaya suaranya tetap satu. */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
 
   --bg: #000;
   --bg-elevated: #1c1c1e;
   --bg-elevated-2: #2c2c2e;
+  --bg-elevated-3: #3a3a3c;
   --fill: rgba(118, 118, 128, 0.24);
   --fill-strong: rgba(120, 120, 128, 0.36);
-  --fill-soft: rgba(255, 255, 255, 0.1);
+  --fill-soft: rgba(255, 255, 255, 0.08);
+  --hover: rgba(255, 255, 255, 0.06);
   --label: #fff;
-  --label-2: rgba(235, 235, 245, 0.6);
-  --label-3: rgba(235, 235, 245, 0.3);
+  --label-2: rgba(235, 235, 245, 0.62);
+  --label-3: rgba(235, 235, 245, 0.32);
   --separator: rgba(84, 84, 88, 0.65);
+  --hairline: rgba(255, 255, 255, 0.09);
 
   --blue: #0091ff;
+  /* Isi berteks putih: #0091ff hanya 3.2:1 dengan putih, ini 4.8:1 (WCAG AA). */
+  --blue-fill: #0070e0;
   --blue-text: #5cb8ff;
+  --blue-wash: rgba(0, 145, 255, 0.16);
   --green: #30d158;
   --red: #ff4245;
+  --red-text: #ff6961;
   --orange: #ff9230;
 
-  --glass-bg: rgba(22, 22, 24, 0.74);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-filter: blur(40px) saturate(170%);
-  --clear-bg: rgba(0, 0, 0, 0.48);
-  --clear-border: rgba(255, 255, 255, 0.16);
+  /* Kaca hanya untuk kontrol yang melayang di atas foto. */
+  --glass-bg: rgba(28, 28, 30, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-filter: blur(30px) saturate(160%);
+  --clear-bg: rgba(0, 0, 0, 0.55);
+  --clear-border: rgba(255, 255, 255, 0.14);
+
+  --shadow-menu: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(0, 0, 0, 0.6);
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(0, 0, 0, 0.7);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
 
-  /* Radius sudut layar iPhone modern; elemen di dekatnya konsentris (radius − margin). */
+  /* Kepadatan compact (iPhone). */
+  --h-control: 44px;
+  --h-control-lg: 50px;
+  --h-seg: 34px;
+  --h-row: 48px;
+  --r-control: 10px;
+  --r-field: 10px;
+  --r-list: 12px;
+  --r-menu: 12px;
+  --r-dialog: 16px;
+  /*
+   * Kontinuitas sudut (konsentris): radius dalam = radius luar - jarak.
+   * Panel dan sheet menempel ke tepi bawah layar, jadi sudut atasnya
+   * mengikuti sudut layar iPhone; tab grup berjarak 16 px dari tepi
+   * panel, pil terpilihnya 3 px lagi ke dalam.
+   */
   --display-radius: 47px;
+  --r-panel: var(--display-radius);
+  --r-tabs: calc(var(--display-radius) - 16px);
+  --r-tab: calc(var(--r-tabs) - 3px);
+  --icon-btn: 44px;
+}
+
+html[data-size="regular"] {
+  --h-control: 28px;
+  --h-control-lg: 30px;
+  --h-seg: 24px;
+  --h-row: 30px;
+  --r-control: 6px;
+  --r-field: 6px;
+  --r-list: 8px;
+  --r-menu: 10px;
+  --r-dialog: 12px;
+  --r-panel: 0px;
+  --icon-btn: 30px;
 }
 
 html {
@@ -47,7 +96,7 @@ html {
   text-size-adjust: 100%;
 }
 @supports (font: -apple-system-body) {
-  html { font: -apple-system-body; }
+  html:not([data-size="regular"]) { font: -apple-system-body; }
 }
 
 html, body, #root {
@@ -69,6 +118,13 @@ html, body, #root {
  * tepi bawahnya diturunkan sebesar selisihnya -- 0 bila tidak ada bug.
  * Dibatasi ke mode terpasang: tab Safari tetap memakai viewport dinamis.
  */
+/*
+ * `#root` jadi containing block: `main { position: absolute; inset: 0 }`
+ * mengikuti tingginya (100lvh di mode terpasang), bukan initial containing
+ * block yang sependek viewport layout -- tanpa ini panel bawah berhenti
+ * setinggi status bar di atas tepi layar.
+ */
+#root { position: relative; }
 @media (display-mode: standalone), (display-mode: fullscreen) {
   html { height: 100lvh; }
   .backdrop, .alert-scrim { bottom: calc(100dvh - 100lvh); }
@@ -88,13 +144,16 @@ button {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
-:focus-visible { outline: 3px solid rgba(0, 145, 255, 0.7); outline-offset: 2px; }
+:focus-visible { outline: 3px solid rgba(0, 145, 255, 0.6); outline-offset: 1px; }
+html[data-size="regular"] :focus-visible { outline-width: 2px; }
+::selection { background: rgba(0, 145, 255, 0.45); color: #fff; }
+input { caret-color: var(--blue); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
-/* Gaya teks (Large default) */
+/* Gaya teks. Compact: gaya teks iOS (Large). Regular: skala macOS. */
 .t-large-title { font-size: 2rem; line-height: 1.206; font-weight: 700; letter-spacing: 0.01em; }
 .t-title2 { font-size: 1.294rem; line-height: 1.27; font-weight: 700; }
 .t-title3 { font-size: 1.176rem; line-height: 1.25; font-weight: 600; }
@@ -104,11 +163,23 @@ button {
 .t-subhead { font-size: 0.882rem; line-height: 1.333; }
 .t-footnote { font-size: 0.765rem; line-height: 1.385; }
 .t-caption { font-size: 0.706rem; line-height: 1.333; }
-.t-caption2 { font-size: 0.647rem; line-height: 1.18; }
+.t-caption2 { font-size: 0.6471rem; line-height: 1.18; }
+html[data-size="regular"] .t-large-title { font-size: 26px; line-height: 32px; }
+html[data-size="regular"] .t-title2 { font-size: 17px; line-height: 22px; }
+html[data-size="regular"] .t-title3 { font-size: 15px; line-height: 20px; }
+html[data-size="regular"] .t-headline { font-size: 13px; line-height: 16px; }
+html[data-size="regular"] .t-body { font-size: 13px; line-height: 16px; }
+html[data-size="regular"] .t-callout { font-size: 12px; line-height: 15px; }
+html[data-size="regular"] .t-subhead { font-size: 12px; line-height: 15px; }
+html[data-size="regular"] .t-footnote { font-size: 11px; line-height: 14px; }
+html[data-size="regular"] .t-caption,
+html[data-size="regular"] .t-caption2 { font-size: 11px; line-height: 13px; }
 .secondary { color: var(--label-2); }
-.tabular { font-variant-numeric: tabular-nums; }
+.tertiary { color: var(--label-3); }
+.tabular, .num { font-variant-numeric: tabular-nums; }
 
 /* Material */
+.panel { background: var(--bg-elevated); }
 .glass {
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-filter);
@@ -117,72 +188,116 @@ button {
 }
 .glass-clear {
   background: var(--clear-bg);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
   border: 1px solid var(--clear-border);
 }
 @media (prefers-reduced-transparency: reduce) {
-  .glass, .glass-clear { background: #1c1c1e; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .glass, .glass-clear { background: var(--bg-elevated); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 /* Tombol */
 .icon-btn {
-  width: 44px; height: 44px; flex-shrink: 0; box-sizing: border-box;
-  border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  width: var(--icon-btn); height: var(--icon-btn); flex-shrink: 0; box-sizing: border-box;
+  border-radius: var(--r-control); border: 0; padding: 0; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--fill); color: var(--label);
+  transition: background-color 0.12s, color 0.12s;
 }
+.icon-btn.plain { background: transparent; color: var(--label-2); }
+.icon-btn.plain:hover:not(:disabled) { background: var(--hover); color: var(--label); }
+.icon-btn.small { --icon-btn: 30px; }
 .icon-btn.glass { background: var(--glass-bg); border: 1px solid var(--glass-border); }
-.icon-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.9); color: #000; }
+.icon-btn[aria-pressed="true"] { background: var(--blue-wash); color: var(--blue-text); }
+.icon-btn.glass[aria-pressed="true"] { background: rgba(255, 255, 255, 0.92); color: #000; }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
 .capsule {
-  height: 44px; padding: 0 18px; box-sizing: border-box; flex-shrink: 0;
-  border-radius: 9999px; border: 0; cursor: pointer;
+  height: var(--h-control); padding: 0 16px; box-sizing: border-box; flex-shrink: 0;
+  border-radius: var(--r-control); border: 0; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   font-size: 1rem; font-weight: 600; white-space: nowrap; text-decoration: none;
   background: var(--fill); color: var(--label);
+  transition: background-color 0.12s, filter 0.12s;
 }
-.capsule.prominent { background: var(--blue); color: #fff; }
-.capsule.large { height: 50px; width: 100%; }
-.capsule.bordered { background: transparent; border: 1px solid rgba(255, 255, 255, 0.18); }
-.capsule:disabled { opacity: 0.45; cursor: default; }
+html[data-size="regular"] .capsule { font-size: 13px; font-weight: 500; padding: 0 12px; gap: 6px; }
+.capsule:hover:not(:disabled) { filter: brightness(1.12); }
+.capsule.plain { background: transparent; }
+.capsule.plain:hover:not(:disabled) { background: var(--hover); filter: none; }
+.capsule.prominent, .icon-btn.prominent { background: var(--blue-fill); color: #fff; }
+.capsule.large { height: var(--h-control-lg); width: 100%; }
+.capsule.bordered { background: transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.capsule:disabled { opacity: 0.4; cursor: default; }
 .text-btn {
-  min-height: 44px; padding: 0 8px; border: 0; background: transparent; cursor: pointer;
+  min-height: var(--h-control); padding: 0 8px; border: 0; background: transparent; cursor: pointer;
   color: var(--blue-text); font-size: 1rem;
 }
 
-/* Segmented control */
+/* Segmented control: segmen terpilih terangkat seperti kontrol macOS. */
 .segmented {
   position: relative; display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column;
-  height: 36px; padding: 2px; gap: 2px; border-radius: 9999px; background: var(--fill);
+  height: var(--h-seg); padding: 2px; gap: 2px; border-radius: calc(var(--r-control) + 1px); background: var(--fill);
   box-sizing: border-box;
 }
-.segmented.small { height: 32px; }
+.segmented.small { --h-seg: 30px; }
+html[data-size="regular"] .segmented.small { --h-seg: 22px; }
 .segment {
-  position: relative; border: 0; background: transparent; border-radius: 9999px; cursor: pointer;
-  font-size: 0.882rem; font-weight: 600; color: rgba(235, 235, 245, 0.75);
-  transition: color 0.2s;
+  position: relative; border: 0; background: transparent; border-radius: calc(var(--r-control) - 1px); cursor: pointer;
+  font-size: 0.882rem; font-weight: 600; color: rgba(235, 235, 245, 0.72);
+  transition: color 0.15s;
 }
+html[data-size="regular"] .segment { font-size: 12px; font-weight: 500; }
 .segment[aria-pressed="true"] { color: #fff; }
-/* Empat segmen atau lebih (grup alat Fase 2D): huruf sedikit lebih kecil, tanpa tumpang tindih. */
 .segmented.dense .segment { font-size: 0.8rem; letter-spacing: -0.01em; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .segment-pill {
-  position: absolute; inset: 0; border-radius: 9999px; background: rgba(255, 255, 255, 0.22);
+  position: absolute; inset: 0; border-radius: calc(var(--r-control) - 1px);
+  background: rgba(255, 255, 255, 0.2); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.12);
 }
 .segment-label { position: relative; }
 
-/* Switch (iOS, hijau sistem) */
+/* Tab kelompok (ikon + label, pola ARIA tabs), seperti tab inspector Final Cut. */
+.tabs {
+  position: relative; display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column;
+  padding: 3px; gap: 2px; border-radius: var(--r-tabs); background: var(--fill); box-sizing: border-box;
+}
+.tab {
+  position: relative; min-height: 50px; border: 0; background: transparent; border-radius: var(--r-tab); cursor: pointer; padding: 5px 0 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: rgba(235, 235, 245, 0.72); transition: color 0.15s;
+}
+.tab:hover { color: #fff; }
+.tab[aria-selected="true"] { color: #fff; }
+.tab-pill {
+  position: absolute; inset: 0; border-radius: var(--r-tab);
+  background: rgba(255, 255, 255, 0.18); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+}
+.tab-icon { position: relative; display: inline-flex; }
+.tab-label { position: relative; font-size: 0.706rem; line-height: 1.1; font-weight: 600; white-space: nowrap; }
+.tab-edited {
+  position: absolute; top: -2px; right: -6px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 0 1.5px var(--bg-elevated);
+}
+/* Regular: strip tab tanpa wadah, pilihan aktif = ikon biru + garis bawah. */
+.tabs.small { background: transparent; padding: 0; gap: 0; border-radius: 0; }
+.tabs.small .tab { min-height: 44px; border-radius: 0; gap: 3px; padding: 6px 0 5px; }
+.tabs.small .tab[aria-selected="true"] { color: var(--blue-text); }
+.tabs.small .tab-pill { inset: auto 10px 0 10px; height: 2px; border-radius: 1px; background: var(--blue); box-shadow: none; }
+.tabs.small .tab-label { font-size: 11px; font-weight: 500; }
+
+/* Switch: aksen biru (kontrol macOS/iOS pro, satu warna aksen). */
 .switch {
   position: relative; width: 51px; height: 31px; flex-shrink: 0;
   border-radius: 9999px; border: 0; padding: 0; cursor: pointer;
-  background: var(--fill-strong); transition: background-color 0.25s;
+  background: var(--fill-strong); transition: background-color 0.2s;
 }
-.switch[aria-checked="true"] { background: var(--green); }
+.switch[aria-checked="true"] { background: var(--blue-fill); }
 .switch:disabled { opacity: 0.4; cursor: default; }
 .switch-knob {
   position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 9999px;
-  background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  background: #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
+html[data-size="regular"] .switch { width: 32px; height: 18px; }
+html[data-size="regular"] .switch-knob { top: 1px; left: 1px; width: 16px; height: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 
 /* Slider */
 .slider {
@@ -190,7 +305,7 @@ button {
   outline: none; -webkit-user-select: none; user-select: none;
 }
 .slider[aria-disabled="true"] { opacity: 0.4; cursor: default; }
-.slider:focus-visible .slider-track { outline: 3px solid rgba(0, 145, 255, 0.7); outline-offset: 6px; }
+.slider:focus-visible .slider-track { outline: 2px solid rgba(0, 145, 255, 0.6); outline-offset: 6px; }
 .slider-track {
   position: absolute; left: 14px; right: 14px; top: 20px; height: 4px; border-radius: 9999px;
   background: var(--fill-strong);
@@ -205,109 +320,213 @@ button {
   background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
   pointer-events: none;
 }
+html[data-size="regular"] .slider { height: 22px; }
+html[data-size="regular"] .slider-track { left: 8px; right: 8px; top: 10px; height: 3px; }
+html[data-size="regular"] .slider-zero { top: -4px; height: 11px; width: 1px; margin-left: -0.5px; }
+html[data-size="regular"] .slider-thumb { top: -6.5px; width: 16px; height: 16px; margin-left: -8px; }
 
 /* Stepper */
 .stepper { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; }
 .stepper-value { min-width: 110px; text-align: center; }
+html[data-size="regular"] .stepper { gap: 10px; justify-content: space-between; }
+html[data-size="regular"] .stepper .icon-btn { --icon-btn: 24px; }
+html[data-size="regular"] .stepper-value { min-width: 0; flex-grow: 1; }
 
-/* Pilihan kapsul yang bisa digulir */
+/* Gulir */
 .scroll-x { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .scroll-x::-webkit-scrollbar { display: none; }
-.scroll-y { overflow-y: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.scroll-y::-webkit-scrollbar { display: none; }
-.options { display: flex; gap: 8px; width: 100%; }
+.scroll-y { overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.scroll-y::-webkit-scrollbar { width: 8px; }
+.scroll-y::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+.scroll-y::-webkit-scrollbar-track { background: transparent; }
+/* Isi daftar bergulir tidak boleh menyusut (daftar format ekspor terpotong di sheet medium). */
+.scroll-y > * { flex-shrink: 0; }
+
+/* Pilihan kapsul yang bisa digulir */
+.options { display: flex; gap: 6px; width: 100%; }
 .option {
-  height: 44px; padding: 0 16px; flex-shrink: 0; border: 0; border-radius: 9999px; cursor: pointer;
+  height: 36px; padding: 0 14px; flex-shrink: 0; border: 0; border-radius: var(--r-control); cursor: pointer;
   background: var(--fill-soft); font-size: 0.882rem; font-weight: 500; white-space: nowrap;
-  transition: background-color 0.2s, color 0.2s;
+  transition: background-color 0.15s, color 0.15s;
 }
-.option[aria-pressed="true"] { background: #fff; color: #000; }
+.option:hover { background: rgba(255, 255, 255, 0.12); }
+.option[aria-pressed="true"] { background: var(--blue-fill); color: #fff; }
+html[data-size="regular"] .options { flex-wrap: wrap; overflow: visible; gap: 4px; }
+html[data-size="regular"] .option { height: 22px; padding: 0 8px; font-size: 11px; }
 
 /* Daftar grouped inset */
 .list-section { display: flex; flex-direction: column; gap: 6px; }
 .list-header {
-  margin: 0; padding: 0 16px; font-size: 0.765rem; font-weight: 400; text-transform: uppercase;
-  letter-spacing: 0.02em; color: var(--label-2);
+  margin: 0; padding: 0 12px; font-size: 0.765rem; font-weight: 600;
+  color: var(--label-2);
 }
-.list-footer { margin: 0; padding: 0 16px; color: var(--label-2); }
+html[data-size="regular"] .list-header { font-size: 11px; padding: 0 8px; }
+.list-footer { margin: 0; padding: 0 12px; color: var(--label-2); }
+html[data-size="regular"] .list-footer { padding: 0 8px; }
 .list {
-  border-radius: 26px; background: var(--bg-elevated-2); overflow: hidden;
+  border-radius: var(--r-list); background: var(--bg-elevated-2); overflow: hidden;
   display: flex; flex-direction: column;
 }
-.list.on-bg { background: var(--bg-elevated); }
 .row {
-  min-height: 52px; border: 0; background: transparent; padding: 0 0 0 16px; margin: 0;
+  min-height: var(--h-row); border: 0; background: transparent; padding: 0 0 0 14px; margin: 0;
   display: flex; align-items: stretch; text-align: left; cursor: pointer; width: 100%;
-  transition: background-color 0.15s;
+  transition: background-color 0.12s;
 }
+.row:hover:not(:disabled) { background: var(--hover); }
 .row:active { background: rgba(255, 255, 255, 0.08); }
 .row:disabled { cursor: default; }
 .row:disabled:active { background: transparent; }
 .row-body {
-  flex-grow: 1; display: flex; align-items: center; gap: 12px; padding-right: 16px;
+  flex-grow: 1; display: flex; align-items: center; gap: 12px; padding-right: 14px;
   border-top: 1px solid var(--separator); min-width: 0;
 }
 .row:first-child .row-body, .row-static:first-child .row-body { border-top: 0; }
-.row-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 9px 0; }
-.row-static { min-height: 52px; padding-left: 16px; display: flex; align-items: stretch; }
+.row-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding: 8px 0; }
+.row-static { min-height: var(--h-row); padding-left: 14px; display: flex; align-items: stretch; }
+html[data-size="regular"] .row, html[data-size="regular"] .row-static { padding-left: 10px; }
+html[data-size="regular"] .row-body { padding-right: 10px; gap: 8px; }
+html[data-size="regular"] .row-text { padding: 5px 0; gap: 1px; }
+
+/* Source list (sidebar): baris rapat tanpa kartu, pilihan = isian biru. */
+.source-list { display: flex; flex-direction: column; gap: 1px; }
+.source-row {
+  min-height: 26px; border: 0; border-radius: 5px; background: transparent; margin: 0; padding: 3px 8px;
+  display: flex; align-items: center; gap: 8px; text-align: left; cursor: pointer; width: 100%;
+  color: var(--label); transition: background-color 0.1s;
+}
+.source-row:hover:not(:disabled) { background: var(--hover); }
+.source-row[aria-checked="true"] { background: var(--blue-fill); }
+.source-row[aria-checked="true"] .secondary { color: rgba(255, 255, 255, 0.78); }
+.source-row:disabled { cursor: default; opacity: 0.45; }
+.source-row .name { flex-grow: 1; min-width: 0; font-size: 13px; line-height: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-row .meta { flex-shrink: 0; font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+.source-header { margin: 10px 0 2px; padding: 0 8px; font-size: 11px; font-weight: 600; color: var(--label-2); }
+
+/* Kolom pencarian */
+.search-field {
+  height: 36px; border-radius: var(--r-field); background: var(--fill); display: flex; align-items: center; gap: 8px; padding: 0 12px;
+}
+html[data-size="regular"] .search-field { height: 24px; padding: 0 8px; gap: 5px; }
+.search-field input { flex-grow: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 1rem; }
+html[data-size="regular"] .search-field input { font-size: 12px; }
+
+/* Callout informasi */
+.callout { border-radius: var(--r-list); padding: 10px 12px; display: flex; gap: 10px; }
+.callout.warn { background: rgba(255, 146, 48, 0.13); box-shadow: inset 0 0 0 1px rgba(255, 146, 48, 0.22); }
 
 /* Lembar (sheet) */
-.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 40; }
+.backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 40; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
   margin: 0 auto; max-width: 640px;
-  background: var(--bg-elevated); border: 1px solid rgba(255, 255, 255, 0.1); border-bottom: 0;
-  border-radius: 38px 38px 0 0;
+  background: var(--bg-elevated); border: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 0;
+  border-radius: var(--r-panel) var(--r-panel) 0 0;
   display: flex; flex-direction: column; box-sizing: border-box;
   touch-action: none;
 }
 .sheet.centered {
-  top: 50%; bottom: auto; left: 50%; right: auto; width: min(560px, calc(100vw - 48px));
-  border-radius: 26px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  top: 50%; bottom: auto; left: 50%; right: auto; width: min(520px, calc(100vw - 48px));
+  border-radius: var(--r-dialog); border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-dialog);
   padding-bottom: 0; touch-action: auto;
 }
 .sheet-grabber-hit {
-  align-self: center; width: 80px; height: 18px; border: 0; background: transparent; padding: 5px 0 0;
+  align-self: center; width: 80px; height: 16px; border: 0; background: transparent; padding: 5px 0 0;
   cursor: grab; display: flex; justify-content: center;
 }
 .sheet-grabber { width: 36px; height: 5px; border-radius: 9999px; background: rgba(235, 235, 245, 0.3); }
 .sheet-bar {
-  height: 56px; padding: 0 16px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
+  height: 52px; padding: 0 12px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center; flex-shrink: 0;
 }
+.sheet.centered .sheet-bar { height: 44px; padding: 0 10px; grid-template-columns: 30px minmax(0, 1fr) 30px; border-bottom: 1px solid var(--hairline); margin-bottom: 10px; }
 .sheet-title { margin: 0; text-align: center; }
 .sheet-content { flex-grow: 1; min-height: 0; touch-action: pan-y; padding-bottom: var(--safe-bottom); }
 .sheet.centered .sheet-content { padding-bottom: 0; }
+/* Tombol aksi dialog desktop: rata kanan, lebar menurut isi (macOS). */
+.sheet-actions { padding: 12px 16px 16px; flex-shrink: 0; display: flex; gap: 10px; }
+.sheet.centered .sheet-actions { justify-content: flex-end; border-top: 1px solid var(--hairline); padding: 12px 16px; margin-top: 8px; }
+.sheet.centered .sheet-actions .capsule.large { width: auto; flex: 0 0 auto !important; min-width: 96px; }
+/* Dialog desktop: Cancel di footer; sheet HP: tombol tutup di bar. */
+html:not([data-size="regular"]) .dialog-only { display: none; }
 
-/* Popover / action sheet dan alert */
+/* Popover / menu dan alert */
 .popover {
-  position: fixed; z-index: 51; width: 270px; border-radius: 26px; overflow: hidden;
-  background: rgba(30, 30, 32, 0.92); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
-  border: 1px solid var(--glass-border); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  position: fixed; z-index: 51; width: 260px; border-radius: var(--r-menu); overflow: hidden;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-menu);
   display: flex; flex-direction: column;
 }
 .popover-action {
-  min-height: 52px; border: 0; border-top: 1px solid var(--separator); background: transparent;
+  min-height: 46px; border: 0; border-top: 1px solid var(--separator); background: transparent;
   font-size: 1rem; cursor: pointer; color: var(--blue-text);
 }
+.popover-action:hover { background: var(--hover); }
 .popover-action.destructive { color: var(--red); font-weight: 600; }
+.popover-action[data-menu] {
+  display: flex; align-items: center; gap: 12px; padding: 0 14px; text-align: left; color: var(--label);
+}
+.popover-action[data-menu].destructive { color: var(--red); font-weight: 400; }
 .popover-action:active { background: rgba(255, 255, 255, 0.1); }
+html[data-size="regular"] .popover-action { min-height: 30px; font-size: 13px; }
 .scrim { position: fixed; inset: 0; z-index: 50; }
 .alert {
   position: fixed; z-index: 61; left: 50%; top: 50%; width: min(300px, calc(100vw - 48px));
-  box-sizing: border-box; border-radius: 34px; padding: 22px 18px 18px;
-  background: rgba(30, 30, 32, 0.94); -webkit-backdrop-filter: var(--glass-filter); backdrop-filter: var(--glass-filter);
-  border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 16px; text-align: center;
+  box-sizing: border-box; border-radius: var(--r-dialog); padding: 20px 18px 16px;
+  background: var(--bg-elevated-2);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-dialog);
+  display: flex; flex-direction: column; gap: 16px; text-align: center;
 }
 .alert-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); }
 
 /* Toast */
 .toast {
   position: fixed; z-index: 70; left: 50%; top: calc(max(var(--safe-top), 12px) + 60px);
-  background: rgba(28, 28, 30, 0.92) !important;
-  height: 44px; padding: 0 18px; border-radius: 9999px; display: flex; align-items: center; gap: 8px;
-  white-space: nowrap;
+  background: rgba(36, 36, 38, 0.94) !important;
+  height: 40px; padding: 0 14px; border-radius: var(--r-menu); display: flex; align-items: center; gap: 8px;
+  box-shadow: var(--shadow-menu);
+  white-space: nowrap; max-width: calc(100vw - 32px); box-sizing: border-box; overflow: hidden; text-overflow: ellipsis;
 }
+html[data-size="regular"] .toast { top: 64px; height: 32px; }
+
+/* Jendela desktop: toolbar terpadu, sidebar, inspector, status bar. */
+.window-toolbar {
+  height: 52px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 16px; box-sizing: border-box;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--hairline);
+}
+.toolbar-sep { width: 1px; height: 18px; background: var(--hairline); margin: 0 4px; flex-shrink: 0; }
+.path-control { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.path-segment {
+  height: 24px; border: 0; background: var(--fill-soft); border-radius: 5px; padding: 0 7px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background-color 0.1s;
+}
+.path-segment:hover:not(:disabled) { background: var(--hover); }
+.path-segment.secondary { color: var(--label-2); font-weight: 400; }
+.path-chevron { color: var(--label-3); display: inline-flex; flex-shrink: 0; }
+.status-bar {
+  height: 28px; display: flex; align-items: center; gap: 12px; padding: 0 12px; box-sizing: border-box;
+  border-top: 1px solid var(--hairline); background: var(--bg-elevated); font-size: 11px; color: var(--label-2);
+  white-space: nowrap; overflow: hidden;
+}
+.pane-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; height: 36px; flex-shrink: 0;
+}
+.inspector-row { padding: 9px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.inspector-row + .inspector-row { border-top: 1px solid var(--hairline); }
+/* Trek slider sejajar dengan label baris (trek punya inset 8 px untuk thumb). */
+.inspector-row .slider { margin: 0 -8px; width: calc(100% + 16px); }
+.step-btn { --icon-btn: 22px; border-radius: 5px; }
+.popup { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
+.popup select {
+  appearance: none; -webkit-appearance: none; height: 22px; border: 0; border-radius: 5px; cursor: pointer;
+  background: var(--fill); color: var(--label); font-size: 12px; padding: 0 22px 0 8px; max-width: 170px;
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+}
+.popup select:hover { background: var(--fill-strong); }
+.popup option { background: var(--bg-elevated-2); color: var(--label); }
+.popup svg { position: absolute; right: 6px; pointer-events: none; color: var(--label-2); }
+.inspector-row .note { margin: 0; font-size: 11px; line-height: 14px; color: var(--label-2); }
 
 /* Spinner (indeterminate) */
 .spinner { animation: spin 0.9s linear infinite; }

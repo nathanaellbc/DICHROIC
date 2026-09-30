@@ -25,6 +25,7 @@ import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
 import { depthProfile, firstDownloadBytes } from '../../depth/model';
+import type { DepthMap } from '../../host/lens';
 import type { DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
 import type { DepthState } from './depthController';
@@ -51,10 +52,26 @@ export interface EngineState {
   /** Render sedang berjalan (pratinjau masih menampilkan frame sebelumnya). */
   rendering: boolean;
   error?: AppError;
+  /** Alasan teknis dari `acquireDevice` saat `engine === 'unsupported'`. */
+  unsupportedReason?: string;
   /** `false` bila backend meruntuhkan aritmetika df64 (halation/DIR bisa meleset ~1e-3). */
   precisionOk: boolean;
   /** Peta kedalaman lens blur untuk foto terbuka. */
   depth: DepthState;
+  /** Langkah undo/redo yang tersedia untuk foto terbuka. */
+  history: { canUndo: boolean; canRedo: boolean };
+}
+
+/** Perubahan beruntun yang lebih rapat dari ini (satu seretan slider) jadi satu langkah undo. */
+const HISTORY_GAP_MS = 600;
+const HISTORY_LIMIT = 100;
+
+function diffParams(from: RenderParams, to: RenderParams): Partial<RenderParams> {
+  const patch: Partial<RenderParams> = {};
+  for (const key of Object.keys(to) as Array<keyof RenderParams>) {
+    if (from[key] !== to[key]) (patch as Record<string, unknown>)[key] = to[key];
+  }
+  return patch;
 }
 
 /** Profil cadangan bila deteksi perangkat gagal: CPU, masukan kecil, hemat memori. */
@@ -127,8 +144,12 @@ export class Engine {
     rendering: false,
     precisionOk: true,
     depth: { status: 'idle' },
+    history: { canUndo: false, canRedo: false },
   };
   readonly #listeners = new Set<Listener>();
+  #past: RenderParams[] = [];
+  #future: RenderParams[] = [];
+  #lastEditAt = 0;
   #client: SessionClient | undefined;
   #ready: Promise<void> | undefined;
   #openToken = 0;
@@ -145,6 +166,7 @@ export class Engine {
   #dirty = false;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
+  #depthMap: DepthMap | undefined;
   readonly #depth = new DepthController({
     estimate: async (guide, allowDownload, onProgress) => {
       const token = this.#photoGeneration;
@@ -154,6 +176,8 @@ export class Engine {
       return this.#estimator.estimate(guide, { allowDownload, profile, onProgress });
     },
     deliver: async (map) => {
+      // Salinan untuk cek fokus di thread UI: peta aslinya DITRANSFER ke worker.
+      this.#depthMap = map ? { width: map.width, height: map.height, data: map.data.slice() } : undefined;
       await this.#client!.setDepthMap(map, this.#photoId);
       this.requestRender();
     },
@@ -224,7 +248,11 @@ export class Engine {
         this.#client = undefined;
         client.shutdown(error instanceof Error ? error : new Error(String(error)), false);
         const unsupported = error instanceof Error && error.name === 'WebGPUUnavailableError';
-        this.#set({ engine: unsupported ? 'unsupported' : 'failed', error: unsupported ? undefined : describeError(error) });
+        this.#set({
+          engine: unsupported ? 'unsupported' : 'failed',
+          error: unsupported ? undefined : describeError(error),
+          unsupportedReason: unsupported ? (error as Error).message : undefined,
+        });
         throw error;
       });
     this.#ready.catch(() => {});
@@ -272,6 +300,8 @@ export class Engine {
       this.#imageSize = { width: prepared.width, height: prepared.height };
       this.#depth.reset(guide);
       this.#paramsRevision += 1;
+      this.#depthMap = undefined;
+      this.#clearHistory();
       this.#set({
         params,
         defaults: { ...BASELINE_RENDER_PARAMS, ...input },
@@ -300,6 +330,8 @@ export class Engine {
 
   closePhoto(): void {
     this.#openToken += 1;
+    this.#depthMap = undefined;
+    this.#clearHistory();
     this.#photoGeneration += 1;
     this.#pendingPatches.clear();
     this.#refreshParams();
@@ -317,6 +349,33 @@ export class Engine {
     this.#set({ engine: 'paused', phase: 'idle', rendering: false, frame: undefined, original: undefined, fileName: undefined, opening: undefined });
   }
 
+  #clearHistory(): void {
+    this.#past = [];
+    this.#future = [];
+    this.#lastEditAt = 0;
+    this.#set({ history: { canUndo: false, canRedo: false } });
+  }
+
+  #historyState(): EngineState['history'] {
+    return { canUndo: this.#past.length > 0, canRedo: this.#future.length > 0 };
+  }
+
+  undo(): void {
+    const target = this.#past.pop();
+    if (!target) return;
+    this.#future.push(this.#state.params);
+    this.#lastEditAt = 0;
+    this.setParams(diffParams(this.#state.params, target), false);
+  }
+
+  redo(): void {
+    const target = this.#future.pop();
+    if (!target) return;
+    this.#past.push(this.#state.params);
+    this.#lastEditAt = 0;
+    this.setParams(diffParams(this.#state.params, target), false);
+  }
+
   dismissError(): void {
     this.#set({ error: undefined });
   }
@@ -326,14 +385,26 @@ export class Engine {
     return (Object.keys(params) as Array<keyof RenderParams>).some((k) => params[k] !== defaults[k]);
   }
 
-  setParams(patch: Partial<RenderParams>): void {
+  /** `record: false` untuk undo/redo sendiri (tidak menambah langkah). */
+  setParams(patch: Partial<RenderParams>, record = true): void {
     const client = this.#client;
     if (!client) return;
     const previous = this.#state.params;
+    const changed = (Object.keys(patch) as Array<keyof RenderParams>).some((k) => previous[k] !== patch[k]);
+    if (record && changed) {
+      const now = performance.now();
+      if (this.#past.length === 0 || this.#future.length > 0 || now - this.#lastEditAt > HISTORY_GAP_MS) {
+        this.#past.push(previous);
+        if (this.#past.length > HISTORY_LIMIT) this.#past.shift();
+      }
+      this.#future = [];
+      this.#lastEditAt = now;
+    }
     const token = this.#photoGeneration;
     const revision = ++this.#paramsRevision;
     this.#pendingPatches.set(revision, patch);
     this.#set({ params: { ...previous, ...patch } });
+    this.#set({ history: this.#historyState() });
     client.setParams(patch).then(
       () => {
         if (token !== this.#photoGeneration) return;
@@ -431,6 +502,11 @@ export class Engine {
     }
   }
 
+  /** Peta kedalaman foto terbuka (salinan UI, untuk cek fokus), bila sudah ada. */
+  get depthMap(): DepthMap | undefined {
+    return this.#depthMap;
+  }
+
   /** Ukuran gambar asli yang terbuka. */
   get imageSize(): { width: number; height: number } | undefined {
     return this.#imageSize;
@@ -477,6 +553,11 @@ export class Engine {
       this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
     }
     return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: EXPORT_MIME[format] });
+  }
+
+  /** Lembar Ekspor ditutup: worker melepas render penuh dan scratch GPU-nya. */
+  releaseExport(): void {
+    this.#client?.releaseExport().catch(() => {});
   }
 
   async exportCube(size: number): Promise<File> {

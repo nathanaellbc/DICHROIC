@@ -53,7 +53,10 @@ export function serveSession(
           const method = target[request.method] as (...args: unknown[]) => unknown;
           result = await method.apply(target, request.args);
         }
-        const copy = cloneTypedArrays(result);
+        // Berkas ekspor tidak disimpan Session, jadi langsung DITRANSFER tanpa
+        // salinan (dulu satu salinan seukuran berkas per encode). Hasil lain
+        // bisa berupa array yang di-cache Session: disalin dulu.
+        const copy = request.method === 'exportImage' ? result : cloneTypedArrays(result);
         reply({ id: request.id, ok: true, result: copy }, transferablesOf(copy));
       } catch (e) {
         reply({ id: request.id, ok: false, error: serializeError(e) });

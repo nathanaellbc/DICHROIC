@@ -21,12 +21,22 @@ export const DOF_TILE = 16;
 /** Sisi panjang grid gather tidak pernah melebihi ini: blur itu frekuensi rendah. */
 export const DOF_MAX_EDGE = 1536;
 const MAX_REACH_TILES = 8;
-const MAX_MIPS = 6;
 const UNIFORM_BYTES = 80;
+
+/**
+ * Skala grid gather: pangkat dua, paling besar setengah resolusi, dan sisi
+ * panjang grid tidak pernah melebihi `DOF_MAX_EDGE` -- sama dengan defocus
+ * EMULSION (`2^-k`, `k = max(1, ceil(log2(sisi / 1536)))`), jadi pratinjau dan
+ * ekspor besar mengumpulkan di grid berskala sama dan tampilan blurnya sama.
+ */
+export function lensGridScale(width: number, height: number): number {
+  const k = Math.max(1, Math.ceil(Math.log2(Math.max(width, height, 1) / DOF_MAX_EDGE)));
+  return 2 ** -k;
+}
 
 /** Ukuran grid gather untuk render `width x height`. */
 export function lensGridSize(width: number, height: number): { gw: number; gh: number } {
-  const scale = Math.min(0.5, DOF_MAX_EDGE / Math.max(width, height));
+  const scale = lensGridScale(width, height);
   return { gw: Math.max(1, Math.round(width * scale)), gh: Math.max(1, Math.round(height * scale)) };
 }
 
@@ -59,6 +69,13 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     addressModeV: 'clamp-to-edge',
   });
   let targets: Targets | undefined;
+  // Satu uniform per tahap, ditulis ulang tiap encode (dulu satu buffer baru
+  // per render yang tidak pernah dihancurkan).
+  const uniform = device.createBuffer({
+    label: 'lensBlur:uniform',
+    size: UNIFORM_BYTES,
+    usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
+  });
   let depthCache: { map: DepthMap; buffer: GPUBuffer } | undefined;
 
   function targetsFor(gw: number, gh: number): Targets {
@@ -67,7 +84,9 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     targets?.grid.destroy();
     targets?.far.destroy();
     targets?.near.destroy();
-    const mips = Math.min(MAX_MIPS, Math.floor(Math.log2(Math.max(gw, gh))) + 1);
+    // Rantai mip penuh (seperti `generateMipmap` EMULSION): sampel gather yang
+    // jarang membaca level selebar jaraknya, sampai cakram terbesar.
+    const mips = Math.floor(Math.log2(Math.max(gw, gh))) + 1;
     const usage = gpuTextureUsage.TEXTURE_BINDING | gpuTextureUsage.STORAGE_BINDING;
     const texture = (label: string, mipLevelCount = 1) =>
       device.createTexture({ label: `lensBlur:${label}`, size: [gw, gh], format: 'rgba16float', usage, mipLevelCount });
@@ -109,13 +128,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
       const maxRadiusGrid = lens.maxCocPx * 0.5 * gridScale;
       const reach = Math.min(MAX_REACH_TILES, Math.ceil(maxRadiusGrid / DOF_TILE));
 
-      const uniform = device.createBuffer({
-        label: 'lensBlur:uniform',
-        size: UNIFORM_BYTES,
-        usage: gpuBufferUsage.UNIFORM,
-        mappedAtCreation: true,
-      });
-      const range = uniform.getMappedRange();
+      const range = new ArrayBuffer(UNIFORM_BYTES);
       const u = new Uint32Array(range);
       const f = new Float32Array(range);
       u.set([width, height, gw, gh, lens.depth.width, lens.depth.height, tilesX, tilesY], 0);
@@ -123,7 +136,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
       const diag = Math.hypot(width, height);
       f.set([width / diag, height / diag], 16);
       u.set([lens.blades, reach], 18);
-      uniform.unmap();
+      device.queue.writeBuffer(uniform, 0, range);
 
       const depth = depthBuffer(lens.depth);
       const tileBytes = Math.max(tilesX * tilesY * 8, 16);

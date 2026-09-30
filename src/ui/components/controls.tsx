@@ -9,6 +9,7 @@ import type { KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from
 import { pressScale, snappy } from '../motion';
 import { snap } from '../model/tools';
 import { Icon } from './Icon';
+import type { UiIconName } from './Icon';
 
 // ---------------------------------------------------------------------------
 
@@ -44,6 +45,92 @@ export function Segmented<V extends string>({
       })}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+
+export interface TabItem<V extends string> {
+  value: V;
+  label: string;
+  icon: UiIconName;
+  /** Ada yang diubah di kelompok ini: titik biru, dan ", edited" untuk VoiceOver. */
+  edited?: boolean;
+}
+
+/**
+ * Pemilih kelompok sebagai tab (ikon di atas label, seperti tab bar): enam
+ * label penuh muat di panel HP maupun inspector, tanpa terpotong. Panah
+ * kiri/kanan, Home dan End berpindah tab (pola ARIA tabs).
+ */
+export function GroupTabs<V extends string>({
+  items,
+  value,
+  onChange,
+  label,
+  idPrefix,
+  small,
+}: {
+  items: readonly TabItem<V>[];
+  value: V;
+  onChange: (value: V) => void;
+  label: string;
+  /** Awalan id tab; panel yang dikendalikan ber-id `${idPrefix}-panel`. */
+  idPrefix: string;
+  small?: boolean;
+}) {
+  const pillId = useId();
+  const refs = useRef(new Map<V, HTMLButtonElement>());
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const index = items.findIndex((item) => item.value === value);
+    const moves: Record<string, number> = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: items.length - 1 };
+    if (!(e.key in moves)) return;
+    e.preventDefault();
+    const next = items[(moves[e.key]! + items.length) % items.length]!;
+    onChange(next.value);
+    refs.current.get(next.value)?.focus();
+  };
+  return (
+    <div role="tablist" aria-label={label} className={`tabs${small ? ' small' : ''}`} onKeyDown={onKeyDown}>
+      {items.map((item) => {
+        const selected = item.value === value;
+        return (
+          <button
+            key={item.value}
+            ref={(el) => {
+              if (el) refs.current.set(item.value, el);
+              else refs.current.delete(item.value);
+            }}
+            type="button"
+            role="tab"
+            id={`${idPrefix}-tab-${item.value}`}
+            aria-selected={selected}
+            aria-controls={`${idPrefix}-panel`}
+            tabIndex={selected ? 0 : -1}
+            className="tab"
+            onClick={() => onChange(item.value)}
+          >
+            {selected && <motion.span layoutId={pillId} className="tab-pill" transition={snappy} />}
+            <span className="tab-icon">
+              <Icon name={item.icon} size={small ? 17 : 19} />
+              {item.edited && <span className="tab-edited" />}
+            </span>
+            <span className="tab-label">{item.label}</span>
+            {item.edited && <span className="sr-only">, edited</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Gulir wadah horizontal sehingga `el` di tengah -- tanpa menggulir wadah vertikal di atasnya (scrollIntoView). */
+export function centerInScroller(el: HTMLElement): void {
+  const scroller = el.parentElement;
+  if (!scroller) return;
+  const box = scroller.getBoundingClientRect();
+  const rect = el.getBoundingClientRect();
+  const left = scroller.scrollLeft + (rect.left - box.left) - (scroller.clientWidth - rect.width) / 2;
+  scroller.scrollTo({ left, behavior: 'smooth' });
 }
 
 // ---------------------------------------------------------------------------
@@ -249,7 +336,8 @@ export function OptionRow({
 }) {
   const refs = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
-    refs.current.get(value)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    const el = refs.current.get(value);
+    if (el) centerInScroller(el);
   }, [value]);
   return (
     <div role="group" aria-label={label} className="options scroll-x">
@@ -269,6 +357,35 @@ export function OptionRow({
         </button>
       ))}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Pop-up button macOS (select asli, jadi keyboard dan VoiceOver bawaan):
+ * pilihan pendek di inspector layar lebar, rata kanan di baris label.
+ */
+export function PopUp({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: readonly { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+}) {
+  return (
+    <span className="popup">
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <Icon name="upDown" size={11} strokeWidth={2.4} />
+    </span>
   );
 }
 

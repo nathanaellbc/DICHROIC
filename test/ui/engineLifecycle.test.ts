@@ -43,6 +43,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('photo lifecycle', () => {
+  it('preserves undo and redo while confirming worker parameter updates', async () => {
+    const engine = new Engine(); await engine.openFile(file('first.png'));
+    engine.setParams({ filmExposureEv: 1 }); await flush();
+    expect(engine.getState().history.canUndo).toBe(true);
+    engine.undo(); await flush();
+    expect(engine.getState().params.filmExposureEv).toBe(BASELINE_RENDER_PARAMS.filmExposureEv);
+    expect(engine.getState().history.canRedo).toBe(true);
+    engine.redo(); await flush();
+    expect(engine.getState().params.filmExposureEv).toBe(1);
+  });
+
   it.each(['renderExport', 'exportImage', 'exportCube'] as const)('rejects %s completed after the photo closes', async (method) => {
     const engine = new Engine(); await engine.openFile(file('first.png'));
     const pending = deferred<unknown>(); client[method].mockReturnValueOnce(pending.promise);

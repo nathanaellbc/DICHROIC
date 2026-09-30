@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { engine } from './engine/engine';
 import { startPwa } from './pwa';
+// Cadangan SF di luar perangkat Apple (Windows, Android): Inter, self-host dan ikut precache PWA.
+import '@fontsource-variable/inter/wght.css';
 import './styles.css';
 
 startPwa();

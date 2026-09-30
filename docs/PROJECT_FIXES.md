@@ -42,7 +42,7 @@ after close has cold worker initialization cost in exchange for releasing
 the retained heap. Full-resolution 24/48-megapixel processing and peak
 memory on physical mobile devices have not been certified.
 
-## Verification
+## Verification before integrating remote main
 
 | Check | Result |
 |---|---|
@@ -80,3 +80,28 @@ an emulated iPhone user agent, which does not validate physical Safari or
 iPhone hardware. The new hosted CI workflow has not been executed remotely.
 Physical iPhone, other browser engines, native/GPU peak-memory measurements
 and a full WARP parity run remain release validation limits.
+
+## Integration with remote main
+
+Before publishing, six newer commits through `a7d661f` were fetched and
+merged. Their Mac/iPhone redesign, photo zoom/pan, undo/redo, export cleanup,
+shared GPU scratch pool and lens improvements were retained. Conflict
+resolution combines those features with the transaction, color, allocation
+and worker-lifetime fixes above. Export-dialog cleanup now waits for an
+active render to finish before releasing shared scratch; stale full results
+cannot refill its cache. Opening dialogs also block editor shortcuts.
+
+The integrated tree passed type checking, lint, production build and audit
+(zero advisories). The build precaches 32 entries / 10,253.34 KiB including
+the new font. Post-merge validation passed 42 UI/RPC/resource tests, 42 native
+graph/Session/lens tests, and 11 grain/scanner-glare/diffusion parity tests.
+The new undo/redo and deferred shared-scratch cleanup have regression tests.
+The build emits the existing browser-externalized Node import diagnostic and
+a size notice for the approximately 502 kB main JavaScript bundle.
+
+A fresh-profile browser run on the integrated UI also passed startup, photo
+preparation, failed replacement/focus containment, consent before binary
+downloads, actual GPU depth inference, worker retirement and photo reopening,
+offline PWA reload/rendering, and cached depth inference offline. No browser
+failures were recorded; four native provider-assignment warnings were recorded
+separately as described above.

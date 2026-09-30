@@ -29,6 +29,7 @@ export interface SessionLike {
   renderExport(longEdge?: number): Promise<ExportRenderInfo>;
   exportFormats(): Promise<ExportFormat[]>;
   exportImage(format: ExportFormat, options?: ExportOptions): Promise<Uint8Array>;
+  releaseExport(): void;
   dispose(): void;
 }
 

@@ -79,7 +79,9 @@ try {
 
   await mkdir('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/browser-smoke.png' });
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  const close = page.getByRole('button', { name: /^Close(?: Photo)?$/ });
+  if (!await close.isVisible()) await page.getByRole('button', { name: 'More', exact: true }).click();
+  await close.click();
   const discard = page.getByRole('button', { name: 'Discard Edits', exact: true });
   if (await discard.isVisible()) await discard.click();
   await page.locator('canvas').first().waitFor({ state: 'hidden' });

@@ -5,6 +5,7 @@ import type { EngineDevice } from '../src/engine/device';
 
 const resources = vi.hoisted(() => ({
   graphs: [] as Array<{ disposed: boolean }>,
+  scratch: [] as Array<{ release: Mock }>,
   arenas: [] as Array<Record<'static' | 'stock' | 'dynamic' | 'frameState', { destroy: Mock }>>,
   barrier: undefined as Promise<void> | undefined,
 }));
@@ -23,7 +24,10 @@ vi.mock('../src/engine/graph', () => ({ RenderGraph: class {
   addStage() {}
   async run(input: Float32Array) { await resources.barrier; return input.slice(); }
   dispose() { this.disposed = true; }
-} }));
+}, ScratchPool: class {
+  release = vi.fn();
+  constructor() { resources.scratch.push(this); }
+}, returnFreedMemory: () => {} }));
 
 const image = () => ({ width: 2, height: 2, rgba: new Float32Array(16).fill(0.18),
   suggestedColorSpace: 'sRGB', encoding: 'encoded' as const, source: { format: 'png' as const, bitDepth: 8 } });
@@ -31,9 +35,22 @@ const create = () => Session.create({ assetsBaseUrl: 'public/data', engine: {
   device: { lost: new Promise(() => {}) }, maxStorageBufferBindingSize: 1024 * 1024,
 } as unknown as EngineDevice });
 
-beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.barrier = undefined; });
+beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.scratch.length = 0; resources.barrier = undefined; });
 
 describe('Session resource lifetime', () => {
+  it('defers export cleanup until an active render releases shared scratch', async () => {
+    const session = await create(); session.open(image());
+    let release!: () => void;
+    resources.barrier = new Promise((resolve) => { release = resolve; });
+    const render = session.render('preview');
+    await vi.waitFor(() => expect(resources.scratch).toHaveLength(1));
+    session.releaseExport();
+    expect(resources.scratch[0]!.release).not.toHaveBeenCalled();
+    release(); await render;
+    expect(resources.scratch[0]!.release).toHaveBeenCalledOnce();
+    session.dispose();
+  });
+
   it('bounds the scratch-owning graph variants to four', async () => {
     const session = await create(); session.open(image());
     for (let flags = 0; flags < 8; flags += 1) {

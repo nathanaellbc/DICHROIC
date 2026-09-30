@@ -138,6 +138,11 @@ export class SessionClient {
     return this.call('exportImage', options === undefined ? [format] : [format, options]) as Promise<Uint8Array>;
   }
 
+  /** Release the cached export render. */
+  releaseExport(): Promise<void> {
+    return this.call('releaseExport', []) as Promise<void>;
+  }
+
   async dispose(): Promise<void> {
     try { await this.call('dispose', []); }
     finally { this.shutdown(new SessionStateError('Session client was disposed.'), false); }

@@ -50,7 +50,8 @@ import source from '../../shaders/grain.wgsl?raw';
  * Constraints/task-14-report.md) -- setiap dispatch di sini punya himpunan
  * binding writable yang genuinely disjoint.
  *
- * DELAPAN scratch buffer lewat `ctx.scratch()` (`layerRaw`, `layerBlurX`,
+ * DELAPAN peran scratch (sejak ekspor hemat memori: ditumpuk ke TIGA buffer,
+ * lih. `encode`) lewat `ctx.scratch()` (`layerRaw`, `layerBlurX`,
  * `layerSummed`, `microRaw`, `microBlurX`, `microBlurred`, `preBlur`,
  * `blurX`) -- naik dari dua di Task 16 karena blur_particle butuh mem-blur
  * SETIAP (kanal,sublapisan) SENDIRI-SENDIRI (sigma berbeda per pasangan)
@@ -141,14 +142,23 @@ export function createGrainStage(
       // (satu per sublapisan, lih. blok komentar modul grain.wgsl) --
       // `layerSummed`/`microRaw`/`microBlurXOut`/`microBlurred`/`preBlur`/
       // `blurXOut` tetap SATU vec4 per piksel seperti sebelumnya.
-      const layerRaw = ctx.scratch('grain:layerRaw', layerBytes);
-      const layerBlurXBuf = ctx.scratch('grain:layerBlurX', layerBytes);
-      const layerSummed = ctx.scratch('grain:layerSummed', pixelBytes);
-      const microRaw = ctx.scratch('grain:microRaw', pixelBytes);
-      const microBlurXBuf = ctx.scratch('grain:microBlurX', pixelBytes);
-      const microBlurred = ctx.scratch('grain:microBlurred', pixelBytes);
-      const preBlur = ctx.scratch('grain:preBlur', pixelBytes);
-      const blurXOut = ctx.scratch('grain:blurX', pixelBytes);
+      // Delapan peran, TIGA buffer: umur tiap peran (dispatch yang menulis
+      // sampai dispatch terakhir yang membaca) tidak bertumpuk dengan peran
+      // lain di buffer yang sama, dan tidak ada dispatch yang mengikat satu
+      // buffer dua kali. Urutan: generateLayers -> blurLayersX -> blurLayersY
+      // -> microGenerate -> microBlurX -> microBlurY -> combine -> blurX -> blurY.
+      //   A (3 vec4/px): layerRaw [1-2] -> layerSummed [3-7] -> blurXOut [8-9]
+      //   B (3 vec4/px): layerBlurX [2-3] -> microRaw [4-5] -> microBlurred [6-7]
+      //   C (1 vec4/px): microBlurX [5-6] -> preBlur [7-8]
+      // 192 -> 112 byte/px (24 MP: 4,6 GB -> 2,7 GB).
+      const layerRaw = ctx.scratch('grain:A', layerBytes);
+      const layerBlurXBuf = ctx.scratch('grain:B', layerBytes);
+      const layerSummed = layerRaw;
+      const microRaw = layerBlurXBuf;
+      const microBlurXBuf = ctx.scratch('grain:C', pixelBytes);
+      const microBlurred = layerBlurXBuf;
+      const preBlur = microBlurXBuf;
+      const blurXOut = layerRaw;
 
       const longEdge = Math.max(ctx.params.fullWidth, ctx.params.fullHeight, 1);
       // Fase 2A.5: format film dari `ctx.frame` (dulu argumen `filmFormatMm`).
