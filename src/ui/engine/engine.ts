@@ -461,11 +461,11 @@ export class Engine {
     void this.#renderLoop();
   }
 
-  /** Debounced by PhotoView; render only detail needed by the current zoom. */
+  /** Keep acquired detail when zooming out; only a higher target needs rendering. */
   setPreviewLongEdge = (requested: number): void => {
     if (!this.#imageSize || this.#state.phase !== 'editing' || !Number.isFinite(requested)) return;
     const edge = Math.min(Math.max(this.#imageSize.width, this.#imageSize.height), Math.max(1, Math.round(requested)));
-    if (edge === this.#previewLongEdge) return;
+    if (edge <= this.#previewLongEdge) return;
     this.#previewLongEdge = edge;
     this.requestRender();
   };

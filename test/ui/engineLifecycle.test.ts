@@ -50,6 +50,10 @@ describe('photo lifecycle', () => {
     expect(client.render).toHaveBeenLastCalledWith('preview', 2048);
     engine.setPreviewLongEdge(9000); await flush();
     expect(client.render).toHaveBeenLastCalledWith('preview', 4096);
+    const renders = client.render.mock.calls.length;
+    engine.setPreviewLongEdge(2048); await flush();
+    engine.setPreviewLongEdge(768); await flush();
+    expect(client.render.mock.calls).toHaveLength(renders);
     await engine.openFile(file('next.png'));
     engine.setPreviewLongEdge(4096); await flush();
     expect(client.render.mock.calls.filter((args) => args[1] === 4096)).toHaveLength(2);
