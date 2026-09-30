@@ -105,8 +105,8 @@ export class SessionClient {
     return this.call('getDiagnostics', []) as Promise<SessionDiagnostics>;
   }
 
-  render(quality: RenderQuality): Promise<RenderResult> {
-    return this.call('render', [quality]) as Promise<RenderResult>;
+  render(quality: RenderQuality, longEdge?: number): Promise<RenderResult> {
+    return this.call('render', longEdge === undefined ? [quality] : [quality, longEdge]) as Promise<RenderResult>;
   }
 
   /** Ukuran render penuh terakhir (lihat `Session.lastFullSize`). */

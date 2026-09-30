@@ -173,6 +173,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       rendering={state.rendering}
       photoKey={state.fileName ?? 'photo'}
       label={photoLabel}
+      sourceSize={engine.imageSize}
+      onResolutionChange={engine.setPreviewLongEdge}
       focus={{
         x: state.params.lensFocusX,
         y: state.params.lensFocusY,

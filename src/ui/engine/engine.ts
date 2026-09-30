@@ -164,6 +164,7 @@ export class Engine {
   lastExportLimited: { width: number; height: number } | undefined;
   #inFlight: number | undefined;
   #dirty = false;
+  #previewLongEdge = 1024;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
   #depthMap: DepthMap | undefined;
@@ -298,6 +299,7 @@ export class Engine {
       this.#confirmedParams = params;
       this.#pendingPatches.clear();
       this.#imageSize = { width: prepared.width, height: prepared.height };
+      this.#previewLongEdge = 1024;
       this.#depth.reset(guide);
       this.#paramsRevision += 1;
       this.#depthMap = undefined;
@@ -459,6 +461,15 @@ export class Engine {
     void this.#renderLoop();
   }
 
+  /** Debounced by PhotoView; render only detail needed by the current zoom. */
+  setPreviewLongEdge = (requested: number): void => {
+    if (!this.#imageSize || this.#state.phase !== 'editing' || !Number.isFinite(requested)) return;
+    const edge = Math.min(Math.max(this.#imageSize.width, this.#imageSize.height), Math.max(1, Math.round(requested)));
+    if (edge === this.#previewLongEdge) return;
+    this.#previewLongEdge = edge;
+    this.requestRender();
+  };
+
   async #renderLoop(): Promise<void> {
     const token = this.#openToken;
     const generation = this.#photoGeneration;
@@ -485,10 +496,12 @@ export class Engine {
     const token = this.#openToken;
     const revision = this.#paramsRevision;
     const outputColorSpace = this.#state.params.outputColorSpace;
+    const previewLongEdge = this.#previewLongEdge;
     try {
-      const result = await client.render('preview');
-      if (token !== this.#openToken || revision !== this.#paramsRevision || this.#state.phase !== 'editing') return;
+      const result = await client.render('preview', previewLongEdge);
+      if (token !== this.#openToken || revision !== this.#paramsRevision || previewLongEdge !== this.#previewLongEdge || this.#state.phase !== 'editing') return;
       this.#set({
+        ...(result.original ? { original: result.original } : {}),
         frame: {
           width: result.width,
           height: result.height,

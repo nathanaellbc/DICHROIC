@@ -38,6 +38,19 @@ const create = () => Session.create({ assetsBaseUrl: 'public/data', engine: {
 beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.scratch.length = 0; resources.barrier = undefined; });
 
 describe('Session resource lifetime', () => {
+  it('renders requested preview detail and a matching original without upscaling', async () => {
+    const session = await create();
+    session.open({ ...image(), width: 2048, height: 2, rgba: new Float32Array(2048 * 2 * 4).fill(0.18) });
+    expect((await session.render('preview')).width).toBe(1024);
+    const detailed = await session.render('preview', 2048);
+    expect(detailed.width).toBe(2048);
+    expect(detailed.original?.width).toBe(2048);
+    expect(resources.scratch[0]!.release).toHaveBeenCalled();
+    expect((await session.render('preview', 512)).width).toBe(512);
+    expect((await session.render('preview', 4096)).width).toBe(2048);
+    await expect(session.render('preview', Infinity)).rejects.toThrow(/finite/);
+    session.dispose();
+  });
   it('defers export cleanup until an active render releases shared scratch', async () => {
     const session = await create(); session.open(image());
     let release!: () => void;

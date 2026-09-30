@@ -43,6 +43,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('photo lifecycle', () => {
+  it('requests zoom resolution and resets it when opening another photo', async () => {
+    client.stageOpen.mockResolvedValue({ ...photo, width: 4096, height: 2048 });
+    const engine = new Engine(); await engine.openFile(file('first.png'));
+    engine.setPreviewLongEdge(2048); await flush();
+    expect(client.render).toHaveBeenLastCalledWith('preview', 2048);
+    engine.setPreviewLongEdge(9000); await flush();
+    expect(client.render).toHaveBeenLastCalledWith('preview', 4096);
+    await engine.openFile(file('next.png'));
+    engine.setPreviewLongEdge(4096); await flush();
+    expect(client.render.mock.calls.filter((args) => args[1] === 4096)).toHaveLength(2);
+    engine.closePhoto();
+  });
   it('preserves undo and redo while confirming worker parameter updates', async () => {
     const engine = new Engine(); await engine.openFile(file('first.png'));
     engine.setParams({ filmExposureEv: 1 }); await flush();

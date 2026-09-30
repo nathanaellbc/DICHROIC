@@ -226,6 +226,8 @@ Vertical scrolling uses a transparent track and a slim rounded neutral thumb, br
 
 ### Editor zoom and frosted chrome (2026-09-30)
 
+Preview detail follows fitted image size × zoom × screen pixel density, requested in 256px increments after a 180ms pause. The worker renders directly from the retained source, up to native resolution, with a matching original for compare/peek. It never enlarges source pixels or uses nearest-neighbour pixelated zoom. Only the latest requested size/parameter revision can publish; the previous image remains visible while developing. Fit releases unnecessary detail. Low-memory devices keep an 8 MP preview ceiling; desktop previews allow up to 64 MP and remain subject to the renderer's diffusion/GPU limits. High-resolution renders release GPU scratch after completion.
+
 Dragging a zoomed photo beyond its pan bounds uses increasing rubber-band resistance. Releasing or cancelling the last pointer returns the photo to the nearest valid edge with the shared `photoReturn` spring (0.5s, bounce 0.2). A new drag, wheel zoom, Fit reset, photo change or viewport resize interrupts the return. Reduced motion keeps the resisted drag but restores the boundary immediately. This gesture feedback is an intentional exception to the desktop no-bounce rule; ordinary pan and zoom stay immediate.
 
 The photo preview has no inset border on desktop. Zoomed pixels extend beyond the fitted preview area behind the editor chrome; only the outer app window clips them. Fit still shows the full photo, and zoom, pan, comparison and focus selection keep their existing coordinates.

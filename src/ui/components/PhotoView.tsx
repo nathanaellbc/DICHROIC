@@ -19,6 +19,7 @@ import type { Frame } from '../engine/display';
 import { fade, photoReturn } from '../motion';
 import { Spinner } from './Overlays';
 import { Icon } from './Icon';
+import { imageMemoryBudget } from '../../io/budget';
 
 function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -94,6 +95,8 @@ export function PhotoView({
   photoKey,
   label,
   focus,
+  sourceSize,
+  onResolutionChange,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -103,6 +106,8 @@ export function PhotoView({
   photoKey: string;
   label: string;
   focus?: FocusOverlay;
+  sourceSize?: { width: number; height: number };
+  onResolutionChange?: (longEdge: number) => void;
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
@@ -159,6 +164,16 @@ export function PhotoView({
   }
 
   // Foto baru mulai dari pas.
+  useEffect(() => {
+    if (!onResolutionChange || !sourceSize || rect.width === 0) return;
+    const nativeEdge = Math.max(sourceSize.width, sourceSize.height);
+    const needed = Math.ceil(Math.max(rect.width, rect.height) * view.s * (window.devicePixelRatio || 1) / 256) * 256;
+    const maxPixels = imageMemoryBudget() <= 1024 * 1024 * 1024 ? 8_388_608 : 64_000_000;
+    const memoryEdge = Math.floor(Math.sqrt(maxPixels * nativeEdge / Math.min(sourceSize.width, sourceSize.height)));
+    const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), 180);
+    return () => window.clearTimeout(timer);
+  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey]);
+
   useEffect(() => {
     returnAnimation.current?.stop();
     setView(FIT);
@@ -387,7 +402,7 @@ export function PhotoView({
             transition={fade}
             style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
           >
-            <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})`, imageRendering: view.s >= 2 ? 'pixelated' : undefined }}>
+            <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
               {frame && <FrameCanvas key={frame.colorSpace} frame={frame} />}
               {showOriginal && original && (
                 <motion.div

@@ -22,7 +22,7 @@ export interface SessionLike {
   setParams(patch: Partial<RenderParams>): void;
   getParams(): RenderParams;
   getDiagnostics(): SessionDiagnostics;
-  render(quality: RenderQuality): Promise<RenderResult>;
+  render(quality: RenderQuality, longEdge?: number): Promise<RenderResult>;
   prewarm(): Promise<void>;
   lastFullSize(): { width: number; height: number } | undefined;
   exportCube(size: number): Promise<string>;

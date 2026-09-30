@@ -93,6 +93,8 @@ export interface ExportRenderInfo {
 }
 
 export interface RenderResult {
+  /** Original at the same resolution as an explicitly sized preview. */
+  original?: Frame;
   width: number;
   height: number;
   /** `rgb_out` 3 kanal rapat, sudah ter-encode di `outputColorSpace`. */
@@ -230,7 +232,7 @@ export class Session {
   #image: DecodedImage | undefined;
   #imageId = 0;
   #photoId = 0;
-  #preview: { imageId: number; image: ScaledImage } | undefined;
+  #preview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
   /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
   #depth: DepthMap | undefined;
   #depthId = 0;
@@ -462,14 +464,15 @@ export class Session {
    * yang sedang berjalan selalu diselesaikan -- hasilnya membawa
    * `paramsVersion` saat ia mulai, supaya UI bisa membuangnya bila basi.
    */
-  render(quality: RenderQuality): Promise<RenderResult> {
+  render(quality: RenderQuality, longEdge?: number): Promise<RenderResult> {
     try {
       this.assertAlive();
       if (!this.#image) throw new SessionStateError('render() sebelum open(): belum ada gambar.');
     } catch (e) {
       return Promise.reject(e);
     }
-    return this.renderAt(quality, undefined);
+    if (longEdge !== undefined && (!Number.isFinite(longEdge) || longEdge < 1)) return Promise.reject(new RangeError('Preview resolution must be positive and finite.'));
+    return this.renderAt(quality, longEdge);
   }
 
   /** `render` dengan sisi panjang ekspor (`undefined` = sumber; hanya `full`). */
@@ -557,7 +560,7 @@ export class Session {
     const key = this.cacheKey(quality, longEdge);
     const frame =
       quality === 'preview'
-        ? this.previewImage()
+        ? this.fitForDiffusion(this.previewImage(longEdge), params)
         : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
     let rgb: Float32Array;
     try {
@@ -565,12 +568,13 @@ export class Session {
     } finally {
       // Scratch seukuran foto penuh tidak dibiarkan menetap setelah ekspor:
       // pratinjau berikutnya hanya butuh sepotong kecilnya.
-      if (quality === 'full') {
+      if (quality === 'full' || (longEdge ?? 0) > this.previewMaxLongEdge) {
         this.#scratch?.release();
         returnFreedMemory(this.engine.device);
       }
     }
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion, outputColorSpace: params.outputColorSpace };
+    if (quality === 'preview' && longEdge !== undefined) result.original = originalFrame(image, Math.max(frame.width, frame.height));
     if (!this.#disposed && key === this.cacheKey(quality, longEdge) && (quality !== 'full' || exportVersion === this.exportVersion)) this.#cache.set(quality, { key, result });
     return result;
   }
@@ -600,12 +604,13 @@ export class Session {
     return boxDownscale(image.rgba, image.width, image.height, longEdge);
   }
 
-  private previewImage(): ScaledImage {
-    if (this.#preview?.imageId !== this.#imageId) {
+  private previewImage(longEdge = this.previewMaxLongEdge): ScaledImage {
+    if (this.#preview?.imageId !== this.#imageId || this.#preview.longEdge !== longEdge) {
       const image = this.#image!;
       this.#preview = {
         imageId: this.#imageId,
-        image: boxDownscale(image.rgba, image.width, image.height, this.previewMaxLongEdge),
+        longEdge,
+        image: boxDownscale(image.rgba, image.width, image.height, longEdge),
       };
     }
     return this.#preview.image;
