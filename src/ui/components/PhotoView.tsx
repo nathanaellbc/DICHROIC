@@ -318,7 +318,7 @@ export function PhotoView({
       role={picking ? 'application' : undefined}
       aria-label={picking ? 'Focus point. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
       onKeyDown={onKeyDown}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : zoomed && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'visible', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : zoomed && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}

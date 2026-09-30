@@ -395,7 +395,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
 
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
-      <div style={photoStyle}>{photo}</div>
+      <div style={{ ...photoStyle, zIndex: 0 }}>{photo}</div>
 
       <div
         style={{
@@ -451,7 +451,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       <section
         ref={panelRef}
         aria-label="Adjustments"
-        className="panel"
+        className="panel editor-frost"
         inert={!hasPhoto}
         style={{
           position: 'absolute',
@@ -548,7 +548,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         display: 'grid', gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0, 1fr) ${INSPECTOR_WIDTH}px`, gridTemplateRows: '52px minmax(0, 1fr)',
       }}
     >
-      <header className="window-toolbar" style={{ gridColumn: '1 / -1' }}>
+      <header className="window-toolbar editor-frost" style={{ gridColumn: '1 / -1' }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 120, maxWidth: 380, flex: '0 1 auto' }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em' }}>DICHROIC</span>
           <span className="t-footnote secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={state.fileName}>{state.fileName ?? 'No photo'}</span>
@@ -577,7 +577,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         </PressButton>
       </header>
 
-      <nav aria-label="Stocks" className="panel" inert={inert} style={{ ...dim, borderRight: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: 10 }}>
+      <nav aria-label="Stocks" className="panel editor-frost" inert={inert} style={{ ...dim, borderRight: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: 10 }}>
         <StockBrowser
           film={state.params.film}
           paper={state.params.paper}
@@ -592,11 +592,11 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         />
       </nav>
 
-      <main style={{ display: 'grid', gridTemplateRows: 'minmax(0, 1fr) 28px', minWidth: 0, minHeight: 0 }}>
+      <main style={{ position: 'relative', zIndex: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr) 28px', minWidth: 0, minHeight: 0 }}>
         <div style={{ position: 'relative', minHeight: 0 }}>
-          <div style={{ position: 'absolute', inset: hasPhoto ? 24 : 0 }}>{photo}</div>
+          <div style={{ position: 'absolute', inset: 0 }}>{photo}</div>
         </div>
-        <div className="status-bar" role="status">
+        <div className="status-bar editor-frost" role="status">
           {state.frame ? <span className="tabular">Preview {state.frame.width} × {state.frame.height}</span> : <span>No photo open</span>}
           <span aria-hidden="true" className="tertiary">·</span>
           <span>{state.params.outputColorSpace}{isDisplayReferred(state.params.outputColorSpace) ? '' : ', shown without conversion'}</span>
@@ -610,7 +610,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         </div>
       </main>
 
-      <aside aria-label="Parameters" className="panel" inert={inert} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <aside aria-label="Parameters" className="panel editor-frost" inert={inert} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ borderBottom: '1px solid var(--hairline)', padding: '0 4px', flexShrink: 0 }}>
           <GroupTabs label="Parameter group" idPrefix="wide-groups" items={groupItems} value={group} onChange={setGroup} small />
         </div>

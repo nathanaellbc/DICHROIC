@@ -214,6 +214,12 @@ components:
 
 ## Overview
 
+### Editor zoom and frosted chrome (2026-09-30)
+
+The photo preview has no inset border on desktop. Zoomed pixels extend beyond the fitted preview area behind the editor chrome; only the outer app window clips them. Fit still shows the full photo, and zoom, pan, comparison and focus selection keep their existing coordinates.
+
+The editor toolbar, stock sidebar, parameter inspector, status bar and compact adjustment panel use neutral frosted graphite: `rgba(28, 28, 30, 0.78)` with `blur(30px)` and no saturation boost. These panels sit above the photo, with their existing geometry and separators. Unsupported backdrop filters and reduced transparency use solid graphite. This user-requested editor treatment supersedes the solid-panel and glass-only-on-floating-controls rules below for these surfaces; dialogs and menus retain their existing materials.
+
 **Creative North Star: "The Pro App Window"**
 
 DICHROIC is drawn as a mature Apple pro application in the line of Photos for Mac and Final Cut Pro. On the desktop it is a window, not a web page. A unified toolbar runs across the top. A film/paper source list sits on the left and an inspector on the right, both solid graphite panels flush to the window edges and split by 1px lines. The photo sits between them on true black. On the phone the same world uses iOS sizes: a floating top bar over the photo and a bottom panel attached to the screen edge.
