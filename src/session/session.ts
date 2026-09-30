@@ -246,6 +246,8 @@ export class Session {
    * terakhir pada sisi panjang apa pun (ekspor); kuncinya memuat sisi itu.
    */
   readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
+  /** Recent zoom/undo results, bounded by both RAM and entry count. */
+  readonly #previewCache = new Map<string, RenderResult>();
   private readonly graphs = new Map<string, Promise<RenderGraph>>();
   private graphArenaKey: string | undefined;
   private cleanupPending = false;
@@ -363,6 +365,7 @@ export class Session {
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();
+    this.#previewCache.clear();
   }
 
   /**
@@ -381,6 +384,7 @@ export class Session {
     }
     this.#depth = map ?? undefined;
     this.#depthId += 1;
+    this.#previewCache.clear();
   }
 
   /** Prepare and render a candidate without replacing the current photo. */
@@ -438,6 +442,7 @@ export class Session {
       this.#depthId += 1;
       this.#preview = undefined;
       this.#cache.clear();
+      this.#previewCache.clear();
     }
     this.staged = undefined;
   }
@@ -477,8 +482,17 @@ export class Session {
 
   /** `render` dengan sisi panjang ekspor (`undefined` = sumber; hanya `full`). */
   private renderAt(quality: RenderQuality, longEdge: number | undefined): Promise<RenderResult> {
+    const key = this.cacheKey(quality, longEdge);
+    if (quality === 'preview') {
+      const cached = this.#previewCache.get(key);
+      if (cached) {
+        this.#previewCache.delete(key);
+        this.#previewCache.set(key, cached);
+        return Promise.resolve({ ...cached, paramsVersion: this.#paramsVersion });
+      }
+    }
     const hit = this.#cache.get(quality);
-    if (hit && hit.key === this.cacheKey(quality, longEdge)) return Promise.resolve(hit.result);
+    if (hit && hit.key === key) return Promise.resolve({ ...hit.result, paramsVersion: this.#paramsVersion });
     return this.enqueue(() => this.execute(quality, longEdge));
   }
 
@@ -575,8 +589,25 @@ export class Session {
     }
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion, outputColorSpace: params.outputColorSpace };
     if (quality === 'preview' && longEdge !== undefined) result.original = originalFrame(image, Math.max(frame.width, frame.height));
-    if (!this.#disposed && key === this.cacheKey(quality, longEdge) && (quality !== 'full' || exportVersion === this.exportVersion)) this.#cache.set(quality, { key, result });
+    if (!this.#disposed && key === this.cacheKey(quality, longEdge) && (quality !== 'full' || exportVersion === this.exportVersion)) {
+      this.#cache.set(quality, { key, result });
+      if (quality === 'preview') this.cachePreview(key, result);
+    }
     return result;
+  }
+
+  private cachePreview(key: string, result: RenderResult): void {
+    const size = (frame: RenderResult) => frame.rgb.byteLength + (frame.original?.pixels.byteLength ?? 0);
+    const budget = imageMemoryBudget() / 8;
+    if (size(result) > budget) return; // The current frame still lives in #cache.
+    this.#previewCache.delete(key);
+    this.#previewCache.set(key, result);
+    let bytes = [...this.#previewCache.values()].reduce((sum, frame) => sum + size(frame), 0);
+    while (this.#previewCache.size > 6 || bytes > budget) {
+      const oldest = this.#previewCache.entries().next().value!;
+      bytes -= size(oldest[1]);
+      this.#previewCache.delete(oldest[0]);
+    }
   }
 
   /**
@@ -767,6 +798,7 @@ export class Session {
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();
+    this.#previewCache.clear();
     this.cleanupPending = true;
     if (!this.#busy) this.clearResources();
     return this.#busy ? new Promise((resolve) => this.idleWaiters.add(resolve)) : Promise.resolve();

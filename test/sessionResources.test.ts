@@ -8,6 +8,7 @@ const resources = vi.hoisted(() => ({
   scratch: [] as Array<{ release: Mock }>,
   arenas: [] as Array<Record<'static' | 'stock' | 'dynamic' | 'frameState', { destroy: Mock }>>,
   barrier: undefined as Promise<void> | undefined,
+  runs: 0,
 }));
 vi.mock('../src/engine/precisionSelfTest', () => ({ runPrecisionSelfTest: async () => ({ ok: true, maxAbsError: 0 }) }));
 vi.mock('../src/engine/chain', () => ({ buildChain: () => [] }));
@@ -22,7 +23,7 @@ vi.mock('../src/engine/graph', () => ({ RenderGraph: class {
   disposed = false;
   constructor() { resources.graphs.push(this); }
   addStage() {}
-  async run(input: Float32Array) { await resources.barrier; return input.slice(); }
+  async run(input: Float32Array) { resources.runs += 1; await resources.barrier; return input.slice(); }
   dispose() { this.disposed = true; }
 }, ScratchPool: class {
   release = vi.fn();
@@ -35,9 +36,40 @@ const create = () => Session.create({ assetsBaseUrl: 'public/data', engine: {
   device: { lost: new Promise(() => {}) }, maxStorageBufferBindingSize: 1024 * 1024,
 } as unknown as EngineDevice });
 
-beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.scratch.length = 0; resources.barrier = undefined; });
+beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.scratch.length = 0; resources.barrier = undefined; resources.runs = 0; });
 
 describe('Session resource lifetime', () => {
+  it('reuses preview sizes and undo states without rerunning the GPU', async () => {
+    const session = await create(); session.open(image());
+    await session.render('preview', 1);
+    await session.render('preview', 2);
+    expect(resources.runs).toBe(2);
+    await session.render('preview', 1);
+    expect(resources.runs).toBe(2);
+    session.setParams({ filmExposureEv: 1 }); await session.render('preview', 1);
+    session.setParams({ filmExposureEv: 0 });
+    const restored = await session.render('preview', 1);
+    expect(resources.runs).toBe(3);
+    expect(restored.paramsVersion).toBe(session.paramsVersion);
+    session.open(image()); await session.render('preview', 1);
+    expect(resources.runs).toBe(4);
+    await session.close(); session.open(image()); await session.render('preview', 1);
+    expect(resources.runs).toBe(5);
+    session.dispose();
+  });
+
+  it('evicts old previews instead of retaining an unlimited edit history', async () => {
+    const session = await create(); session.open(image());
+    for (let i = 0; i < 7; i += 1) {
+      session.setParams({ filmExposureEv: i / 10 }); await session.render('preview', 1);
+    }
+    expect(resources.runs).toBe(7);
+    session.setParams({ filmExposureEv: 0.1 }); await session.render('preview', 1);
+    expect(resources.runs).toBe(7);
+    session.setParams({ filmExposureEv: 0 }); await session.render('preview', 1);
+    expect(resources.runs).toBe(8);
+    session.dispose();
+  });
   it('renders requested preview detail and a matching original without upscaling', async () => {
     const session = await create();
     session.open({ ...image(), width: 2048, height: 2, rgba: new Float32Array(2048 * 2 * 4).fill(0.18) });
