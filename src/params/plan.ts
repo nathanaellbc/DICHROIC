@@ -24,7 +24,7 @@ import type { CoreParams } from '../engine/params';
 import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
-import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
+import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, invert3, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
 import type { CameraSettings } from '../host/cameraDevelop';
 import { softenKernel } from '../host/softenDetail';
 import { LENS_LIMITS, lensSettings, resolveLensFrame } from '../host/lens';
@@ -41,6 +41,7 @@ import type { ProcessMode, RenderParams } from './renderParams';
 export type RenderMode = 'image' | 'cube';
 
 export interface ChainSpec {
+  filmOff?: boolean;
   softenDetail?: boolean;
   family: 'measured' | 'lut';
   /** Tahap grain disertakan. Selalu `false` untuk `lut`. */
@@ -403,7 +404,7 @@ export function buildRenderPlan(
   // `rgb_to_raw`). Tanpa decode keduanya linear dan EV cukup dijumlah ke
   // `filmExposureEv`; dengan decode EV itu dibawa `frame.inputDecodeScale`.
   const autoEv =
-    family === 'measured' && params.autoExposure
+    family === 'measured' && params.filmEnabled && params.autoExposure
       ? measureAutoExposureEv(
           image.rgba,
           image.width,
@@ -426,6 +427,7 @@ export function buildRenderPlan(
     arenaInputs: { stockId: params.film, printScan },
     chain: {
       family,
+      ...(!params.filmEnabled ? { filmOff: true } : {}),
       grain: grainActive,
       ...(scan ? { scan } : {}),
       ...(cameraDiffusion ? { cameraDiffusion: true } : {}),
@@ -436,6 +438,7 @@ export function buildRenderPlan(
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {
+      ...(!params.filmEnabled ? { cameraOutput: cameraOutputFrame(params, bundle) } : {}),
       ...exposureFrame(params, family, filmFormatMm),
       ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
@@ -712,4 +715,22 @@ function buildCoreParams(
     activeWidth: 0, // 0 = seluruh buffer
     activeHeight: 0,
   };
+}
+
+/** Convert between input/output RGB primaries via their common adapted sRGB basis. */
+function cameraOutputFrame(params: RenderParams, bundle: AssetBundle): Float32Array {
+  const matrices = bundle.stockField(params.film, 'inputToSrgb')!;
+  const labels = bundle.manifest.colorSpaces.labels;
+  const inIndex = labels.indexOf(params.inputColorSpace);
+  const input = matrices.slice(inIndex * 9, inIndex * 9 + 9);
+  const outIndex = labels.indexOf(params.outputColorSpace);
+  const inverse = invert3(matrices.slice(outIndex * 9, outIndex * 9 + 9));
+  const values = new Float32Array(16);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    for (let k = 0; k < 3; k++) values[r * 4 + c]! += inverse[r * 3 + k]! * input[k * 3 + c]!;
+  }
+  const output = bundle.manifest.outputColorSpaces[params.outputColorSpace]!;
+  values[12] = { linear: 0, srgb: 1, romm: 2, gamma: 3 }[output.encoding];
+  values[13] = output.gamma ?? 1;
+  return values;
 }

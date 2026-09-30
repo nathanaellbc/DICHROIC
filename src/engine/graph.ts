@@ -39,6 +39,7 @@ import type { TileSpec } from './tiling';
  * foto sungguhan pada fixture 64 px.
  */
 export interface FrameParams {
+  cameraOutput?: Float32Array;
   softenDetail?: { amount: number; luma: readonly number[] };
   filmFormatMm: number;
   /**

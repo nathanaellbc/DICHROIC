@@ -257,13 +257,14 @@ export const GROUPS: readonly ToolGroup[] = [
     label: 'Film',
     icon: 'format',
     tools: [
-      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
-      { kind: 'slider', id: 'scanExposureEv', field: 'filmExposureEv', mode: 'scan', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Exposure of the film itself. Scanning has no print step, so this sets the brightness directly.' },
-      { kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the film. Best for RAW and linear files; phone photos are already exposed.' },
-      { kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', mode: 'print', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, color and grain more than brightness.' },
-      { kind: 'stepper', id: 'filmPushPullStops', field: 'filmPushPullStops', label: 'Push/Pull', title: 'Push / Pull', icon: 'pushPull', min: -2, max: 2, step: 0.5 },
-      { kind: 'choice', id: 'filmFormat', field: 'filmFormat', label: 'Format', title: 'Film Format', icon: 'format', options: FILM_FORMATS, note: 'Smaller formats enlarge the grain and halation.' },
-      { kind: 'choice', id: 'process', field: 'process', elsewhere: true, label: 'Process', title: 'Process', icon: 'process', options: PROCESS_MODES, note: 'Print enlarges the negative onto paper. Scan digitizes the film itself: slides come out positive, negatives as orange negatives.' },
+      { kind: 'toggle', id: 'filmEnabled', field: 'filmEnabled', label: 'Film', title: 'Film Simulation', icon: 'format', note: 'Turn off film and paper processing. Camera and Lens adjustments remain active.' },
+      { requires: 'filmEnabled', kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
+      { requires: 'filmEnabled', kind: 'slider', id: 'scanExposureEv', field: 'filmExposureEv', mode: 'scan', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Exposure of the film itself. Scanning has no print step, so this sets the brightness directly.' },
+      { requires: 'filmEnabled', kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the film. Best for RAW and linear files; phone photos are already exposed.' },
+      { requires: 'filmEnabled', kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', mode: 'print', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, color and grain more than brightness.' },
+      { requires: 'filmEnabled', kind: 'stepper', id: 'filmPushPullStops', field: 'filmPushPullStops', label: 'Push/Pull', title: 'Push / Pull', icon: 'pushPull', min: -2, max: 2, step: 0.5 },
+      { requires: 'filmEnabled', kind: 'choice', id: 'filmFormat', field: 'filmFormat', label: 'Format', title: 'Film Format', icon: 'format', options: FILM_FORMATS, note: 'Smaller formats enlarge the grain and halation.' },
+      { requires: 'filmEnabled', kind: 'choice', id: 'process', field: 'process', elsewhere: true, label: 'Process', title: 'Process', icon: 'process', options: PROCESS_MODES, note: 'Print enlarges the negative onto paper. Scan digitizes the film itself: slides come out positive, negatives as orange negatives.' },
     ],
   },
   {
@@ -481,9 +482,10 @@ export function choicePatch(tool: ChoiceTool, value: string, params?: Pick<Rende
  */
 export function stockPatch(kind: 'film' | 'paper', id: string, params: Pick<RenderParams, 'film' | 'process'>): Partial<RenderParams> {
   if (kind === 'paper') return { paper: id };
-  if (isSlideFilm(id)) return { film: id, process: 'scanNegative' };
-  if (isSlideFilm(params.film) && params.process === 'scanNegative') return { film: id, process: 'printSimulation' };
-  return { film: id };
+  if (id === 'off') return { filmEnabled: false };
+  if (isSlideFilm(id)) return { filmEnabled: true, film: id, process: 'scanNegative' };
+  if (isSlideFilm(params.film) && params.process === 'scanNegative') return { filmEnabled: true, film: id, process: 'printSimulation' };
+  return { filmEnabled: true, film: id };
 }
 
 /** Nilai slider tanpa galat pembulatan biner (0.1 + 0.2), dijepit ke rentang. */

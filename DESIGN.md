@@ -421,3 +421,5 @@ Keep the Camera tab and compact mobile tool strip. The desktop Camera inspector 
 Camera also includes a Detail section containing Soften Detail, a 0–100 slider (neutral 0). It shares the compact camera row, numeric readout, per-tool reset, Lucide icon, and mobile tool strip. It controls input texture before film/grain, independently of lens defocus and mist diffusion; its help states edge protection and processing order.
 
 Camera → Color also exposes HSV Saturation, a 0–200 gain slider with neutral 100, using the existing Lucide saturation icon and compact/mobile controls. Its help distinguishes HSV Value from perceived brightness.
+
+The Film stock list starts with an Off radio row. Film Simulation also has an On/Off control in the Film panel and mobile strip. Off retains the last recipe, marks the toolbar as Film Off / Camera & Lens only, disables paper rows and film controls, and selecting a film enables simulation again.

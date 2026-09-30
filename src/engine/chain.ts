@@ -1,5 +1,6 @@
 import { createMaterializeActiveRegionStage } from './stages/materializeActiveRegion';
 import { createFilmExposureStage } from './stages/filmExposure';
+import { createCameraOutputStage } from './stages/cameraOutput';
 import { createSoftenDetailStage } from './stages/softenDetail';
 import { createHalationStage } from './stages/halation';
 import { createCurveDevelopStage } from './stages/curveDevelop';
@@ -140,6 +141,14 @@ function lensStages(device: GPUDevice, spec: ChainSpec): Stage[] {
 
 export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
   if (spec.softenDetail && spec.family === 'lut') throw new Error('Soften Detail is spatial and cannot be baked into a cube LUT.');
+  if (spec.filmOff) return [
+    createMaterializeActiveRegionStage(device),
+    ...(spec.softenDetail ? [createSoftenDetailStage(device)] : []),
+    createFilmExposureStage(device, arenas, true),
+    ...lensStages(device, spec),
+    ...(spec.cameraDiffusion ? [cameraDiffusionStage(device, arenas, spec)] : []),
+    createCameraOutputStage(device),
+  ];
   if (!spec.scan) return buildPrintChain(device, arenas, spec);
   if (spec.family === 'lut') {
     if (spec.grain) throw new Error('buildChain: grain tidak sah di keluarga lut (lut_mode mematikan efek stokastik).');

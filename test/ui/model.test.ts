@@ -81,7 +81,7 @@ describe('alat UI == permukaan parameter engine', () => {
   });
   const tools = GROUPS.flatMap((g) => g.tools);
 
-  it('setiap field yang diubah alat berstatus verified (atau extension di grup Camera/Lens), tidak pernah locked', () => {
+  it('setiap field yang diubah alat berstatus verified (atau extension Camera/Lens/Film bypass), tidak pernah locked', () => {
     for (const group of GROUPS) {
       for (const tool of group.tools) {
         if (tool.kind === 'locked') continue;
@@ -89,7 +89,7 @@ describe('alat UI == permukaan parameter engine', () => {
         if (tool.kind === 'slider' && tool.enabledBy) fields.push(tool.enabledBy);
         // Ekstensi di luar spektrafilm (tanpa oracle Python) hanya di grup yang
         // menyatakannya: Camera Raw dan Lens blur.
-        const allowed = group.id === 'camera' || group.id === 'lens' ? ['verified', 'extension'] : ['verified'];
+        const allowed = group.id === 'camera' || group.id === 'lens' || tool.id === 'filmEnabled' ? ['verified', 'extension'] : ['verified'];
         for (const field of fields) expect(allowed, `${tool.id}: ${field}`).toContain(FIELD_STATUS[field]);
       }
     }
@@ -191,14 +191,16 @@ describe('format, snap, patch', () => {
 describe('mode proses dan stok (Fase 2D)', () => {
   it('slide film memindah ke scan; kembali ke negatif memindah ke print; negatif tetap scan bila disengaja', () => {
     expect(stockPatch('film', 'fujifilm_velvia_100', { film: 'kodak_portra_400', process: 'printSimulation' })).toEqual({
+      filmEnabled: true,
       film: 'fujifilm_velvia_100',
       process: 'scanNegative',
     });
     expect(stockPatch('film', 'kodak_gold_200', { film: 'fujifilm_velvia_100', process: 'scanNegative' })).toEqual({
+      filmEnabled: true,
       film: 'kodak_gold_200',
       process: 'printSimulation',
     });
-    expect(stockPatch('film', 'kodak_gold_200', { film: 'kodak_portra_400', process: 'scanNegative' })).toEqual({ film: 'kodak_gold_200' });
+    expect(stockPatch('film', 'kodak_gold_200', { film: 'kodak_portra_400', process: 'scanNegative' })).toEqual({ filmEnabled: true, film: 'kodak_gold_200' });
     expect(stockPatch('paper', 'kodak_2383', { film: 'kodak_portra_400', process: 'printSimulation' })).toEqual({ paper: 'kodak_2383' });
   });
 

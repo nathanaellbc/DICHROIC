@@ -18,7 +18,7 @@ import source from '../../shaders/filmExposure.wgsl?raw';
  * berubah antar dispatch, tapi `ctx.source`/`ctx.dest` berganti tiap tahap
  * lewat ping-pong `RenderGraph`).
  */
-export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stage {
+export function createFilmExposureStage(device: GPUDevice, arenas: Arenas, cameraOnly = false): Stage {
   const arenaConstants = [
     arenas.static.wgslConstants(),
     arenas.stock.wgslConstants(),
@@ -37,8 +37,8 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
   });
 
   return {
-    name: 'filmExposure',
-    writesTaps: [Tap.LOG_E_FILM],
+    name: cameraOnly ? 'cameraLinear' : 'filmExposure',
+    writesTaps: [cameraOnly ? Tap.RGB_PRE : Tap.LOG_E_FILM],
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       // Fase 2C Task 9: pengali ruang ter-encode sebelum decode CCTF (binding 6).
       const inputFrame = ctx.device.createBuffer({
@@ -47,7 +47,7 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas): Stag
         usage: gpuBufferUsage.UNIFORM,
         mappedAtCreation: true,
       });
-      new Float32Array(inputFrame.getMappedRange()).set([ctx.frame.inputDecodeScale ?? 1, 0, 0, 0]);
+      new Float32Array(inputFrame.getMappedRange()).set([ctx.frame.inputDecodeScale ?? 1, cameraOnly ? 1 : 0, 0, 0]);
       inputFrame.unmap();
       // "Camera Raw" (binding 7): nol semua = dilewati persis.
       const cameraFrame = ctx.device.createBuffer({

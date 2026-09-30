@@ -23,6 +23,7 @@ function rowName(kind: StockKind, section: StockSection, stock: StockInfo): stri
 
 export function StockBrowser({
   film,
+  filmEnabled = true,
   paper,
   onPick,
   kind,
@@ -35,6 +36,7 @@ export function StockBrowser({
   revealToken,
 }: {
   film: string;
+  filmEnabled?: boolean;
   paper: string;
   onPick: (kind: StockKind, id: string) => void;
   kind: StockKind;
@@ -70,8 +72,10 @@ export function StockBrowser({
 
   const hint = query === '' && (
     <p className="t-footnote secondary" style={{ margin: dense ? '4px 8px 2px' : '0 4px -8px' }}>
-      {kind === 'film'
-        ? scan
+      {!filmEnabled && kind === 'paper' ? 'Paper is bypassed while Film is Off. Select a film to enable it again.' : kind === 'film'
+        ? !filmEnabled
+          ? 'Film and paper are off. Camera and Lens adjustments remain active.'
+          : scan
           ? 'Scanning shows the film itself. Slides come out as positives; color negatives come out orange and inverted.'
           : 'Every negative is printed to a neutral grey, so films differ subtly: in color, contrast and grain. For a bigger change in look, try Paper.'
         : scan
@@ -92,7 +96,7 @@ export function StockBrowser({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: dense ? '0 2px' : '0 4px' }}>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span className={dense ? 't-body' : 't-subhead'} style={{ fontWeight: 600 }}>Process</span>
-            <span className="t-footnote secondary">{scan ? 'The film itself, no paper' : 'Film printed onto paper'}</span>
+            <span className="t-footnote secondary">{!filmEnabled ? 'Film and paper bypassed' : scan ? 'The film itself, no paper' : 'Film printed onto paper'}</span>
           </span>
           <span style={{ width: dense ? 112 : 150, flexShrink: 0 }}>
             <Segmented label="Process" items={PROCESS_MODES as readonly { value: string; label: string }[]} value={process} onChange={onProcess} small />
@@ -121,15 +125,22 @@ export function StockBrowser({
         style={{ flexGrow: 1, minHeight: 0, padding: dense ? '4px 8px 16px' : '0 16px 32px', display: 'flex', flexDirection: 'column', gap: dense ? 0 : 20 }}
       >
         {sections.length === 0 && <p className="t-subhead secondary" style={{ textAlign: 'center', marginTop: 24 }}>No stocks match “{query}”.</p>}
+        {kind === 'film' && !query && <div className={dense ? 'source-list' : 'list'} role="radiogroup" aria-label="Film bypass">
+          <button type="button" role="radio" aria-checked={!filmEnabled} className={dense ? 'source-row' : 'row'} style={dense ? undefined : { minHeight: 56 }} onClick={() => onPick('film', 'off')}>
+            <span className={dense ? 'name' : 'row-body'}>Off</span>
+            <span className="meta secondary">Camera &amp; Lens only</span>
+            {!dense && !filmEnabled && <Icon name="check" size={20} color="var(--blue)" />}
+          </button>
+        </div>}
         {hint}
         {sections.map((section) => {
-          const paperOff = kind === 'paper' && scan;
+          const paperOff = kind === 'paper' && (scan || !filmEnabled);
           return (
             <section key={section.title} className={dense ? undefined : 'list-section'}>
               <h3 className={dense ? 'source-header' : 'list-header'}>{section.title}</h3>
               <div className={dense ? 'source-list' : 'list'} role="radiogroup" aria-label={section.title}>
                 {section.stocks.map((stock) => {
-                  const selected = !section.locked && stock.id === chosen && !paperOff;
+                  const selected = !section.locked && stock.id === chosen && !paperOff && (kind !== 'film' || filmEnabled);
                   const disabled = section.locked || paperOff;
                   const name = rowName(kind, section, stock);
                   return dense ? (

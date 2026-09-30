@@ -347,6 +347,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let colorSpace = colorSpaceIndex();
   let source = src[index];
   let decoded = cameraDevelop(decodeInputRgb(source.rgb, colorSpace));
+  if (inputFrame.y == 1.0) {
+    filmRaw[index] = vec4<f32>(decoded, source.a);
+    return;
+  }
   let linearSrgb = multiplyMatrix3(0u, ARENA_INPUTTOSRGB_OFFSET, colorSpace, decoded);
   let referenceXyz = multiplyMatrix3(1u, ARENA_INPUTTOREFERENCEXYZ_OFFSET, colorSpace, decoded);
   let raw = select(hanatosRaw(referenceXyz), mallettRaw(linearSrgb), params.rgbToRawMethod == 1);
