@@ -1,5 +1,6 @@
 import { createMaterializeActiveRegionStage } from './stages/materializeActiveRegion';
 import { createFilmExposureStage } from './stages/filmExposure';
+import { createDirectPaperStage } from './stages/directPaper';
 import { createCameraOutputStage } from './stages/cameraOutput';
 import { createSoftenDetailStage } from './stages/softenDetail';
 import { createHalationStage } from './stages/halation';
@@ -147,7 +148,7 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): 
     createFilmExposureStage(device, arenas, true),
     ...lensStages(device, spec),
     ...(spec.cameraDiffusion ? [cameraDiffusionStage(device, arenas, spec)] : []),
-    createCameraOutputStage(device),
+    ...(spec.paperOnly ? [createDirectPaperStage(device, arenas), createScannerPostStage(device, arenas)] : [createCameraOutputStage(device)]),
   ];
   if (!spec.scan) return buildPrintChain(device, arenas, spec);
   if (spec.family === 'lut') {

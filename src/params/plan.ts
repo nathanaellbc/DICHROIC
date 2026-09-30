@@ -42,6 +42,7 @@ export type RenderMode = 'image' | 'cube';
 
 export interface ChainSpec {
   filmOff?: boolean;
+  paperOnly?: boolean;
   softenDetail?: boolean;
   family: 'measured' | 'lut';
   /** Tahap grain disertakan. Selalu `false` untuk `lut`. */
@@ -359,14 +360,17 @@ export function buildRenderPlan(
   extras: PlanExtras = {},
 ): RenderPlan {
   validateRenderParams(params);
-  validateStocks(bundle, params.film, params.paper, params.process);
+  validateStocks(bundle, params.film, params.paper, params.filmEnabled ? params.process : 'scanNegative');
   validateOutputColorSpace(bundle, params.outputColorSpace);
   validateDirCouplers(params);
   validateCamera(params);
   validateLens(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
-  const scan = params.process === 'scanNegative';
+  const scan = params.filmEnabled && params.process === 'scanNegative';
+  const paperOnly = !params.filmEnabled && params.paperOnly;
+  // Shared arena packaging needs a film record; direct paper never reads its response.
+  const stockId = params.filmEnabled ? params.film : BASELINE_RENDER_PARAMS.film;
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
   // `print_render.glare.active`); keduanya mati di lut_mode. Scan film
   // (Fase 2D) tidak punya glare: `scanning.py` memberi `glare = None`.
@@ -385,7 +389,7 @@ export function buildRenderPlan(
         printStockId: params.paper,
         enlargerFilters: resolveEnlargerFilters(
           bundle,
-          params.film,
+          stockId,
           params.paper,
           params.filterC,
           params.filterMShift,
@@ -422,12 +426,13 @@ export function buildRenderPlan(
   return {
     core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
     arenaKey: scan
-      ? `${params.film}::scan::out=${params.outputColorSpace}`
-      : `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
-    arenaInputs: { stockId: params.film, printScan },
+      ? `${stockId}::scan::out=${params.outputColorSpace}`
+      : `${stockId}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
+    arenaInputs: { stockId, printScan },
     chain: {
       family,
       ...(!params.filmEnabled ? { filmOff: true } : {}),
+      ...(paperOnly ? { paperOnly: true } : {}),
       grain: grainActive,
       ...(scan ? { scan } : {}),
       ...(cameraDiffusion ? { cameraDiffusion: true } : {}),
@@ -439,6 +444,7 @@ export function buildRenderPlan(
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {
       ...(!params.filmEnabled ? { cameraOutput: cameraOutputFrame(params, bundle) } : {}),
+      ...(paperOnly ? { paperDirectMatrix: directPaperMatrix(params, bundle) } : {}),
       ...exposureFrame(params, family, filmFormatMm),
       ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
@@ -733,4 +739,12 @@ function cameraOutputFrame(params: RenderParams, bundle: AssetBundle): Float32Ar
   values[12] = { linear: 0, srgb: 1, romm: 2, gamma: 3 }[output.encoding];
   values[13] = output.gamma ?? 1;
   return values;
+}
+
+function directPaperMatrix(params: RenderParams, bundle: AssetBundle): Float32Array {
+  const index = bundle.manifest.colorSpaces.labels.indexOf(params.inputColorSpace);
+  const input = bundle.stockField(BASELINE_RENDER_PARAMS.film, 'inputToSrgb')!;
+  const out = new Float32Array(12);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) out[r * 4 + c] = input[index * 9 + r * 3 + c]!;
+  return out;
 }

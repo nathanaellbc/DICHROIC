@@ -257,8 +257,8 @@ export const GROUPS: readonly ToolGroup[] = [
     label: 'Film',
     icon: 'format',
     tools: [
-      { kind: 'toggle', id: 'filmEnabled', field: 'filmEnabled', label: 'Film', title: 'Film Simulation', icon: 'format', note: 'Turn off film and paper processing. Camera and Lens adjustments remain active.' },
-      { requires: 'filmEnabled', kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
+      { kind: 'toggle', id: 'filmEnabled', field: 'filmEnabled', label: 'Film', title: 'Film Simulation', icon: 'format', note: 'Bypass film processing. Camera and Lens stay active; Paper can also be used on its own.' },
+      { kind: 'slider', id: 'printExposureEv', field: 'printExposureEv', invert: true, mode: 'print', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -2, max: 2, step: 0.1, digits: 1, unit: ' EV', note: 'Brightness of the print, like printing lighter or darker in the darkroom.' },
       { requires: 'filmEnabled', kind: 'slider', id: 'scanExposureEv', field: 'filmExposureEv', mode: 'scan', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Exposure of the film itself. Scanning has no print step, so this sets the brightness directly.' },
       { requires: 'filmEnabled', kind: 'toggle', id: 'autoExposure', field: 'autoExposure', label: 'Auto', title: 'Auto Exposure', icon: 'auto', note: 'Meters the scene like a camera and re-exposes the film. Best for RAW and linear files; phone photos are already exposed.' },
       { requires: 'filmEnabled', kind: 'slider', id: 'filmExposureEv', field: 'filmExposureEv', mode: 'print', label: 'Negative', title: 'Negative Exposure', icon: 'negative', min: -3, max: 3, step: 0.1, digits: 1, unit: ' EV', note: 'Over- or underexpose the negative. The print is re-timed to match, so this changes density, color and grain more than brightness.' },
@@ -313,8 +313,8 @@ export const GROUPS: readonly ToolGroup[] = [
 /** Stop filter komersial (0, 1/8 .. 2) untuk slider strength difusi. */
 export const DIFFUSION_STRENGTH = { min: 0, max: 2, step: 0.125 } as const;
 
-export function isScanMode(params: Pick<RenderParams, 'process'>): boolean {
-  return params.process === 'scanNegative';
+export function isScanMode(params: Pick<RenderParams, 'process'> & Partial<Pick<RenderParams, 'filmEnabled'>>): boolean {
+  return params.filmEnabled !== false && params.process === 'scanNegative';
 }
 
 /** Alat grup yang berlaku untuk mode proses saat ini (Fase 2D), tanpa alat `elsewhere`. */
@@ -467,9 +467,9 @@ export const DEFAULT_NEGATIVE = 'kodak_portra_400';
  * mode print dengan slide film terpilih mengganti film ke negatif bawaan
  * (film reversal hanya bisa di-scan).
  */
-export function choicePatch(tool: ChoiceTool, value: string, params?: Pick<RenderParams, 'film'>): Partial<RenderParams> {
+export function choicePatch(tool: ChoiceTool, value: string, params?: Pick<RenderParams, 'film'> & Partial<Pick<RenderParams, 'filmEnabled'>>): Partial<RenderParams> {
   if (tool.field === 'inputColorSpace' && !decodeAllowed(value)) return { inputColorSpace: value, inputCctfDecoding: false };
-  if (tool.field === 'process' && value === 'printSimulation' && params && isSlideFilm(params.film)) {
+  if (tool.field === 'process' && value === 'printSimulation' && params && params.filmEnabled !== false && isSlideFilm(params.film)) {
     return { process: 'printSimulation', film: DEFAULT_NEGATIVE };
   }
   return { [tool.field]: value } as Partial<RenderParams>;
@@ -480,9 +480,9 @@ export function choicePatch(tool: ChoiceTool, value: string, params?: Pick<Rende
  * ke negatif dari slide film memindah ke print. Negatif yang dipilih saat
  * sudah scan tetap di-scan (scan negatif disengaja lewat alat Process).
  */
-export function stockPatch(kind: 'film' | 'paper', id: string, params: Pick<RenderParams, 'film' | 'process'>): Partial<RenderParams> {
-  if (kind === 'paper') return { paper: id };
-  if (id === 'off') return { filmEnabled: false };
+export function stockPatch(kind: 'film' | 'paper', id: string, params: Pick<RenderParams, 'film' | 'process'> & Partial<Pick<RenderParams, 'filmEnabled'>>): Partial<RenderParams> {
+  if (kind === 'paper') return id === 'off' ? { paperOnly: false } : params.filmEnabled === false ? { paper: id, paperOnly: true } : { paper: id };
+  if (id === 'off') return { filmEnabled: false, paperOnly: false };
   if (isSlideFilm(id)) return { filmEnabled: true, film: id, process: 'scanNegative' };
   if (isSlideFilm(params.film) && params.process === 'scanNegative') return { filmEnabled: true, film: id, process: 'printSimulation' };
   return { filmEnabled: true, film: id };
@@ -612,6 +612,7 @@ export function stepperText(tool: StepperTool, params: RenderParams): string {
  * mengembalikannya ke bidang fokus dalam patch yang sama.
  */
 export function normalizePatch(params: RenderParams, patch: Partial<RenderParams>): Partial<RenderParams> {
+  if (patch.filmEnabled === true && isSlideFilm(patch.film ?? params.film)) patch = { ...patch, process: 'scanNegative' };
   const focus = patch.lensFocusDistanceM;
   if (focus === undefined) return patch;
   const near = patch.lensNearSharpM ?? params.lensNearSharpM;

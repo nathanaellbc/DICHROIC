@@ -59,6 +59,7 @@ export function isLongChoice(tool: ChoiceTool): boolean {
 }
 
 function toolEnabled(tool: Tool, params: RenderParams): boolean {
+  if (tool.kind === 'slider' && tool.field === 'printExposureEv' && !params.filmEnabled && !params.paperOnly) return false;
   if (tool.requires && !params[tool.requires]) return false;
   if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
   if (tool.kind === 'diffusion') return params[tool.enabledBy];

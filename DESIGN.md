@@ -422,4 +422,4 @@ Camera also includes a Detail section containing Soften Detail, a 0–100 slider
 
 Camera → Color also exposes HSV Saturation, a 0–200 gain slider with neutral 100, using the existing Lucide saturation icon and compact/mobile controls. Its help distinguishes HSV Value from perceived brightness.
 
-The Film stock list starts with an Off radio row. Film Simulation also has an On/Off control in the Film panel and mobile strip. Off retains the last recipe, marks the toolbar as Film Off / Camera & Lens only, disables paper rows and film controls, and selecting a film enables simulation again.
+The Film stock list starts with an Off radio row. Film Simulation also has an On/Off control in the Film panel and mobile strip. Off retains the last recipe, marks the toolbar as Film Off / Camera & Lens only, disables film controls, and selecting a film enables simulation again. Paper rows remain available with Film Off; selecting one activates its standalone paper response. The Paper list then includes Off to restore Camera and Lens only.
