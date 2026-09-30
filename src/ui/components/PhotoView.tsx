@@ -12,11 +12,11 @@
  * (pas <-> 2,5x); seret untuk menggeser saat diperbesar. Zoom hanya transform
  * tampilan -- pratinjau yang sama diperbesar, render tidak diulang.
  */
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Frame } from '../engine/display';
-import { fade } from '../motion';
+import { fade, photoReturn } from '../motion';
 import { Spinner } from './Overlays';
 import { Icon } from './Icon';
 
@@ -73,6 +73,19 @@ function clampAxis(t: number, s: number, len: number, offset: number, areaLen: n
   return Math.min(-offset, Math.max(areaLen - offset - scaled, t));
 }
 
+/** Rubber-band distance approaches a quarter viewport, never a hard wall. */
+function elasticOffset(distance: number, extent: number): number {
+  const limit = Math.max(1, extent / 4);
+  return Math.sign(distance) * limit * (Math.abs(distance) * 0.55) / (limit + Math.abs(distance) * 0.55);
+}
+
+/** Recover the raw gesture origin when a new drag interrupts an elastic return. */
+function rawOffset(distance: number, extent: number): number {
+  const limit = Math.max(1, extent / 4);
+  const magnitude = Math.min(Math.abs(distance), limit - 0.001);
+  return Math.sign(distance) * magnitude * limit / (0.55 * (limit - magnitude));
+}
+
 export function PhotoView({
   frame,
   original,
@@ -98,6 +111,13 @@ export function PhotoView({
   const [slow, setSlow] = useState(false);
   const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FIT);
+  const reducedMotion = useReducedMotion();
+  const returnAnimation = useRef<{ stop: () => void } | null>(null);
+  const stopReturn = () => {
+    returnAnimation.current?.stop();
+    returnAnimation.current = null;
+  };
+  useEffect(() => () => returnAnimation.current?.stop(), []);
   const holdTimer = useRef(0);
   const splitDrag = useRef(false);
   const pointers = useRef(new Map<number, Point>());
@@ -139,7 +159,10 @@ export function PhotoView({
   }
 
   // Foto baru mulai dari pas.
-  useEffect(() => setView(FIT), [photoKey]);
+  useEffect(() => {
+    returnAnimation.current?.stop();
+    setView(FIT);
+  }, [photoKey]);
 
   const clampView = (v: View): View => {
     if (rect.width === 0) return FIT;
@@ -149,6 +172,27 @@ export function PhotoView({
       tx: clampAxis(v.tx, s, rect.width, rect.left, area.width),
       ty: clampAxis(v.ty, s, rect.height, rect.top, area.height),
     };
+  };
+  const elasticView = (v: View): View => {
+    const edge = clampView(v);
+    return { ...edge, tx: edge.tx + elasticOffset(v.tx - edge.tx, area.width), ty: edge.ty + elasticOffset(v.ty - edge.ty, area.height) };
+  };
+  const dragOrigin = (): View => {
+    const edge = clampView(view);
+    return { ...view, tx: edge.tx + rawOffset(view.tx - edge.tx, area.width), ty: edge.ty + rawOffset(view.ty - edge.ty, area.height) };
+  };
+  const settleView = () => {
+    stopReturn();
+    const edge = clampView(view);
+    if (reducedMotion || (edge.tx === view.tx && edge.ty === view.ty)) {
+      setView(edge);
+      return;
+    }
+    returnAnimation.current = animate(0, 1, {
+      ...photoReturn,
+      onUpdate: (progress) => setView({ s: edge.s, tx: view.tx + (edge.tx - view.tx) * progress, ty: view.ty + (edge.ty - view.ty) * progress }),
+      onComplete: () => { returnAnimation.current = null; setView(edge); },
+    });
   };
   /** Titik area (px) -> koordinat foto 0..1, memperhitungkan zoom. */
   const toPhoto = (ax: number, ay: number, v: View = view): Point => ({
@@ -178,6 +222,7 @@ export function PhotoView({
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      returnAnimation.current?.stop();
       const box = el.getBoundingClientRect();
       const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002));
       setView((v) => latest.current.zoomAt(v, v.s * factor, e.clientX - box.left, e.clientY - box.top));
@@ -188,6 +233,7 @@ export function PhotoView({
 
   // Ukuran area berubah (rotasi, panel): jaga tampilan tetap sah.
   useEffect(() => {
+    returnAnimation.current?.stop();
     setView((v) => latest.current.clampView(v));
   }, [area.width, area.height, rect.width, rect.height]);
 
@@ -228,6 +274,7 @@ export function PhotoView({
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) return;
+    stopReturn();
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
@@ -243,7 +290,7 @@ export function PhotoView({
     if (pointers.current.size > 2) return;
     if (picking) {
       // Fokus dipilih saat dilepas, kecuali ternyata menggeser foto yang diperbesar.
-      gesture.current = view.s > 1 ? { kind: 'pan', x: p.x, y: p.y, view, moved: false } : { kind: 'tap', x: p.x, y: p.y, moved: false };
+      gesture.current = view.s > 1 ? { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false } : { kind: 'tap', x: p.x, y: p.y, moved: false };
       return;
     }
     if (compare) {
@@ -251,7 +298,7 @@ export function PhotoView({
       setSplitFrom(e.clientX);
       return;
     }
-    if (view.s > 1) gesture.current = { kind: 'pan', x: p.x, y: p.y, view, moved: false };
+    if (view.s > 1) gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false };
     window.clearTimeout(holdTimer.current);
     holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
@@ -281,13 +328,13 @@ export function PhotoView({
         window.clearTimeout(holdTimer.current);
         setPeek(false);
       }
-      if (g.kind === 'pan' && g.moved) setView(clampView({ s: g.view.s, tx: g.view.tx + dx, ty: g.view.ty + dy }));
+      if (g.kind === 'pan' && g.moved) setView(elasticView({ s: g.view.s, tx: g.view.tx + dx, ty: g.view.ty + dy }));
     }
   };
   const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const tracked = pointers.current.delete(e.pointerId);
-    if (tracked && picking && focus && (g?.kind === 'tap' || g?.kind === 'pan') && !g.moved) {
+    if (tracked && e.type === 'pointerup' && picking && focus && (g?.kind === 'tap' || g?.kind === 'pan') && !g.moved) {
       const p = toPhoto(g.x, g.y);
       // Ketukan di luar foto (di bingkai hitam) tidak memilih apa pun.
       if (p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1) focus.onPick(Number(p.x.toFixed(4)), Number(p.y.toFixed(4)));
@@ -297,10 +344,12 @@ export function PhotoView({
     splitDrag.current = false;
     window.clearTimeout(holdTimer.current);
     setPeek(false);
+    if (tracked && pointers.current.size === 0) settleView();
   };
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, [role=slider]')) return;
     const p = local(e.clientX, e.clientY);
+    stopReturn();
     setView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
   };
   const zoomed = view.s > 1.01;
@@ -426,7 +475,7 @@ export function PhotoView({
           type="button"
           className="glass-clear t-footnote tabular"
           title="Fit to view (double-click)"
-          onClick={() => setView(FIT)}
+          onClick={() => { stopReturn(); setView(FIT); }}
           style={{ position: 'absolute', top: 10, right: 10, height: 28, padding: '0 10px', borderRadius: 'var(--r-control)', border: 0, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
         >
           {Math.round(view.s * 100)}% <span className="secondary">· Fit</span>

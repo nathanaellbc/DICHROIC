@@ -14,6 +14,9 @@ export const snappy: Transition = { type: 'spring', stiffness: 560, damping: 44,
 /** Sheet dan panel besar: mengikuti jari lalu berhenti lembut di detent. */
 export const sheetSpring: Transition = { type: 'spring', stiffness: 420, damping: 42, mass: 1 };
 
+/** Photo overscroll: a soft, interruptible return after the pointer releases. */
+export const photoReturn = { type: 'spring' as const, duration: 0.5, bounce: 0.2 };
+
 /** Popover dan alert muncul dari sumbernya. */
 export const popSpring: Transition = { type: 'spring', stiffness: 520, damping: 34, mass: 0.7 };
 

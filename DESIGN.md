@@ -222,6 +222,8 @@ Vertical scrolling uses a transparent track and a slim rounded neutral thumb, br
 
 ### Editor zoom and frosted chrome (2026-09-30)
 
+Dragging a zoomed photo beyond its pan bounds uses increasing rubber-band resistance. Releasing or cancelling the last pointer returns the photo to the nearest valid edge with the shared `photoReturn` spring (0.5s, bounce 0.2). A new drag, wheel zoom, Fit reset, photo change or viewport resize interrupts the return. Reduced motion keeps the resisted drag but restores the boundary immediately. This gesture feedback is an intentional exception to the desktop no-bounce rule; ordinary pan and zoom stay immediate.
+
 The photo preview has no inset border on desktop. Zoomed pixels extend beyond the fitted preview area behind the editor chrome; only the outer app window clips them. Fit still shows the full photo, and zoom, pan, comparison and focus selection keep their existing coordinates.
 
 The editor toolbar, stock sidebar, parameter inspector, status bar and compact adjustment panel use neutral frosted graphite: `rgba(28, 28, 30, 0.78)` with `blur(30px)` and no saturation boost. These panels sit above the photo, with their existing geometry and separators. Unsupported backdrop filters and reduced transparency use solid graphite. This user-requested editor treatment supersedes the solid-panel and glass-only-on-floating-controls rules below for these surfaces; dialogs and menus retain their existing materials.
