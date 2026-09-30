@@ -464,7 +464,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
             : {
                 left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 560,
                 borderRadius: 'var(--r-panel) var(--r-panel) 0 0',
-                boxShadow: '0 -1px 0 var(--hairline), 0 -12px 32px rgba(0,0,0,0.35)',
+                boxShadow: '0 -1px 0 var(--hairline), 0 -8px 48px rgba(0,0,0,0.12)',
                 padding: '14px calc(var(--safe-right) + 16px) max(14px, var(--safe-bottom)) calc(var(--safe-left) + 16px)',
               }),
         }}

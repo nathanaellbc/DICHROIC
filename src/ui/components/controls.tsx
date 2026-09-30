@@ -273,8 +273,8 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
           initial={false}
           animate={
             active
-              ? { scale: 1.2, backgroundColor: 'rgba(255,255,255,0.5)', boxShadow: '0 0 0 1px rgba(255,255,255,0.85), 0 4px 14px rgba(0,0,0,0.35)' }
-              : { scale: 1, backgroundColor: 'rgba(255,255,255,1)', boxShadow: '0 0 0 0px rgba(255,255,255,0), 0 3px 8px rgba(0,0,0,0.35)' }
+              ? { scale: 1.2, backgroundColor: 'rgba(255,255,255,0.5)', boxShadow: '0 0 0 1px rgba(255,255,255,0.85)' }
+              : { scale: 1, backgroundColor: 'rgba(255,255,255,1)', boxShadow: '0 0 0 0px rgba(255,255,255,0)' }
           }
           transition={snappy}
         />

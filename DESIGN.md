@@ -214,6 +214,10 @@ components:
 
 ## Overview
 
+### Flat controls and soft overlay shadows (2026-09-30)
+
+Switch knobs, slider thumbs, selected segments/tabs and pop-up fields have no cast shadow or inset highlight. Controls read as flat shapes through fill, colour and existing focus/selection marks. Floating menus/toasts use only `0 8px 40px rgba(0,0,0,0.18)`; dialogs use `0 16px 72px rgba(0,0,0,0.24)`. The compact panel keeps its hairline with a diffuse `0 -8px 48px rgba(0,0,0,0.12)` shadow. These treatments supersede the older knob/segment lift and overlay shadow vocabulary below. Accessibility outlines and image focus-marker contrast rings remain legible.
+
 ### Lucide icons and softer controls (2026-09-30)
 
 All UI icons, including the spinner, use statically imported Lucide React components through the shared `Icon` adapter. They retain existing sizes, colours, accessible control labels and stroke weights. Control/field radii are 8px on desktop and 12px on compact layouts; list, menu and dialog radii are 10/12/14px on desktop and 14/14/18px on compact layouts. Dense inline controls use 7px/8px. Panel geometry and phone corner continuity stay unchanged. These values supersede the older radius scale below.
