@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { installSquircleGeometry } from './squircle';
 import { Alert, Toast } from './components/Overlays';
 import { describeError, engine } from './engine/engine';
 import { ACCEPTED_FILES, useEngineState, useFilePicker, useSizeClass } from './hooks';
@@ -14,6 +15,7 @@ export function App() {
   const toastTimer = useRef(0);
 
   useEffect(() => engine.start(), []);
+  useLayoutEffect(() => installSquircleGeometry(), []);
 
   // Kepadatan (styles.css): ukuran iOS di compact, kepadatan macOS di regular.
   useLayoutEffect(() => {

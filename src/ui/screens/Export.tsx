@@ -251,7 +251,7 @@ export function ExportContent({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
-      <div className="scroll-y" style={{ flexGrow: 1, minHeight: 0, padding: '4px 16px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="scroll-y" style={{ flexGrow: 1, minHeight: 0, padding: 'var(--inset-dialog)', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Segmented label="Export type" items={[{ value: 'image', label: 'Image' }, { value: 'cube', label: 'LUT (.cube)' }] as const} value={mode} onChange={setMode} />
 
         {mode === 'image' ? (
@@ -421,7 +421,7 @@ export function ListPickerContent({
 }) {
   const groups = [...new Set(options.map((o) => o.group ?? ''))];
   return (
-    <div className="scroll-y" style={{ flexGrow: 1, minHeight: 0, padding: '4px 16px 32px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+    <div className="scroll-y" style={{ flexGrow: 1, minHeight: 0, padding: 'var(--inset-dialog)', display: 'flex', flexDirection: 'column', gap: 22 }}>
       {groups.map((group) => (
         <section key={group} className="list-section">
           {group && <h3 className="list-header">{group}</h3>}

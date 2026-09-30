@@ -56,7 +56,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           borderRadius: 'var(--r-dialog)',
           border: `1.5px dashed ${over ? 'var(--blue)' : 'rgba(255,255,255,0.2)'}`,
           background: over ? 'var(--blue-wash)' : 'rgba(255,255,255,0.02)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '24px 20px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 20,
           transition: 'border-color 0.15s, background-color 0.15s',
         }}
       >

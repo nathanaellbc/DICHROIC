@@ -103,7 +103,7 @@ export function StockBrowser({
           </span>
         </div>
         {previous && (
-          <div style={{ borderRadius: 'var(--r-list)', background: 'var(--bg-elevated-2)', padding: '6px 6px 6px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="nested-stock-swap">
             <span className="t-footnote" style={{ flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <span className="secondary">Previous</span>
               <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previous.label}</span>
@@ -127,9 +127,12 @@ export function StockBrowser({
         {sections.length === 0 && <p className="t-subhead secondary" style={{ textAlign: 'center', marginTop: 24 }}>No stocks match “{query}”.</p>}
         {kind === 'film' && !query && <div className={dense ? 'source-list' : 'list'} role="radiogroup" aria-label="Film bypass">
           <button type="button" role="radio" aria-checked={!filmEnabled} className={dense ? 'source-row' : 'row'} style={dense ? undefined : { minHeight: 56 }} onClick={() => onPick('film', 'off')}>
-            <span className={dense ? 'name' : 'row-body'}>Off</span>
-            <span className="meta secondary">Camera &amp; Lens only</span>
-            {!dense && !filmEnabled && <Icon name="check" size={20} color="var(--blue)" />}
+            {dense ? <><span className="name">Off</span><span className="meta secondary">Camera &amp; Lens only</span></> : (
+              <span className="row-body">
+                <span className="row-text"><span className="t-body">Off</span><span className="t-subhead secondary">Camera &amp; Lens only</span></span>
+                {!filmEnabled && <Icon name="check" size={20} color="var(--blue)" />}
+              </span>
+            )}
           </button>
         </div>}
         {hint}

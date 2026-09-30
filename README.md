@@ -295,3 +295,7 @@ The kernel footprint scales with render dimensions (sigma 1.5 px at a 4096 px lo
 ## Film Off
 
 Select Off at the top of the Film list, or disable Film Simulation in the Film controls. This bypasses spectral film exposure/develop, halation, DIR, grain, paper and scanner processing while retaining Camera develop, Soften Detail, Lens Blur and camera diffusion. Output still converts to the selected output primaries and transfer function. Film auto-exposure and film/print exposure controls are bypassed. Stock and paper selections are retained; choosing a film re-enables simulation. Preview and image export share the same path; the graph cache includes the bypass state.
+
+## Squircle interface geometry
+
+Rounded UI surfaces use n=4 superellipse (squircle) corners. Nested corner extents subtract the actual padding and border from the outer radius, with consistent inset tokens for segmented controls, tabs, dialogs and nested cards. Circular indicators and slider thumbs remain circles. Native `corner-shape: squircle` is used where supported; a responsive SVG cubic-path fallback handles other browsers. Support is feature-detected because [MDN browser compatibility data](https://github.com/mdn/browser-compat-data/blob/main/css/properties/corner-shape.json) still marks stable Safari/Firefox support as incomplete. Fallback geometry and glass/focus behavior were tested in Edge; physical iPhone Safari is pending.

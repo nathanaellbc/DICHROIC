@@ -425,3 +425,12 @@ Camera → Color also exposes HSV Saturation, a 0–200 gain slider with neutral
 The Film stock list starts with an Off radio row. Film Simulation also has an On/Off control in the Film panel and mobile strip. Off retains the last recipe, marks the toolbar as Film Off / Camera & Lens only, disables paper rows and film controls, and selecting a film enables simulation again.
 
 Modal sheets, alerts and action menus use an 8px blurred scrim with 28% black dimming. Foregrounds use 28px blur, 115% saturation and a 76% dark material, with a diffuse 16% black shadow. Reduced transparency restores opaque surfaces; increased contrast strengthens borders and dimming.
+
+
+### Squircle and nested corner geometry
+
+Non-circular surfaces use quartic superellipse corners: `(x/r)^4 + (y/r)^4 = 1`, CSS `corner-shape: squircle` (`superellipse(2)`). Circles, focus rings, slider thumbs and pill tracks keep their intended shape. Desktop panes that meet the window edge remain square.
+
+The nested corner extent rule is `R_inner = max(0, R_outer - padding - border)`. Segmented controls use a 2px inset with radii 10/8px on desktop and 14/12px on mobile. Tabs use their shared 3px inset. Centered dialogs use `R_list + 16px + 1px` for their outer radius; body and action insets are 16px on all sides. Alerts use equal 18px padding. The previous-stock container uses `R_control + 6px` and equal 6px padding. Safe-area padding remains device-dependent. Radii normalize proportionally when opposing corners would overlap; this radius-extent convention does not claim an exact constant normal-distance offset between quartic curves.
+
+Stable browsers without native corner-shape get responsive SVG path clipping from the same n=4 curve, approximated by shared-tangent cubic segments with zero curvature at straight-edge joins. ResizeObserver updates dimensions; density/border changes invalidate relevant geometry. Photo movement does not regenerate paths. Uniform solid/dashed borders are repainted along the contour, keyboard outlines stay inside clipping, and observers/styles clean up on unmount. SVG clipping suppresses outside box shadows on this fallback; native rendering retains them. Native and forced SVG paths, desktop/mobile sizing, glass materials and keyboard focus were exercised in Edge; physical iPhone Safari remains unverified.
