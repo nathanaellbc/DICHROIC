@@ -25,7 +25,7 @@ import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
-import { focusCheckFrame } from '../engine/focusCheck';
+import { prepareFocusOverlay } from '../engine/focusCheck';
 import { dialogOpen } from '../hooks';
 import { stockInfo } from '../model/stocks';
 import { GROUPS, choicePatch, findTool, isModified, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
@@ -80,12 +80,18 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const [pickingFocus, setPickingFocus] = useState(false);
+  const [focusPreview, setFocusPreview] = useState<{ x: number; y: number } | null>(null);
   // Mode pilih fokus hanya selama grup Lens terbuka dan lens blur menyala.
   const picking = pickingFocus && group === 'lens' && state.params.lensBlurEnabled && state.depth.status === 'ready';
+  useEffect(() => setFocusPreview(null), [picking, state.fileName]);
+  const previewParams = useMemo(
+    () => picking && focusPreview ? { ...state.params, lensFocusX: focusPreview.x, lensFocusY: focusPreview.y } : state.params,
+    [picking, focusPreview, state.params],
+  );
   const hasPhoto = !!state.frame;
 
   const ctx: ToolContext = {
-    params: state.params,
+    params: previewParams,
     defaults: state.defaults,
     onPatch: (patch) => engine.setParams(normalizePatch(state.params, patch)),
     onOpenList: (tool) => setSheet({ kind: 'list', toolId: tool.id }),
@@ -95,7 +101,12 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       aspect: state.frame ? state.frame.width / state.frame.height : 1.5,
       onDownload: () => engine.downloadDepth(),
       onRetry: () => engine.retryDepth(),
-      onPickFocus: () => setPickingFocus(!picking),
+      onPickFocus: () => {
+        if (picking && focusPreview && (focusPreview.x !== state.params.lensFocusX || focusPreview.y !== state.params.lensFocusY)) {
+          engine.setParams({ lensFocusX: focusPreview.x, lensFocusY: focusPreview.y });
+        }
+        setPickingFocus(!picking);
+      },
     },
   };
 
@@ -159,15 +170,20 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
   // Mode fokus menampilkan cek fokus: di luar kedalaman ruang jadi abu-abu gelap.
   const depthMap = state.depth.status === 'ready' ? engine.depthMap : undefined;
-  const shownFrame = useMemo(
-    () => (picking && state.frame && depthMap ? focusCheckFrame(state.frame, depthMap, state.params) : state.frame),
-    [picking, state.frame, depthMap, state.params],
+  const focusOverlay = useMemo(
+    () => (picking && state.frame && depthMap ? prepareFocusOverlay(state.frame, depthMap) : undefined),
+    [picking, state.frame, depthMap],
+  );
+  const focusMask = useMemo(
+    () => focusOverlay?.(previewParams),
+    [focusOverlay, previewParams],
   );
   const photo = !hasPhoto ? (
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
   ) : (
     <PhotoView
-      frame={shownFrame}
+      frame={state.frame}
+      focusMask={focusMask}
       original={state.original}
       compare={compare}
       rendering={state.rendering}
@@ -181,7 +197,12 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         show: group === 'lens' && state.params.lensBlurEnabled,
         picking,
         // Focus point and depth-of-field mask follow a held drag until Done.
-        onPick: (lensFocusX, lensFocusY) => engine.setParams({ lensFocusX, lensFocusY }),
+        onPreview: (x, y) => setFocusPreview((previous) => previous?.x === x && previous.y === y ? previous : { x, y }),
+        onPreviewCancel: () => setFocusPreview(null),
+        onPick: (lensFocusX, lensFocusY) => {
+          setFocusPreview(null);
+          if (lensFocusX !== state.params.lensFocusX || lensFocusY !== state.params.lensFocusY) engine.setParams({ lensFocusX, lensFocusY });
+        },
         onCancel: () => setPickingFocus(false),
       }}
     />

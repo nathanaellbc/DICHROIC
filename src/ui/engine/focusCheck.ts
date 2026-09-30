@@ -38,6 +38,43 @@ function depthAt(map: DepthMap, u: number, v: number): number {
   return a + (b - a) * ty;
 }
 
+/** Prepare once per rendered photo/depth map. The translucent mask is bounded;
+ * the photo underneath remains at its acquired resolution, including zoom.
+ * CoC thresholds still use the original preview's pixel pitch. */
+export function prepareFocusOverlay(frame: Frame, depth: DepthMap): (params: RenderParams) => Frame {
+  const sourceEdge = Math.max(frame.width, frame.height);
+  const scale = Math.min(1, 768 / sourceEdge);
+  const width = Math.max(1, Math.round(frame.width * scale));
+  const height = Math.max(1, Math.round(frame.height * scale));
+  const disparities = new Float32Array(width * height);
+  const grey = new Uint8ClampedArray(width * height);
+  for (let y = 0; y < height; y += 1) {
+    const v = (y + 0.5) / height;
+    const sy = Math.min(frame.height - 1, Math.floor(v * frame.height));
+    for (let x = 0; x < width; x += 1) {
+      const u = (x + 0.5) / width;
+      const i = y * width + x;
+      disparities[i] = depthAt(depth, u, v);
+      const p = (sy * frame.width + Math.min(frame.width - 1, Math.floor(u * frame.width))) * 4;
+      grey[i] = (0.2126 * frame.pixels[p]! + 0.7152 * frame.pixels[p + 1]! + 0.0722 * frame.pixels[p + 2]!) * 0.3;
+    }
+  }
+  return (params) => {
+    const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
+    const lens = resolveLensFrame(lensSettings(params), depth, params.filmFormat, filmFormatMm, sourceEdge);
+    const edge0 = acceptableCocMm(filmFormatMm, frame.width / frame.height) * (sourceEdge / filmFormatMm);
+    const edge1 = edge0 * 1.5 + 0.5;
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < disparities.length; i += 1) {
+      const c = Math.abs(signedCocPx(disparities[i]!, lens.focusDisparity, lens.cocScalePx, lens.maxCocPx, lens.nearDisparity, lens.foreground));
+      const p = i * 4;
+      pixels[p] = pixels[p + 1] = pixels[p + 2] = grey[i]!;
+      pixels[p + 3] = 255 * smoothstep(edge0, edge1, c);
+    }
+    return { width, height, pixels, colorSpace: frame.colorSpace };
+  };
+}
+
 export function focusCheckFrame(frame: Frame, depth: DepthMap, params: RenderParams): Frame {
   const { width, height, pixels } = frame;
   const longEdge = Math.max(width, height);

@@ -44,6 +44,9 @@ export interface FocusOverlay {
   show: boolean;
   picking: boolean;
   onPick: (x: number, y: number) => void;
+  /** Cheap provisional mask update, without committing a GPU render. */
+  onPreview?: (x: number, y: number) => void;
+  onPreviewCancel?: () => void;
   onCancel?: () => void;
 }
 
@@ -95,6 +98,7 @@ export function PhotoView({
   photoKey,
   label,
   focus,
+  focusMask,
   sourceSize,
   onResolutionChange,
 }: {
@@ -106,6 +110,7 @@ export function PhotoView({
   photoKey: string;
   label: string;
   focus?: FocusOverlay;
+  focusMask?: Frame;
   sourceSize?: { width: number; height: number };
   onResolutionChange?: (longEdge: number) => void;
 }) {
@@ -278,7 +283,7 @@ export function PhotoView({
     setAim(point);
     // Coalesce pointer samples: depth selection and render parameters update
     // together once per display frame, with the last position flushed on release.
-    pendingFocus.current = { point, pick: focus.onPick };
+    pendingFocus.current = { point, pick: focus.onPreview ?? focus.onPick };
     if (!focusFrame.current) focusFrame.current = requestAnimationFrame(flushFocusUpdate);
   };
   useEffect(() => () => {
@@ -323,6 +328,8 @@ export function PhotoView({
     pointers.current.set(e.pointerId, p);
     if (pointers.current.size === 2) {
       cancelFocusUpdate();
+      focus?.onPreviewCancel?.();
+      setAim(null);
       // Pinch dua jari: batalkan seret/intip/pembagi yang sempat dimulai.
       const [a, b] = twoPointers();
       window.clearTimeout(holdTimer.current);
@@ -388,9 +395,12 @@ export function PhotoView({
     if (tracked && g?.kind === 'focus' && g.pointerId === e.pointerId) {
       if (e.type === 'pointerup' && picking) {
         pickAt(local(e.clientX, e.clientY));
+        const finalPoint = pendingFocus.current!.point;
         flushFocusUpdate();
+        if (focus?.onPreview) focus.onPick(finalPoint.x, finalPoint.y);
       } else {
         cancelFocusUpdate();
+        focus?.onPreviewCancel?.();
         setAim(null);
       }
     }
@@ -444,6 +454,7 @@ export function PhotoView({
           >
             <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
               {frame && <FrameCanvas key={frame.colorSpace} frame={frame} />}
+              {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
               {showOriginal && original && (
                 <motion.div
                   initial={{ opacity: compare ? 1 : 0 }}
