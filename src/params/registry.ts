@@ -82,6 +82,7 @@ export const FIELD_STATUS: Readonly<Record<keyof RenderParams, FieldStatus>> = O
   preflashYFilterShift: 'verified',
   // Ekstensi "Camera Raw" (`test/cameraDevelop.test.ts`, referensi JS).
   cameraWhiteBalanceK: 'extension',
+  cameraExposureEv: 'extension',
   cameraTint: 'extension',
   cameraContrast: 'extension',
   cameraHighlights: 'extension',

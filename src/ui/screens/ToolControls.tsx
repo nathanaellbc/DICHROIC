@@ -154,7 +154,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
           onChange={(v) => onPatch(positionPatch(tool, v, params))}
         />
       );
-      if (!tool.note) return slider;
+      if (!tool.note || (dense && tool.section)) return slider;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {slider}
@@ -389,7 +389,7 @@ export function InspectorTool({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
       <div style={{ minHeight: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           {tool.tint && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 2, background: tool.tint, flexShrink: 0 }} />}
-          <span className="t-body" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.title}</span>
+          <span className="t-body" title={tool.kind === 'slider' ? tool.note : undefined} style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.title}</span>
           {modified && <span aria-label="edited" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--blue)', flexShrink: 0 }} />}
           {locked && <Icon name="lock" size={12} />}
         </span>

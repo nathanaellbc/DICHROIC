@@ -13,7 +13,7 @@
  * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto.
  */
 import { motion } from 'motion/react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
 import { GroupTabs, PressButton } from '../components/controls';
@@ -620,9 +620,18 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
           <div className="pane-header">
             <h2 className="t-headline" style={{ margin: 0 }}>{currentGroup.label}</h2>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 12 }}>
-            {visibleTools(currentGroup, state.params).map((tool) => (
-              <InspectorTool key={tool.id} tool={tool} ctx={ctx} />
+          <div className={group === 'camera' ? 'camera-controls' : undefined} style={{ display: 'flex', flexDirection: 'column', paddingBottom: 12 }}>
+            {group === 'camera' && <p className="t-footnote secondary" style={{ margin: '0 12px 4px' }}>Before film · WB relative to the decoded image.</p>}
+            {visibleTools(currentGroup, state.params).map((tool, index, tools) => (
+              <Fragment key={tool.id}>
+                {tool.section && tool.section !== tools[index - 1]?.section && (
+                  <div className="camera-section">
+                    <h3>{tool.section}</h3>
+                    {tool.section === 'White Balance' && <PressButton className="capsule plain" onClick={() => ctx.onPatch({ cameraWhiteBalanceK: state.defaults.cameraWhiteBalanceK, cameraTint: state.defaults.cameraTint })}>Reset WB</PressButton>}
+                  </div>
+                )}
+                <InspectorTool tool={tool} ctx={ctx} />
+              </Fragment>
             ))}
           </div>
         </motion.div>

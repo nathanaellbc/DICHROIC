@@ -26,6 +26,7 @@ export type IconName =
   | 'focus' | 'aperture' | 'focalLength' | 'nearSharp' | 'foreground' | 'blades' | 'curvature' | 'catEye';
 
 interface ToolBase {
+  section?: 'White Balance' | 'Light' | 'Color';
   id: string;
   label: string;
   title: string;
@@ -52,6 +53,8 @@ interface ToolBase {
 }
 
 export interface SliderTool extends ToolBase {
+  /** Relative -100..100 display; keeps the validated processing domain intact. */
+  relativeCenter?: number;
   kind: 'slider';
   field: NumericField;
   min: number;
@@ -211,7 +214,6 @@ export const DIFFUSION_FAMILIES: readonly ChoiceOption<DiffusionFilterFamily>[] 
  * "Camera Raw" (ekstensi DICHROIC, di luar spektrafilm): develop kamera
  * sebelum film. Rentang = `CAMERA_LIMITS` (`host/cameraDevelop.ts`).
  */
-const CAMERA_NOTE = 'Camera develop before the film, beyond spektrafilm.';
 const LENS_NOTE = 'Beyond spektrafilm.';
 
 export const GROUPS: readonly ToolGroup[] = [
@@ -220,14 +222,15 @@ export const GROUPS: readonly ToolGroup[] = [
     label: 'Camera',
     icon: 'camera',
     tools: [
-      { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', label: 'Temp', title: 'White Balance', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, unit: ' K', note: 'The light the scene was under. 5500 K leaves the picture as it is; lower corrects warm (tungsten) light toward blue, higher corrects cool light toward amber.' },
-      { kind: 'slider', id: 'cameraTint', field: 'cameraTint', label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 2, note: 'The light’s green–magenta error. + says the light was green (fluorescent) and adds magenta; − the opposite.' },
-      { kind: 'slider', id: 'cameraContrast', field: 'cameraContrast', label: 'Contrast', title: 'Contrast', icon: 'contrast', min: -0.75, max: 0.75, step: 0.01, digits: 2, note: `Steepens or flattens the tones around the picture’s own middle grey, which stays put. ${CAMERA_NOTE}` },
-      { kind: 'slider', id: 'cameraHighlights', field: 'cameraHighlights', label: 'Highlights', title: 'Highlights', icon: 'highlights', min: -1.5, max: 1.5, step: 0.05, digits: 2, unit: ' EV', note: 'Brightens or recovers the tones about 1½ stops over the middle.' },
-      { kind: 'slider', id: 'cameraShadows', field: 'cameraShadows', label: 'Shadows', title: 'Shadows', icon: 'shadows', min: -1.5, max: 1.5, step: 0.05, digits: 2, unit: ' EV', note: 'Opens up or deepens the tones about 1½ stops under the middle.' },
-      { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme top end, four stops over the middle.' },
-      { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 2, unit: ' EV', note: 'The extreme bottom end, four stops under the middle. True black stays black.' },
-      { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 2, note: `Color intensity of the scene before the film sees it; brightness is kept. ${CAMERA_NOTE}` },
+      { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', section: 'White Balance', relativeCenter: 5500, label: 'Temp', title: 'Temperature', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, note: 'Cooler ← → warmer. Relative to the decoded white balance.' },
+      { kind: 'slider', id: 'cameraTint', field: 'cameraTint', section: 'White Balance', relativeCenter: 0, label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 0, note: 'Green ← → magenta.' },
+      { kind: 'slider', id: 'cameraExposureEv', field: 'cameraExposureEv', section: 'Light', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -5, max: 5, step: 0.05, digits: 2, unit: ' EV', note: 'Linear exposure before film. +1 EV doubles the light.' },
+      { kind: 'slider', id: 'cameraContrast', field: 'cameraContrast', section: 'Light', relativeCenter: 0, label: 'Contrast', title: 'Contrast', icon: 'contrast', min: -0.75, max: 0.75, step: 0.01, digits: 0, note: 'Less ← → more contrast around the scene midtone.' },
+      { kind: 'slider', id: 'cameraHighlights', field: 'cameraHighlights', section: 'Light', relativeCenter: 0, label: 'Highlights', title: 'Highlights', icon: 'highlights', min: -1.5, max: 1.5, step: 0.05, digits: 0, note: 'Darkens or lifts bright tones; cannot restore clipped sensor data.' },
+      { kind: 'slider', id: 'cameraShadows', field: 'cameraShadows', section: 'Light', relativeCenter: 0, label: 'Shadows', title: 'Shadows', icon: 'shadows', min: -1.5, max: 1.5, step: 0.05, digits: 0, note: 'Deepens or opens dark tones.' },
+      { kind: 'slider', id: 'cameraWhites', field: 'cameraWhites', section: 'Light', relativeCenter: 0, label: 'Whites', title: 'Whites', icon: 'whites', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the brightest end of the tonal range.' },
+      { kind: 'slider', id: 'cameraBlacks', field: 'cameraBlacks', section: 'Light', relativeCenter: 0, label: 'Blacks', title: 'Blacks', icon: 'blacks', min: -2, max: 2, step: 0.05, digits: 0, note: 'Adjusts the darkest end; true black stays black.' },
+      { kind: 'slider', id: 'cameraSaturation', field: 'cameraSaturation', section: 'Color', relativeCenter: 1, label: 'Saturation', title: 'Saturation', icon: 'saturation', min: 0, max: 2, step: 0.01, digits: 0, note: 'Color intensity before film, preserving luminance.' },
     ],
   },
   {
@@ -345,7 +348,7 @@ export function formatNumber(value: number, digits: number, signed: boolean): st
 }
 
 export function isBipolar(tool: SliderTool | StepperTool): boolean {
-  return tool.min < 0;
+  return tool.min < 0 || (tool.kind === 'slider' && tool.relativeCenter !== undefined);
 }
 
 export function formatPushPull(stops: number): string {
@@ -358,11 +361,20 @@ export function formatPushPull(stops: number): string {
 /** Nilai slider di ruang UI (lihat `SliderTool.invert`). */
 export function sliderValue(tool: SliderTool, params: RenderParams): number {
   const v = params[tool.field];
+  if (tool.relativeCenter !== undefined) {
+    const centre = tool.relativeCenter;
+    return 100 * (v - centre) / (v < centre ? centre - tool.min : tool.max - centre);
+  }
   return tool.invert ? (v === 0 ? 0 : -v) : v;
 }
 
 /** Patch field dari nilai slider di ruang UI. */
 export function sliderPatch(tool: SliderTool, value: number): Partial<RenderParams> {
+  if (tool.relativeCenter !== undefined) {
+    const centre = tool.relativeCenter;
+    const v = Math.min(100, Math.max(-100, value));
+    return { [tool.field]: centre + v / 100 * (v < 0 ? centre - tool.min : tool.max - centre) };
+  }
   return { [tool.field]: tool.invert ? (value === 0 ? 0 : -value) : value };
 }
 
@@ -530,6 +542,7 @@ function dynamicMax(tool: SliderTool, params: RenderParams): number {
 
 /** Rentang slider dalam ruang posisi (log bila `scale`). */
 export function sliderRange(tool: SliderTool, params: RenderParams): { min: number; max: number; step: number } {
+  if (tool.relativeCenter !== undefined) return { min: -100, max: 100, step: 1 };
   if (!tool.scale) return { min: tool.min, max: tool.max, step: tool.step };
   const min = toPosition(tool, tool.min);
   const max = toPosition(tool, Math.max(dynamicMax(tool, params), tool.min));

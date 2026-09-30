@@ -557,3 +557,9 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .spinner { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* Camera develop: compact sections, like a photographic basic panel. */
+.camera-section { display: flex; align-items: center; justify-content: space-between; min-height: 34px; margin: 12px 12px 2px; border-top: 1px solid var(--hairline); padding-top: 10px; }
+.camera-section h3 { margin: 0; font-size: 12px; font-weight: 600; }
+.camera-section .capsule { min-height: 26px; font-size: 11px; }
+.camera-controls .inspector-row { border-top: 0; padding-top: 4px; padding-bottom: 4px; }

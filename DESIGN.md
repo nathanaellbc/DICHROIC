@@ -413,3 +413,7 @@ Quiet, system-native buttons; only the primary action is coloured.
 - **Don't** use Tertiary Label for text people must read.
 - **Don't** add bouncy springs to desktop chrome; desktop motion stays within 120–180ms, with no overshoot.
 - **Don't** add a second typeface or hard-code a font size outside the `t-*` roles.
+
+### Camera controls (September 2026 refinement)
+
+Keep the Camera tab and compact mobile tool strip. The desktop Camera inspector groups White Balance, Light, and Color, with slim slider rows and right-aligned signed readouts. Show concise help under the active mobile control and as desktop label tooltips. White Balance includes Reset WB; zero means the decoded balance, not a fabricated camera Kelvin value. Exposure reads in EV; other camera adjustments read from -100 to +100. Preserve the underlying processing domain and saved edits. This photographic inspector uses restrained hairlines between sections rather than between every slider.

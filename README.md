@@ -271,3 +271,11 @@ test/             vitest tests, including the licence boundary test
 tools/            upstream toolchain records and fixture generators
 package.json      independent dependency graph — see "Licence" above
 ```
+
+## Camera develop controls
+
+The Camera panel provides White Balance, Light, and Color adjustments before film simulation. Exposure is a scene-linear RGB gain of `2 ** EV` (-5 to +5 stops), independent of negative/print exposure. Values above 1 remain available to the film pipeline rather than being clipped to display white. The neutral camera stage is skipped exactly.
+
+Temperature and Tint are relative corrections (-100 to +100), with zero preserving decoded white balance. LibRaw currently applies camera white balance during RAW decoding; the temperature readout therefore does not claim to show the sensor's original Kelvin metadata. Contrast, Highlights, Shadows, Whites, Blacks, and Saturation also use a relative -100 to +100 interface, mapped to the existing validated processing domains. Existing edits retain their underlying values.
+
+The panel follows the basic photographic workflow described in [Adobe Camera Raw's official tone and color guide](https://helpx.adobe.com/camera-raw/desktop/using/make-color-tonal-adjustments-camera.html). Camera RAW decoding controls are format-specific in Resolve; consult [Blackmagic's official documentation](https://www.blackmagicdesign.com/support). DICHROIC uses its own CAT02 adaptation and luminance tone operators: matching slider numbers does not establish pixel parity with Adobe or Resolve. Highlights adjusts available decoded data, without claiming sensor highlight reconstruction, ISO changes, or a different demosaic.

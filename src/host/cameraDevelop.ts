@@ -25,6 +25,8 @@
  *    menggeser kecerahan tengah. Tone invarian skala, jadi urutannya
  *    terhadap eksposur film (dikalikan sesudah raw) tidak berpengaruh.
  *  - Saturasi: campuran yang menjaga luminans, `y + s * (c - y)`.
+ *  - Exposure: RGB linear dikali 2^EV sesudah tone/WB, sebelum film.
+ *    Tidak menjepit nilai HDR ke 1 dan tidak mengubah pengukuran pivot.
  */
 
 export const REFERENCE_TEMP_K = 5500;
@@ -33,6 +35,7 @@ export const LUMA_FLOOR = 1e-7;
 export const SCENE_GREY = 0.18;
 
 export const CAMERA_LIMITS = {
+  exposureEv: { min: -5, max: 5 },
   whiteBalanceK: { min: 2000, max: 12000 },
   tint: { min: -1, max: 1 },
   contrast: { min: -0.75, max: 0.75 },
@@ -52,6 +55,7 @@ export const MASKS = {
 } as const;
 
 export interface CameraSettings {
+  exposureEv: number;
   whiteBalanceK: number;
   tint: number;
   /** Kemiringan log2: pengali = 2^contrast. */
@@ -64,6 +68,7 @@ export interface CameraSettings {
 }
 
 export const NEUTRAL_CAMERA: Readonly<CameraSettings> = Object.freeze({
+  exposureEv: 0,
   whiteBalanceK: REFERENCE_TEMP_K,
   tint: 0,
   contrast: 0,
@@ -251,7 +256,7 @@ export const CAMERA_FRAME_FLOATS = 24;
 
 /**
  * Isi uniform `CameraFrame`: tiga baris matriks WB (primer input), bobot
- * luminans + pivot, tone, lalu (blacks, saturasi, aktif, 0). Netral -> semua
+ * luminans + pivot, tone, lalu (blacks, saturasi, aktif, exposure gain). Netral -> semua
  * nol termasuk flag aktif, dan shader melewati tahap ini persis.
  */
 export function cameraFrameValues(
@@ -266,7 +271,7 @@ export function cameraFrameValues(
   out.set([wb[0], wb[1], wb[2], 0, wb[3], wb[4], wb[5], 0, wb[6], wb[7], wb[8], 0], 0);
   out.set([w[0], w[1], w[2], pivot], 12);
   out.set([2 ** settings.contrast, settings.highlights, settings.shadows, settings.whites], 16);
-  out.set([settings.blacks, settings.saturation, 1, 0], 20);
+  out.set([settings.blacks, settings.saturation, 1, 2 ** settings.exposureEv], 20);
   return out;
 }
 
@@ -289,5 +294,5 @@ export function cameraDevelopPixel(rgb: readonly [number, number, number], frame
   const yOut = developLuma(y, tone);
   const gain = yOut / Math.max(y, LUMA_FLOOR);
   const s = frame[21]!;
-  return [0, 1, 2].map((k) => Math.max(yOut + s * (c[k]! * gain - yOut), 0)) as [number, number, number];
+  return [0, 1, 2].map((k) => Math.max(yOut + s * (c[k]! * gain - yOut), 0) * frame[23]!) as [number, number, number];
 }

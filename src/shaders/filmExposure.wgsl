@@ -47,7 +47,7 @@ struct CameraFrame {
   luma: vec4<f32>,
   // x = pengali contrast, y = highlights, z = shadows, w = whites
   tone: vec4<f32>,
-  // x = blacks, y = saturasi, z = aktif (1/0)
+  // x = blacks, y = saturasi, z = aktif (1/0), w = 2^cameraExposureEv
   flags: vec4<f32>,
 }
 @group(0) @binding(7) var<uniform> cameraFrame: CameraFrame;
@@ -164,7 +164,7 @@ fn cameraDevelop(rgb: vec3<f32>) -> vec3<f32> {
   let y = dot(cameraFrame.luma.xyz, c);
   let yOut = developLuma(y);
   let gain = yOut / max(y, 1.0e-7);
-  return max(vec3<f32>(yOut) + cameraFrame.flags.y * (c * gain - vec3<f32>(yOut)), vec3<f32>(0.0));
+  return max(vec3<f32>(yOut) + cameraFrame.flags.y * (c * gain - vec3<f32>(yOut)), vec3<f32>(0.0)) * cameraFrame.flags.w;
 }
 
 // Baca satu matriks 3x3 row-major dari `arena` mulai `base`, kalikan `rgb`.

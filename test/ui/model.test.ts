@@ -21,6 +21,7 @@ import {
   snap,
   sliderPatch,
   sliderValue,
+  sliderRange,
   stockPatch,
   suggestedInput,
   visibleTools,
@@ -64,6 +65,20 @@ describe('katalog stok UI == manifest', () => {
 });
 
 describe('alat UI == permukaan parameter engine', () => {
+  it('relative camera controls round-trip through -100..100 with neutral at zero', () => {
+    const camera = GROUPS.find((g) => g.id === 'camera')!;
+    for (const tool of camera.tools) {
+      if (tool.kind !== 'slider' || tool.relativeCenter === undefined) continue;
+      expect(sliderValue(tool, BASELINE_RENDER_PARAMS)).toBe(0);
+      expect(valueText(tool, BASELINE_RENDER_PARAMS)).toBe('0');
+      expect(sliderRange(tool, BASELINE_RENDER_PARAMS)).toEqual({ min: -100, max: 100, step: 1 });
+      expect(sliderPatch(tool, -100)[tool.field]).toBe(tool.min);
+      expect(sliderPatch(tool, 100)[tool.field]).toBe(tool.max);
+      for (const value of [-100, -50, 0, 50, 100]) {
+        expect(sliderValue(tool, { ...BASELINE_RENDER_PARAMS, ...sliderPatch(tool, value) })).toBeCloseTo(value, 8);
+      }
+    }
+  });
   const tools = GROUPS.flatMap((g) => g.tools);
 
   it('setiap field yang diubah alat berstatus verified (atau extension di grup Camera/Lens), tidak pernah locked', () => {
@@ -84,6 +99,7 @@ describe('alat UI == permukaan parameter engine', () => {
     const camera = GROUPS.find((g) => g.id === 'camera')!;
     const limits: Record<string, { min: number; max: number }> = {
       cameraWhiteBalanceK: CAMERA_LIMITS.whiteBalanceK,
+      cameraExposureEv: CAMERA_LIMITS.exposureEv,
       cameraTint: CAMERA_LIMITS.tint,
       cameraContrast: CAMERA_LIMITS.contrast,
       cameraHighlights: CAMERA_LIMITS.highlights,

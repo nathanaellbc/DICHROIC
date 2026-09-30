@@ -1,4 +1,4 @@
-// @extends cameraWhiteBalanceK cameraTint cameraContrast cameraHighlights cameraShadows cameraWhites cameraBlacks cameraSaturation -- ekstensi "Camera Raw", digerbangi terhadap referensi JS
+// @extends cameraExposureEv cameraWhiteBalanceK cameraTint cameraContrast cameraHighlights cameraShadows cameraWhites cameraBlacks cameraSaturation -- ekstensi "Camera Raw", digerbangi terhadap referensi JS
 import { describe, it, expect } from 'vitest';
 import {
   cameraDevelopPixel,
@@ -7,6 +7,7 @@ import {
   illuminantXyz,
   invert3,
   measureScenePivot,
+  NEUTRAL_CAMERA,
   whiteBalanceRgb,
   whiteBalanceXyz,
 } from '../src/host/cameraDevelop';
@@ -42,6 +43,15 @@ const PRINT = {
 const PROPHOTO_TO_XYZ = [0.7976749, 0.1351917, 0.0313534, 0.2880402, 0.7118741, 0.0000857, 0, 0, 0.82521];
 
 describe('Camera Raw: matematika host', () => {
+  it('exposure in stops doubles linear RGB without clipping HDR values', () => {
+    const rgb = [0.125, 0.25, 2] as const;
+    for (const exposureEv of [-5, -1, 1, 5]) {
+      const frame = cameraFrameValues({ ...NEUTRAL_CAMERA, exposureEv }, PROPHOTO_TO_XYZ, 0.2);
+      cameraDevelopPixel(rgb, frame).forEach((v, i) => expect(v).toBeCloseTo(rgb[i]! * 2 ** exposureEv, 6));
+    }
+    expect(() => validateCamera({ ...BASELINE_RENDER_PARAMS, cameraExposureEv: 5.01 })).toThrow(RangeError);
+    expect(() => validateCamera({ ...BASELINE_RENDER_PARAMS, cameraExposureEv: Number.NaN })).toThrow(RangeError);
+  });
   it('white balance 5500 K / tint 0 = identitas; iluminan sumber dipetakan ke 5500 K', () => {
     const id = whiteBalanceXyz(5500, 0);
     id.forEach((v, i) => expect(v).toBeCloseTo(i % 4 === 0 ? 1 : 0, 12));
@@ -88,7 +98,7 @@ describe('Camera Raw: matematika host', () => {
 
   it('netral -> uniform nol (flag mati); invert3 benar', () => {
     const neutral = cameraFrameValues(
-      { whiteBalanceK: 5500, tint: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, saturation: 1 },
+      { ...NEUTRAL_CAMERA },
       PROPHOTO_TO_XYZ,
       0.2,
     );
@@ -125,6 +135,9 @@ function colourImage(width: number, height: number): { width: number; height: nu
 
 describe('Camera Raw: tahap GPU == referensi JS', () => {
   const SETTINGS: Array<Partial<RenderParams>> = [
+    { cameraExposureEv: 1 },
+    { cameraExposureEv: -5 },
+    { cameraExposureEv: 5, cameraHighlights: -1, cameraWhiteBalanceK: 6500 },
     { cameraWhiteBalanceK: 3200, cameraTint: 0.4 },
     { cameraContrast: 0.5, cameraHighlights: -1.2, cameraShadows: 1.1 },
     { cameraWhites: 1.5, cameraBlacks: -1.5, cameraSaturation: 0.3 },

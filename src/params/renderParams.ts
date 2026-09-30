@@ -131,6 +131,7 @@ export interface RenderParams {
   // Nilai baseline netral = tahap dilewati persis.
   /** Suhu iluminan adegan, K (2000..12000). 5500 = identitas. */
   cameraWhiteBalanceK: number;
+  cameraExposureEv: number;
   /** Tint iluminan, -1..1 (Duv ±0.02; + = cahaya hijau). */
   cameraTint: number;
   /** Kemiringan log2 di sekitar pivot, -0.75..0.75 (pengali 2^x). */
@@ -212,6 +213,7 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   preflashMFilterShift: 0,
   preflashYFilterShift: 0,
   cameraWhiteBalanceK: 5500,
+  cameraExposureEv: 0,
   cameraTint: 0,
   cameraContrast: 0,
   cameraHighlights: 0,

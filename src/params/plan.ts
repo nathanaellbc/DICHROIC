@@ -260,6 +260,7 @@ export function validateDirCouplers(params: RenderParams): void {
 /** Rentang kontrol "Camera Raw" (ekstensi DICHROIC, `host/cameraDevelop.ts`). */
 const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max: number }]> = [
   ['cameraWhiteBalanceK', CAMERA_LIMITS.whiteBalanceK],
+  ['cameraExposureEv', CAMERA_LIMITS.exposureEv],
   ['cameraTint', CAMERA_LIMITS.tint],
   ['cameraContrast', CAMERA_LIMITS.contrast],
   ['cameraHighlights', CAMERA_LIMITS.highlights],
@@ -281,6 +282,7 @@ export function validateCamera(params: RenderParams): void {
 export function cameraSettings(params: RenderParams): CameraSettings {
   return {
     whiteBalanceK: params.cameraWhiteBalanceK,
+    exposureEv: params.cameraExposureEv,
     tint: params.cameraTint,
     contrast: params.cameraContrast,
     highlights: params.cameraHighlights,
