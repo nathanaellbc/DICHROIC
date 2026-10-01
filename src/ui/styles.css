@@ -532,7 +532,7 @@ html[data-size="compact"] .photo-dropzone[data-drag-over="true"] { background: v
 html[data-size="regular"] .slider { height: 22px; }
 html[data-size="regular"] .slider-track { left: 8px; right: 8px; top: 10px; height: 3px; }
 html[data-size="regular"] .slider-zero { top: -4px; height: 11px; width: 1px; margin-left: -0.5px; }
-html[data-size="regular"] .slider-thumb { top: -5.5px; width: 14px; height: 14px; margin-left: -7px; }
+html[data-size="regular"] .slider-thumb { top: -4.5px; width: 12px; height: 12px; margin-left: -6px; }
 html[data-size="regular"] .slider-lens-track { height: calc(3px * 1.6); margin-top: calc(-1.5px * 1.6); }
 
 /* Stepper */

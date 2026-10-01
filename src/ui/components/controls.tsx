@@ -308,7 +308,7 @@ const STRETCH_SPEED = 2200;
 /** Knob diam dan lensa (px); `track` = tebal trek, untuk memusatkan knob vertikal. */
 const KNOB = {
   compact: { rest: 24, lensW: 36, lensH: 24, track: 4 },
-  regular: { rest: 14, lensW: 22, lensH: 13, track: 3 },
+  regular: { rest: 12, lensW: 22, lensH: 13, track: 3 },
 };
 
 /**
@@ -341,7 +341,7 @@ export function Slider({ value, min, max, step, onChange, onInteractionChange, l
   const pointerX = useMotionValue(0);
   const speed = useSpring(useVelocity(pointerX), { stiffness: 300, damping: 40, mass: 0.5 });
   const stretch = useTransform(speed, (v) => (reduce ? 1 : 1 + Math.min(STRETCH_MAX, Math.abs(v) / STRETCH_SPEED)));
-  // Ukuran knob per kepadatan (iOS 24 px -> lensa 36x24; macOS 14 px -> 22x13).
+  // Ukuran knob per kepadatan (iOS 24 px -> lensa 36x24; macOS 12 px -> 22x13).
   const dims = useRef(KNOB.compact);
   dims.current = typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular' ? KNOB.regular : KNOB.compact;
   const width = useTransform(press, (p) => dims.current.rest + (dims.current.lensW - dims.current.rest) * p);
