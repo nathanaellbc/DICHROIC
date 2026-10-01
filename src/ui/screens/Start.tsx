@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import type { UiIconName } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
-import { overlay } from '../motion';
+import { overlay, scrimMotion } from '../motion';
 import { useEffect } from 'react';
 import { activateModal } from '../modalFocus';
 import { useDialogKeys } from '../hooks';
@@ -105,7 +105,7 @@ export function OpeningCard({ opening, onCancel }: { opening?: { name: string; s
     <AnimatePresence>
       {opening && (
         <>
-          <motion.div className="alert-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden="true" />
+          <motion.div className="alert-scrim" {...scrimMotion()} aria-hidden="true" />
           <motion.div
             ref={ref}
             role="dialog"

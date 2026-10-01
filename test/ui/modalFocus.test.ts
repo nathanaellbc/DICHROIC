@@ -11,6 +11,15 @@ beforeEach(() => {
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); vi.restoreAllMocks(); });
 
 describe('modal keyboard access', () => {
+  it('leaves the dialog scrim interactive so a tap outside can dismiss it', () => {
+    const scrim = document.createElement('div');
+    scrim.className = 'scrim';
+    document.body.insertBefore(scrim, document.getElementById('dialog'));
+    cleanups.push(activateModal(document.getElementById('dialog')!));
+    expect(document.querySelector('main')!.inert).toBe(true);
+    expect(scrim.inert).toBeFalsy();
+  });
+
   it('makes the background inert, traps both Tab directions, and restores focus', () => {
     const dialog = document.getElementById('dialog')!;
     const cleanup = activateModal(dialog); cleanups.push(cleanup);

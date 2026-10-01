@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useDialogKeys } from '../hooks';
-import { overlay } from '../motion';
+import { overlay, scrimMotion } from '../motion';
 import { Icon } from './Icon';
 import type { UiIconName } from './Icon';
 import { activateModal } from '../modalFocus';
@@ -104,7 +104,7 @@ function ActionSheetBody({ anchor, message, label, actions, onCancel }: ActionSh
 
   return (
     <>
-      <div className="scrim" onClick={onCancel} aria-hidden="true" />
+      <motion.div className="scrim" {...scrimMotion()} onClick={onCancel} aria-hidden="true" />
       <motion.div
         ref={ref}
         role={message ? 'alertdialog' : 'dialog'}
@@ -188,7 +188,7 @@ function AlertBody({ title, message, onDismiss, actionLabel = 'OK' }: AlertProps
   }, []);
   return (
         <>
-          <motion.div className="alert-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden="true" />
+          <motion.div className="alert-scrim" {...scrimMotion()} aria-hidden="true" />
           <motion.div
             ref={ref}
             role="alertdialog"

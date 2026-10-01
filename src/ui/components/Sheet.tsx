@@ -8,12 +8,12 @@
  * bisa digulir. Escape menutup dari mana saja dan Tab tidak keluar dari
  * sheet; fokus dipindah ke sheet saat dibuka dan dikembalikan saat ditutup.
  */
-import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useTransform } from 'motion/react';
-import type { PanInfo } from 'motion/react';
+import { AnimatePresence, animate, motion, useDragControls, useMotionValue, usePresence, useTransform } from 'motion/react';
+import type { MotionValue, PanInfo } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useDialogKeys } from '../hooks';
-import { sheetSpring } from '../motion';
+import { scrimBlurFor, scrimMotion, sheetSpring } from '../motion';
 import { activateModal } from '../modalFocus';
 
 export type Detent = 'medium' | 'large';
@@ -93,6 +93,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
   const y = useMotionValue(fullHeight);
   const dim = useTransform(y, [offsets.medium, 0], dimAtMedium || !detents.includes('medium') ? [1, 1] : [0.35, 1]);
 
+
   useLayoutEffect(() => {
     const controlsAnim = animate(y, offsets[detent], sheetSpring);
     return () => controlsAnim.stop();
@@ -122,7 +123,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
 
   return (
     <>
-      <motion.div className="backdrop" style={{ opacity: dim }} initial={{ opacity: 0 }} exit={{ opacity: 0 }} onClick={onClose} aria-hidden="true" />
+      <SheetBackdrop dim={dim} onClose={onClose} />
       <motion.div
         ref={ref}
         role="dialog"
@@ -158,6 +159,27 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
   );
 }
 
+/**
+ * Latar sheet HP: redup DAN blur naik bertahap bersama kemunculan, dan
+ * mengikuti seretan (`dim`). Kemunculan/kepergian satu nilai (`appear`)
+ * lewat usePresence: elemen dilepas eksplisit setelah animasi keluar selesai
+ * (animasi exit pada opacity turunan tidak pernah selesai, sheet tertinggal).
+ */
+function SheetBackdrop({ dim, onClose }: { dim: MotionValue<number>; onClose: () => void }) {
+  const [isPresent, safeToRemove] = usePresence();
+  const appear = useMotionValue(0);
+  useEffect(() => {
+    const controls = isPresent
+      ? animate(appear, 1, { duration: 0.32, ease: [0.23, 1, 0.32, 1] })
+      : animate(appear, 0, { duration: 0.22, ease: [0.4, 0, 0.2, 1] });
+    if (!isPresent) void controls.then(() => safeToRemove?.());
+    return () => controls.stop();
+  }, [isPresent, appear, safeToRemove]);
+  const level = useTransform([dim, appear], ([d, a]: number[]) => d! * a!);
+  const blur = useTransform(level, (v) => scrimBlurFor(v).backdropFilter ?? 'none');
+  return <motion.div className="backdrop" style={{ opacity: level, backdropFilter: blur, WebkitBackdropFilter: blur }} onClick={onClose} aria-hidden="true" />;
+}
+
 function CenteredSheet({ onClose, title, leading, trailing, children }: SheetProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = `sheet-${title.replace(/\W+/g, '-').toLowerCase()}`;
@@ -165,7 +187,7 @@ function CenteredSheet({ onClose, title, leading, trailing, children }: SheetPro
   useDialogKeys(ref, onClose, false);
   return (
     <>
-      <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} onClick={onClose} aria-hidden="true" />
+      <motion.div className="backdrop" {...scrimMotion()} onClick={onClose} aria-hidden="true" />
       <motion.div
         ref={ref}
         role="dialog"

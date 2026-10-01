@@ -1,4 +1,6 @@
 const modalStack: HTMLElement[] = [];
+/** Lapisan latar dialog (aria-hidden, klik = tutup). */
+export const MODAL_SCRIM = '.scrim, .backdrop, .alert-scrim';
 const inertOwners = new WeakMap<HTMLElement, { count: number; previous: boolean }>();
 
 /** Trap keyboard focus and disable the background, including nested dialogs. */
@@ -8,6 +10,9 @@ export function activateModal(element: HTMLElement): () => void {
   for (let branch: HTMLElement | null = element; branch?.parentElement; branch = branch.parentElement) {
     for (const sibling of Array.from(branch.parentElement.children)) {
       if (!(sibling instanceof HTMLElement) || sibling === branch) continue;
+      // Latar modal (scrim/backdrop) menangkap ketukan untuk menutup: tidak boleh
+      // ikut inert, kalau tidak ketukan di luar dialog tembus dan hilang.
+      if (sibling.matches(MODAL_SCRIM)) continue;
       const owner = inertOwners.get(sibling) ?? { count: 0, previous: sibling.inert };
       owner.count += 1;
       inertOwners.set(sibling, owner);
