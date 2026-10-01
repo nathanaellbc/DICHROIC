@@ -398,7 +398,14 @@ Quiet, system-native buttons; only the primary action is coloured.
 ### Motion
 - **Desktop:** short fades and slides, no bounce. The group panel cross-fades in 140ms ease-out. The dialog enters in 180ms `cubic-bezier(0.2,0,0,1)` and exits in 120ms ease-in, and the backdrop fades in 160ms. Hover transitions run 100–150ms. Control state (the segment and tab pill, the switch knob, the press scale) uses the critically damped `snappy` spring (stiffness 560, damping 44, mass 0.8), which settles without overshoot.
 - **Phone:** iOS springs. Sheets follow the finger and settle on `sheetSpring` (420 / 42 / 1). Popovers, alerts and toasts pop from their source on `popSpring` (520 / 34 / 0.7). Screen changes fade in 280ms.
-- **Reduced motion:** `MotionConfig reducedMotion="user"` removes transform animation, and the spinner slows to 2.4s.
+- **Micro-interactions** (adapted from React Bits Micro, built on our own controls so roles, keyboard and VoiceOver stay intact):
+  - **Slider knob:** white at rest. Under the finger it becomes a Liquid Glass lens (40×26 compact, 24×15 regular) that shows the track and fill magnified 1.6× around its centre, with a specular top edge, a soft bottom reflection and a lifting shadow. It stretches up to 22% with pointer speed and rubber-bands past the ends (k 0.55), then springs back (0.45s, bounce 0.35). The React Bits FluidGlass component itself is not used: it refracts its own three.js scene, not the DOM behind it, and it adds roughly 600 KB plus a second GPU context next to the film pipeline.
+  - **Switch** (Squish Switch): drag to scrub, flips at the midpoint while you are still dragging, rubber-bands at the ends, and stretches with velocity. While held, the knob widens 7px toward the centre and turns to glass, so the track colour shows through.
+  - **Segmented and group tabs** (Rubber Segment): one pill per control. A tap stretches it across origin and target (0.19s ease-out), then the leading edge lands on a spring and the trailing edge overshoots 3px before relaxing. The pill can be dragged, with a rubber band at the ends; a flick always moves one slot.
+  - **Option chips** (Jelly Radio): the chosen chip swells wide, then tall, and its neighbours are nudged outward with a 35ms stagger.
+  - **Stepper:** the value rolls in the direction of the button pressed.
+  - **PressButton:** goes down in 0.08s and comes back on `pressRelease` (0.34s, bounce 0.32).
+- **Reduced motion:** `MotionConfig reducedMotion="user"` removes transform animation, and the spinner slows to 2.4s. The lens and glass states still appear, but without stretch, rubber band, jelly or roll.
 
 ## Do's and Don'ts
 

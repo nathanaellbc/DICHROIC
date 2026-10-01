@@ -33,3 +33,6 @@ export const fade: Transition = { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] };
 
 /** Umpan balik tekan: singkat dan presisi. */
 export const pressScale = 0.94;
+
+/** Lepas tekan: kembali dengan pegas sedikit memantul (turunnya 0,08 s, di PressButton). */
+export const pressRelease: Transition = { type: 'spring', duration: 0.34, bounce: 0.32 };
