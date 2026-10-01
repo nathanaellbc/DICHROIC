@@ -95,6 +95,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     params: previewParams,
     defaults: state.defaults,
     onPatch: (patch) => engine.setParams(normalizePatch(state.params, patch)),
+    onInteractionChange: engine.setInteracting,
     onOpenList: (tool) => setSheet({ kind: 'list', toolId: tool.id }),
     lens: {
       depth: state.depth,
@@ -187,7 +188,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       focusMask={focusMask}
       original={state.original}
       compare={compare}
-      rendering={state.rendering}
+      rendering={state.rendering && !state.interacting}
       photoKey={state.fileName ?? 'photo'}
       label={photoLabel}
       sourceSize={engine.imageSize}
@@ -626,7 +627,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
           {state.frame ? <span className="tabular">Preview {state.frame.width} × {state.frame.height}</span> : <span>No photo open</span>}
           <span aria-hidden="true" className="tertiary">·</span>
           <span>{state.params.outputColorSpace}{isDisplayReferred(state.params.outputColorSpace) ? '' : ', shown without conversion'}</span>
-          {state.rendering && hasPhoto && (
+          {state.rendering && !state.interacting && hasPhoto && (
             <>
               <span aria-hidden="true" className="tertiary">·</span>
               <span style={{ color: 'var(--blue-text)' }}>Developing…</span>

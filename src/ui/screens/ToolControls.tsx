@@ -48,6 +48,7 @@ export interface ToolContext {
   params: RenderParams;
   defaults: RenderParams;
   onPatch: (patch: Partial<RenderParams>) => void;
+  onInteractionChange?: (active: boolean) => void;
   /** Daftar pilihan panjang (colour space input) dibuka di sheet terpisah. */
   onOpenList: (tool: ChoiceTool) => void;
   lens?: LensContext;
@@ -152,6 +153,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
           valueText={valueText(tool, params)}
           disabled={!toolEnabled(tool, params)}
           onChange={(v) => onPatch(positionPatch(tool, v, params))}
+          onInteractionChange={ctx.onInteractionChange}
         />
       );
       if (!tool.note || (dense && tool.section)) return slider;
@@ -223,6 +225,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
             valueText={enabled ? `${formatStops(params[tool.strengthField])} stop` : 'Off'}
             disabled={!enabled}
             onChange={(v) => onPatch({ [tool.strengthField]: v })}
+            onInteractionChange={ctx.onInteractionChange}
           />
           <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>
         </div>

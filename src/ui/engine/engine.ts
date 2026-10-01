@@ -51,6 +51,8 @@ export interface EngineState {
   original?: Frame;
   /** Render sedang berjalan (pratinjau masih menampilkan frame sebelumnya). */
   rendering: boolean;
+  /** A slider is being dragged or held with the keyboard. */
+  interacting?: boolean;
   error?: AppError;
   /** Alasan teknis dari `acquireDevice` saat `engine === 'unsupported'`. */
   unsupportedReason?: string;
@@ -165,6 +167,7 @@ export class Engine {
   #inFlight: number | undefined;
   #dirty = false;
   #previewLongEdge = 1024;
+  #interactionChanged = false;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
   #depthMap: DepthMap | undefined;
@@ -227,8 +230,9 @@ export class Engine {
       this.#depth.reset(undefined);
       this.#imageSize = undefined;
       this.#dirty = false;
+      this.#interactionChanged = false;
       this.#set({ engine: 'failed', phase: 'idle', frame: undefined, original: undefined,
-        fileName: undefined, opening: undefined, rendering: false, error: describeError(error) });
+        fileName: undefined, opening: undefined, rendering: false, interacting: false, error: describeError(error) });
     });
     this.#client = client;
     const assetsBaseUrl = new URL(`${import.meta.env.BASE_URL}data`, window.location.href).href;
@@ -300,6 +304,7 @@ export class Engine {
       this.#pendingPatches.clear();
       this.#imageSize = { width: prepared.width, height: prepared.height };
       this.#previewLongEdge = 1024;
+      this.#interactionChanged = false;
       this.#depth.reset(guide);
       this.#paramsRevision += 1;
       this.#depthMap = undefined;
@@ -312,6 +317,7 @@ export class Engine {
         frame: { width: preview.width, height: preview.height,
           pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
         phase: 'editing', opening: undefined,
+        interacting: false,
       });
       void client.finishOpen(token).catch(() => {});
       if (params.lensBlurEnabled) this.#depth.ensure();
@@ -348,7 +354,8 @@ export class Engine {
     // LibRaw's retained WASM heap and the loaded asset bundle.
     if (client) void client.close().then(() => client.dispose()).catch((error: unknown) =>
       client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
-    this.#set({ engine: 'paused', phase: 'idle', rendering: false, frame: undefined, original: undefined, fileName: undefined, opening: undefined });
+    this.#interactionChanged = false;
+    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, fileName: undefined, opening: undefined });
   }
 
   #clearHistory(): void {
@@ -393,6 +400,8 @@ export class Engine {
     if (!client) return;
     const previous = this.#state.params;
     const changed = (Object.keys(patch) as Array<keyof RenderParams>).some((k) => previous[k] !== patch[k]);
+    if (!changed) return;
+    if (this.#state.interacting) this.#interactionChanged = true;
     if (record && changed) {
       const now = performance.now();
       if (this.#past.length === 0 || this.#future.length > 0 || now - this.#lastEditAt > HISTORY_GAP_MS) {
@@ -461,6 +470,17 @@ export class Engine {
     void this.#renderLoop();
   }
 
+  /** Show lightweight live frames during a gesture, then refine at acquired detail. */
+  setInteracting = (active: boolean): void => {
+    if (this.#state.phase !== 'editing' || active === !!this.#state.interacting) return;
+    if (active) this.#interactionChanged = false;
+    this.#set({ interacting: active });
+    if (!active && this.#interactionChanged) {
+      this.#interactionChanged = false;
+      this.requestRender();
+    }
+  };
+
   /** Keep acquired detail when zooming out; only a higher target needs rendering. */
   setPreviewLongEdge = (requested: number): void => {
     if (!this.#imageSize || this.#state.phase !== 'editing' || !Number.isFinite(requested)) return;
@@ -496,17 +516,21 @@ export class Engine {
     const token = this.#openToken;
     const revision = this.#paramsRevision;
     const outputColorSpace = this.#state.params.outputColorSpace;
-    const previewLongEdge = this.#previewLongEdge;
+    const previewLongEdge = this.#state.interacting ? Math.min(256, this.#previewLongEdge) : this.#previewLongEdge;
     try {
       const result = await client.render('preview', previewLongEdge);
-      if (token !== this.#openToken || revision !== this.#paramsRevision || previewLongEdge !== this.#previewLongEdge || this.#state.phase !== 'editing') return;
+      if (token !== this.#openToken || this.#state.phase !== 'editing') return;
+      // During a drag, a completed frame is useful feedback even if the next
+      // value is already queued. Outside a gesture only the exact result wins.
+      if (!this.#state.interacting && (revision !== this.#paramsRevision || previewLongEdge !== this.#previewLongEdge)) return;
+      const resultColorSpace = result.outputColorSpace ?? outputColorSpace;
       this.#set({
         ...(result.original ? { original: result.original } : {}),
         frame: {
           width: result.width,
           height: result.height,
-          pixels: rgbToPixels(result.rgb, result.width, result.height, outputColorSpace),
-          colorSpace: canvasColorSpaceFor(outputColorSpace),
+          pixels: rgbToPixels(result.rgb, result.width, result.height, resultColorSpace),
+          colorSpace: canvasColorSpaceFor(resultColorSpace),
         },
       });
     } catch (error) {

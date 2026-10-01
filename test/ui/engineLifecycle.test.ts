@@ -164,4 +164,42 @@ describe('photo lifecycle', () => {
     pending.resolve({ ...frame, rgb: Float32Array.of(1, 0, 0) }); await flush();
     expect(engine.getState().frame).toBe(before);
   });
+
+  it('publishes completed drag previews even when the slider has moved again', async () => {
+    client.stageOpen.mockResolvedValue({ ...photo, width: 4096, height: 2048 });
+    const engine = new Engine(); await engine.openFile(file('first.png'));
+    const before = engine.getState().frame;
+    const first = deferred<RenderResult>();
+    const next = deferred<RenderResult>();
+    client.render.mockReturnValueOnce(first.promise).mockReturnValueOnce(next.promise);
+    engine.setInteracting(true);
+    engine.setParams({ cameraTint: 1 }); await flush();
+    expect(client.render).toHaveBeenLastCalledWith('preview', 256);
+    engine.setParams({ cameraTint: 2 }); await flush();
+    first.resolve({ ...frame, rgb: Float32Array.of(1, 0, 0) }); await flush();
+    expect(engine.getState().frame).not.toBe(before);
+    expect(engine.getState().params.cameraTint).toBe(2);
+    expect(client.render).toHaveBeenCalledTimes(2);
+    engine.closePhoto(); next.resolve(frame); await flush();
+    expect(engine.getState().frame).toBeUndefined();
+    expect(engine.getState().interacting).toBe(false);
+  });
+
+  it('restores acquired zoom detail after a drag and ignores a late draft', async () => {
+    client.stageOpen.mockResolvedValue({ ...photo, width: 4096, height: 2048 });
+    const engine = new Engine(); await engine.openFile(file('first.png'));
+    engine.setPreviewLongEdge(3072); await flush();
+    const before = engine.getState().frame;
+    const draft = deferred<RenderResult>();
+    const refined = deferred<RenderResult>();
+    client.render.mockReturnValueOnce(draft.promise).mockReturnValueOnce(refined.promise);
+    engine.setInteracting(true); engine.setParams({ cameraTint: 1 }); await flush();
+    engine.setInteracting(false);
+    draft.resolve({ ...frame, rgb: Float32Array.of(1, 0, 0) }); await flush();
+    expect(engine.getState().frame).toBe(before);
+    expect(client.render).toHaveBeenLastCalledWith('preview', 3072);
+    refined.resolve(frame); await flush();
+    expect(engine.getState().frame).not.toBe(before);
+    engine.closePhoto();
+  });
 });

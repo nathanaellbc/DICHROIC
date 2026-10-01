@@ -285,6 +285,7 @@ export interface SliderProps {
   max: number;
   step: number;
   onChange: (value: number) => void;
+  onInteractionChange?: (active: boolean) => void;
   label: string;
   valueText: string;
   disabled?: boolean;
@@ -322,11 +323,14 @@ const KNOB = {
  * geser, dan meregang seperti karet di luar rentang lalu memantul balik.
  * Reduce Motion: lensa tetap muncul, tanpa regangan dan karet.
  */
-export function Slider({ value, min, max, step, onChange, label, valueText, disabled, defaultValue }: SliderProps) {
+export function Slider({ value, min, max, step, onChange, onInteractionChange, label, valueText, disabled, defaultValue }: SliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x0: number; v0: number; width: number } | null>(null);
   const pending = useRef<number | null>(null);
   const frame = useRef(0);
+  const interacting = useRef(false);
+  const interactionCallback = useRef(onInteractionChange);
+  interactionCallback.current = onInteractionChange;
   const [active, setActive] = useState(false);
   const [trackWidth, setTrackWidth] = useState(0);
   const reduce = useReducedMotion();
@@ -369,7 +373,17 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
     },
     [onChange],
   );
-  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useEffect(() => () => {
+    cancelAnimationFrame(frame.current);
+    if (interacting.current) interactionCallback.current?.(false);
+  }, []);
+
+  const begin = () => {
+    if (interacting.current) return;
+    interacting.current = true;
+    interactionCallback.current?.(true);
+    setActive(true);
+  };
 
   const settle = (raw: number) => {
     const detent = bipolar && Math.abs(raw) < range * 0.015 ? 0 : raw;
@@ -380,6 +394,7 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
     if (disabled || !trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     e.currentTarget.setPointerCapture(e.pointerId);
+    begin();
     let v0 = value;
     if (e.pointerType === 'mouse') {
       const thumbX = rect.left + frac * rect.width;
@@ -405,10 +420,19 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
     overshoot.set(over === 0 ? 0 : rubberBand((over / range) * d.width, 36));
   };
   const end = () => {
+    if (!interacting.current) return;
+    // Pointerup can precede the last animation frame: commit that value
+    // before asking the engine to render the full-quality final preview.
+    cancelAnimationFrame(frame.current);
+    frame.current = 0;
+    if (pending.current !== null) onChange(pending.current);
+    pending.current = null;
+    interacting.current = false;
     drag.current = null;
     setActive(false);
     pointerX.jump(pointerX.get());
     if (overshoot.get() !== 0) animate(overshoot, 0, { type: 'spring', duration: 0.45, bounce: 0.35 });
+    interactionCallback.current?.(false);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -420,6 +444,7 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
     };
     if (e.key in next) {
       e.preventDefault();
+      begin();
       onChange(snap(next[e.key]!, { min, max, step }));
     }
   };
@@ -441,7 +466,10 @@ export function Slider({ value, min, max, step, onChange, label, valueText, disa
       onPointerMove={onPointerMove}
       onPointerUp={end}
       onPointerCancel={end}
+      onLostPointerCapture={end}
       onKeyDown={onKeyDown}
+      onKeyUp={end}
+      onBlur={end}
       onDoubleClick={() => defaultValue !== undefined && !disabled && onChange(defaultValue)}
     >
       <div ref={trackRef} className="slider-track">

@@ -233,6 +233,7 @@ export class Session {
   #imageId = 0;
   #photoId = 0;
   #preview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
+  #originalPreview: { imageId: number; longEdge: number; frame: Frame } | undefined;
   /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
   #depth: DepthMap | undefined;
   #depthId = 0;
@@ -362,6 +363,7 @@ export class Session {
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#originalPreview = undefined;
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();
@@ -441,6 +443,7 @@ export class Session {
       this.#paramsVersion += 1;
       this.#depthId += 1;
       this.#preview = undefined;
+      this.#originalPreview = undefined;
       this.#cache.clear();
       this.#previewCache.clear();
     }
@@ -588,7 +591,7 @@ export class Session {
       }
     }
     const result: RenderResult = { width: frame.width, height: frame.height, rgb, quality, paramsVersion, outputColorSpace: params.outputColorSpace };
-    if (quality === 'preview' && longEdge !== undefined) result.original = originalFrame(image, Math.max(frame.width, frame.height));
+    if (quality === 'preview' && longEdge !== undefined) result.original = this.comparisonFrame(image, Math.max(frame.width, frame.height));
     if (!this.#disposed && key === this.cacheKey(quality, longEdge) && (quality !== 'full' || exportVersion === this.exportVersion)) {
       this.#cache.set(quality, { key, result });
       if (quality === 'preview') this.cachePreview(key, result);
@@ -645,6 +648,15 @@ export class Session {
       };
     }
     return this.#preview.image;
+  }
+
+  /** Comparison pixels depend only on the source and size, never slider values. */
+  private comparisonFrame(image: DecodedImage, longEdge: number): Frame {
+    if (image !== this.#image) return originalFrame(image, longEdge);
+    if (this.#originalPreview?.imageId !== this.#imageId || this.#originalPreview.longEdge !== longEdge) {
+      this.#originalPreview = { imageId: this.#imageId, longEdge, frame: originalFrame(image, longEdge) };
+    }
+    return this.#originalPreview.frame;
   }
 
   private cacheKey(quality: RenderQuality, longEdge?: number): string {
@@ -795,6 +807,7 @@ export class Session {
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#originalPreview = undefined;
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();

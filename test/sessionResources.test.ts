@@ -39,6 +39,25 @@ const create = () => Session.create({ assetsBaseUrl: 'public/data', engine: {
 beforeEach(() => { resources.graphs.length = 0; resources.arenas.length = 0; resources.scratch.length = 0; resources.barrier = undefined; resources.runs = 0; });
 
 describe('Session resource lifetime', () => {
+  it('reuses the unchanged comparison pixels across edits and invalidates them on size or photo changes', async () => {
+    const session = await create(); session.open(image());
+    const first = await session.render('preview', 2);
+    session.setParams({ filmExposureEv: 1 });
+    const edited = await session.render('preview', 2);
+    expect(edited.original).toBe(first.original);
+    const small = await session.render('preview', 1);
+    expect(small.original).not.toBe(first.original);
+    expect(small.original?.width).toBe(1);
+    session.open(image());
+    const replaced = await session.render('preview', 1);
+    expect(replaced.original).not.toBe(small.original);
+    await session.close();
+    session.open(image());
+    const reopened = await session.render('preview', 1);
+    expect(reopened.original).not.toBe(replaced.original);
+    session.dispose();
+  });
+
   it('reuses preview sizes and undo states without rerunning the GPU', async () => {
     const session = await create(); session.open(image());
     await session.render('preview', 1);
