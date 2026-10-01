@@ -11,7 +11,7 @@
  * Tombol tetap tombol asli (klik, keyboard, VoiceOver); seret yang benar-benar
  * bergeser menelan klik berikutnya. Reduce Motion: pil langsung pindah.
  */
-import { animate, useMotionValue, useReducedMotion, useTransform } from 'motion/react';
+import { animate, useMotionValue, useReducedMotion } from 'motion/react';
 import type { MotionValue } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
@@ -78,7 +78,7 @@ export function useRubberPill(count: number, index: number, onSelect: (index: nu
   const swallow = useRef(false);
   const left = useMotionValue(0);
   const right = useMotionValue(0);
-  const width = useTransform([left, right], ([l, r]: number[]) => Math.max(0, r! - l!));
+  const width = useMotionValue(0);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
 
@@ -105,12 +105,18 @@ export function useRubberPill(count: number, index: number, onSelect: (index: nu
   };
 
   useLayoutEffect(() => {
+    // Subscribe before measuring: useTransform subscribes after layout effects,
+    // so initial jump() values could be missed and leave the pill at width 0.
+    const syncWidth = () => width.set(Math.max(0, right.get() - left.get()));
+    const offLeft = left.on('change', syncWidth);
+    const offRight = right.on('change', syncWidth);
     measure();
+    syncWidth();
     const observer = new ResizeObserver(measure);
     if (track.current) observer.observe(track.current);
     for (const el of items.current) if (el) observer.observe(el);
     void document.fonts?.ready.then(measure);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); offLeft(); offRight(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [count, pad]);
 
