@@ -91,6 +91,9 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
   const [detent, setDetent] = useState<Detent>(initial);
 
   const y = useMotionValue(fullHeight);
+  // Keep the content's bottom at the viewport edge throughout the drag,
+  // rather than retaining the previous detent's empty reserved space.
+  const bottomInset = useTransform(y, (value) => Math.max(0, Math.min(fullHeight, value)));
   const dim = useTransform(y, [offsets.medium, 0], dimAtMedium || !detents.includes('medium') ? [1, 1] : [0.35, 1]);
 
 
@@ -131,11 +134,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
         aria-labelledby={titleId}
         tabIndex={-1}
         className="sheet"
-        style={{ y, height: fullHeight, outline: 'none' }}
-        // Konten mengecil ke bagian yang terlihat pada detent ini (tombol di
-        // bawah tetap di layar); selama diseret, sheet hanya bergeser.
-        animate={{ paddingBottom: offsets[detent] }}
-        transition={sheetSpring}
+        style={{ y, height: fullHeight, paddingBottom: bottomInset, outline: 'none' }}
         exit={{ y: fullHeight, transition: sheetSpring }}
         drag="y"
         dragControls={controls}
