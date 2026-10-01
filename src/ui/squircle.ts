@@ -15,7 +15,7 @@
  * memakai radius nominal; skalanya diterapkan di sini, seragam.
  */
 export type CornerRadii = readonly [number, number, number, number];
-export const SQUIRCLE_SELECTOR = '.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta, .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip, .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]';
+export const SQUIRCLE_SELECTOR = '.icon-btn, .capsule, .photo-status-pill, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta, .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip, .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]';
 
 /** Panjang kurva sudut kontinu Apple per radius nominal. */
 export const CONTINUOUS_EXTENT = 1.528665;

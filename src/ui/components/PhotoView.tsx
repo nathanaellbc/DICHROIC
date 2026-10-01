@@ -17,6 +17,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { Frame } from '../engine/display';
 import { fade, photoReturn } from '../motion';
+
+/** Fit / ketuk dua kali: mendarat lembut tanpa pantulan (tidak lompat). */
+const viewSpring = { type: 'spring' as const, duration: 0.42, bounce: 0 };
+/** Pil status kanan atas. */
+const statusSpring = { type: 'spring' as const, duration: 0.3, bounce: 0.15 };
 import { Spinner } from './Overlays';
 import { Icon } from './Icon';
 import { imageMemoryBudget } from '../../io/budget';
@@ -217,6 +222,29 @@ export function PhotoView({
       onComplete: () => { returnAnimation.current = null; setView(edge); },
     });
   };
+  /**
+   * Pindah ke tampilan lain dengan pegas (Fit, ketuk dua kali), bukan lompat.
+   * Zoom diinterpolasi logaritmik supaya laju perbesaran terasa rata dari
+   * 4x ke 1x; geser ikut linear. Bisa disela gestur berikutnya (stopReturn).
+   */
+  const animateView = (target: View) => {
+    stopReturn();
+    const from = view;
+    if (reducedMotion || (from.s === target.s && from.tx === target.tx && from.ty === target.ty)) {
+      setView(target);
+      return;
+    }
+    const ls0 = Math.log(from.s), ls1 = Math.log(target.s);
+    returnAnimation.current = animate(0, 1, {
+      ...viewSpring,
+      onUpdate: (t) => setView({
+        s: Math.exp(ls0 + (ls1 - ls0) * t),
+        tx: from.tx + (target.tx - from.tx) * t,
+        ty: from.ty + (target.ty - from.ty) * t,
+      }),
+      onComplete: () => { returnAnimation.current = null; setView(target); },
+    });
+  };
   /** Titik area (px) -> koordinat foto 0..1, memperhitungkan zoom. */
   const toPhoto = (ax: number, ay: number, v: View = view): Point => ({
     x: (ax - rect.left - v.tx) / (v.s * rect.width),
@@ -414,8 +442,7 @@ export function PhotoView({
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (picking || (e.target as HTMLElement).closest('button, [role=slider]')) return;
     const p = local(e.clientX, e.clientY);
-    stopReturn();
-    setView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
+    animateView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
   };
   const zoomed = view.s > 1.01;
   /** Posisi (px, relatif kotak foto pas) dari koordinat foto 0..1. */
@@ -519,34 +546,47 @@ export function PhotoView({
             {peek && !compare && !picking && (
               <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: 10, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600 }}>Original</span>
             )}
-            <AnimatePresence>
-              {slow && (
-                <motion.span
-                  className="glass-clear t-footnote"
-                  role="status"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  style={{ position: 'absolute', right: 10, bottom: 10, height: 30, padding: '0 12px 0 8px', borderRadius: 'var(--r-control)', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
-                >
-                  <Spinner size={16} /> Developing
-                </motion.span>
-              )}
-            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
-      {zoomed && (
-        <button
-          type="button"
-          className="glass-clear t-footnote tabular"
-          title="Fit to view (double-click)"
-          onClick={() => { stopReturn(); setView(FIT); }}
-          style={{ position: 'absolute', top: 10, right: 10, height: 28, padding: '0 10px', borderRadius: 'var(--r-control)', border: 0, color: '#fff', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          {Math.round(view.s * 100)}% <span className="secondary">· Fit</span>
-        </button>
-      )}
+      {/* Status di kanan atas: Developing di sebelah zoom; geser mulus saat zoom muncul/hilang. */}
+      <div className="photo-status">
+        <AnimatePresence initial={false} mode="popLayout">
+          {slow && (
+            <motion.span
+              key="developing"
+              layout
+              className="glass-clear t-footnote photo-status-pill"
+              role="status"
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={statusSpring}
+              style={{ padding: '0 10px 0 7px' }}
+            >
+              <Spinner size={15} /> Developing
+            </motion.span>
+          )}
+          {zoomed && (
+            <motion.button
+              key="zoom"
+              layout
+              type="button"
+              className="glass-clear t-footnote tabular photo-status-pill"
+              title="Fit to view (double-click)"
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              whileTap={{ scale: 0.94 }}
+              transition={statusSpring}
+              onClick={() => animateView(clampView(FIT))}
+              style={{ padding: '0 10px', border: 0, color: '#fff', cursor: 'pointer' }}
+            >
+              {Math.round(view.s * 100)}% <span className="secondary">· Fit</span>
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

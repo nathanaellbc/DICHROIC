@@ -768,6 +768,16 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .popup svg { position: absolute; right: 6px; pointer-events: none; color: var(--label-2); }
 .inspector-row .note { margin: 0; font-size: 11px; line-height: 14px; color: var(--label-2); }
 
+/* Status foto kanan atas: Developing + zoom (PhotoView). Pil tunggal, tidak bersarang. */
+.photo-status {
+  position: absolute; top: 10px; right: 10px; z-index: 1;
+  display: flex; align-items: center; gap: 6px; pointer-events: none;
+}
+.photo-status-pill {
+  height: 28px; border-radius: var(--r-control); display: flex; align-items: center; gap: 6px;
+  font-weight: 600; white-space: nowrap; pointer-events: auto;
+}
+
 /* Spinner (indeterminate) */
 .spinner { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -784,7 +794,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
  * sepanjang radius nominal x 1,528 (border-radius inline dipasang
  * installSquircleGeometry). Diagonalnya = lingkaran beradius nominal.
  */
-:where(.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
+:where(.icon-btn, .capsule, .photo-status-pill, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
        .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip,
        .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]) {
   corner-shape: superellipse(1.704);
