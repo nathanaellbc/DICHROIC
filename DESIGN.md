@@ -226,7 +226,7 @@ Vertical scrolling uses a transparent track and a slim rounded neutral thumb, br
 
 ### Mobile polish (2026-10-01)
 
-Compact layouts use one 52px neutral frosted toolbar with 44px touch targets, a flexible two-line stock selector, and an icon-only Export action. Adjustment group tabs use icons with accessible names and hover tooltips; their selected state and tool chips use the blue wash rather than white fills. The bottom adjustment dock has 24px top corners and a separated navigation row. Slider controls retain a stable 108px area; the Lens card uses 156px to accommodate its status and primary action. Landscape keeps the dock at the right with touch-sized navigation.
+Compact layouts use one 52px neutral frosted toolbar with 44px touch targets, a flexible two-line stock selector, and an icon-only Export action. Adjustment group tabs use icons with accessible names and hover tooltips; their selected state and tool chips use the blue wash rather than white fills. The bottom adjustment dock has 24px top corners and a separated navigation row. Control areas follow their measured content height, with 10px gaps to the heading and tool chips. Long Lens statuses scroll within a 156px maximum; short notes and sliders leave no reserved blank space. Height changes use the existing restrained spring, or update immediately with reduced motion. The photo reserves only the visible dock height plus its 12px gap. Landscape keeps the dock at the right with touch-sized navigation.
 
 Before a photo is opened, compact layouts show a centered Choose Photo action, supported formats and an on-device privacy note. Inactive adjustment controls are hidden so the start screen can use the full canvas. Desktop density and layout remain as defined below.
 

@@ -366,10 +366,8 @@ interface LayoutProps {
 /** Tanpa foto, panel tetap terlihat sebagai pratinjau fungsinya, tapi jelas belum aktif. */
 const EMPTY_OPACITY = 0.6;
 
-/** Kotak kontrol alat di panel HP: slider + catatan tiga baris, stepper, atau pilihan. */
-const COMPACT_CONTROL_HEIGHT = 108;
-/** Kartu Lens (status, unduh, fokus) butuh ruang lebih. */
-const LENS_CONTROL_HEIGHT = 156;
+/** Status panjang tetap bisa digulir tanpa memenuhi viewport foto. */
+const COMPACT_CONTROL_MAX_HEIGHT = 156;
 /** Perubahan tinggi panel bawah: lembut, tanpa pantulan (tidak lompat). */
 const panelResize = { type: 'spring' as const, duration: 0.38, bounce: 0 };
 
@@ -397,27 +395,32 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
   const panelRef = useRef<HTMLElement>(null);
   // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
   const reduceMotion = useReducedMotion();
-  const controlRef = useRef<HTMLDivElement>(null);
-  // `control`: tinggi area kontrol yang sedang dianimasikan (lihat di bawah).
-  const [panelSize, setPanelSize] = useState({ width: 0, height: 0, control: 0 });
+  const controlContentRef = useRef<HTMLDivElement>(null);
+  const [controlHeight, setControlHeight] = useState(0);
+  useLayoutEffect(() => {
+    const el = controlContentRef.current;
+    if (!el) return;
+    const measure = () => setControlHeight(Math.min(el.getBoundingClientRect().height, COMPACT_CONTROL_MAX_HEIGHT));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const el = panelRef.current;
     if (!el) return;
-    // Rect pecahan: selisih panel - kontrol konstan selama animasi (offsetHeight
-    // yang dibulatkan membuat foto bergetar 1 px).
     const measure = () => {
       const box = el.getBoundingClientRect();
-      setPanelSize({ width: box.width, height: box.height, control: controlRef.current?.getBoundingClientRect().height ?? 0 });
+      setPanelSize({ width: box.width, height: box.height });
     };
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    if (controlRef.current) observer.observe(controlRef.current);
     return () => observer.disconnect();
   }, []);
-  // Foto tidak ikut bergeser saat area kontrol berubah tinggi (slider <-> kartu
-  // Lens): ruangnya selalu disisihkan untuk panel versi tertinggi, jadi foto
-  // diam dan tidak pernah tertutup panel.
-  const photoBottom = Math.round(panelSize.height - panelSize.control + LENS_CONTROL_HEIGHT + 12);
+  // Sisihkan tinggi panel yang tampil, tanpa ruang kosong untuk status Lens
+  // yang belum dibuka. Ukuran kontrol mengikuti isi dan tetap dibatasi.
+  const photoBottom = Math.round(panelSize.height + 12);
 
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   // Alat terpilih yang tidak berlaku di mode proses ini (mis. Exposure print
@@ -525,20 +528,17 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           </div>
 
           {/*
-            Slider tetap stabil; kartu Lens mendapat ruang untuk aksi dan
-            statusnya. Tinggi berubah dengan pegas, bukan lompat; panel dan
-            tombol compare ikut bergeser bertahap, foto tetap diam
-            (photoBottom). Reduce Motion: langsung.
+            Tinggi mengikuti isi kontrol, termasuk status Lens yang berubah.
+            Panel dan tombol compare bergeser lembut. Reduce Motion: langsung.
           */}
           <motion.div
-            ref={controlRef}
             className="scroll-y"
             initial={false}
-            animate={{ height: tool.kind === 'lens' ? LENS_CONTROL_HEIGHT : COMPACT_CONTROL_HEIGHT }}
+            animate={{ height: controlHeight }}
             transition={reduceMotion ? { duration: 0 } : panelResize}
             style={{ display: 'flex', flexDirection: 'column' }}
           >
-            <div style={{ margin: 'auto 0', width: '100%' }}>
+            <div ref={controlContentRef} style={{ width: '100%', flexShrink: 0 }}>
               <ToolControl key={tool.id} tool={tool} ctx={ctx} />
             </div>
           </motion.div>
