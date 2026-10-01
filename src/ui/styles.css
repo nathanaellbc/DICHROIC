@@ -678,6 +678,8 @@ html[data-size="regular"] .search-field input { font-size: 12px; }
 .sheet.centered .sheet-content { padding-bottom: 0; }
 /* Tombol aksi dialog desktop: rata kanan, lebar menurut isi (macOS). */
 .sheet-actions { padding: var(--inset-dialog); flex-shrink: 0; display: flex; gap: 10px; }
+.export-action-status { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 6px var(--inset-dialog) 0; }
+.export-action-status:empty { display: none; }
 /* Tombol berbagi baris (dulu `flex-shrink: 0` + `width: 100%` membuat tombol kedua keluar layar). */
 .sheet-actions .capsule.large { flex: 1 1 0; width: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sheet.centered .sheet-actions { justify-content: flex-end; border-top: 1px solid var(--hairline); padding: var(--inset-dialog); margin-top: 8px; }
@@ -817,6 +819,112 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .photo-status-pill {
   height: 28px; border-radius: var(--r-control); display: flex; align-items: center; gap: 6px;
   font-weight: 600; white-space: nowrap; pointer-events: auto;
+}
+
+/* Thought Line (React Bits Micro): status proses ekspor (ThoughtLine.tsx). */
+.thought-line {
+  --tl-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --tl-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+  color: var(--label); font-size: 15px; font-weight: 600; line-height: 1.25;
+}
+.thought-line-head { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.thought-line-glyph { display: inline-flex; color: var(--blue-text); opacity: 0.55; }
+.thought-line-label { display: inline-grid; }
+.thought-line-text {
+  grid-area: 1 / 1; width: max-content; opacity: 0; filter: blur(2px);
+  transition: opacity 350ms var(--tl-ease-out), filter 350ms var(--tl-ease-out);
+}
+.thought-line-text[data-active] { opacity: 1; filter: blur(0); }
+.thought-line-done[data-active] { opacity: 0.8; }
+.thought-line-breath { display: inline-block; }
+.thought-line[data-shimmer] .thought-line-breath {
+  background: linear-gradient(100deg, rgba(235, 235, 245, 0.45) 30%, #fff 50%, rgba(235, 235, 245, 0.45) 70%);
+  background-size: 250% 100%; background-position: 125% 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  animation: thought-line-shimmer 1.8s linear infinite;
+}
+@keyframes thought-line-shimmer { to { background-position: -125% 0; } }
+.thought-line-timer {
+  font-weight: 500; color: var(--label-2); opacity: 0.7;
+  transition: opacity 350ms ease, transform 350ms var(--tl-ease-in-out);
+}
+.thought-line:not([data-working]) .thought-line-timer { opacity: 0.85; }
+/* Jejak langkah: terbuka selama bekerja, terlipat ke judul saat selesai. */
+.thought-line-trace {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows 420ms var(--tl-ease-in-out), opacity 300ms ease;
+}
+.thought-line-trace[data-open] { grid-template-rows: 1fr; opacity: 1; }
+.thought-line-fold { overflow: hidden; min-height: 0; display: flex; flex-direction: column; gap: 4px; padding-left: 23px; }
+.thought-line-fold > :first-child { margin-top: 8px; }
+.thought-line-step {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--label-2);
+  animation: thought-line-step-in 320ms var(--tl-ease-out) both;
+}
+.thought-line-step[data-done] { color: var(--label-3, rgba(235, 235, 245, 0.45)); }
+@keyframes thought-line-step-in { from { opacity: 0; transform: translateY(-3px); filter: blur(2px); } }
+.thought-line-mark { display: inline-flex; width: 13px; justify-content: center; color: var(--blue-text); }
+.thought-line-pulse {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--blue-text);
+  animation: thought-line-pulse 1.1s var(--tl-ease-in-out) infinite;
+}
+@keyframes thought-line-pulse { 50% { transform: scale(0.55); opacity: 0.45; } }
+.thought-line[data-hide-head] .thought-line-fold { padding-left: 0; }
+.thought-line[data-hide-head] .thought-line-fold > :first-child { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .thought-line-step, .thought-line-pulse { animation: none; }
+  .thought-line-text, .thought-line-trace, .thought-line-timer { transition: none; }
+  .thought-line-text { filter: none; }
+}
+
+/* Button light sweep & timer (proses Developing / Encoding di tombol) */
+.btn-busy-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.btn-sweep {
+  display: inline-block;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.55) 20%, #ffffff 50%, rgba(255, 255, 255, 0.55) 80%);
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: btn-sweep-shimmer 1.8s linear infinite;
+}
+@keyframes btn-sweep-shimmer {
+  to { background-position: -100% 0; }
+}
+.btn-timer {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  font-weight: 500;
+  font-size: 0.95em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-sweep {
+    animation: none;
+    color: inherit;
+    -webkit-text-fill-color: inherit;
+  }
+}
+
+/* Decrypted Text (React Bits): animasi teks teracak/terdekripsi saat unduhan siap */
+.decrypted-text-root {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.decrypted-encrypted {
+  opacity: 0.65;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: inherit;
+  font-feature-settings: 'tnum';
 }
 
 /* Spinner (indeterminate) */

@@ -689,8 +689,8 @@ export class Session {
   }
 
   /**
-   * Fase render ekspor saja (gaya EMULSION): UI memanggilnya saat lembar
-   * Ekspor dibuka atau sisi panjang berubah, lalu `exportImage` dengan format
+   * Fase render ekspor saja (gaya EMULSION): UI memanggilnya saat pengguna
+   * menekan Develop di lembar Ekspor, lalu `exportImage` dengan format
    * dan kualitas apa pun memakai hasil yang sama dari cache -- menggeser
    * kualitas hanya meng-encode ulang. Ukuran yang dikembalikan bisa lebih
    * kecil dari permintaan bila difusi memaksa `fitForDiffusion`.

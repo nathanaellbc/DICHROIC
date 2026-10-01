@@ -8,17 +8,23 @@
  *  - Sisi panjang berupa detent yang sungguh memperkecil (2048/4096/8192) plus
  *    "Source"; tidak pernah memperbesar. Efek berukuran fisik dirender ulang
  *    pada pitch piksel itu, bukan di-resize.
- *  - Render dan encode berjalan SELAGI pengaturan dipilih: tombol simpan
- *    langsung aktif, `navigator.share` (yang di iOS wajib di dalam gestur)
- *    menerima berkas yang sudah ada, dan ukuran berkas yang ditampilkan adalah
- *    ukuran TERUKUR, bukan perkiraan.
+ *  - Membuka lembar ini TIDAK me-render: pengguna menekan Develop dulu.
+ *    Selama itu baris status Thought Line (React Bits Micro) menunjukkan
+ *    langkah dan jamnya. Setelah selesai tombol berganti menjadi Save/
+ *    Download, ketukan TERPISAH, karena `navigator.share` di iOS wajib di
+ *    dalam gestur dan menerima berkas yang sudah ada. Ukuran berkas yang
+ *    ditampilkan TERUKUR, bukan perkiraan. Ganti format/kualitas setelah
+ *    develop = encode ulang dari render yang sama; ganti sisi panjang =
+ *    Develop lagi.
  *  - Pilihan disimpan di `localStorage`.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ExportFormat } from '../../session/session';
+import { DecryptedText } from '../components/DecryptedText';
 import { Icon } from '../components/Icon';
 import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
+import { formatElapsed, ThoughtLine } from '../components/ThoughtLine';
 import { engine } from '../engine/engine';
 import { canvasLimits, longEdgeDetents } from '../model/exportSizes';
 import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
@@ -78,6 +84,30 @@ function loadPrefs(): ExportPrefs {
   return { format: 'png8', quality: DEFAULT_QUALITY, longEdge: null };
 }
 
+function BusyButtonContent({ label, active }: { label: string; active: boolean }) {
+  const timerRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    if (!active) return undefined;
+    const start = performance.now();
+    const paint = () => {
+      const ds = Math.floor((performance.now() - start) / 100);
+      if (timerRef.current) timerRef.current.textContent = formatElapsed(ds);
+    };
+    paint();
+    const id = window.setInterval(paint, 100);
+    return () => window.clearInterval(id);
+  }, [active]);
+
+  return (
+    <span className="btn-busy-wrap">
+      <Spinner size={16} />
+      <span className="btn-sweep">{label}</span>
+      <span ref={timerRef} className="btn-timer tabular">0.0s</span>
+    </span>
+  );
+}
+
 export function ExportContent({
   outputColorSpace,
   inputColorSpace,
@@ -100,11 +130,17 @@ export function ExportContent({
   const [prefs, setPrefs] = useState<ExportPrefs>(loadPrefs);
   const [cubeSize, setCubeSize] = useState<'17' | '33' | '65'>('33');
   const [rendered, setRendered] = useState<{ width: number; height: number; limited: boolean; request: number | undefined } | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<{ value: File; key: string } | null>(null);
   const [cubeFile, setCubeFile] = useState<File | null>(null);
   const [encoding, setEncoding] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
   const shareable = useMemo(prefersShareSheet, []);
+  // The render starts only in the Develop click handler. A new click supersedes
+  // callbacks from an earlier size or a sheet that has already closed.
+  const [developedFor, setDevelopedFor] = useState<string | undefined>(undefined);
+  const [renderingExport, setRenderingExport] = useState(false);
+  const renderTicket = useRef(0);
+  const [hasDeveloped, setHasDeveloped] = useState(false);
 
   const format: ExportFormat = formats?.includes(prefs.format) ? prefs.format : 'png8';
   const info = FORMAT_INFO[format];
@@ -115,10 +151,40 @@ export function ExportContent({
   );
   const selected = detents.find((d) => d.longEdge === prefs.longEdge) ?? detents[detents.length - 1]!;
   const request = selected.request;
-  const rendering = mode === 'image' && (rendered === null || rendered.request !== request);
+  const requestKey = String(request ?? 'source');
+  const encodeKey = `${requestKey}|${format}|${prefs.quality}`;
+  const needsDevelop = mode === 'image' && developedFor !== requestKey;
+  const rendering = mode === 'image' && !needsDevelop && renderingExport;
+  const develop = () => {
+    if (!formats) return;
+    const ticket = ++renderTicket.current;
+    setHasDeveloped(true);
+    setFailure(null);
+    setFile(null);
+    setRendered(null);
+    setEncoding(false);
+    setDevelopedFor(requestKey);
+    setRenderingExport(true);
+    void engine.renderExport(request, selected).then(
+      (size) => {
+        if (ticket !== renderTicket.current) return;
+        setRendered({ ...size, request });
+        setRenderingExport(false);
+      },
+      (error: unknown) => {
+        if (ticket !== renderTicket.current) return;
+        setFailure(failureOf(error, 'image'));
+        setDevelopedFor(undefined);
+        setRenderingExport(false);
+      },
+    );
+  };
 
   // Seperti EMULSION: render ekspor hanya dipegang selama lembar ini terbuka.
-  useEffect(() => () => engine.releaseExport(), []);
+  useEffect(() => () => {
+    renderTicket.current += 1;
+    engine.releaseExport();
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -139,41 +205,17 @@ export function ExportContent({
     }
   }, [prefs]);
 
-  // Fase 1, render: saat dibuka dan saat sisi panjang berubah (debounce,
-  // supaya worker tidak merender tiap detent yang dilewati).
-  useEffect(() => {
-    if (mode !== 'image') return;
-    let alive = true;
-    setFile(null);
-    const t = window.setTimeout(() => {
-      engine.renderExport(request, selected).then(
-        (size) => {
-          if (!alive) return;
-          setRendered({ ...size, request });
-          setFailure(null);
-        },
-        (error: unknown) => alive && setFailure(failureOf(error, 'image')),
-      );
-    }, 250);
-    return () => {
-      alive = false;
-      window.clearTimeout(t);
-    };
-    // `selected` berubah identitas tiap render; `request` sudah mewakilinya.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, request]);
-
   // Fase 2, encode: setelah render mendarat, dan saat format/kualitas
   // bergeser -- tanpa kerja GPU (render diambil dari cache `Session`).
   useEffect(() => {
-    if (mode !== 'image' || rendering || !formats) return;
+    if (mode !== 'image' || needsDevelop || rendering || rendered?.request !== request || !formats) return;
     let alive = true;
     setEncoding(true);
     const t = window.setTimeout(() => {
       engine.exportImage(format, { longEdge: request, quality: prefs.quality / 100 }).then(
         (f) => {
           if (!alive) return;
-          setFile(f);
+          setFile({ value: f, key: encodeKey });
           setEncoding(false);
           setFailure(null);
         },
@@ -182,6 +224,7 @@ export function ExportContent({
           setFile(null);
           setEncoding(false);
           setFailure(failureOf(error, 'image'));
+          setDevelopedFor(undefined);
         },
       );
     }, 200);
@@ -189,7 +232,7 @@ export function ExportContent({
       alive = false;
       window.clearTimeout(t);
     };
-  }, [mode, rendering, formats, format, request, prefs.quality]);
+  }, [mode, needsDevelop, rendering, rendered, formats, format, request, prefs.quality, encodeKey]);
 
   useEffect(() => {
     if (mode !== 'cube') return;
@@ -204,7 +247,7 @@ export function ExportContent({
     };
   }, [mode, cubeSize]);
 
-  const ready = mode === 'image' ? (!rendering && !encoding ? file : null) : cubeFile;
+  const ready = mode === 'image' ? (!needsDevelop && !rendering && !encoding && file?.key === encodeKey ? file.value : null) : cubeFile;
   const limitedNote = mode === 'image' && rendered?.limited ? ` at ${rendered.width} × ${rendered.height} (diffusion filter size limit)` : '';
 
   // Keduanya menerima berkas yang SUDAH ada: tidak ada `await` antara
@@ -228,7 +271,7 @@ export function ExportContent({
 
   // Dialog desktop: Return menjalankan tombol bawaan (Download / Save), kecuali
   // fokus sedang di kontrol lain yang memakai Enter sendiri.
-  const primary = shareable ? doShare : doDownload;
+  const primary = needsDevelop ? develop : shareable ? doShare : doDownload;
   const primaryRef = useRef(primary);
   useEffect(() => {
     primaryRef.current = primary;
@@ -246,8 +289,17 @@ export function ExportContent({
   }, []);
 
   const sizeLabel = ready ? formatBytes(ready.size) : '';
-  const busyLabel = mode === 'cube' ? 'Building LUT…' : rendering ? 'Developing…' : 'Encoding…';
-  const busy = !ready && !failure;
+  const busyTitle = mode === 'cube' ? 'Building LUT' : rendering ? 'Developing' : 'Encoding';
+  const busy = !needsDevelop && !ready && !failure;
+  // Thought Line follows the real render and encode phases after Develop.
+  const steps = [
+    `Developing ${selected.width} × ${selected.height} on the GPU`,
+    `Encoding ${info.name}${info.lossy ? ` · quality ${prefs.quality}` : ''}`,
+  ];
+  // Satu fase kerja dari render sampai berkas siap (tanpa celah satu frame
+  // di antara render dan encode yang me-reset jam).
+  const working = mode === 'image' && busy;
+  const showLine = mode === 'image' && hasDeveloped && !needsDevelop && !failure;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flexGrow: 1 }}>
@@ -362,45 +414,67 @@ export function ExportContent({
           </>
         )}
 
+      </div>
+      <div className="export-action-status">
         {failure && (
           <div role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <p className="t-footnote" style={{ margin: 0, color: 'var(--red-text)', fontWeight: 600 }}>{failure.text}</p>
             <p className="t-caption secondary" style={{ margin: 0 }}>{failure.detail}</p>
           </div>
         )}
-        <p className="t-footnote secondary num" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ready?.name}>
-          {ready?.name ?? ' '}
-        </p>
+        {showLine && (
+          <ThoughtLine
+            key={encodeKey}
+            working={working}
+            label={rendering ? 'Developing' : 'Encoding'}
+            doneLabel="Developed in"
+            steps={steps}
+            activeStep={rendering ? 0 : 1}
+            hideHead
+          />
+        )}
+        {mode === 'image' && needsDevelop && !failure && (
+          <p className="t-footnote secondary" style={{ margin: 0 }}>
+            {hasDeveloped ? 'The export settings changed. Press Develop to prepare this size.' : 'Press Develop to prepare your file.'}
+          </p>
+        )}
+        {ready && (
+          <p className="t-footnote secondary num" style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ready.name}>
+            {ready.name}
+          </p>
+        )}
       </div>
       <div className="sheet-actions">
         <PressButton className="capsule large dialog-only" aria-keyshortcuts="Escape" onClick={onCancel}>
           Cancel
         </PressButton>
-        {shareable ? (
+        {needsDevelop ? (
+          <PressButton className="capsule prominent large" disabled={!formats} onClick={develop}>
+            Develop
+          </PressButton>
+        ) : shareable ? (
           <>
             <PressButton className="capsule bordered large" style={{ flex: '0 0 38%' }} disabled={!ready} onClick={doDownload}>
-              Download
+              {ready ? <DecryptedText key={sizeLabel || 'ready'} text={sizeLabel ? `Download · ${sizeLabel}` : 'Download'} animateOn="mount" /> : 'Download'}
             </PressButton>
             <PressButton className="capsule prominent large" disabled={!ready} onClick={doShare}>
               {busy ? (
-                <>
-                  <Spinner size={18} /> {busyLabel}
-                </>
+                <BusyButtonContent label={busyTitle} active={busy} />
               ) : (
-                'Save to Photos'
+                <DecryptedText key={sizeLabel || 'ready-share'} text="Save to Photos" animateOn="mount" />
               )}
             </PressButton>
           </>
         ) : (
           <PressButton className="capsule prominent large" disabled={!ready} onClick={doDownload}>
             {busy ? (
-              <>
-                <Spinner size={18} /> {busyLabel}
-              </>
-            ) : sizeLabel ? (
-              `Download · ${sizeLabel}`
+              <BusyButtonContent label={busyTitle} active={busy} />
             ) : (
-              'Download'
+              <DecryptedText
+                key={sizeLabel || 'ready'}
+                text={sizeLabel ? `Download · ${sizeLabel}` : 'Download'}
+                animateOn="mount"
+              />
             )}
           </PressButton>
         )}
