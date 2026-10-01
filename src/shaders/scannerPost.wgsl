@@ -853,6 +853,11 @@ fn scanPreUnsharp(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let index = absoluteIndex(gid);
   let cmyPrint = src[index];
+  if (scannerFrame.z == 1.0) {
+    let glareOn = (params.slot1 & 4u) != 0u;
+    preUnsharp[index] = vec4<f32>(cmyPrint.rgb + select(0.0, glareBlurred[index], glareOn), cmyPrint.a);
+    return;
+  }
   let xyz = densityToXyz(cmyPrint.rgb);
   // `black_white_xyz_correction`: identitas (`white_correction`/
   // `black_correction` KEDUANYA `False`, lih. blok komentar berkas).

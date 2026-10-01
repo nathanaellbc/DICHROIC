@@ -10,7 +10,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { PressButton, Segmented } from '../components/controls';
 import { PROCESS_MODES } from '../model/tools';
-import { FILM_SECTIONS, PAPER_SECTIONS, matchesQuery } from '../model/stocks';
+import { FILM_SECTIONS, PAPER_SECTIONS, matchesQuery, isSlideFilm } from '../model/stocks';
+import { isPrintLut } from '../../profiles/printLuts';
 import type { StockInfo, StockSection } from '../model/stocks';
 
 export type StockKind = 'film' | 'paper';
@@ -72,7 +73,7 @@ export function StockBrowser({
 
   const hint = query === '' && (
     <p className="t-footnote secondary" style={{ margin: dense ? '4px 8px 2px' : '0 4px -8px' }}>
-      {!filmEnabled && kind === 'paper' ? 'Paper is bypassed while Film is Off. Select a film to enable it again.' : kind === 'film'
+      {!filmEnabled && kind === 'paper' ? 'Film Off keeps exposure, develop and texture active. Film print LUTs work with this neutral negative; photographic paper requires a film stock.' : kind === 'film'
         ? !filmEnabled
           ? 'Film and paper are off. Camera and Lens adjustments remain active.'
           : scan
@@ -96,7 +97,7 @@ export function StockBrowser({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: dense ? '0 2px' : '0 4px' }}>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <span className={dense ? 't-body' : 't-subhead'} style={{ fontWeight: 600 }}>Process</span>
-            <span className="t-footnote secondary">{!filmEnabled ? 'Film and paper bypassed' : scan ? 'The film itself, no paper' : 'Film printed onto paper'}</span>
+            <span className="t-footnote secondary">{!filmEnabled ? 'Neutral negative · controls active' : scan ? 'The film itself, no paper' : 'Film printed onto paper'}</span>
           </span>
           <span style={{ width: dense ? 112 : 150, flexShrink: 0 }}>
             <Segmented label="Process" items={PROCESS_MODES as readonly { value: string; label: string }[]} value={process} onChange={onProcess} small />
@@ -127,9 +128,9 @@ export function StockBrowser({
         {sections.length === 0 && <p className="t-subhead secondary" style={{ textAlign: 'center', marginTop: 24 }}>No stocks match “{query}”.</p>}
         {kind === 'film' && !query && <div className={dense ? 'source-list' : 'list'} role="radiogroup" aria-label="Film bypass">
           <button type="button" role="radio" aria-checked={!filmEnabled} className={dense ? 'source-row' : 'row'} style={dense ? undefined : { minHeight: 56 }} onClick={() => onPick('film', 'off')}>
-            {dense ? <><span className="name">Off</span><span className="meta secondary">Camera &amp; Lens only</span></> : (
+            {dense ? <><span className="name">Off</span><span className="meta secondary">Neutral negative</span></> : (
               <span className="row-body">
-                <span className="row-text"><span className="t-body">Off</span><span className="t-subhead secondary">Camera &amp; Lens only</span></span>
+                <span className="row-text"><span className="t-body">Off</span><span className="t-subhead secondary">Neutral negative · controls active</span></span>
                 {!filmEnabled && <Icon name="check" size={20} color="var(--blue)" />}
               </span>
             )}
@@ -137,12 +138,12 @@ export function StockBrowser({
         </div>}
         {hint}
         {sections.map((section) => {
-          const paperOff = kind === 'paper' && (scan || !filmEnabled);
           return (
             <section key={section.title} className={dense ? undefined : 'list-section'}>
               <h3 className={dense ? 'source-header' : 'list-header'}>{section.title}</h3>
               <div className={dense ? 'source-list' : 'list'} role="radiogroup" aria-label={section.title}>
                 {section.stocks.map((stock) => {
+                  const paperOff = kind === 'paper' && (scan || !filmEnabled || isSlideFilm(film)) && !isPrintLut(stock.id);
                   const selected = !section.locked && stock.id === chosen && !paperOff && (kind !== 'film' || filmEnabled);
                   const disabled = section.locked || paperOff;
                   const name = rowName(kind, section, stock);

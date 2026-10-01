@@ -45,7 +45,7 @@ export default defineConfig({
       includeManifestIcons: false,
       injectManifest: {
         // Manifest aplikasi ditambahkan plugin sendiri.
-        globPatterns: ['**/*.{html,js,css,wasm,svg,png,json,f16,f32,woff2}'],
+        globPatterns: ['**/*.{html,js,css,wasm,svg,png,json,f16,f32,cube,woff2}'],
         // Layar pembuka hanya diminta iOS saat memasang; tidak perlu offline.
         // Runtime WASM ONNX Runtime (lens blur, 14-27 MB) diambil worker
         // kedalaman lewat cache kedalamannya sendiri (`src/depth/model.ts`),

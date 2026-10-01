@@ -1,6 +1,9 @@
 import { createMaterializeActiveRegionStage } from './stages/materializeActiveRegion';
 import { createFilmExposureStage } from './stages/filmExposure';
 import { createCameraOutputStage } from './stages/cameraOutput';
+import { createNeutralFilmStage } from './stages/neutralFilm';
+import { createPrintLutStage } from './stages/printLut';
+import type { PrintCube } from '../profiles/printLuts';
 import { createSoftenDetailStage } from './stages/softenDetail';
 import { createHalationStage } from './stages/halation';
 import { createCurveDevelopStage } from './stages/curveDevelop';
@@ -139,15 +142,23 @@ function lensStages(device: GPUDevice, spec: ChainSpec): Stage[] {
   return [createLensBlurStage(device)];
 }
 
-export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {
+export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec, cube?: PrintCube): Stage[] {
   if (spec.softenDetail && spec.family === 'lut') throw new Error('Soften Detail is spatial and cannot be baked into a cube LUT.');
-  if (spec.filmOff) return [
+  if (spec.filmOff || spec.printLut) return [
     createMaterializeActiveRegionStage(device),
     ...(spec.softenDetail ? [createSoftenDetailStage(device)] : []),
-    createFilmExposureStage(device, arenas, true),
+    createFilmExposureStage(device, arenas, spec.filmOff === true),
+    ...(spec.filmOff ? [createNeutralFilmStage(device, 'expose')] : []),
     ...lensStages(device, spec),
     ...(spec.cameraDiffusion ? [cameraDiffusionStage(device, arenas, spec)] : []),
-    createCameraOutputStage(device),
+    ...(spec.family === 'measured' || spec.filmOff ? [createHalationStage(device, arenas)] : []),
+    spec.filmOff ? createNeutralFilmStage(device, 'develop') : createCurveDevelopStage(device, arenas),
+    createDirStage(device, arenas, { spatialDiffusionActive: spec.family === 'measured', neutralFilm: spec.filmOff }),
+    ...(spec.grain ? [createGrainStage(device, arenas)] : []),
+    createNeutralFilmStage(device, 'scene', arenas),
+    ...(spec.printDiffusion ? [createDiffusionFftStage(device, 'print', true)] : []),
+    ...(spec.printLut ? [createPrintLutStage(device, requiredCube(cube))] : [createCameraOutputStage(device)]),
+    createScannerPostStage(device, arenas, true),
   ];
   if (!spec.scan) return buildPrintChain(device, arenas, spec);
   if (spec.family === 'lut') {
@@ -172,6 +183,11 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): 
     ...(spec.grain ? [createGrainStage(device, arenas)] : []),
     createScannerPostStage(device, arenas),
   ];
+}
+
+function requiredCube(cube: PrintCube | undefined): PrintCube {
+  if (!cube) throw new Error('Print LUT must be loaded before constructing the render graph.');
+  return cube;
 }
 
 function buildPrintChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): Stage[] {

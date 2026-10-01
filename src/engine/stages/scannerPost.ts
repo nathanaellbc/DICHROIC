@@ -103,7 +103,7 @@ function buildUnsharpKernelBuffer(sigma: number): Float32Array {
  * TANPA SYARAT, bukan hanya ketika `printScan` diberikan -- lih.
  * `src/host/spectral.ts`).
  */
-export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage {
+export function createScannerPostStage(device: GPUDevice, arenas: Arenas, directRgb = false): Stage {
   const arenaConstants = `${arenas.static.wgslConstants()}\n\n${arenas.dynamic.wgslConstants()}`;
 
   const module = device.createShaderModule({
@@ -185,7 +185,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
       new Float32Array(scannerFrame.getMappedRange()).set([
         ctx.frame.scannerUnsharpAmount ?? 0.7,
         glareLogMu(ctx.frame.glarePercent ?? 0.03),
-        0,
+        directRgb ? 1 : 0,
         0,
       ]);
       scannerFrame.unmap();
@@ -271,6 +271,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas): Stage
           { binding: 4, resource: { buffer: arenas.dynamic.buffer } },
           { binding: 7, resource: { buffer: glareBlurred } },
           { binding: 8, resource: { buffer: preUnsharp } },
+          { binding: 12, resource: { buffer: scannerFrame } },
         ],
       });
       const scanPreUnsharpPass = encoder.beginComputePass({ label: 'scannerPost:scanPreUnsharp' });

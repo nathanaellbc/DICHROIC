@@ -5,6 +5,8 @@
  * (140 KB) hanya untuk daftar nama.
  */
 
+import { PRINT_LUTS } from '../../profiles/printLuts';
+
 export interface StockInfo {
   id: string;
   /** Nama tanpa merek, untuk baris daftar yang sudah dikelompokkan per merek. */
@@ -72,6 +74,11 @@ export const FILM_SECTIONS: readonly StockSection[] = [
 ];
 
 export const PAPER_SECTIONS: readonly StockSection[] = [
+  {
+    title: 'Film print LUTs · Cineon',
+    footer: 'Rec.709 / Cineon Film Log input → Rec.709 gamma 2.4. 2383 and 3513: D55 / D60 / D65; 2393: Autodesk FPE, D65 only.',
+    stocks: Object.entries(PRINT_LUTS).map(([id, entry]) => ({ id, short: entry.name, name: entry.name, detail: id.includes('2393') ? 'Autodesk FPE · 13³ · D65 only' : `Film Look LUT · 33³ · ${id.endsWith('d55') ? 'D55' : id.endsWith('d60') ? 'D60' : 'D65'}` })),
+  },
   {
     title: 'Color paper',
     stocks: [

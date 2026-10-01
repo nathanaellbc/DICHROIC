@@ -169,6 +169,13 @@ function interpDensity(t: MidgrayTables, logRaw: number, channel: number, gamma:
   return yAt(lo) + (yAt(hi) - yAt(lo)) * f;
 }
 
+/** Balanced negative CMY density before DIR, used to anchor a Cineon print LUT. */
+export function midgrayDensityChannels(t: MidgrayTables, srgbColorSpace: number): number[] {
+  const o = srgbColorSpace * 9;
+  const xyz = [0, 1, 2].map(r => 0.18 * (t.inputToReferenceXyz[o + r * 3]! + t.inputToReferenceXyz[o + r * 3 + 1]! + t.inputToReferenceXyz[o + r * 3 + 2]!)) as [number, number, number];
+  return hanatosRawHost(t, xyz, false).map((value, c) => interpDensity(t, Math.log10(value + 1e-10), c, 1) - t.densityCurveMinimum[c]!);
+}
+
 /** `_simple_rgb_to_density_spectral` untuk abu-abu `value` (per wavelength). */
 export function midgrayDensitySpectral(t: MidgrayTables, value: number, opts: MidgrayOptions): Float64Array {
   const rgb = value;

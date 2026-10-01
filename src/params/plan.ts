@@ -36,11 +36,13 @@ import type { AssetBundle } from '../profiles/load';
 import { FILM_FORMAT_LONG_EDGE_MM } from './filmFormat';
 import { UnverifiedParameterError, validateRenderParams } from './registry';
 import { BASELINE_RENDER_PARAMS } from './renderParams';
+import { isPrintLut, type PrintLutId } from '../profiles/printLuts';
 import type { ProcessMode, RenderParams } from './renderParams';
 
 export type RenderMode = 'image' | 'cube';
 
 export interface ChainSpec {
+  printLut?: PrintLutId;
   filmOff?: boolean;
   softenDetail?: boolean;
   family: 'measured' | 'lut';
@@ -154,6 +156,10 @@ export class MissingNeutralFiltersError extends Error {
  * Dipanggil `buildRenderPlan` dan `Session.setParams`.
  */
 export function validateStocks(bundle: AssetBundle, film: string, paper: string, process: ProcessMode = 'printSimulation'): void {
+  if (isPrintLut(paper)) {
+    validateStocks(bundle, film, BASELINE_RENDER_PARAMS.paper, 'scanNegative');
+    return;
+  }
   const { table } = bundle.manifest.neutralPrintFilters;
   const papers = Object.keys(table);
   if (!papers.includes(paper)) {
@@ -366,7 +372,9 @@ export function buildRenderPlan(
   validateLens(params);
 
   const family = mode === 'cube' ? 'lut' : 'measured';
-  const scan = params.process === 'scanNegative';
+  const printLut = isPrintLut(params.paper) ? params.paper : undefined;
+  const scan = params.process === 'scanNegative' && !printLut;
+  const backingParams = printLut ? { ...params, paper: BASELINE_RENDER_PARAMS.paper } : params;
   // Grain dan glare independen sejak Fase 2C (`film_render.grain.active`,
   // `print_render.glare.active`); keduanya mati di lut_mode. Scan film
   // (Fase 2D) tidak punya glare: `scanning.py` memberi `glare = None`.
@@ -382,11 +390,11 @@ export function buildRenderPlan(
   const printScan: PrintScanArenaOptions | ScanFilmArenaOptions = scan
     ? { scanFilm: true, outputColorSpace: params.outputColorSpace }
     : {
-        printStockId: params.paper,
+        printStockId: backingParams.paper,
         enlargerFilters: resolveEnlargerFilters(
           bundle,
-          params.film,
-          params.paper,
+          printLut ? BASELINE_RENDER_PARAMS.film : params.film,
+          backingParams.paper,
           params.filterC,
           params.filterMShift,
           params.filterYShift,
@@ -404,7 +412,7 @@ export function buildRenderPlan(
   // `rgb_to_raw`). Tanpa decode keduanya linear dan EV cukup dijumlah ke
   // `filmExposureEv`; dengan decode EV itu dibawa `frame.inputDecodeScale`.
   const autoEv =
-    family === 'measured' && params.filmEnabled && params.autoExposure
+    family === 'measured' && params.autoExposure
       ? measureAutoExposureEv(
           image.rgba,
           image.width,
@@ -420,13 +428,14 @@ export function buildRenderPlan(
   const camera = family === 'measured' ? cameraFrame(params, bundle, image, inputColorSpace, params.inputCctfDecoding ? 2 ** autoEv : 1) : undefined;
 
   return {
-    core: buildCoreParams(params, bundle, image, family, glareActive, inputColorSpace, autoEv),
+    core: buildCoreParams(backingParams, bundle, image, family, glareActive, inputColorSpace, autoEv),
     arenaKey: scan
       ? `${params.film}::scan::out=${params.outputColorSpace}`
       : `${params.film}::print=${params.paper}::out=${params.outputColorSpace}::c=${params.filterC}::m=${params.filterMShift}::y=${params.filterYShift}`,
     arenaInputs: { stockId: params.film, printScan },
     chain: {
       family,
+      ...(printLut ? { printLut } : {}),
       ...(!params.filmEnabled ? { filmOff: true } : {}),
       grain: grainActive,
       ...(scan ? { scan } : {}),
@@ -438,7 +447,10 @@ export function buildRenderPlan(
     overlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {
-      ...(!params.filmEnabled ? { cameraOutput: cameraOutputFrame(params, bundle) } : {}),
+      ...(!params.filmEnabled || printLut ? {
+        cameraOutput: linearOutputFrame(params, bundle),
+        neutralFilm: neutralFilmFrame(params, bundle, family, autoEv),
+      } : {}),
       ...exposureFrame(params, family, filmFormatMm),
       ...(cameraDiffusion ? { cameraDiffusion: { family: params.cameraDiffusionFamily, strength: params.cameraDiffusionStrength } } : {}),
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
@@ -732,5 +744,29 @@ function cameraOutputFrame(params: RenderParams, bundle: AssetBundle): Float32Ar
   const output = bundle.manifest.outputColorSpaces[params.outputColorSpace]!;
   values[12] = { linear: 0, srgb: 1, romm: 2, gamma: 3 }[output.encoding];
   values[13] = output.gamma ?? 1;
+  return values;
+}
+
+function linearOutputFrame(params: RenderParams, bundle: AssetBundle): Float32Array {
+  const frame = cameraOutputFrame({ ...params, inputColorSpace: 'sRGB' }, bundle);
+  frame[12] = 0;
+  return frame;
+}
+
+function neutralFilmFrame(params: RenderParams, bundle: AssetBundle, family: 'measured' | 'lut', autoEv: number): Float32Array {
+  const matrix = cameraOutputFrame({ ...params, outputColorSpace: 'sRGB' }, bundle);
+  const values = new Float32Array(28);
+  values.set(matrix.subarray(0, 12));
+  values[12] = 2 ** ((family === 'lut' ? 0 : params.filmExposureEv) + (params.inputCctfDecoding ? 0 : autoEv));
+  values[13] = filmPushPullGamma(params.filmPushPullStops);
+  values[14] = bundle.stockEntry(params.film).type === 'positive' ? -1 : 1;
+  values[15] = params.filmEnabled ? 1 : 0;
+  values[19] = family === 'lut' ? 1 : 2 ** params.printExposureEv;
+  values[20] = 10 ** (-params.filterC / 100);
+  values[21] = 10 ** (-(params.filterC + params.filterMShift) / 100);
+  values[22] = 10 ** (-(params.filterC + params.filterYShift) / 100);
+  values[23] = params.preflashExposure;
+  values[24] = params.preflashMFilterShift;
+  values[25] = params.preflashYFilterShift;
   return values;
 }

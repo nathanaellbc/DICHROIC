@@ -53,7 +53,7 @@ describe('katalog stok UI == manifest', () => {
   });
 
   it('kertas = kunci database netral', () => {
-    expect(selectableIds(PAPER_SECTIONS).sort()).toEqual([...papers].sort());
+    expect(selectableIds(PAPER_SECTIONS).filter(id => !id.startsWith('lut_')).sort()).toEqual([...papers].sort());
   });
 
   it('baseline ada di katalog; pencarian cocok nama dan keterangan', () => {

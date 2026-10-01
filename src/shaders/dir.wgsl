@@ -240,6 +240,13 @@ fn experimentalPushPullDensityGain(logRaw: f32, channel: u32, stops: f32) -> f32
 }
 
 fn developFilmDensity(logRaw: vec3<f32>) -> vec3<f32> {
+  if (NEUTRAL_FILM) {
+    let black = 0.0107977516232771;
+    let linear = pow(vec3<f32>(10.0), logRaw);
+    let density = (vec3<f32>(590.0) + 300.0 * log(linear * (1.0 - black) + black) / log(10.0)) / 500.0;
+    let pivot = (590.0 + 300.0 * log(0.18 * (1.0 - black) + black) / log(10.0)) / 500.0;
+    return max(vec3<f32>(0.0), vec3<f32>(pivot) + (density - pivot) * params.filmGamma);
+  }
   if (params.filmPushPullMode == 1) {
     let lookupRaw = experimentalPushPullLogRaw(logRaw, params.filmPushPullStops);
     let density = vec3<f32>(
@@ -264,6 +271,7 @@ fn developFilmDensity(logRaw: vec3<f32>) -> vec3<f32> {
 // ini untuk kenapa TANPA klem tambahan yang OFX pakai (spec §6.3.1, Python
 // menang).
 fn silverDensity(densityCmy: vec3<f32>) -> vec3<f32> {
+  if (NEUTRAL_FILM) { return densityCmy; }
   if (stockArena[ARENA_DIRISPOSITIVE_OFFSET] > 0.5) {
     let densityMax = vec3<f32>(
       stockArena[ARENA_DIRDENSITYMAX_OFFSET],

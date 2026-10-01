@@ -97,6 +97,8 @@ export interface DirStageOptions {
    * sebelum Task 18c menambahkan istilah spasial, bukan pendekatan baru.
    */
   spatialDiffusionActive?: boolean;
+  /** Neutral negative redevelops Cineon density, never the selected stock curve. */
+  neutralFilm?: boolean;
 }
 
 export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirStageOptions): Stage {
@@ -105,7 +107,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
 
   const module = device.createShaderModule({
     label: 'dir',
-    code: `${CORE_PARAMS_WGSL}\n\n${arenaConstants}\n\n${source}`,
+    code: `${CORE_PARAMS_WGSL}\n\n${arenaConstants}\n\nconst NEUTRAL_FILM: bool = ${options?.neutralFilm === true};\n${source}`,
   });
 
   const pipeline = device.createComputePipeline({

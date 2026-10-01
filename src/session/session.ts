@@ -38,6 +38,7 @@ import { applyParamsPatch } from '../params/registry';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
 import type { RenderParams } from '../params/renderParams';
 import { loadAssets } from '../profiles/load';
+import { loadPrintCube } from '../profiles/printLuts';
 import type { AssetBundle } from '../profiles/load';
 import { RenderSupersededError, SessionStateError } from './errors';
 import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
@@ -272,6 +273,7 @@ export class Session {
     private readonly previewMaxLongEdge: number,
     readonly diagnostics: Readonly<SessionDiagnostics>,
     private readonly canvasEncoder: CanvasEncoder | undefined,
+    private readonly assetsBaseUrl: string,
   ) {}
 
   static async create(opts: SessionOptions): Promise<Session> {
@@ -297,6 +299,7 @@ export class Session {
       opts.previewMaxLongEdge ?? PREVIEW_MAX_LONG_EDGE,
       Object.freeze({ iirPrecisionOk: selfTest.ok, iirMaxAbsError: selfTest.maxAbsError }),
       opts.canvasEncoder ?? (typeof OffscreenCanvas !== 'undefined' ? offscreenCanvasEncoder : undefined),
+      opts.assetsBaseUrl,
     );
     void engine.device.lost.then((info) => {
       if (session.#disposed) return;
@@ -875,7 +878,7 @@ export class Session {
     }
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|off=${plan.chain.filmOff ?? false}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
+      `|off=${plan.chain.filmOff ?? false}|lut=${plan.chain.printLut ?? ''}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) {
       this.graphs.delete(key);
@@ -889,9 +892,11 @@ export class Session {
     }
     const building = (async () => {
       const arenas = await this.arenas.get(plan.arenaKey, plan.arenaInputs);
+      const cube = plan.chain.printLut ? await loadPrintCube(plan.chain.printLut, this.assetsBaseUrl) : undefined;
+      this.assertAlive();
       this.#scratch ??= new ScratchPool(this.engine.device);
       const graph = new RenderGraph(this.engine, this.#scratch);
-      for (const stage of buildChain(this.engine.device, arenas, plan.chain)) graph.addStage(stage);
+      for (const stage of buildChain(this.engine.device, arenas, plan.chain, cube)) graph.addStage(stage);
       return graph;
     })();
     this.graphs.set(key, building);

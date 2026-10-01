@@ -39,6 +39,7 @@ import type { TileSpec } from './tiling';
  * foto sungguhan pada fixture 64 px.
  */
 export interface FrameParams {
+  neutralFilm?: Float32Array;
   cameraOutput?: Float32Array;
   softenDetail?: { amount: number; luma: readonly number[] };
   filmFormatMm: number;
@@ -123,6 +124,7 @@ export interface StageContext {
 }
 
 export interface Stage {
+  dispose?: () => void;
   name: string;
   /** Setiap tap kanonis yang ditulis tahap ini. Kosong untuk tahap murni internal. */
   writesTaps: readonly TapName[];
@@ -708,6 +710,7 @@ export class RenderGraph {
    */
   dispose(): void {
     if (this.#disposed) return;
+    for (const stage of this.stages) stage.dispose?.();
     // Pool bersama milik pemanggil (`Session`), yang melepasnya sendiri.
     if (this.ownsPool) this.pool.release();
     this.#disposed = true;

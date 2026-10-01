@@ -126,7 +126,7 @@ interface KernelCache {
   spectra: [GPUBuffer, GPUBuffer];
 }
 
-export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite): Stage {
+export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, linearOutput = false): Stage {
   const pipelines = pipelinesFor(device);
   const twiddleCache = new Map<number, GPUBuffer>();
   let kernelCache: KernelCache | undefined;
@@ -307,7 +307,7 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite):
       }
 
       const scale = 1 / (nx * ny);
-      const finalLog = site === 'print' ? 1 : 0;
+      const finalLog = site === 'print' && !linearOutput ? 1 : 0;
       for (const [pairIndex, [a, b]] of (
         [
           [0, 1],

@@ -15,6 +15,7 @@
 import { motion, useReducedMotion } from 'motion/react';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderParams } from '../../params/renderParams';
+import { isPrintLut } from '../../profiles/printLuts';
 import { Icon } from '../components/Icon';
 import { GroupTabs, PressButton } from '../components/controls';
 import type { TabItem } from '../components/controls';
@@ -55,10 +56,11 @@ const REDO_KEYS = 'Meta+Shift+Z Control+Y';
 
 const stocksOf = (p: RenderParams): Stocks => ({ film: p.film, filmEnabled: p.filmEnabled, paper: p.paper, process: p.process });
 const sameStocks = (a: Stocks, b: Stocks) => a.filmEnabled === b.filmEnabled && a.film === b.film && a.paper === b.paper && a.process === b.process;
+const offOutput = (s: Stocks) => isPrintLut(s.paper) ? 'on ' + stockInfo(s.paper).short : 'Neutral negative';
 
 /** "Portra 400 → Portra Endura", atau "Velvia 100, scanned". */
 function recipe(s: Stocks): string {
-  if (!s.filmEnabled) return 'Film Off';
+  if (!s.filmEnabled) return 'Film Off · ' + offOutput(s);
   const film = stockInfo(s.film).short;
   return isScanMode(s) ? `${film}, scanned` : `${film} → ${stockInfo(s.paper).short}`;
 }
@@ -160,7 +162,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const film = stockInfo(state.params.film);
   const paper = stockInfo(state.params.paper);
   const scan = isScanMode(state.params);
-  const photoLabel = !state.params.filmEnabled ? `${state.fileName ?? 'Photo'}, Camera and Lens only` : scan
+  const photoLabel = !state.params.filmEnabled ? `${state.fileName ?? 'Photo'}, Neutral negative` : scan
     ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
   // Mode fokus menampilkan cek fokus: di luar kedalaman ruang jadi abu-abu gelap.
@@ -299,7 +301,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           onCancel={() => setSheet(null)}
           outputColorSpace={state.params.outputColorSpace}
           inputColorSpace={state.params.inputColorSpace}
-          recipe={!state.params.filmEnabled ? 'Film Off' : scan ? `${film.short}, scanned` : `${film.short} on ${paper.short}`}
+          recipe={!state.params.filmEnabled ? 'Film Off · ' + offOutput(state.params) : scan ? `${film.short}, scanned` : `${film.short} on ${paper.short}`}
           onDone={(message) => {
             setSheet(null);
             onToast(message);
@@ -454,13 +456,13 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
         </PressButton>
         <PressButton
           className="capsule plain mobile-recipe"
-          aria-label={`Stocks: ${state.params.filmEnabled ? film.name : 'Film Off'}, ${!state.params.filmEnabled ? 'Camera and Lens only' : scan ? 'scanned' : `printed on ${paper.name}`}. Change`}
+          aria-label={`Stocks: ${state.params.filmEnabled ? film.name : 'Film Off'}, ${!state.params.filmEnabled ? offOutput(state.params) : scan ? 'scanned' : `printed on ${paper.name}`}. Change`}
           disabled={!hasPhoto}
           onClick={() => openStocks('film')}
         >
           <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left' }}>
             <span className="t-subhead" style={{ fontWeight: 600, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.params.filmEnabled ? film.short : 'Film Off'}</span>
-            <span className="t-caption secondary" style={{ fontWeight: 500, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!state.params.filmEnabled ? 'Camera & Lens only' : scan ? 'Scanned' : `on ${paper.short}`}</span>
+            <span className="t-caption secondary" style={{ fontWeight: 500, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!state.params.filmEnabled ? offOutput(state.params) : scan ? 'Scanned' : `on ${paper.short}`}</span>
           </span>
           <span className="secondary" style={{ display: 'inline-flex', flexShrink: 0 }}><Icon name="upDown" size={14} strokeWidth={2.4} /></span>
         </PressButton>
@@ -572,7 +574,7 @@ function RecipePath({ state, onReveal, disabled }: { state: EngineState; onRevea
       </button>
       <span className="path-chevron" aria-hidden="true"><Icon name="chevronRight" size={12} strokeWidth={2.4} /></span>
       <button type="button" className="path-segment secondary" disabled={disabled} title={scan ? 'Scanned, no paper: show Paper list' : `${paper.name}: show in Paper list`} onClick={() => onReveal('paper')}>
-        {!state.params.filmEnabled ? 'Camera & Lens' : scan ? 'Scanned' : paper.name}
+        {!state.params.filmEnabled && !isPrintLut(state.params.paper) ? 'Neutral negative' : scan ? 'Scanned' : paper.name}
       </button>
     </nav>
   );

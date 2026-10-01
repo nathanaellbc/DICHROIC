@@ -49,7 +49,7 @@ export interface RenderParams {
   process: ProcessMode;
   /** Python: `film_stock` argumen `init_params`. */
   film: string;
-  /** Bypass film and paper simulation; preserve Camera and Lens controls. */
+  /** Bypass stock color/tone curves; keep neutral-negative controls and print LUTs. */
   filmEnabled: boolean;
   /** Python: `print_stock` argumen `init_params`. */
   paper: string;
