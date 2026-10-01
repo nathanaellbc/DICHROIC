@@ -1,6 +1,8 @@
 /** Desktop ceiling for estimated decoder allocations and retained source images. */
 export const IMAGE_RGBA_BUDGET = 2 * 1024 * 1024 * 1024;
 export const IMAGE_BLOCK_BUDGET = 64 * 1024 * 1024;
+/** Mobile source-decoding headroom; 48 MP browser-decoded photos exceed it. */
+export const MOBILE_IMAGE_BUDGET = 768 * 1024 * 1024;
 
 /** Available in both the UI and workers; missing RAM hints are not zero RAM. */
 export function imageMemoryBudget(): number {
@@ -14,7 +16,12 @@ export function imageMemoryBudget(): number {
   // Safari does not expose deviceMemory. Keep a lower ceiling on phones/tablets.
   const mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(device?.userAgent ?? '') ||
     (/Macintosh/i.test(device?.userAgent ?? '') && (device?.maxTouchPoints ?? 0) > 1);
-  return mobile ? 1024 * 1024 * 1024 : IMAGE_RGBA_BUDGET;
+  return mobile ? MOBILE_IMAGE_BUDGET : IMAGE_RGBA_BUDGET;
+}
+
+/** Preview history is useful, but should hold fewer full preview frames on phones. */
+export function previewCacheBudgetBytes(budget = imageMemoryBudget()): number {
+  return budget < IMAGE_RGBA_BUDGET ? budget / 16 : budget / 8;
 }
 
 export function assertImageBudget(width: number, height: number, bytesPerPixel = 16, budget = imageMemoryBudget()): void {

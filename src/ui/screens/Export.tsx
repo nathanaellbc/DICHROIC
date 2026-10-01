@@ -26,7 +26,7 @@ import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { formatElapsed, ThoughtLine } from '../components/ThoughtLine';
 import { engine } from '../engine/engine';
-import { canvasLimits, longEdgeDetents } from '../model/exportSizes';
+import { exportSizeLimits, longEdgeDetents } from '../model/exportSizes';
 import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
 
 interface Failure {
@@ -146,7 +146,7 @@ export function ExportContent({
   const info = FORMAT_INFO[format];
   const source = engine.imageSize ?? { width: 1, height: 1 };
   const detents = useMemo(
-    () => longEdgeDetents(source.width, source.height, info.lossy ? canvasLimits() : undefined),
+    () => longEdgeDetents(source.width, source.height, exportSizeLimits(info.lossy)),
     [source.width, source.height, info.lossy],
   );
   const selected = detents.find((d) => d.longEdge === prefs.longEdge) ?? detents[detents.length - 1]!;
@@ -370,6 +370,7 @@ export function ExportContent({
                 </div>
               )}
               <p className="list-footer t-footnote">
+                {selected.label.startsWith('Max · 4096') && 'Mobile exports are capped at a 4096 px long edge to keep the render within Safari’s working memory. '}
                 Grain, halation and diffusion are physical sizes, so a smaller export is developed again at its own pixel pitch rather than resized.
               </p>
             </div>

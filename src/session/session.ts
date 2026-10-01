@@ -49,7 +49,7 @@ import { buildGuide } from '../depth/estimate';
 import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, imageMemoryBudget } from '../io/budget';
+import { assertImageBudget, imageMemoryBudget, previewCacheBudgetBytes } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -653,7 +653,7 @@ export class Session {
 
   private cachePreview(key: string, result: RenderResult): void {
     const size = (frame: RenderResult) => frame.rgb.byteLength + (frame.original?.pixels.byteLength ?? 0);
-    const budget = imageMemoryBudget() / 8;
+    const budget = previewCacheBudgetBytes();
     if (size(result) > budget) return; // The current frame still lives in #cache.
     this.#previewCache.delete(key);
     this.#previewCache.set(key, result);

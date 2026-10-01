@@ -13,12 +13,24 @@ function isAppleMobile(): boolean {
   return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+/** iOS WebGPU/export working-set ceiling: about 12 MP, 4096 px on the long edge. */
+export const MOBILE_EXPORT_LIMITS = { area: 12_582_912, side: 4096 } as const;
+
 /**
- * Kanvas terbesar yang bisa di-encode browser ini (hanya membatasi format
- * lossy, yang lewat kanvas): iOS Safari menolak kanvas di atas 16,7 MP.
+ * Kanvas terbesar yang bisa di-encode browser ini (khusus format lossy):
+ * iOS Safari menolak kanvas di atas 16,7 MP.
  */
 export function canvasLimits(): { area: number; side: number } {
   return isAppleMobile() ? { area: 16_777_216, side: 16_384 } : { area: 268_435_456, side: 32_767 };
+}
+
+/**
+ * Mobile gets a lower limit for every output format to keep full-resolution
+ * GPU render and encoder buffers within a practical Safari working set.
+ */
+export function exportSizeLimits(lossy: boolean, mobile = isAppleMobile()): { area: number; side: number } | undefined {
+  if (mobile) return MOBILE_EXPORT_LIMITS;
+  return lossy ? canvasLimits() : undefined;
 }
 
 export interface LongEdgeDetent {

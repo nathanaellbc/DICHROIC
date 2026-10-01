@@ -80,13 +80,24 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
       const crop = await engine.prepareRemoval({ width: mask.width, height: mask.height, data });
       if (!mounted.current) return;
       worker.current ??= new Worker(new URL('../../retouch/lama.worker.ts', import.meta.url), { type: 'module' });
-      const fail = (message: string) => { clearTimeout(timer.current); worker.current?.terminate(); worker.current = null; setBusy(false); setError(message); };
+      const retireWorker = () => {
+        clearTimeout(timer.current);
+        const active = worker.current;
+        worker.current = null;
+        active?.terminate();
+      };
+      const fail = (message: string) => { retireWorker(); setBusy(false); setError(message); };
       timer.current = setTimeout(() => fail('LaMa took too long. Try again with a smaller selection.'), 180_000);
       worker.current.onerror = () => fail('LaMa could not start on this browser. Try again or use a desktop browser.');
       worker.current.onmessage = (event: MessageEvent<{ status?: string; error?: string; output?: Float32Array }>) => {
         if (event.data.status) setStatus(event.data.status);
-        if (event.data.error) fail(event.data.error);
-        if (event.data.output) { clearTimeout(timer.current); setResult({ crop, output: event.data.output }); setBusy(false); setStatus('Preview ready. Apply to keep this removal.'); }
+        if (event.data.error) { fail(event.data.error); return; }
+        if (event.data.output) {
+          retireWorker();
+          setResult({ crop, output: event.data.output });
+          setBusy(false);
+          setStatus('Preview ready. Apply to keep this removal.');
+        }
       };
       const rgb = crop.rgb.slice(), selection = crop.mask.slice();
       worker.current.postMessage({ rgb, mask: selection }, [rgb.buffer, selection.buffer]);

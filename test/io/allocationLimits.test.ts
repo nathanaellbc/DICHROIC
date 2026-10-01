@@ -3,7 +3,7 @@ import { zlibSync } from 'fflate';
 import { encode } from 'fast-png';
 import { decodePng } from '../../src/io/png';
 import { inflateBounded } from '../../src/io/inflateBounded';
-import { assertImageBudget, imageMemoryBudget, IMAGE_RGBA_BUDGET } from '../../src/io/budget';
+import { assertImageBudget, imageMemoryBudget, IMAGE_RGBA_BUDGET, MOBILE_IMAGE_BUDGET, previewCacheBudgetBytes } from '../../src/io/budget';
 import { decodeTiff } from '../../src/io/tiff';
 import { buildTiff, RGB_TAGS, type Entry } from './tiffBuilder';
 
@@ -55,8 +55,8 @@ describe('decoder allocation limits', () => {
     [{ deviceMemory: 2 }, 512],
     [{ deviceMemory: 4 }, 1024],
     [{ deviceMemory: 8 }, 2048],
-    [{ userAgent: 'iPhone' }, 1024],
-    [{ userAgent: 'Macintosh', maxTouchPoints: 5 }, 1024],
+    [{ userAgent: 'iPhone' }, 768],
+    [{ userAgent: 'Macintosh', maxTouchPoints: 5 }, 768],
     [{ userAgent: 'Desktop' }, 2048],
     [{ deviceMemory: 0, userAgent: 'Desktop' }, 2048],
   ])('uses a bounded budget for device %j', (navigator, mib) => {
@@ -69,6 +69,14 @@ describe('decoder allocation limits', () => {
     expect(() => assertImageBudget(1, 1, -1)).toThrow(/memory limit/);
     expect(() => assertImageBudget(1, 1, Infinity)).toThrow(/memory limit/);
     expect(imageMemoryBudget()).toBe(IMAGE_RGBA_BUDGET);
+  });
+
+  it('keeps less preview history on mobile while preserving the desktop cache budget', () => {
+    expect(MOBILE_IMAGE_BUDGET).toBe(768 * 1024 * 1024);
+    expect(previewCacheBudgetBytes(MOBILE_IMAGE_BUDGET)).toBe(48 * 1024 * 1024);
+    expect(previewCacheBudgetBytes(IMAGE_RGBA_BUDGET)).toBe(256 * 1024 * 1024);
+    expect(() => assertImageBudget(6000, 4000, 32, MOBILE_IMAGE_BUDGET)).not.toThrow();
+    expect(() => assertImageBudget(8064, 6048, 20, MOBILE_IMAGE_BUDGET)).toThrow(/memory limit/);
   });
 
   it.each([
