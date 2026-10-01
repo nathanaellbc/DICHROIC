@@ -299,6 +299,8 @@ Rounded UI surfaces use n=4 superellipse (squircle) corners. Nested corner exten
 
 Desktop: choose the eraser icon next to Export. Compact/mobile: More → Remove Object…. Brush directly on the main photo preview; the inspector or bottom panel becomes removal controls. Grading is temporarily bypassed in the preview without changing any adjustment values. Paint the object, choose Remove, compare Before/After, then Apply. Done restores the graded editor. Undo brush changes the selection; Undo removal restores the last applied edit, including after reopening the mode.
 
+Use two fingers to pinch and move, or mouse scroll to zoom. Move enables drag navigation (middle mouse also works); Brush returns to painting. Panning stretches elastically beyond the image bounds and springs back on release, even at fit scale. The zoom indicator resets to Fit. Brush size stays constant on screen while zoomed.
+
 The first Remove action downloads the approximately 62 MB LaMa ONNX model, cached on the device where storage permits. No photo is uploaded and no API key is needed. Inference runs in a separate worker; leaving the mode discards unapplied results and releases the worker. Done is unavailable while processing. Apply updates the native source before film simulation and export, preserving unmasked pixels and metadata.
 
 Initial support: sRGB photos and Linear Rec.709 RAW. Use small selections; native crops larger than 4 MP are rejected to keep memory bounded. Generated areas have 512×512 model detail and LDR color, so very large removals are unsuitable. Physical iPhone/Safari performance is not yet verified. Model attribution, pinned revision, and implementation details: [src/retouch/README.md](src/retouch/README.md).

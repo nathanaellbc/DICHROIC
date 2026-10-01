@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PointerEvent } from 'react';
 import { PressButton, Slider } from '../components/controls';
+import { PhotoView } from '../components/PhotoView';
 import { Icon } from '../components/Icon';
 import { engine } from '../engine/engine';
 import type { Frame } from '../engine/display';
@@ -18,6 +18,7 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const active = useRef<Stroke | null>(null);
   const [size, setSize] = useState(32);
+  const [moving, setMoving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Brush over the object, then choose Remove.');
   const [result, setResult] = useState<{ crop: RemovalCrop; output: Float32Array } | null>(null);
@@ -63,11 +64,14 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   };
   useEffect(() => { draw(); });
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; worker.current?.terminate(); clearTimeout(timer.current); cancelAnimationFrame(paintFrame.current); }; }, []);
-  const point = (e: PointerEvent<HTMLCanvasElement>) => {
-    const box = e.currentTarget.getBoundingClientRect();
-    return { x: Math.max(0, Math.min(original.width, (e.clientX - box.left) * original.width / box.width)), y: Math.max(0, Math.min(original.height, (e.clientY - box.top) * original.height / box.height)) };
+  const point = (uv: { x: number; y: number }) => ({ x: uv.x * original.width, y: uv.y * original.height });
+  const finish = (cancel: boolean) => {
+    cancelAnimationFrame(paintFrame.current); paintFrame.current = 0;
+    const stroke = active.current;
+    if (stroke && !cancel) setStrokes(items => [...items, stroke]);
+    active.current = null;
+    draw(strokes);
   };
-  const finish = () => { if (active.current) { setStrokes([...strokes, active.current]); active.current = null; } };
   const remove = async () => {
     setBusy(true); setError(''); setStatus('Preparing the selected area…');
     try {
@@ -97,15 +101,21 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
     finally { setBusy(false); }
   };
   return <>
-    {createPortal(<div className="remove-preview"><canvas ref={canvas} width={original.width} height={original.height} aria-label="Object removal brush canvas" style={{ touchAction: 'none', cursor: result ? 'default' : 'crosshair' }}
-      onPointerDown={e => { if (busy || result || !e.isPrimary || e.button !== 0) return; e.currentTarget.setPointerCapture(e.pointerId); active.current = { radius: size * original.width / e.currentTarget.getBoundingClientRect().width / 2, points: [point(e)] }; draw([...strokes, active.current]); }}
-      onPointerMove={e => { if (!active.current || !e.isPrimary) return; active.current.points.push(point(e)); if (!paintFrame.current) paintFrame.current = requestAnimationFrame(() => { paintFrame.current = 0; if (active.current) draw([...strokes, active.current]); }); }} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish} />
+    {createPortal(<div className="remove-preview"><PhotoView frame={original} compare={false} rendering={false} photoKey="removal" label="Original photo for object removal"
+      content={<canvas ref={canvas} width={original.width} height={original.height} aria-label="Object removal brush canvas" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', maxHeight: 'none' }} />}
+      brush={{ enabled: !moving && !busy && !result,
+        onStart: (uv, width) => { active.current = { radius: size * original.width / width / 2, points: [point(uv)] }; draw([...strokes, active.current]); },
+        onMove: uv => { if (!active.current) return; active.current.points.push(point(uv)); if (!paintFrame.current) paintFrame.current = requestAnimationFrame(() => { paintFrame.current = 0; if (active.current) draw([...strokes, active.current]); }); },
+        onEnd: finish,
+      }} />
     </div>, previewTarget)}
     {createPortal(<div className="remove-controls">
       <div className="mobile-tool-heading"><div><h2 className="t-headline" style={{ margin: 0 }}>Remove Object</h2><span className="t-caption secondary">Original · grading paused</span></div><PressButton className="capsule prominent" disabled={busy} onClick={onClose}>Done</PressButton></div>
       <div className="t-footnote" style={{ display: 'flex', justifyContent: 'space-between' }}><span>Brush size</span><span className="tabular secondary">{size} px</span></div>
       <Slider label="Brush size" value={size} min={8} max={100} step={1} defaultValue={32} valueText={`${size} px`} disabled={busy || !!result} onChange={setSize} />
       <div className="remove-actions">
+        <PressButton className="capsule" aria-pressed={!moving} disabled={busy || !!result} onClick={() => setMoving(false)}><Icon name="erase" size={16} /> Brush</PressButton>
+        <PressButton className="capsule" aria-pressed={moving} onClick={() => setMoving(true)}><Icon name="move" size={16} /> Move</PressButton>
         <PressButton className="capsule" disabled={busy || !strokes.length || !!result} onClick={() => setStrokes(strokes.slice(0, -1))}><Icon name="undo" size={16} /> Undo brush</PressButton>
         <PressButton className="capsule" disabled={busy || (!strokes.length && !result)} onClick={() => { setStrokes([]); setResult(null); setBefore(false); }}>Clear</PressButton>
         {canUndo && <PressButton className="capsule" disabled={busy || !!result} onClick={() => void apply(true)}>Undo removal</PressButton>}
@@ -113,7 +123,7 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
       </div>
       <p className="t-footnote secondary" role="status" style={{ margin: 0 }}>{status}</p>
       {error && <p className="t-footnote" role="alert" style={{ color: 'var(--red-text)', margin: 0 }}>{error}</p>}
-      <p className="t-caption secondary" style={{ margin: 0 }}>On-device LaMa · first use downloads 62 MB. Photos stay local.</p>
+      <p className="t-caption secondary" style={{ margin: 0 }}>Pinch with two fingers to zoom and move. Mouse: scroll to zoom, Move to drag. On-device LaMa · first use downloads 62 MB.</p>
     </div>, controlsTarget)}
   </>;
 }

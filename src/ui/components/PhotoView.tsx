@@ -15,6 +15,7 @@
 import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { ReactNode } from 'react';
 import type { Frame } from '../engine/display';
 import { fade, photoReturn } from '../motion';
 
@@ -107,6 +108,8 @@ export function PhotoView({
   focusMask,
   sourceSize,
   onResolutionChange,
+  content,
+  brush,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -119,6 +122,14 @@ export function PhotoView({
   focusMask?: Frame;
   sourceSize?: { width: number; height: number };
   onResolutionChange?: (longEdge: number) => void;
+  /** Source retouching shares the same zoom/pan transform as the main preview. */
+  content?: ReactNode;
+  brush?: {
+    enabled: boolean;
+    onStart: (point: Point, displayedWidth: number) => void;
+    onMove: (point: Point) => void;
+    onEnd: (cancel: boolean) => void;
+  };
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
@@ -152,6 +163,7 @@ export function PhotoView({
     | { kind: 'pan'; x: number; y: number; view: View; moved: boolean }
     | { kind: 'pinch'; dist: number; mid: Point; view: View }
     | { kind: 'tap'; x: number; y: number; moved: boolean }
+    | { kind: 'brush'; pointerId: number }
     | null
   >(null);
 
@@ -399,6 +411,7 @@ export function PhotoView({
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
     if (pointers.current.size === 2) {
+      if (gesture.current?.kind === 'brush') brush?.onEnd(true);
       cancelFocusUpdate();
       focus?.onPreviewCancel?.();
       setAim(null);
@@ -411,6 +424,13 @@ export function PhotoView({
       return;
     }
     if (pointers.current.size > 2) return;
+    if (brush?.enabled && e.button === 0) {
+      const uv = toPhoto(p.x, p.y);
+      if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
+      gesture.current = { kind: 'brush', pointerId: e.pointerId };
+      brush.onStart(uv, rect.width * view.s);
+      return;
+    }
     if (focus?.show && (e.target as HTMLElement).closest('[data-focus-pin]')) {
       window.clearTimeout(holdTimer.current);
       setPeek(false);
@@ -429,13 +449,18 @@ export function PhotoView({
     }
     gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false };
     window.clearTimeout(holdTimer.current);
-    holdTimer.current = window.setTimeout(() => setPeek(true), 220);
+    if (!brush) holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(e.pointerId)) return;
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
     const g = gesture.current;
+    if (g?.kind === 'brush' && g.pointerId === e.pointerId) {
+      const uv = toPhoto(p.x, p.y);
+      brush?.onMove({ x: clamp01(uv.x), y: clamp01(uv.y) });
+      return;
+    }
     if (g?.kind === 'focus' && g.pointerId === e.pointerId) {
       pickAt(p);
       return;
@@ -446,7 +471,7 @@ export function PhotoView({
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       // Zoom di titik tengah awal, lalu ikut geseran titik tengahnya.
       const next = zoomAt(g.view, g.view.s * (dist / Math.max(g.dist, 1)), g.mid.x, g.mid.y);
-      setView(clampView({ ...next, tx: next.tx + mid.x - g.mid.x, ty: next.ty + mid.y - g.mid.y }));
+      setView(elasticView({ ...next, tx: next.tx + mid.x - g.mid.x, ty: next.ty + mid.y - g.mid.y }));
       return;
     }
     if (splitDrag.current) {
@@ -467,6 +492,7 @@ export function PhotoView({
   const onPointerEnd = (e: ReactPointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const tracked = pointers.current.delete(e.pointerId);
+    if (tracked && g?.kind === 'brush' && g.pointerId === e.pointerId) brush?.onEnd(e.type !== 'pointerup');
     if (tracked && g?.kind === 'focus' && g.pointerId === e.pointerId) {
       if (e.type === 'pointerup') {
         pickAt(local(e.clientX, e.clientY));
@@ -487,7 +513,7 @@ export function PhotoView({
     if (tracked && pointers.current.size === 0) settleView();
   };
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (picking || (e.target as HTMLElement).closest('button, [role=slider]')) return;
+    if (picking || brush?.enabled || (e.target as HTMLElement).closest('button, [role=slider]')) return;
     const p = local(e.clientX, e.clientY);
     animateView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
   };
@@ -506,7 +532,7 @@ export function PhotoView({
       role={picking ? 'application' : undefined}
       aria-label={picking ? 'Focus point. Hold and drag to select. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
       onKeyDown={onKeyDown}
-      style={{ position: 'absolute', inset: 0, overflow: 'visible', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : shown && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: brush ? 'hidden' : 'visible', outline: 'none', touchAction: 'none', cursor: picking || brush?.enabled ? 'crosshair' : shown && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
@@ -528,7 +554,7 @@ export function PhotoView({
             style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
           >
             <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
-              {frame && <FrameCanvas key={frame.colorSpace} frame={frame} />}
+              {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
               {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
               {showOriginal && original && (
                 <motion.div
