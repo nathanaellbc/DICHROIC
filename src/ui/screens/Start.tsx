@@ -113,7 +113,7 @@ export function OpeningCard({ opening, onCancel }: { opening?: { name: string; s
             aria-label="Opening photo"
             aria-live="polite"
             className="alert"
-            style={{ x: '-50%', y: '-50%', width: 270, alignItems: 'center', padding: '24px 20px 20px', gap: 14 }}
+            style={{ x: '-50%', y: '-50%', width: 270, alignItems: 'center', padding: '24px var(--inset-alert) var(--inset-alert)', gap: 14 }}
             initial={{ opacity: 0, scale: 1.1 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}

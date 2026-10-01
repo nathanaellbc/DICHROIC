@@ -91,9 +91,15 @@ export function useRubberPill(count: number, index: number, onSelect: (index: nu
     right.jump(s.r);
   };
   const measure = () => {
+    // Rect pecahan, bukan offsetWidth (dibulatkan): tepi pil harus tepat di
+    // tepi slot agar celahnya ke wadah sama di kedua sisi (konsentris).
+    const box = track.current?.getBoundingClientRect();
+    const origin = (box?.left ?? 0) + (track.current?.clientLeft ?? 0);
     slots.current = Array.from({ length: count }, (_, i) => {
       const el = items.current[i];
-      return el ? { l: el.offsetLeft + pad, r: el.offsetLeft + el.offsetWidth - pad } : { l: 0, r: 0 };
+      if (!el) return { l: 0, r: 0 };
+      const r = el.getBoundingClientRect();
+      return { l: r.left - origin + pad, r: r.right - origin - pad };
     });
     if (!drag.current) jumpTo(committed.current);
   };
