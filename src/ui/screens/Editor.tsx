@@ -187,7 +187,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     <PhotoView
       frame={state.frame}
       focusMask={focusMask}
-      original={state.original}
+      original={state.before ?? state.original}
       compare={compare}
       rendering={state.rendering && !state.interacting}
       photoKey={state.fileName ?? 'photo'}

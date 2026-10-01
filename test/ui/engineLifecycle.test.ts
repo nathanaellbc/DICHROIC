@@ -55,12 +55,14 @@ describe('photo lifecycle', () => {
     expect(completed).toBe(false);
     expect(engine.getState().frame).toBe(retouched);
     expect(engine.getState().original).toBe(retouched);
+    expect(engine.getState().before).toBe(photo.original);
     rendering.resolve({ ...frame, rgb: Float32Array.of(.1, .2, .3) });
     await applying;
     expect(completed).toBe(true);
     expect(engine.getState().frame).not.toBe(retouched);
     expect(engine.getState().frame!.pixels[0]).toBe(26);
     engine.closePhoto();
+    expect(engine.getState().before).toBeUndefined();
   });
   it('film format gives a small preview, coalesces changes, then restores acquired detail', async () => {
     vi.useFakeTimers();

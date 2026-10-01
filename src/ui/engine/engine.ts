@@ -50,6 +50,8 @@ export interface EngineState {
   defaults: RenderParams;
   frame?: Frame;
   original?: Frame;
+  /** Immutable opening preview for comparison, before grading and retouching. */
+  before?: Frame;
   /** Render sedang berjalan (pratinjau masih menampilkan frame sebelumnya). */
   rendering: boolean;
   /** A slider is being dragged or held with the keyboard. */
@@ -236,7 +238,7 @@ export class Engine {
       this.#imageSize = undefined;
       this.#dirty = false;
       this.#interactionChanged = false;
-      this.#set({ engine: 'failed', phase: 'idle', frame: undefined, original: undefined,
+      this.#set({ engine: 'failed', phase: 'idle', frame: undefined, original: undefined, before: undefined,
         fileName: undefined, opening: undefined, rendering: false, interacting: false, error: describeError(error) });
     });
     this.#client = client;
@@ -321,6 +323,7 @@ export class Engine {
         params,
         defaults: { ...BASELINE_RENDER_PARAMS, ...input },
         original,
+        before: original,
         fileName: file.name,
         frame: { width: preview.width, height: preview.height,
           pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
@@ -389,7 +392,7 @@ export class Engine {
     if (client) void client.close().then(() => client.dispose()).catch((error: unknown) =>
       client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
     this.#interactionChanged = false;
-    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, fileName: undefined, opening: undefined });
+    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, before: undefined, fileName: undefined, opening: undefined });
   }
 
   #clearHistory(): void {
