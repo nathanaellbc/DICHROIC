@@ -167,6 +167,8 @@ export class Engine {
   #inFlight: number | undefined;
   #dirty = false;
   #previewLongEdge = 1024;
+  #formatPreview = false;
+  #refinementTimer: ReturnType<typeof setTimeout> | undefined;
   #interactionChanged = false;
   #depthProfile: Promise<DepthProfile> | undefined;
   #estimator: DepthEstimator | undefined;
@@ -264,6 +266,8 @@ export class Engine {
   }
 
   async openFile(file: File): Promise<void> {
+    this.#formatPreview = false;
+    this.#cancelRefinement();
     if (!this.#client) this.start();
     const client = this.#client;
     if (!client) return;
@@ -337,6 +341,8 @@ export class Engine {
   }
 
   closePhoto(): void {
+    this.#formatPreview = false;
+    this.#cancelRefinement();
     this.#openToken += 1;
     this.#depthMap = undefined;
     this.#clearHistory();
@@ -401,6 +407,8 @@ export class Engine {
     const previous = this.#state.params;
     const changed = (Object.keys(patch) as Array<keyof RenderParams>).some((k) => previous[k] !== patch[k]);
     if (!changed) return;
+    if (patch.filmFormat !== undefined && patch.filmFormat !== previous.filmFormat) this.#formatPreview = true;
+    if (this.#formatPreview) this.#cancelRefinement();
     if (this.#state.interacting) this.#interactionChanged = true;
     if (record && changed) {
       const now = performance.now();
@@ -516,13 +524,13 @@ export class Engine {
     const token = this.#openToken;
     const revision = this.#paramsRevision;
     const outputColorSpace = this.#state.params.outputColorSpace;
-    const previewLongEdge = this.#state.interacting ? Math.min(256, this.#previewLongEdge) : this.#previewLongEdge;
+    const previewLongEdge = this.#renderLongEdge();
     try {
       const result = await client.render('preview', previewLongEdge);
       if (token !== this.#openToken || this.#state.phase !== 'editing') return;
       // During a drag, a completed frame is useful feedback even if the next
       // value is already queued. Outside a gesture only the exact result wins.
-      if (!this.#state.interacting && (revision !== this.#paramsRevision || previewLongEdge !== this.#previewLongEdge)) return;
+      if (!this.#state.interacting && (revision !== this.#paramsRevision || previewLongEdge !== this.#renderLongEdge())) return;
       const resultColorSpace = result.outputColorSpace ?? outputColorSpace;
       this.#set({
         ...(result.original ? { original: result.original } : {}),
@@ -533,10 +541,30 @@ export class Engine {
           colorSpace: canvasColorSpaceFor(resultColorSpace),
         },
       });
+      if (this.#formatPreview && !this.#state.interacting) {
+        this.#cancelRefinement();
+        if (previewLongEdge < this.#previewLongEdge) {
+          this.#refinementTimer = setTimeout(() => {
+            this.#refinementTimer = undefined;
+            this.#formatPreview = false;
+            if (token === this.#openToken && this.#state.phase === 'editing') this.requestRender();
+          }, 600);
+        } else this.#formatPreview = false;
+      }
     } catch (error) {
       if (error instanceof RenderSupersededError) return;
       throw error;
     }
+  }
+
+  #renderLongEdge(): number {
+    if (this.#state.interacting) return Math.min(256, this.#previewLongEdge);
+    return this.#formatPreview ? Math.min(512, this.#previewLongEdge) : this.#previewLongEdge;
+  }
+
+  #cancelRefinement(): void {
+    if (this.#refinementTimer !== undefined) clearTimeout(this.#refinementTimer);
+    this.#refinementTimer = undefined;
   }
 
   /** Peta kedalaman foto terbuka (salinan UI, untuk cek fokus), bila sudah ada. */

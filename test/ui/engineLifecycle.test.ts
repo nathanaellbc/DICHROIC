@@ -43,6 +43,35 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('photo lifecycle', () => {
+  it('film format gives a small preview, coalesces changes, then restores acquired detail', async () => {
+    vi.useFakeTimers();
+    const engine = new Engine();
+    try {
+      client.stageOpen.mockResolvedValue({ ...photo, width: 4096, height: 2048 });
+      await engine.openFile(file('large.png'));
+      engine.setPreviewLongEdge(4096);
+      await vi.advanceTimersByTimeAsync(0);
+      client.render.mockClear();
+      engine.setParams({ filmFormat: 'standard8' });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.render).toHaveBeenLastCalledWith('preview', 512);
+      await vi.advanceTimersByTimeAsync(300);
+      engine.setParams({ filmFormat: 'standard16' });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(599);
+      expect(client.render.mock.calls).toEqual([['preview', 512], ['preview', 512]]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(client.render).toHaveBeenLastCalledWith('preview', 4096);
+      engine.setPreviewLongEdge(1024);
+      expect(client.render).toHaveBeenLastCalledWith('preview', 4096);
+      engine.setParams({ filmFormat: 'standard35' });
+      await vi.advanceTimersByTimeAsync(0);
+      engine.closePhoto();
+      const calls = client.render.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client.render.mock.calls).toHaveLength(calls);
+    } finally { engine.closePhoto(); vi.useRealTimers(); }
+  });
   it('requests zoom resolution and resets it when opening another photo', async () => {
     client.stageOpen.mockResolvedValue({ ...photo, width: 4096, height: 2048 });
     const engine = new Engine(); await engine.openFile(file('first.png'));
