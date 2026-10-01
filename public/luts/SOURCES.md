@@ -33,7 +33,9 @@ and transfer function. Cineon values outside the cube domain clamp to its edges.
 
 Film Off uses a neutral reversible density response, retaining exposure,
 development gamma, halation, DIR and grain. Its selected stock still supplies
-the texture calibration. Film On additionally develops the selected stock and
+the texture calibration. Neutral DIR retains spatial adjacency contrast and
+compensates its uniform-density inhibition so it does not darken the base exposure.
+Film On additionally develops the selected stock and
 balances each density channel against its own 18% patch before print LUT input.
 That density reconstruction is DICHROIC's simulation adapter, not a Resolve CST
 for a physical scanned negative. Neither path feeds display sRGB directly into

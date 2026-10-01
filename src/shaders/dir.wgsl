@@ -347,13 +347,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // ini melewati blend TAIL sepenuhnya, bukan mengandalkan sigma=0 saja.
     let spatialActive = params.slot1 != 0u;
     let corrTail = pairBSrc[index].rgb;
-    let correction = select(
+    var correction = select(
       corrBase,
       (1.0 - kDiffusionTailWeight) * corrBase + kDiffusionTailWeight * corrTail,
       spatialActive,
     );
 
     let logRawPixel = pairBDst[index];
+    if (NEUTRAL_FILM) {
+      // A neutral negative has no stock "before DIR" curve compensating
+      // the DC inhibition. Retain only spatial adjacency contrast so a
+      // uniform patch keeps its exposure before Cineon/LUT conversion.
+      let localCorrection = correctionFromDensity(developFilmDensity(logRawPixel.rgb));
+      let normalizedSpatial = (1.0 - kDiffusionTailWeight) * corrBase + kDiffusionTailWeight * corrTail / 0.9999;
+      correction = select(corrBase, normalizedSpatial, spatialActive) - localCorrection;
+    }
     let correctedLogRaw = logRawPixel.rgb - correction;
     let density = developFilmDensity(correctedLogRaw);
     pairBDst[index] = vec4<f32>(max(density, vec3<f32>(0.0)), logRawPixel.a);

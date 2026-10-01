@@ -7,6 +7,38 @@ import { stockPatch, choicePatch, findTool, type ChoiceTool } from '../src/ui/mo
 
 const print = { printStockId: 'kodak_portra_endura', enlargerFilters: { cFilterNeutral: 0, mFilterNeutral: 51.56801468495496, mFilterShift: 0, yFilterNeutral: 52.53400422349596, yFilterShift: 0 } };
 describe('Cineon print LUTs', () => {
+  it('Film Off keeps the Cineon neutral exposure with DIR enabled by default', async () => {
+    const { engine, bundle } = await sharedResources('kodak_portra_400', print);
+    const session = await Session.create({ assetsBaseUrl: 'public/data', engine, bundle,
+      arenaProvider: { get: async (_key, inputs) => (await sharedResources(inputs.stockId, inputs.printScan)).arenas } });
+    const rgba = new Float32Array(32 * 32 * 4);
+    for (let p = 0; p < 32 * 32; p++) rgba.set([0.18, 0.18, 0.18, 1], p * 4);
+    try {
+      session.open({ width: 32, height: 32, rgba, suggestedColorSpace: 'sRGB', encoding: 'linear', source: { format: 'fixture', bitDepth: 32 } });
+      session.setParams({ filmEnabled: false, paper: 'lut_kodak_2383_d55', autoExposure: false,
+        inputColorSpace: 'sRGB', inputCctfDecoding: false, outputColorSpace: 'sRGB',
+        grainEnabled: false, halationEnabled: false, glareEnabled: false, scannerUnsharpAmount: 0 });
+      const withDir = await session.render('preview');
+      session.setParams({ dirCouplersEnabled: false });
+      const withoutDir = await session.render('preview');
+      let error = 0;
+      for (let i = 0; i < withDir.rgb.length; i++) error = Math.max(error, Math.abs(withDir.rgb[i]! - withoutDir.rgb[i]!));
+      expect(error).toBeLessThan(0.0005);
+      // The compensation must retain the adjacency effect on real edges.
+      const edge = rgba.slice();
+      for (let p = 0; p < 32 * 32; p++) {
+        const v = p % 32 < 16 ? 0.02 : 0.6;
+        edge.set([v, v, v, 1], p * 4);
+      }
+      session.open({ width: 32, height: 32, rgba: edge, suggestedColorSpace: 'sRGB', encoding: 'linear', source: { format: 'fixture', bitDepth: 32 } });
+      session.setParams({ filmFormat: 'standard8', dirCouplersEnabled: true });
+      const adjacency = await session.render('preview');
+      session.setParams({ dirCouplersEnabled: false });
+      const noAdjacency = await session.render('preview');
+      expect(adjacency.rgb).not.toEqual(noAdjacency.rgb);
+      expect(adjacency.rgb.every(Number.isFinite)).toBe(true);
+    } finally { session.dispose(); }
+  }, 120000);
   it('loads all seven original assets and preserves standard Cineon endpoints', async () => {
     for (const id of Object.keys(PRINT_LUTS) as PrintLutId[]) {
       const cube = await loadPrintCube(id, 'public/data');
