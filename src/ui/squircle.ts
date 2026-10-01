@@ -52,15 +52,17 @@ export function installSquircleGeometry(root: HTMLElement = document.documentEle
     return () => { delete root.dataset.cornerGeometry; };
   }
   root.dataset.cornerGeometry = 'svg';
-  const tracked = new Map<HTMLElement, { key: string; clip: string; background: string; border: string; origin: string; size: string; applied: string; classes: string }>();
+  const tracked = new Map<HTMLElement, { key: string; clip: string; background: string; border: string; radius: string; origin: string; size: string; applied: string; classes: string }>();
   const pending = new Set<HTMLElement>();
   let raf = 0;
   const update = (el: HTMLElement) => {
     if (!el.isConnected) return;
     const state = tracked.get(el)!;
     el.style.borderColor = state.border;
+    // Radius asli dibaca dengan override kita dilepas (lihat `squareCorners`).
+    el.style.borderRadius = state.radius;
     const style = getComputedStyle(el), w = el.offsetWidth, h = el.offsetHeight;
-    if (!(w > 0 && h > 0)) return;
+    if (!(w > 0 && h > 0)) { squareCorners(el, state); return; }
     const radius = (value: string) => value.endsWith('%') ? parseFloat(value) / 100 * Math.min(w, h) : parseFloat(value);
     const radii = [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius].map(radius) as unknown as CornerRadii;
     // Dots, focus rings, slider thumbs and true pill tracks retain their geometry.
@@ -69,7 +71,7 @@ export function installSquircleGeometry(root: HTMLElement = document.documentEle
       state.applied = el.getAttribute('style') ?? ''; state.classes = el.className; return;
     }
     const key = `${w},${h},${radii.join(',')},${style.borderTopWidth},${style.borderTopColor},${style.borderTopStyle}`;
-    if (key === state.key) { if (el.style.backgroundImage !== state.background) el.style.borderColor = 'transparent'; state.applied = el.getAttribute('style') ?? ''; return; }
+    if (key === state.key) { if (el.style.backgroundImage !== state.background) el.style.borderColor = 'transparent'; squareCorners(el, state); return; }
     state.key = key;
     const path = squirclePath(w, h, radii);
     el.style.clipPath = `path('${path}')`;
@@ -85,6 +87,16 @@ export function installSquircleGeometry(root: HTMLElement = document.documentEle
       el.style.backgroundSize = '100% 100%';
       el.style.borderColor = 'transparent';
     }
+    squareCorners(el, state);
+  };
+  /*
+   * Selama clip-path squircle aktif, sudut box-nya dibuat siku: border-radius
+   * lingkaran yang tersisa memotong background (termasuk border SVG yang
+   * dilukis ulang) dan isi `overflow: hidden` di DALAM kontur squircle, jadi
+   * garis border di sudut hilang. Bentuk sepenuhnya dipegang clip-path.
+   */
+  const squareCorners = (el: HTMLElement, state: { key: string; applied: string; classes: string }) => {
+    if (state.key) el.style.borderRadius = '0px';
     state.applied = el.getAttribute('style') ?? ''; state.classes = el.className;
   };
   const flush = () => { raf = 0; pending.forEach(update); pending.clear(); };
@@ -93,13 +105,13 @@ export function installSquircleGeometry(root: HTMLElement = document.documentEle
   const add = (node: Element) => {
     const candidates = [node, ...Array.from(node.querySelectorAll(SQUIRCLE_SELECTOR))];
     for (const el of candidates) if (el instanceof HTMLElement && el.matches(SQUIRCLE_SELECTOR) && !tracked.has(el)) {
-      tracked.set(el, { key: '', clip: el.style.clipPath, background: el.style.backgroundImage, border: el.style.borderColor, origin: el.style.backgroundOrigin, size: el.style.backgroundSize, applied: '', classes: el.className });
+      tracked.set(el, { key: '', clip: el.style.clipPath, background: el.style.backgroundImage, border: el.style.borderColor, radius: el.style.borderRadius, origin: el.style.backgroundOrigin, size: el.style.backgroundSize, applied: '', classes: el.className });
       resize.observe(el); queue(el);
     }
   };
   const restore = (el: HTMLElement) => {
     const state = tracked.get(el)!;
-    el.style.clipPath = state.clip; el.style.backgroundImage = state.background; el.style.borderColor = state.border;
+    el.style.clipPath = state.clip; el.style.backgroundImage = state.background; el.style.borderColor = state.border; el.style.borderRadius = state.radius;
     el.style.backgroundOrigin = state.origin; el.style.backgroundSize = state.size;
     el.classList.remove('squircle-fallback');
   };
@@ -115,6 +127,7 @@ export function installSquircleGeometry(root: HTMLElement = document.documentEle
           const borders = (s: string) => s.match(/(?:^|;)\s*border[^:]*:[^;]*/g)?.join(';') ?? '';
           if (borders(current) !== borders(record.oldValue ?? '')) {
             if (el.style.borderColor !== 'transparent') state.border = el.style.borderColor;
+            if (el.style.borderRadius !== '0px') state.radius = el.style.borderRadius;
             queue(el);
           }
         }
