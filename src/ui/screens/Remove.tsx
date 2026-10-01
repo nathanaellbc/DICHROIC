@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { PointerEvent } from 'react';
 import { PressButton, Slider } from '../components/controls';
 import { Icon } from '../components/Icon';
@@ -8,7 +9,7 @@ import type { RemovalCrop } from '../../retouch/patch';
 import { removalSample } from '../../retouch/patch';
 
 type Stroke = { radius: number; points: Array<{ x: number; y: number }> };
-export function RemoveContent({ original, sourceSize }: { original: Frame; sourceSize: { width: number; height: number } }) {
+export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; onClose: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const worker = useRef<Worker | null>(null);
   const mounted = useRef(true);
@@ -95,13 +96,13 @@ export function RemoveContent({ original, sourceSize }: { original: Frame; sourc
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
-  return <div className="remove-content">
-    <div className="remove-preview"><canvas ref={canvas} width={original.width} height={original.height} aria-label="Object removal brush canvas" style={{ touchAction: 'none', cursor: result ? 'default' : 'crosshair' }}
+  return <>
+    {createPortal(<div className="remove-preview"><canvas ref={canvas} width={original.width} height={original.height} aria-label="Object removal brush canvas" style={{ touchAction: 'none', cursor: result ? 'default' : 'crosshair' }}
       onPointerDown={e => { if (busy || result || !e.isPrimary || e.button !== 0) return; e.currentTarget.setPointerCapture(e.pointerId); active.current = { radius: size * original.width / e.currentTarget.getBoundingClientRect().width / 2, points: [point(e)] }; draw([...strokes, active.current]); }}
       onPointerMove={e => { if (!active.current || !e.isPrimary) return; active.current.points.push(point(e)); if (!paintFrame.current) paintFrame.current = requestAnimationFrame(() => { paintFrame.current = 0; if (active.current) draw([...strokes, active.current]); }); }} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish} />
-    </div>
-    <div className="remove-controls">
-      <p className="t-footnote secondary" style={{ margin: 0 }}>LaMa runs on this device. First use downloads about 62 MB; photos are never uploaded. Best for small objects. sRGB and Linear Rec.709 RAW supported.</p>
+    </div>, previewTarget)}
+    {createPortal(<div className="remove-controls">
+      <div className="mobile-tool-heading"><div><h2 className="t-headline" style={{ margin: 0 }}>Remove Object</h2><span className="t-caption secondary">Original · grading paused</span></div><PressButton className="capsule prominent" disabled={busy} onClick={onClose}>Done</PressButton></div>
       <div className="t-footnote" style={{ display: 'flex', justifyContent: 'space-between' }}><span>Brush size</span><span className="tabular secondary">{size} px</span></div>
       <Slider label="Brush size" value={size} min={8} max={100} step={1} defaultValue={32} valueText={`${size} px`} disabled={busy || !!result} onChange={setSize} />
       <div className="remove-actions">
@@ -112,6 +113,7 @@ export function RemoveContent({ original, sourceSize }: { original: Frame; sourc
       </div>
       <p className="t-footnote secondary" role="status" style={{ margin: 0 }}>{status}</p>
       {error && <p className="t-footnote" role="alert" style={{ color: 'var(--red-text)', margin: 0 }}>{error}</p>}
-    </div>
-  </div>;
+      <p className="t-caption secondary" style={{ margin: 0 }}>On-device LaMa · first use downloads 62 MB. Photos stay local.</p>
+    </div>, controlsTarget)}
+  </>;
 }

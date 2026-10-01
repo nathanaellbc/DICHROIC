@@ -297,8 +297,8 @@ Rounded UI surfaces use n=4 superellipse (squircle) corners. Nested corner exten
 
 ### Remove Object (local LaMa)
 
-Desktop: choose the eraser icon next to Export. Compact/mobile: More → Remove Object…. Paint the object, choose Remove, compare Before/After, then Apply. Undo brush changes the selection; Undo removal restores the last applied edit, including after reopening the dialog.
+Desktop: choose the eraser icon next to Export. Compact/mobile: More → Remove Object…. Brush directly on the main photo preview; the inspector or bottom panel becomes removal controls. Grading is temporarily bypassed in the preview without changing any adjustment values. Paint the object, choose Remove, compare Before/After, then Apply. Done restores the graded editor. Undo brush changes the selection; Undo removal restores the last applied edit, including after reopening the mode.
 
-The first Remove action downloads the approximately 62 MB LaMa ONNX model, cached on the device where storage permits. No photo is uploaded and no API key is needed. Inference runs in a separate worker; closing the dialog cancels inference and discards unapplied results. Apply updates the native source before film simulation and export, preserving unmasked pixels and metadata.
+The first Remove action downloads the approximately 62 MB LaMa ONNX model, cached on the device where storage permits. No photo is uploaded and no API key is needed. Inference runs in a separate worker; leaving the mode discards unapplied results and releases the worker. Done is unavailable while processing. Apply updates the native source before film simulation and export, preserving unmasked pixels and metadata.
 
 Initial support: sRGB photos and Linear Rec.709 RAW. Use small selections; native crops larger than 4 MP are rejected to keep memory bounded. Generated areas have 512×512 model detail and LDR color, so very large removals are unsuitable. Physical iPhone/Safari performance is not yet verified. Model attribution, pinned revision, and implementation details: [src/retouch/README.md](src/retouch/README.md).

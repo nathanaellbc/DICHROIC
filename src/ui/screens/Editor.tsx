@@ -81,6 +81,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ camera: 'cameraWhiteBalanceK', lens: 'lensBlur', film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
   const [compare, setCompare] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
+  const [removalPreview, setRemovalPreview] = useState<HTMLDivElement | null>(null);
+  const [removalControls, setRemovalControls] = useState<HTMLDivElement | null>(null);
+  const removing = sheet?.kind === 'remove' && !!state.original && !!engine.imageSize;
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
@@ -122,9 +125,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const onProcess = (process: string) => engine.setParams(choicePatch(findTool('process') as ChoiceTool, process, state.params));
 
   // Pintasan keyboard. Nilai terbaru lewat ref supaya pendengar dipasang sekali.
-  const keys = useRef({ hasPhoto, onOpenFile, toggleCompare: () => {}, openExport: () => {} });
+  const keys = useRef({ hasPhoto, removing, onOpenFile, toggleCompare: () => {}, openExport: () => {} });
   useEffect(() => {
-    keys.current = { hasPhoto, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }) };
+    keys.current = { hasPhoto, removing, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }) };
   });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -132,6 +135,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       const k = keys.current;
+      if (k.removing) return;
       const key = e.key.toLowerCase();
       if ((e.metaKey || e.ctrlKey) && !e.altKey) {
         if (key === 'z') {
@@ -177,7 +181,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     () => focusOverlay?.(previewParams),
     [focusOverlay, previewParams],
   );
-  const photo = !hasPhoto ? (
+  const photo = removing ? <div ref={setRemovalPreview} className="remove-preview-slot" /> : !hasPhoto ? (
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
   ) : (
     <PhotoView
@@ -216,7 +220,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     edited: hasPhoto && visibleTools(g, state.params).some((t) => isModified(t, state.params, state.defaults)),
   }));
 
-  const layoutProps = { state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor };
+  const layoutProps = { state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, removing, removalControlsRef: setRemovalControls };
 
   const menuActions: SheetAction[] = [
     { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
@@ -231,9 +235,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
-      <Sheet open={sheet?.kind === 'remove'} title="Remove Object" centered={wide} detents={['large']} onClose={() => setSheet(null)} leading={<PressButton className="icon-btn" aria-label="Close Remove Object" onClick={() => setSheet(null)}><Icon name="close" size={16} /></PressButton>}>
-        {sheet?.kind === 'remove' && state.original && engine.imageSize && <RemoveContent original={state.original} sourceSize={engine.imageSize} />}
-      </Sheet>
+      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} onClose={() => setSheet(null)} />}
 
       <Sheet
         open={sheet?.kind === 'stocks'}
@@ -348,6 +350,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
 }
 
 interface LayoutProps {
+  removing: boolean;
+  removalControlsRef: (node: HTMLDivElement | null) => void;
   state: EngineState;
   /** Belum ada foto: area foto berisi DropZone, kontrol dinonaktifkan. */
   hasPhoto: boolean;
@@ -398,7 +402,7 @@ function UndoButton({ state, className, size = 20 }: { state: EngineState; class
 // ---------------------------------------------------------------------------
 // Compact (iPhone)
 
-function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, onOpenFile, setSheet, onMenu, landscape }: LayoutProps & { landscape: boolean }) {
+function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, onOpenFile, setSheet, onMenu, landscape, removing, removalControlsRef }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
   // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
   const reduceMotion = useReducedMotion();
@@ -412,7 +416,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [removing]);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const el = panelRef.current;
@@ -457,7 +461,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
-        {!hasPhoto ? <>
+        {removing ? <div className="mobile-brand"><span>Remove Object</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
           <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Your pocket darkroom</span></div>
           <PressButton className="icon-btn plain" aria-label="Open Photo" onClick={onOpenFile}><Icon name="open" size={20} /></PressButton>
         </> : <>
@@ -482,7 +486,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       </div>
 
       {/* Sebelum/sesudah di atas panel, dalam jangkauan jempol; toolbar atas memberi ruang ke nama stok. */}
-      {hasPhoto && (
+      {hasPhoto && !removing && (
         <PressButton
           className="icon-btn glass"
           aria-label="Compare with original"
@@ -501,12 +505,12 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       )}
 
       <div style={{ position: 'absolute', left: 0, right: landscape ? panelSize.width : 0, top: 'calc(max(var(--safe-top), 12px) + 64px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-        <PreviewNote state={state} />
+        {!removing && <PreviewNote state={state} />}
       </div>
 
       <section
         ref={panelRef}
-        aria-label="Adjustments"
+        aria-label={removing ? 'Object removal controls' : 'Adjustments'}
         className="panel editor-frost mobile-adjustments"
         hidden={!hasPhoto}
         inert={!hasPhoto}
@@ -518,7 +522,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           display: 'flex', flexDirection: 'column', gap: 12,
         }}
       >
-        <div id="compact-groups-panel" role="tabpanel" aria-labelledby={`compact-groups-tab-${group}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {removing ? <div ref={removalControlsRef} className="remove-controls-slot scroll-y" /> : <><div id="compact-groups-panel" role="tabpanel" aria-labelledby={`compact-groups-tab-${group}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="mobile-tool-heading">
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <motion.h2 key={tool.id} className="t-headline" style={{ margin: 0 }} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
@@ -553,7 +557,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           <ToolChips group={currentGroup} selected={tool.id} onSelect={(id) => setToolByGroup({ ...toolByGroup, [group]: id })} ctx={ctx} />
         </div>
 
-        <GroupTabs label="Adjustment group" idPrefix="compact-groups" items={groupItems} value={group} onChange={setGroup} />
+        <GroupTabs label="Adjustment group" idPrefix="compact-groups" items={groupItems} value={group} onChange={setGroup} /></>}
       </section>
     </div>
   );
@@ -587,7 +591,7 @@ function RecipePath({ state, onReveal, disabled }: { state: EngineState; onRevea
   );
 }
 
-function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess }: LayoutProps) {
+function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   const edited = engine.isEdited();
   const [reveal, setReveal] = useState(0);
@@ -595,7 +599,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
     setSidebarKind(kind);
     setReveal((n) => n + 1);
   };
-  const inert = !hasPhoto;
+  const inert = !hasPhoto || removing;
   const dim: React.CSSProperties = { opacity: hasPhoto ? 1 : EMPTY_OPACITY, transition: 'opacity 0.2s' };
   return (
     <div
@@ -610,6 +614,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
       }}
     >
       <header className="window-toolbar editor-frost" style={{ gridColumn: '1 / -1' }}>
+        {removing ? <><span className="t-headline">Remove Object</span><span className="t-footnote secondary">Original · grading paused</span></> : <>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 120, maxWidth: 380, flex: '0 1 auto' }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em' }}>DICHROIC</span>
           <span className="t-footnote secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={state.fileName}>{state.fileName ?? 'No photo'}</span>
@@ -637,6 +642,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         <PressButton className="capsule prominent" style={{ marginLeft: 6 }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>
           <Icon name="share" size={14} strokeWidth={2.2} /> Export
         </PressButton>
+        </>}
       </header>
 
       <nav aria-label="Stocks" className="panel editor-frost" inert={inert} style={{ ...dim, borderRight: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0, paddingTop: 10 }}>
@@ -662,8 +668,8 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         <div className="status-bar editor-frost" role="status">
           {state.frame ? <span className="tabular">Preview {state.frame.width} × {state.frame.height}</span> : <span>No photo open</span>}
           <span aria-hidden="true" className="tertiary">·</span>
-          <span>{state.params.outputColorSpace}{isDisplayReferred(state.params.outputColorSpace) ? '' : ', shown without conversion'}</span>
-          {state.rendering && !state.interacting && hasPhoto && (
+          <span>{removing ? 'Original · grading paused' : state.params.outputColorSpace}{!removing && !isDisplayReferred(state.params.outputColorSpace) ? ', shown without conversion' : ''}</span>
+          {!removing && state.rendering && !state.interacting && hasPhoto && (
             <>
               <span aria-hidden="true" className="tertiary">·</span>
               <span style={{ color: 'var(--blue-text)' }}>Developing…</span>
@@ -673,8 +679,8 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         </div>
       </main>
 
-      <aside aria-label="Parameters" className="panel editor-frost" inert={inert} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ borderBottom: '1px solid var(--hairline)', padding: '0 4px', flexShrink: 0 }}>
+      <aside aria-label={removing ? 'Object removal controls' : 'Parameters'} className="panel editor-frost" inert={!hasPhoto} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {removing ? <div ref={removalControlsRef} className="remove-controls-slot scroll-y" style={{ padding: 12 }} /> : <><div style={{ borderBottom: '1px solid var(--hairline)', padding: '0 4px', flexShrink: 0 }}>
           <GroupTabs label="Parameter group" idPrefix="wide-groups" items={groupItems} value={group} onChange={setGroup} small />
         </div>
         <motion.div key={group} id="wide-groups-panel" role="tabpanel" aria-labelledby={`wide-groups-tab-${group}`} className="scroll-y" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.14, ease: 'easeOut' }} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -701,6 +707,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
             Reset All
           </PressButton>
         </div>
+        </>}
       </aside>
     </div>
   );
