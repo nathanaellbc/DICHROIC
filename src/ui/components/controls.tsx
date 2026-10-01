@@ -4,7 +4,7 @@
  * tepat) supaya bisa dipakai dengan VoiceOver dan keyboard.
  */
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useSpring, useTransform, useVelocity } from 'motion/react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { pressRelease, pressScale } from '../motion';
 import { snap } from '../model/tools';
@@ -161,9 +161,11 @@ export function Switch({
   const ref = useRef<HTMLButtonElement>(null);
   const reduce = useReducedMotion();
   // Geometri dari CSS (`--switch-*`), diukur ulang saat kepadatan berubah.
-  const geo = useRef({ travel: 20, knob: 27 });
-  const knobBase = useMotionValue(27);
-  const x = useMotionValue(checked ? (typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular' ? 10 : 20) : 0);
+  const regular = typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular';
+  const [geometry, setGeometry] = useState(regular ? { travel: 10, knob: 12 } : { travel: 20, knob: 27 });
+  const geo = useRef(geometry);
+  const knobBase = useMotionValue(geo.current.knob);
+  const x = useMotionValue(checked ? geo.current.travel : 0);
   const press = useSpring(0, LENS_SPRING);
   const flow = useSpring(useVelocity(x), { stiffness: 320, damping: 40, mass: 0.6 });
   const grow = useTransform([press, knobBase], ([p, k]: number[]) => p! * SWITCH_GROW * k! / 27);
@@ -180,13 +182,15 @@ export function Switch({
   const checkedRef = useRef(checked);
   checkedRef.current = checked;
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const measure = () => {
+      if (!el.clientWidth || !el.clientHeight) return;
       const inset = parseFloat(getComputedStyle(el).getPropertyValue('--switch-inset')) || 2;
       const knob = el.clientHeight - inset * 2;
       geo.current = { travel: el.clientWidth - knob - inset * 2, knob };
+      setGeometry((previous) => previous.travel === geo.current.travel && previous.knob === knob ? previous : { ...geo.current });
       if (!grip.current) x.jump(checkedRef.current ? geo.current.travel : 0);
       knobBase.set(knob);
     };
@@ -205,7 +209,7 @@ export function Switch({
     }
     const controls = animate(x, target, { type: 'spring', stiffness: 420, damping: 30, mass: 0.8 });
     return () => controls.stop();
-  }, [checked, dragging, reduce, x]);
+  }, [checked, dragging, reduce, x, geometry.travel]);
 
   const commit = (next: boolean) => {
     if (next === checkedRef.current) return;
