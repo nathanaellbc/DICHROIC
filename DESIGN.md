@@ -3,29 +3,29 @@ name: DICHROIC
 description: A spectral film-and-paper darkroom in the browser, drawn as a mature Apple pro app.
 colors:
   canvas-black: "#000000"
-  graphite: "#1c1c1e"
-  graphite-raised: "#2c2c2e"
-  graphite-high: "#3a3a3c"
-  fill: "rgba(118, 118, 128, 0.24)"
-  fill-strong: "rgba(120, 120, 128, 0.36)"
+  graphite: "rgba(28, 28, 30, 0.58)"
+  graphite-raised: "rgba(44, 44, 46, 0.48)"
+  graphite-high: "rgba(58, 58, 60, 0.44)"
+  fill: "rgba(118, 118, 128, 0.18)"
+  fill-strong: "rgba(120, 120, 128, 0.28)"
   fill-soft: "rgba(255, 255, 255, 0.08)"
   hover: "rgba(255, 255, 255, 0.06)"
   label: "#ffffff"
-  label-secondary: "rgba(235, 235, 245, 0.62)"
-  label-tertiary: "rgba(235, 235, 245, 0.32)"
+  label-secondary: "#aaaab3"
+  label-tertiary: "#777780"
   separator: "rgba(84, 84, 88, 0.65)"
   hairline: "rgba(255, 255, 255, 0.09)"
   signal-blue: "#0091ff"
-  blue-fill: "#0070e0"
+  blue-fill: "rgba(0, 112, 224, 0.7)"
   blue-text: "#5cb8ff"
   blue-wash: "rgba(0, 145, 255, 0.16)"
   green: "#30d158"
   red: "#ff4245"
   red-text: "#ff6961"
   orange: "#ff9230"
-  glass-bg: "rgba(28, 28, 30, 0.78)"
+  glass-bg: "rgba(28, 28, 30, 0.58)"
   glass-border: "rgba(255, 255, 255, 0.1)"
-  clear-bg: "rgba(0, 0, 0, 0.55)"
+  clear-bg: "rgba(0, 0, 0, 0.38)"
 typography:
   large-title:
     fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Inter Variable\", system-ui, sans-serif"
@@ -459,3 +459,6 @@ Controls that sit 16px from the iPhone display corners (sheet action buttons, th
 - the Opening card uses the alert inset (18px + 1px border).
 
 Rubber pills measure fractional slot rects, because a rounded `offsetWidth` left one side 1px off. A browser audit checks every nested surface that sits in a corner of another with equal gaps on both axes. All pairs measure exact in both the native and the SVG geometry.
+
+### Translucent interface materials (current override)
+All interface surfaces use translucent background colors: graphite chrome at 58%, raised lists at 48%, blue controls at 70%, modal foregrounds at 62%, and toasts at 64%. Slider and switch resting thumbs use 66% white; their held glass materials and geometry are preserved. Lucide strokes use 82% opacity independently of labels. Text colors are opaque, including secondary and tertiary labels; containers never gain opacity just to create transparency. The photo pixels and black canvas remain unchanged. Backdrop blur stays on existing chrome and floating surfaces, avoiding a new blur layer on every control. Reduced transparency and increased contrast restore opaque materials. This treatment supersedes earlier solid-surface and glass-only-on-floating-controls rules.
