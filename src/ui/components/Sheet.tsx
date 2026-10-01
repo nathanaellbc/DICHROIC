@@ -31,6 +31,8 @@ export interface SheetProps {
   /** Redupkan latar pada detent medium (bawaan: hanya di large). */
   dimAtMedium?: boolean;
   centered?: boolean;
+  /** Backdrop blur multiplier; dimming remains independent. */
+  blurIntensity?: number;
 }
 
 function useViewportHeight(): number {
@@ -78,7 +80,7 @@ function SheetBar({ title, leading, trailing, titleId }: { title: string; leadin
   );
 }
 
-function BottomSheet({ onClose, title, leading, trailing, children, detents = ['large'], mediumFraction = 0.55, dimAtMedium = false }: SheetProps) {
+function BottomSheet({ onClose, title, leading, trailing, children, detents = ['large'], mediumFraction = 0.55, dimAtMedium = false, blurIntensity = 1 }: SheetProps) {
   const vh = useViewportHeight();
   const ref = useRef<HTMLDivElement>(null);
   const controls = useDragControls();
@@ -126,7 +128,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
 
   return (
     <>
-      <SheetBackdrop dim={dim} onClose={onClose} />
+      <SheetBackdrop dim={dim} onClose={onClose} blurIntensity={blurIntensity} />
       <motion.div
         ref={ref}
         role="dialog"
@@ -164,7 +166,7 @@ function BottomSheet({ onClose, title, leading, trailing, children, detents = ['
  * lewat usePresence: elemen dilepas eksplisit setelah animasi keluar selesai
  * (animasi exit pada opacity turunan tidak pernah selesai, sheet tertinggal).
  */
-function SheetBackdrop({ dim, onClose }: { dim: MotionValue<number>; onClose: () => void }) {
+function SheetBackdrop({ dim, onClose, blurIntensity }: { dim: MotionValue<number>; onClose: () => void; blurIntensity: number }) {
   const [isPresent, safeToRemove] = usePresence();
   const appear = useMotionValue(0);
   useEffect(() => {
@@ -175,18 +177,18 @@ function SheetBackdrop({ dim, onClose }: { dim: MotionValue<number>; onClose: ()
     return () => controls.stop();
   }, [isPresent, appear, safeToRemove]);
   const level = useTransform([dim, appear], ([d, a]: number[]) => d! * a!);
-  const blur = useTransform(level, (v) => scrimBlurFor(v).backdropFilter ?? 'none');
+  const blur = useTransform(level, (v) => scrimBlurFor(v * blurIntensity).backdropFilter ?? 'none');
   return <motion.div className="backdrop" style={{ opacity: level, backdropFilter: blur, WebkitBackdropFilter: blur }} onClick={onClose} aria-hidden="true" />;
 }
 
-function CenteredSheet({ onClose, title, leading, trailing, children }: SheetProps) {
+function CenteredSheet({ onClose, title, leading, trailing, children, blurIntensity = 1 }: SheetProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = `sheet-${title.replace(/\W+/g, '-').toLowerCase()}`;
   useFocusReturn(ref);
   useDialogKeys(ref, onClose, false);
   return (
     <>
-      <motion.div className="backdrop" {...scrimMotion()} onClick={onClose} aria-hidden="true" />
+      <motion.div className="backdrop" {...scrimMotion(blurIntensity)} onClick={onClose} aria-hidden="true" />
       <motion.div
         ref={ref}
         role="dialog"

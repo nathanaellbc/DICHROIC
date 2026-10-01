@@ -57,10 +57,10 @@ export function scrimBlur(amount: number): { backdropFilter: string; WebkitBackd
  * beranimasi di atas blur 8 px penuh, jadi terlihat seperti crossfade
  * tajam-buram, bukan blur yang menebal; latar menu bahkan muncul seketika.
  */
-export function scrimMotion() {
+export function scrimMotion(blurIntensity = 1) {
   const blur = blurAllowed();
   const off = blur ? scrimBlur(0) : {};
-  const on = blur ? scrimBlur(1) : {};
+  const on = blur ? scrimBlur(blurIntensity) : {};
   return {
     initial: { opacity: 0, ...off },
     animate: { opacity: 1, ...on, transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] as [number, number, number, number] } },

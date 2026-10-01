@@ -284,6 +284,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         open={sheet?.kind === 'export'}
         centered={wide}
         title="Export"
+        blurIntensity={0.2}
         detents={['medium', 'large']}
         mediumFraction={0.76}
         dimAtMedium
