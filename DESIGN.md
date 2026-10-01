@@ -462,3 +462,5 @@ Rubber pills measure fractional slot rects, because a rounded `offsetWidth` left
 
 ### Translucent interface materials (current override)
 All interface surfaces use translucent background colors: graphite chrome at 58%, raised lists at 48%, blue controls at 70%, modal foregrounds at 62%, and toasts at 64%. Slider and switch resting thumbs use 66% white; their held glass materials and geometry are preserved. Lucide strokes use 82% opacity independently of labels. Text colors are opaque, including secondary and tertiary labels; containers never gain opacity just to create transparency. The photo pixels and black canvas remain unchanged. Backdrop blur stays on existing chrome and floating surfaces, avoiding a new blur layer on every control. Reduced transparency and increased contrast restore opaque materials. This treatment supersedes earlier solid-surface and glass-only-on-floating-controls rules.
+
+Slider, toggle and scrollbar resting thumbs are an exception to translucent materials: their fill is solid white, with the existing sizes and interaction geometry.
