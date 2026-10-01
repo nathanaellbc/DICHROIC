@@ -8,6 +8,7 @@ import { lensReadout, lensSettings } from '../../host/lens';
 import { FILM_FORMAT_LONG_EDGE_MM } from '../../params/filmFormat';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
+import { useElasticScroll } from '../components/useElasticScroll';
 import { OptionRow, PopUp, PressButton, Slider, Stepper, Switch, centerInScroller } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import type { DepthState } from '../engine/depthController';
@@ -326,13 +327,17 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
 
 /** Deretan alat satu kelompok (panel HP). Alat terpilih digulir ke tengah. */
 export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup; selected: string; onSelect: (id: string) => void; ctx: ToolContext }) {
+  const scroll = useElasticScroll();
+  const resetScroll = scroll.reset;
   const refs = useRef(new Map<string, HTMLButtonElement>());
   useEffect(() => {
+    resetScroll();
     const el = refs.current.get(selected);
     if (el) centerInScroller(el);
-  }, [selected]);
+  }, [selected, resetScroll]);
   return (
-    <div role="group" aria-label={`${group.label} tools`} className="scroll-x mobile-tools">
+    <div ref={scroll.ref} role="group" aria-label={`${group.label} tools`} className="scroll-x mobile-tools" {...scroll.handlers}>
+      <motion.div className="mobile-tools-track" style={{ transform: scroll.transform }}>
       {visibleTools(group, ctx.params).map((tool) => {
         const isSelected = tool.id === selected;
         const modified = isModified(tool, ctx.params, ctx.defaults);
@@ -373,6 +378,7 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
           </motion.button>
         );
       })}
+      </motion.div>
     </div>
   );
 }

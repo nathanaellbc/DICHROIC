@@ -137,7 +137,7 @@ export function GroupTabs<V extends string>({
 
 /** Gulir wadah horizontal sehingga `el` di tengah -- tanpa menggulir wadah vertikal di atasnya (scrollIntoView). */
 export function centerInScroller(el: HTMLElement): void {
-  const scroller = el.parentElement;
+  const scroller = el.closest<HTMLElement>('.scroll-x') ?? el.parentElement;
   if (!scroller) return;
   const box = scroller.getBoundingClientRect();
   const rect = el.getBoundingClientRect();
