@@ -12,7 +12,7 @@
  * Pintasan keyboard (di luar dialog dan kolom teks): ⌘/Ctrl+Z undo,
  * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto.
  */
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
@@ -371,6 +371,10 @@ const EMPTY_OPACITY = 0.6;
 
 /** Kotak kontrol alat di panel HP: slider + catatan tiga baris, stepper, atau pilihan. */
 const COMPACT_CONTROL_HEIGHT = 108;
+/** Kartu Lens (status, unduh, fokus) butuh ruang lebih. */
+const LENS_CONTROL_HEIGHT = 156;
+/** Perubahan tinggi panel bawah: lembut, tanpa pantulan (tidak lompat). */
+const panelResize = { type: 'spring' as const, duration: 0.38, bounce: 0 };
 
 function PreviewNote({ state }: { state: EngineState }) {
   if (isDisplayReferred(state.params.outputColorSpace)) return null;
@@ -394,6 +398,8 @@ function UndoButton({ state, className, size = 20 }: { state: EngineState; class
 
 function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, onOpenFile, setSheet, onMenu, landscape }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
+  // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
+  const reduceMotion = useReducedMotion();
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
     const el = panelRef.current;
@@ -508,12 +514,23 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
             </div>
           </div>
 
-          {/* Slider tetap stabil; kartu Lens mendapat ruang untuk aksi dan statusnya. */}
-          <div className="scroll-y" style={{ height: tool.kind === 'lens' ? 156 : COMPACT_CONTROL_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+          {/*
+            Slider tetap stabil; kartu Lens mendapat ruang untuk aksi dan
+            statusnya. Tinggi berubah dengan pegas, bukan lompat: panel, foto
+            di atasnya, dan tombol compare ikut bergeser bertahap
+            (ResizeObserver panelSize). Reduce Motion: langsung.
+          */}
+          <motion.div
+            className="scroll-y"
+            initial={false}
+            animate={{ height: tool.kind === 'lens' ? LENS_CONTROL_HEIGHT : COMPACT_CONTROL_HEIGHT }}
+            transition={reduceMotion ? { duration: 0 } : panelResize}
+            style={{ display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ margin: 'auto 0', width: '100%' }}>
               <ToolControl key={tool.id} tool={tool} ctx={ctx} />
             </div>
-          </div>
+          </motion.div>
 
           <ToolChips group={currentGroup} selected={tool.id} onSelect={(id) => setToolByGroup({ ...toolByGroup, [group]: id })} ctx={ctx} />
         </div>
