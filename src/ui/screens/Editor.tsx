@@ -400,14 +400,27 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
   const panelRef = useRef<HTMLElement>(null);
   // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
   const reduceMotion = useReducedMotion();
-  const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
+  const controlRef = useRef<HTMLDivElement>(null);
+  // `control`: tinggi area kontrol yang sedang dianimasikan (lihat di bawah).
+  const [panelSize, setPanelSize] = useState({ width: 0, height: 0, control: 0 });
   useLayoutEffect(() => {
     const el = panelRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => setPanelSize({ width: el.offsetWidth, height: el.offsetHeight }));
+    // Rect pecahan: selisih panel - kontrol konstan selama animasi (offsetHeight
+    // yang dibulatkan membuat foto bergetar 1 px).
+    const measure = () => {
+      const box = el.getBoundingClientRect();
+      setPanelSize({ width: box.width, height: box.height, control: controlRef.current?.getBoundingClientRect().height ?? 0 });
+    };
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
+    if (controlRef.current) observer.observe(controlRef.current);
     return () => observer.disconnect();
   }, []);
+  // Foto tidak ikut bergeser saat area kontrol berubah tinggi (slider <-> kartu
+  // Lens): ruangnya selalu disisihkan untuk panel versi tertinggi, jadi foto
+  // diam dan tidak pernah tertutup panel.
+  const photoBottom = Math.round(panelSize.height - panelSize.control + LENS_CONTROL_HEIGHT + 12);
 
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   // Alat terpilih yang tidak berlaku di mode proses ini (mis. Exposure print
@@ -423,7 +436,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
   const photoTop = 'calc(max(var(--safe-top), 12px) + 68px)';
   const photoStyle: React.CSSProperties = landscape
     ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)' }
-    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto ? panelSize.height + 12 : 'var(--safe-bottom)' };
+    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto ? photoBottom : 'var(--safe-bottom)' };
 
   return (
     <div className={`mobile-editor${landscape ? ' is-landscape' : ''}`} style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
@@ -516,11 +529,12 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
 
           {/*
             Slider tetap stabil; kartu Lens mendapat ruang untuk aksi dan
-            statusnya. Tinggi berubah dengan pegas, bukan lompat: panel, foto
-            di atasnya, dan tombol compare ikut bergeser bertahap
-            (ResizeObserver panelSize). Reduce Motion: langsung.
+            statusnya. Tinggi berubah dengan pegas, bukan lompat; panel dan
+            tombol compare ikut bergeser bertahap, foto tetap diam
+            (photoBottom). Reduce Motion: langsung.
           */}
           <motion.div
+            ref={controlRef}
             className="scroll-y"
             initial={false}
             animate={{ height: tool.kind === 'lens' ? LENS_CONTROL_HEIGHT : COMPACT_CONTROL_HEIGHT }}
