@@ -319,7 +319,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
       break;
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+    <div className="lens-status" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
       {status}
       {readout}
     </div>
@@ -334,7 +334,7 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
     if (el) centerInScroller(el);
   }, [selected]);
   return (
-    <div role="group" aria-label={`${group.label} tools`} className="scroll-x" style={{ display: 'flex', gap: 4, margin: '0 -20px', padding: '2px 16px' }}>
+    <div role="group" aria-label={`${group.label} tools`} className="scroll-x mobile-tools">
       {visibleTools(group, ctx.params).map((tool) => {
         const isSelected = tool.id === selected;
         const modified = isModified(tool, ctx.params, ctx.defaults);
@@ -357,13 +357,13 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
             <motion.span
               initial={false}
               animate={{
-                backgroundColor: isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.08)',
+                backgroundColor: isSelected ? 'rgba(0,145,255,0.16)' : 'rgba(255,255,255,0.04)',
                 boxShadow: modified ? 'inset 0 0 0 2px #0091ff' : 'inset 0 0 0 0px #0091ff',
               }}
               transition={snappy}
               style={{ position: 'relative', width: 46, height: 46, borderRadius: 'var(--r-list)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
-              <Icon name={tool.icon} size={22} color={isSelected ? '#000' : tool.tint ?? (dimmed ? 'rgba(235,235,245,0.45)' : '#fff')} />
+              <Icon name={tool.icon} size={22} color={isSelected ? 'var(--blue-text)' : tool.tint ?? (dimmed ? 'rgba(235,235,245,0.45)' : 'var(--label-2)')} />
               {tool.kind === 'locked' && (
                 <span aria-hidden="true" style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 'var(--r-control)', background: 'var(--bg-elevated-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name="lock" size={10} strokeWidth={2.8} />

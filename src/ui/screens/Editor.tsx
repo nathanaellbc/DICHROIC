@@ -391,7 +391,7 @@ function UndoButton({ state, className, size = 20 }: { state: EngineState; class
 // ---------------------------------------------------------------------------
 // Compact (iPhone)
 
-function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, setSheet, onMenu, landscape }: LayoutProps & { landscape: boolean }) {
+function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, onOpenFile, setSheet, onMenu, landscape }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
   const [panelSize, setPanelSize] = useState({ width: 0, height: 0 });
   useLayoutEffect(() => {
@@ -412,30 +412,33 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
   const paper = stockInfo(state.params.paper);
   const scan = isScanMode(state.params);
 
-  const topBarTop = 'calc(max(var(--safe-top), 12px) + 4px)';
-  const photoTop = 'calc(max(var(--safe-top), 12px) + 60px)';
+  const topBarTop = 'max(var(--safe-top), 12px)';
+  const photoTop = 'calc(max(var(--safe-top), 12px) + 68px)';
   const photoStyle: React.CSSProperties = landscape
-    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: panelSize.width + 12 }
-    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: panelSize.height + 12 };
+    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)' }
+    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto ? panelSize.height + 12 : 'var(--safe-bottom)' };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
+    <div className={`mobile-editor${landscape ? ' is-landscape' : ''}`} style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={{ ...photoStyle, zIndex: 0 }}>{photo}</div>
 
       <div
+        className="mobile-toolbar glass"
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
-          right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
-          height: 44, display: 'flex', alignItems: 'center', gap: 6,
+          right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
-        <PressButton className="icon-btn glass" aria-label="More" aria-haspopup="dialog" disabled={!hasPhoto} onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
+        {!hasPhoto ? <>
+          <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Your pocket darkroom</span></div>
+          <PressButton className="icon-btn plain" aria-label="Open Photo" onClick={onOpenFile}><Icon name="open" size={20} /></PressButton>
+        </> : <>
+        <PressButton className="icon-btn plain" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
           <Icon name="more" size={20} strokeWidth={2.4} />
         </PressButton>
         <PressButton
-          className="capsule glass"
-          style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, padding: '0 12px', justifyContent: 'space-between', gap: 6 }}
+          className="capsule plain mobile-recipe"
           aria-label={`Stocks: ${state.params.filmEnabled ? film.name : 'Film Off'}, ${!state.params.filmEnabled ? 'Camera and Lens only' : scan ? 'scanned' : `printed on ${paper.name}`}. Change`}
           disabled={!hasPhoto}
           onClick={() => openStocks('film')}
@@ -446,8 +449,9 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           </span>
           <span className="secondary" style={{ display: 'inline-flex', flexShrink: 0 }}><Icon name="upDown" size={14} strokeWidth={2.4} /></span>
         </PressButton>
-        <UndoButton state={state} className="icon-btn glass" />
-        <PressButton className="capsule prominent" style={{ padding: '0 16px' }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>Export</PressButton>
+        <UndoButton state={state} className="icon-btn plain" />
+        <PressButton className="icon-btn mobile-export" aria-label="Export" aria-keyshortcuts="E" title="Export (E)" onClick={() => setSheet({ kind: 'export' })}><Icon name="share" size={20} /></PressButton>
+        </>}
       </div>
 
       {/* Sebelum/sesudah di atas panel, dalam jangkauan jempol; toolbar atas memberi ruang ke nama stok. */}
@@ -476,7 +480,8 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       <section
         ref={panelRef}
         aria-label="Adjustments"
-        className="panel editor-frost"
+        className="panel editor-frost mobile-adjustments"
+        hidden={!hasPhoto}
         inert={!hasPhoto}
         style={{
           position: 'absolute',
@@ -484,18 +489,10 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
           transition: 'opacity 0.2s',
           boxSizing: 'border-box',
           display: 'flex', flexDirection: 'column', gap: 12,
-          ...(landscape
-            ? { top: 0, bottom: 0, right: 0, width: 'calc(340px + var(--safe-right))', overflowY: 'auto', borderLeft: '1px solid var(--hairline)', padding: 'calc(var(--safe-top) + 12px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 12px) 16px' }
-            : {
-                left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 560,
-                borderRadius: 'var(--r-panel) var(--r-panel) 0 0',
-                boxShadow: '0 -1px 0 var(--hairline), 0 -8px 48px rgba(0,0,0,0.12)',
-                padding: '16px calc(var(--safe-right) + 16px) max(16px, var(--safe-bottom)) calc(var(--safe-left) + 16px)',
-              }),
         }}
       >
         <div id="compact-groups-panel" role="tabpanel" aria-labelledby={`compact-groups-tab-${group}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div className="mobile-tool-heading">
             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <motion.h2 key={tool.id} className="t-headline" style={{ margin: 0 }} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} transition={{ duration: 0.16 }}>
                 {tool.title}
@@ -503,17 +500,15 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {(tool.kind === 'slider' || tool.kind === 'stepper') && (
-                <span className="t-title3 tabular" style={{ whiteSpace: 'nowrap' }}>{valueText(tool, state.params)}</span>
+                <span className="t-title3 tabular mobile-tool-value">{valueText(tool, state.params)}</span>
               )}
               <ResetButton tool={tool} ctx={ctx} />
               <ToolSwitch tool={tool} ctx={ctx} />
             </div>
           </div>
 
-          {/* Tinggi tetap: panel (dan foto di atasnya) tidak naik-turun saat
-              berpindah alat atau grup. Isi yang lebih tinggi (kartu lens)
-              digulir di dalam kotak ini. */}
-          <div className="scroll-y" style={{ height: COMPACT_CONTROL_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+          {/* Slider tetap stabil; kartu Lens mendapat ruang untuk aksi dan statusnya. */}
+          <div className="scroll-y" style={{ height: tool.kind === 'lens' ? 156 : COMPACT_CONTROL_HEIGHT, display: 'flex', flexDirection: 'column' }}>
             <div style={{ margin: 'auto 0', width: '100%' }}>
               <ToolControl key={tool.id} tool={tool} ctx={ctx} />
             </div>

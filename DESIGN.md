@@ -224,6 +224,12 @@ All UI icons, including the spinner, use statically imported Lucide React compon
 
 Vertical scrolling uses a transparent track and a slim rounded neutral thumb, brighter on hover or keyboard focus. Chromium/WebKit use a 4px gutter with a 2px visible thumb and no arrow buttons; other browsers use their thin scrollbar. Hover/focus keep the standard scrollbar color set to auto on Chromium/WebKit so it cannot override the custom thumb. Scrolling remains available with mouse, touch and keyboard.
 
+### Mobile polish (2026-10-01)
+
+Compact layouts use one 52px neutral frosted toolbar with 44px touch targets, a flexible two-line stock selector, and an icon-only Export action. Adjustment group tabs use icons with accessible names and hover tooltips; their selected state and tool chips use the blue wash rather than white fills. The bottom adjustment dock has 24px top corners and a separated navigation row. Slider controls retain a stable 108px area; the Lens card uses 156px to accommodate its status and primary action. Landscape keeps the dock at the right with touch-sized navigation.
+
+Before a photo is opened, compact layouts show a centered Choose Photo action, supported formats and an on-device privacy note. Inactive adjustment controls are hidden so the start screen can use the full canvas. Desktop density and layout remain as defined below.
+
 ### Editor zoom and frosted chrome (2026-09-30)
 
 Preview detail follows fitted image size × zoom × screen pixel density, requested in 256px increments after a 180ms pause. The worker renders directly from the retained source, up to native resolution, with a matching original for compare/peek. It never enlarges source pixels or uses nearest-neighbour pixelated zoom. Only the latest requested size/parameter revision can publish; the previous image remains visible while developing. Zooming out and Fit retain the highest acquired preview resolution for this photo; only exceeding that detail level requests a larger render. Opening another photo resets the acquired level. Low-memory devices keep an 8 MP preview ceiling; desktop previews allow up to 64 MP and remain subject to the renderer's diffusion/GPU limits. High-resolution renders release GPU scratch after completion.

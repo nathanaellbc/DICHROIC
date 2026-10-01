@@ -215,7 +215,7 @@ Tests use fresh, serialized processes for Dawn GPU tests. Set
 `DICHROIC_TEST_GROUP=cpu` or `gpu` to run either group. Codec encoder checks
 require Python with NumPy, Pillow, tifffile and OpenImageIO; point
 `DICHROIC_REF_PYTHON` at that interpreter. CI installs and requires the
-oracle environment, runs both groups, and blocks deployment on failures.
+oracle environment and runs both groups on pushes to `main` and pull requests.
 On Windows, `DICHROIC_DAWN_ADAPTER="Microsoft Basic Render Driver"` selects
 WARP for a reproducible software GPU check.
 
@@ -244,15 +244,10 @@ so after the first visit it runs offline. On iPhone, open the site in Safari
 and choose **Share → Add to Home Screen**; it then opens full screen like a
 native app. Photos never leave the device.
 
-- **GitHub Pages** — `.github/workflows/deploy.yml` builds and publishes on
-  every push to `main`. Enable it once under *Settings → Pages → Source:
-  GitHub Actions*; the app is served at `https://<user>.github.io/<repo>/`.
-  Pages cannot send custom headers, so the service worker adds the isolation
-  headers itself and the page reloads once on the first visit.
-- **Cloudflare Pages / Netlify** — build command `npm run build`, output
-  `dist`; `public/_headers` sends the isolation and cache headers.
-- **Anywhere else** — serve `dist/` over HTTPS with the two headers above.
-  For a subpath, build with `DICHROIC_BASE=/path/ npm run build`.
+- **Vercel** — the existing Git integration deploys `main`. Build command:
+  `npm run build`; output directory: `dist`. The service worker supplies
+  cross-origin isolation when the host does not send the headers above.
+  GitHub Actions runs code checks; GitHub Pages publishing is disabled.
 
 Icons and iOS launch screens come from `node tools/gen_icons.mjs`.
 

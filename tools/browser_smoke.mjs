@@ -64,7 +64,7 @@ try {
   console.log('PASS failed replacement retains editor; alert traps and restores focus');
 
   if (process.argv.includes('--depth')) {
-    await page.getByText('Lens', { exact: true }).first().click();
+    await page.getByRole('tab', { name: /^Lens(?:, edited)?$/ }).click();
     await page.getByRole('switch', { name: /Lens Blur/i }).click();
     const download = page.getByRole('button', { name: /^Download/ });
     await download.waitFor({ timeout: 30_000 });
@@ -97,7 +97,7 @@ try {
     await waitEditing();
     console.log('PASS offline PWA reload and local photo rendering');
     if (process.argv.includes('--depth')) {
-      await page.getByText('Lens', { exact: true }).first().click();
+      await page.getByRole('tab', { name: /^Lens(?:, edited)?$/ }).click();
       const blur = page.getByRole('switch', { name: /Lens Blur/i });
       if (await blur.getAttribute('aria-checked') !== 'true') await blur.click();
       await page.getByText(/Depth ready/).waitFor({ timeout: 120_000 });

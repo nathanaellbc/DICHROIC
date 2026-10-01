@@ -58,9 +58,8 @@ export interface TabItem<V extends string> {
 }
 
 /**
- * Pemilih kelompok sebagai tab (ikon di atas label, seperti tab bar): enam
- * label penuh muat di panel HP maupun inspector, tanpa terpotong. Panah
- * kiri/kanan, Home dan End berpindah tab (pola ARIA tabs).
+ * Pemilih kelompok sebagai tab ikon, dengan nama untuk pembaca layar dan
+ * tooltip. Panah kiri/kanan, Home dan End berpindah tab (pola ARIA tabs).
  */
 export function GroupTabs<V extends string>({
   items,
@@ -105,6 +104,8 @@ export function GroupTabs<V extends string>({
             id={`${idPrefix}-tab-${item.value}`}
             aria-selected={selected}
             aria-controls={`${idPrefix}-panel`}
+            aria-label={`${item.label}${item.edited ? ', edited' : ''}`}
+            title={item.label}
             tabIndex={selected ? 0 : -1}
             className="tab"
             onClick={() => onChange(item.value)}
@@ -114,8 +115,6 @@ export function GroupTabs<V extends string>({
               <Icon name={item.icon} size={small ? 17 : 19} />
               {item.edited && <span className="tab-edited" />}
             </span>
-            <span className="tab-label">{item.label}</span>
-            {item.edited && <span className="sr-only">, edited</span>}
           </button>
         );
       })}

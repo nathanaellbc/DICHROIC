@@ -276,7 +276,7 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 }
 .segment-label { position: relative; }
 
-/* Tab kelompok (ikon + label, pola ARIA tabs), seperti tab inspector Final Cut. */
+/* Tab kelompok (ikon, pola ARIA tabs), seperti tab inspector Final Cut. */
 .tabs {
   position: relative; display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column;
   padding: var(--inset-tabs); gap: 2px; border-radius: var(--r-tabs); background: var(--fill); box-sizing: border-box;
@@ -293,7 +293,6 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
   background: rgba(255, 255, 255, 0.18);
 }
 .tab-icon { position: relative; display: inline-flex; }
-.tab-label { position: relative; font-size: 0.706rem; line-height: 1.1; font-weight: 600; white-space: nowrap; }
 .tab-edited {
   position: absolute; top: -2px; right: -6px; width: 7px; height: 7px; border-radius: 50%;
   background: var(--blue); box-shadow: 0 0 0 1.5px var(--bg-elevated);
@@ -303,7 +302,72 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .tabs.small .tab { min-height: 44px; border-radius: 0; gap: 3px; padding: 6px 0 5px; }
 .tabs.small .tab[aria-selected="true"] { color: var(--blue-text); }
 .tabs.small .tab-pill { inset: auto 10px 0 10px; height: 2px; border-radius: 1px; background: var(--blue); box-shadow: none; }
-.tabs.small .tab-label { font-size: 11px; font-weight: 500; }
+
+/* Mobile editor: one quiet toolbar, a photo canvas and a compact control dock. */
+.mobile-toolbar {
+  z-index: 2; height: 52px; padding: 4px; box-sizing: border-box;
+  display: flex; align-items: center; gap: 4px;
+  border-radius: calc(var(--r-control) + 4px);
+  --glass-filter: blur(30px);
+}
+.mobile-recipe {
+  flex: 1 1 0; min-width: 0; padding: 0 8px; gap: 8px;
+  justify-content: space-between; overflow: hidden;
+}
+.mobile-export { background: var(--blue-fill); color: var(--label); }
+.mobile-brand { flex: 1; min-width: 0; padding-left: 12px; display: flex; flex-direction: column; gap: 2px; }
+.mobile-brand > :first-child { font-size: 13px; font-weight: 650; letter-spacing: 0.12em; }
+.mobile-brand > :last-child { font-size: 11px; }
+.mobile-adjustments {
+  left: 0; right: 0; bottom: 0; max-width: 560px; margin: 0 auto;
+  border-radius: 24px 24px 0 0; border-top: 1px solid var(--hairline);
+  padding: 12px calc(var(--safe-right) + 16px) max(12px, var(--safe-bottom)) calc(var(--safe-left) + 16px);
+}
+.mobile-adjustments[hidden] { display: none !important; }
+.mobile-tool-heading { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mobile-tool-heading h2 { font-size: 16px; line-height: 1.3; }
+.mobile-tool-value { font-size: 18px; white-space: nowrap; }
+.mobile-adjustments .lens-status .t-subhead { font-size: 13px; line-height: 1.4; }
+.mobile-tools { display: flex; gap: 4px; margin: 0 -16px; padding: 2px 16px; scroll-padding-inline: 16px; }
+.mobile-adjustments .tabs {
+  background: transparent; border-radius: 0; padding: 8px 0 0;
+  border-top: 1px solid var(--hairline); gap: 4px; flex-shrink: 0;
+}
+.mobile-adjustments .tab { min-height: 44px; border-radius: var(--r-control); padding: 0; }
+.mobile-adjustments .tab[aria-selected="true"] { color: var(--blue-text); }
+.mobile-adjustments .tab-pill { border-radius: var(--r-control); background: var(--blue-wash); }
+.mobile-editor.is-landscape .mobile-adjustments {
+  left: auto; top: 0; bottom: 0; right: 0; max-width: none; margin: 0;
+  width: calc(clamp(300px, 44vw, 320px) + var(--safe-right));
+  overflow: hidden; border-radius: 0; border-top: 0; border-left: 1px solid var(--hairline);
+  padding-top: calc(var(--safe-top) + 12px);
+}
+.mobile-editor.is-landscape .mobile-adjustments .tabs { gap: 0; }
+.mobile-editor.is-landscape #compact-groups-panel { flex: 1; min-height: 0; overflow-y: auto; }
+.mobile-editor.is-landscape #compact-groups-panel > * { flex-shrink: 0; }
+.dropzone-mobile { display: none; }
+html[data-size="compact"] .dropzone-desktop { display: none !important; }
+html[data-size="compact"] .dropzone-mobile { display: flex; }
+html[data-size="compact"] .empty-photo { padding: 16px 24px !important; }
+html[data-size="compact"] .photo-dropzone {
+  border: 0 !important; background: transparent !important; gap: 24px !important;
+  padding: 24px 0 !important; max-width: 420px; margin: 0 auto !important;
+  width: 100%; scrollbar-width: thin;
+}
+html[data-size="compact"] .photo-dropzone[data-drag-over="true"] { background: var(--blue-wash) !important; }
+.dropzone-title { font-size: 26px; line-height: 1.2; letter-spacing: -0.03em; font-weight: 600; justify-content: center; }
+.dropzone-description { font-size: 14px; line-height: 1.5; justify-content: center; }
+.dropzone-cta {
+  align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 24px;
+  border-radius: var(--r-control); background: var(--blue-fill); font-size: 15px; font-weight: 600;
+}
+.dropzone-formats { justify-content: center; font-size: 11px; line-height: 1.5; }
+.dropzone-privacy { flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.5; }
+
+@media (max-height: 520px) and (orientation: landscape) {
+  html[data-size="compact"] .photo-dropzone { justify-content: flex-start !important; gap: 16px !important; padding: 8px 0 !important; }
+  html[data-size="compact"] .photo-dropzone > :first-child { display: none !important; }
+}
 
 /* Switch: aksen biru (kontrol macOS/iOS pro, satu warna aksen). */
 .switch {

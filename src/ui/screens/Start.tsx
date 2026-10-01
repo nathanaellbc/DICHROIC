@@ -31,9 +31,11 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
   const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files');
 
   return (
-    <div style={{ position: 'absolute', inset: 0, padding: 16, boxSizing: 'border-box', display: 'flex' }}>
+    <div className="empty-photo" style={{ position: 'absolute', inset: 0, padding: 16, boxSizing: 'border-box', display: 'flex' }}>
       <motion.button
         type="button"
+        className="photo-dropzone"
+        data-drag-over={over}
         onClick={onChoose}
         onDragEnter={(e) => {
           if (!hasFiles(e)) return;
@@ -63,11 +65,15 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
         <span aria-hidden="true" style={{ width: 52, height: 52, borderRadius: 'var(--r-list)', background: over ? 'var(--blue-fill)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background-color 0.15s' }}>
           <Icon name="photo" size={28} strokeWidth={2} color="#fff" />
         </span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span className="t-title3" style={{ fontWeight: 600 }}>{touch ? 'Tap to Choose a Photo' : over ? 'Drop to Open' : 'Drag and Drop Your Image'}</span>
-          <span className="t-subhead secondary">Developed through real film and print stocks{touch ? '' : ', or click to browse your files'}</span>
+        <span className="dropzone-heading" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span className="t-title3 dropzone-desktop" style={{ fontWeight: 600 }}>{touch ? 'Tap to Choose a Photo' : over ? 'Drop to Open' : 'Drag and Drop Your Image'}</span>
+          <span className="dropzone-mobile dropzone-title">Start with a photo</span>
+          <span className="t-subhead secondary dropzone-desktop">Developed through real film and print stocks{touch ? '' : ', or click to browse your files'}</span>
+          <span className="dropzone-mobile secondary dropzone-description">Real film. Your own darkroom.</span>
         </span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch', width: '100%', maxWidth: 340 }}>
+        <span className="dropzone-mobile dropzone-cta"><Icon name="open" size={18} /> Choose Photo</span>
+        <span className="dropzone-mobile dropzone-formats secondary">RAW · JPEG · PNG · TIFF · OpenEXR</span>
+        <span className="dropzone-desktop" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch', width: '100%', maxWidth: 340 }}>
           <span className="t-footnote secondary" style={{ fontWeight: 600 }}>Supported files</span>
           {KINDS.map((k) => (
             <span key={k.title} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
@@ -81,9 +87,10 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
             </span>
           ))}
         </span>
-        <span className="t-caption secondary">
+        <span className="t-caption secondary dropzone-desktop">
           Nothing is uploaded. {enginePaused ? 'Darkroom paused until you choose a photo.' : engineFailed ? 'Darkroom stopped. Choose a photo to retry.' : engineReady ? 'Darkroom ready.' : 'Preparing the darkroom…'}
         </span>
+        <span className="dropzone-mobile dropzone-privacy secondary">Photos stay on this device.<span>{engineFailed ? 'Choose a photo to retry.' : !engineReady && !enginePaused ? 'Preparing the darkroom…' : ''}</span></span>
       </motion.button>
     </div>
   );
