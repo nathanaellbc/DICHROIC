@@ -757,11 +757,15 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .camera-section .capsule { min-height: 26px; font-size: 11px; }
 .camera-controls .inspector-row { border-top: 0; padding-top: 4px; padding-bottom: 4px; }
 
-/* Quartic corners: CSS defines squircle as superellipse(2), exponent 2^2 = 4. */
+/*
+ * Sudut kontinu Apple (squircle.ts): superellipse(1.704) = eksponen 3,26,
+ * sepanjang radius nominal x 1,528 (border-radius inline dipasang
+ * installSquircleGeometry). Diagonalnya = lingkaran beradius nominal.
+ */
 :where(.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
        .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip,
        .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]) {
-  corner-shape: squircle;
+  corner-shape: superellipse(1.704);
 }
 :where([style*="border-radius: 50%"], [style*="border-radius: 9999"]) { corner-shape: round; }
 /* The SVG path already supplies the contour; keep keyboard feedback inside it. */
