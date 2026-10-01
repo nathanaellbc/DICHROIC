@@ -8,7 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import type { UiIconName } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
-import { overlay, scrimMotion } from '../motion';
+import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
 import { useEffect } from 'react';
 import { activateModal } from '../modalFocus';
 import { useDialogKeys } from '../hooks';
@@ -50,7 +50,6 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           depth.current = 0;
           setOver(false);
         }}
-        whileTap={{ scale: 0.985 }}
         animate={{ scale: over ? 1.01 : 1 }}
         transition={overlay()}
         style={{
@@ -71,7 +70,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           <span className="t-subhead secondary dropzone-desktop">Developed through real film and print stocks{touch ? '' : ', or click to browse your files'}</span>
           <span className="dropzone-mobile secondary dropzone-description">Real film. Your own darkroom.</span>
         </span>
-        <span className="dropzone-mobile dropzone-cta"><Icon name="open" size={18} /> Choose Photo</span>
+        <motion.span className="dropzone-mobile dropzone-cta" whileTap={{ scale: pressScale }} transition={pressRelease}><Icon name="open" size={18} /> Choose Photo</motion.span>
         <span className="dropzone-mobile dropzone-formats secondary">RAW · JPEG · PNG · TIFF · OpenEXR</span>
         <span className="dropzone-desktop" style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch', width: '100%', maxWidth: 340 }}>
           <span className="t-footnote secondary" style={{ fontWeight: 600 }}>Supported files</span>
