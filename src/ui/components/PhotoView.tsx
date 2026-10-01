@@ -9,7 +9,7 @@
  * dengan panah, Escape membatalkan seretan fokus yang aktif.
  *
  * Zoom: roda/pinch trackpad di titik kursor, pinch dua jari, klik ganda
- * (pas <-> 2,5x); seret untuk menggeser saat diperbesar. Zoom hanya transform
+ * (pas <-> 2,5x); seret elastis pada skala pas maupun saat diperbesar. Zoom hanya transform
  * tampilan -- pratinjau yang sama diperbesar, render tidak diulang.
  */
 import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
@@ -385,7 +385,7 @@ export function PhotoView({
       setSplitFrom(e.clientX);
       return;
     }
-    if (view.s > 1) gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false };
+    gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false };
     window.clearTimeout(holdTimer.current);
     holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
@@ -464,7 +464,7 @@ export function PhotoView({
       role={picking ? 'application' : undefined}
       aria-label={picking ? 'Focus point. Hold and drag to select. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
       onKeyDown={onKeyDown}
-      style={{ position: 'absolute', inset: 0, overflow: 'visible', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : zoomed && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'visible', outline: 'none', touchAction: 'none', cursor: picking ? 'crosshair' : shown && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
