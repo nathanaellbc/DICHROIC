@@ -320,9 +320,16 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 
 /* Mobile editor: one quiet toolbar, a photo canvas and a compact control dock. */
 .mobile-toolbar {
-  z-index: 2; height: 52px; padding: 4px; box-sizing: border-box;
+  /*
+   * Konsentris: tombol 44 px berjarak sama (4 px, termasuk border kaca 1 px)
+   * dari keempat tepi, jadi radius luar = R_control + 4. Dulu padding 4 +
+   * border 1 dengan tinggi 52 menyisakan 42 px untuk tombol 44 px: celah
+   * atas/bawah 4 px, samping 5 px, dan pusat kurvanya tidak sama.
+   */
+  --inset-toolbar: 4px;
+  z-index: 2; height: calc(var(--icon-btn) + 2 * var(--inset-toolbar)); padding: calc(var(--inset-toolbar) - 1px); box-sizing: border-box;
   display: flex; align-items: center; gap: 4px;
-  border-radius: calc(var(--r-control) + 4px);
+  border-radius: calc(var(--r-control) + var(--inset-toolbar));
   --glass-filter: blur(30px);
 }
 .mobile-recipe {
@@ -751,7 +758,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .camera-controls .inspector-row { border-top: 0; padding-top: 4px; padding-bottom: 4px; }
 
 /* Quartic corners: CSS defines squircle as superellipse(2), exponent 2^2 = 4. */
-:where(.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill,
+:where(.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
        .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip,
        .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]) {
   corner-shape: squircle;

@@ -1,6 +1,6 @@
 /** Rounded rectangles with quartic (n=4) superellipse corners, not circular arcs. */
 export type CornerRadii = readonly [number, number, number, number];
-export const SQUIRCLE_SELECTOR = '.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip, .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]';
+export const SQUIRCLE_SELECTOR = '.icon-btn, .capsule, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta, .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip, .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]';
 
 export function fitRadii(width: number, height: number, radii: CornerRadii): CornerRadii {
   const [tl, tr, br, bl] = radii.map(r => Math.max(0, r)) as unknown as CornerRadii;
