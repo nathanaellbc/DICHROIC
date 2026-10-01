@@ -46,6 +46,8 @@ import type { ScaledImage } from './downscale';
 import { originalFrame, rgbToCanvas } from '../io/display';
 import type { Frame } from '../io/display';
 import { buildGuide } from '../depth/estimate';
+import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
+import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
 import { assertImageBudget, imageMemoryBudget } from '../io/budget';
 
@@ -242,6 +244,7 @@ export class Session {
   #paramsVersion = 0;
   #image: DecodedImage | undefined;
   #imageId = 0;
+  #removalUndo: { crop: RemovalCrop; backup: Float32Array } | undefined;
   #photoId = 0;
   #preview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
   #draftPreview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
@@ -374,6 +377,7 @@ export class Session {
       );
     }
     this.#image = image;
+    this.#removalUndo = undefined;
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
@@ -383,6 +387,38 @@ export class Session {
     this.#depthId += 1;
     this.#cache.clear();
     this.#previewCache.clear();
+  }
+
+  prepareRemoval(selection: RemovalMask): RemovalCrop {
+    this.assertAlive();
+    if (!this.#image) throw new SessionStateError('Open a photo first.');
+    return prepareRemoval(this.#image, selection, this.#imageId);
+  }
+
+  async applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }> {
+    while (this.#busy) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
+    this.assertAlive();
+    if (!this.#image || crop.revision !== this.#imageId) throw new RenderSupersededError();
+    this.#removalUndo = { crop, backup: applyRemoval(this.#image, crop, output) };
+    return this.removalChanged();
+  }
+
+  async undoRemoval(): Promise<{ original: Frame; guide: Guide }> {
+    while (this.#busy) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
+    this.assertAlive();
+    if (!this.#image || !this.#removalUndo) throw new SessionStateError('No removal to undo.');
+    restoreRemoval(this.#image, this.#removalUndo.crop, this.#removalUndo.backup);
+    this.#removalUndo = undefined;
+    return this.removalChanged();
+  }
+
+  private removalChanged(): { original: Frame; guide: Guide } {
+    this.#imageId += 1;
+    this.#preview = undefined; this.#draftPreview = undefined; this.#originalPreview = undefined;
+    this.#cache.clear(); this.#previewCache.clear();
+    this.#depth = undefined; this.#depthId += 1;
+    this.releaseExport();
+    return { original: originalFrame(this.#image!, 1024), guide: buildGuide(this.#image!, 1024) };
   }
 
   /**
@@ -821,6 +857,7 @@ export class Session {
     this.#pending?.reject(new RenderSupersededError());
     this.#pending = undefined;
     this.#image = undefined;
+    this.#removalUndo = undefined;
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;

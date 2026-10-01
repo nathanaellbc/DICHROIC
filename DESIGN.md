@@ -466,3 +466,6 @@ All interface surfaces use translucent background colors: graphite chrome at 58%
 Slider and toggle resting thumbs use solid white. All visible scrollbar thumbs use white at 20% opacity, including hover and focus states, with the existing sizes and interaction geometry.
 
 Compact tool chips support horizontal touch swipes and mouse drags. Native scroll coordinates preserve wheel input and focus centering, while a translated inner track provides resisted edge overscroll and the shared photoReturn spring. A horizontal drag suppresses accidental tool selection; ordinary taps and keyboard activation remain intact. Reduced motion removes overscroll and release momentum.
+
+### Local object removal
+The desktop eraser action sits next to Export; compact layouts expose Remove Object in More. Its sheet shows the original source with a red brush mask, a labeled brush-size slider, Undo brush, Clear, Remove, Before/After, Apply, and one-step Undo removal. Model download and processing statuses remain visible. Closing discards unapplied previews and releases the worker. Apply retouches the source before film simulation. The sheet inherits existing frost, typography, control sizes, and continuous corners; the brush canvas uses direct pointer input and frame-coalesced paint updates.

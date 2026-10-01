@@ -8,11 +8,17 @@
 import type { DecodedImage } from '../io/decoded';
 import type { RenderParams } from '../params/renderParams';
 import type { DepthMap } from '../host/lens';
+import type { RemovalCrop, RemovalMask } from '../retouch/patch';
+import type { Frame } from '../io/display';
+import type { Guide } from '../depth/estimate';
 import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
+  prepareRemoval(selection: RemovalMask): RemovalCrop;
+  applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }>;
+  undoRemoval(): Promise<{ original: Frame; guide: Guide }>;
   close(): void | Promise<void>;
   stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto>;
   commitOpen(id: number): void;

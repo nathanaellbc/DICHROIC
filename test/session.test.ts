@@ -144,6 +144,31 @@ function gradientImage(width: number, height: number): DecodedImage {
   return { width, height, rgba, suggestedColorSpace: 'ProPhoto RGB', encoding: 'linear', source: { format: 'fixture', bitDepth: 32 } };
 }
 
+describe('Session: native LaMa edits', () => {
+  it('invalidates preview/export caches, preserves source metadata, and restores export on undo', async () => {
+    const s = await sharedSession();
+    const image = { ...gradientImage(48, 48), suggestedColorSpace: 'sRGB', encoding: 'encoded' as const };
+    const beforeSource = image.rgba.slice();
+    const metadata = image.source;
+    s.open(image);
+    s.setParams({ inputColorSpace: 'sRGB', inputCctfDecoding: true, grainEnabled: false, glareEnabled: false });
+    const before = await s.render('preview', 32);
+    const beforeExport = await s.exportImage('png8');
+    const data = new Uint8Array(48 * 48);
+    for (let y = 16; y < 32; y++) for (let x = 16; x < 32; x++) data[y * 48 + x] = 1;
+    const crop = s.prepareRemoval({ width: 48, height: 48, data });
+    await s.applyRemoval(crop, new Float32Array(512 * 512 * 3).fill(0.8));
+    expect(await s.render('preview', 32)).not.toBe(before);
+    expect(await s.exportImage('png8')).not.toEqual(beforeExport);
+    expect(image.source).toBe(metadata);
+    await expect(s.applyRemoval(crop, new Float32Array(512 * 512 * 3))).rejects.toBeInstanceOf(RenderSupersededError);
+    await s.undoRemoval();
+    expect(image.rgba).toEqual(beforeSource);
+    expect(await s.exportImage('png8')).toEqual(beforeExport);
+    s.dispose();
+  });
+});
+
 describe('Session: pratinjau, antrean, cache', () => {
   /**
    * Penerimaan Fase 2A.5: di 2A render 1024 px masih melempar (dir.ts, radius

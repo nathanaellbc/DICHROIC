@@ -7,13 +7,13 @@ import {
   BringToFront, Hexagon, Spline, Eye, X, Check, ChevronDown, ChevronsUpDown,
   Columns2, RotateCcw, Minus, Plus, Search, Lock, Image, Mountain, Camera,
   FolderOpen, Upload, TriangleAlert, Info, Shuffle, Undo2, Redo2, Ellipsis,
-  ChevronRight, LoaderCircle,
+  ChevronRight, LoaderCircle, Eraser,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { IconName } from '../model/tools';
 
 export type UiIconName =
-  | IconName
+  | IconName | 'erase'
   | 'close' | 'check' | 'chevronDown' | 'upDown' | 'compare' | 'reset' | 'minus' | 'plus'
   | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'loader';
 
@@ -33,7 +33,7 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   reset: RotateCcw, minus: Minus, plus: Plus, search: Search, lock: Lock,
   photo: Image, hdr: Mountain, camera: Camera, open: FolderOpen, share: Upload,
   warning: TriangleAlert, info: Info, undo: Undo2, redo: Redo2,
-  more: Ellipsis, shuffle: Shuffle, loader: LoaderCircle,
+  more: Ellipsis, shuffle: Shuffle, loader: LoaderCircle, erase: Eraser,
 };
 
 export function Icon({ name, size = 22, strokeWidth = 2, color = 'currentColor', className }: {

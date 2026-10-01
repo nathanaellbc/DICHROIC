@@ -35,6 +35,7 @@ import { ExportContent, ListPickerContent } from './Export';
 import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
+import { RemoveContent } from './Remove';
 import { InspectorTool, ResetButton, ToolChips, ToolControl, ToolSwitch } from './ToolControls';
 import type { ToolContext } from './ToolControls';
 
@@ -44,6 +45,7 @@ type SheetState =
   /** `before`: stok saat sheet dibuka (Cancel). `swap`: sisi lain A/B. */
   | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks }
   | { kind: 'export' }
+  | { kind: 'remove' }
   | { kind: 'list'; toolId: string }
   | null;
 
@@ -217,6 +219,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const layoutProps = { state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor };
 
   const menuActions: SheetAction[] = [
+    { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
     { label: 'Open Photo…', icon: 'open', shortcut: HAS_KEYBOARD ? 'O' : undefined, onSelect: () => { setMenuAnchor(null); onOpenFile(); } },
     ...(state.history.canRedo ? [{ label: 'Redo', icon: 'redo' as const, shortcut: HAS_KEYBOARD ? (APPLE ? '⇧⌘Z' : 'Ctrl+Y') : undefined, onSelect: () => { setMenuAnchor(null); engine.redo(); } }] : []),
     ...(engine.isEdited() ? [{ label: 'Reset All Adjustments', icon: 'reset' as const, onSelect: () => { setMenuAnchor(null); engine.resetAll(); } }] : []),
@@ -228,6 +231,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
+      <Sheet open={sheet?.kind === 'remove'} title="Remove Object" centered={wide} detents={['large']} onClose={() => setSheet(null)} leading={<PressButton className="icon-btn" aria-label="Close Remove Object" onClick={() => setSheet(null)}><Icon name="close" size={16} /></PressButton>}>
+        {sheet?.kind === 'remove' && state.original && engine.imageSize && <RemoveContent original={state.original} sourceSize={engine.imageSize} />}
+      </Sheet>
 
       <Sheet
         open={sheet?.kind === 'stocks'}
@@ -627,6 +633,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         <PressButton className="icon-btn plain" aria-label="Before / After" aria-keyshortcuts="\" title="Before / After (\)" aria-pressed={compare} disabled={!hasPhoto} onClick={() => setCompare(!compare)}>
           <Icon name="compare" size={17} />
         </PressButton>
+        <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
         <PressButton className="capsule prominent" style={{ marginLeft: 6 }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>
           <Icon name="share" size={14} strokeWidth={2.2} /> Export
         </PressButton>

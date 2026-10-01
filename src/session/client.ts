@@ -9,6 +9,9 @@
  */
 
 import type { DecodedImage } from '../io/decoded';
+import type { RemovalCrop, RemovalMask } from '../retouch/patch';
+import type { Frame } from '../io/display';
+import type { Guide } from '../depth/estimate';
 import { DecodeError } from '../io/errors';
 import { MissingNeutralFiltersError } from '../params/plan';
 import { UnverifiedParameterError } from '../params/registry';
@@ -79,6 +82,9 @@ export class SessionClient {
   close(): Promise<void> {
     return this.call('close', []) as Promise<void>;
   }
+  prepareRemoval(mask: RemovalMask): Promise<RemovalCrop> { return this.call('prepareRemoval', [mask], transferablesOf(mask)) as Promise<RemovalCrop>; }
+  applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }> { return this.call('applyRemoval', [crop, output], transferablesOf([crop, output])) as Promise<{ original: Frame; guide: Guide }>; }
+  undoRemoval(): Promise<{ original: Frame; guide: Guide }> { return this.call('undoRemoval', []) as Promise<{ original: Frame; guide: Guide }>; }
 
   stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto> {
     return this.call('stageOpen', [id, image, patch, guideMaxEdge], transferablesOf(image)) as Promise<PreparedPhoto>;

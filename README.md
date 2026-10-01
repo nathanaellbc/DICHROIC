@@ -294,3 +294,11 @@ Select Off at the top of the Film list, or disable Film Simulation in the Film c
 ## Squircle interface geometry
 
 Rounded UI surfaces use n=4 superellipse (squircle) corners. Nested corner extents subtract the actual padding and border from the outer radius, with consistent inset tokens for segmented controls, tabs, dialogs and nested cards. Circular indicators and slider thumbs remain circles. Native `corner-shape: squircle` is used where supported; a responsive SVG cubic-path fallback handles other browsers. Support is feature-detected because [MDN browser compatibility data](https://github.com/mdn/browser-compat-data/blob/main/css/properties/corner-shape.json) still marks stable Safari/Firefox support as incomplete. Fallback geometry and glass/focus behavior were tested in Edge; physical iPhone Safari is pending.
+
+### Remove Object (local LaMa)
+
+Desktop: choose the eraser icon next to Export. Compact/mobile: More → Remove Object…. Paint the object, choose Remove, compare Before/After, then Apply. Undo brush changes the selection; Undo removal restores the last applied edit, including after reopening the dialog.
+
+The first Remove action downloads the approximately 62 MB LaMa ONNX model, cached on the device where storage permits. No photo is uploaded and no API key is needed. Inference runs in a separate worker; closing the dialog cancels inference and discards unapplied results. Apply updates the native source before film simulation and export, preserving unmasked pixels and metadata.
+
+Initial support: sRGB photos and Linear Rec.709 RAW. Use small selections; native crops larger than 4 MP are rejected to keep memory bounded. Generated areas have 512×512 model detail and LDR color, so very large removals are unsuitable. Physical iPhone/Safari performance is not yet verified. Model attribution, pinned revision, and implementation details: [src/retouch/README.md](src/retouch/README.md).

@@ -11,6 +11,7 @@
  * `Session` sendiri juga membuang permintaan yang tersalip.
  */
 import { detectFormat } from '../../io/detect';
+import type { RemovalCrop, RemovalMask } from '../../retouch/patch';
 import { DecodeError } from '../../io/errors';
 import type { DecodedImage } from '../../io/decoded';
 import { captureExif } from '../../io/exif';
@@ -162,6 +163,8 @@ export class Engine {
   readonly #pendingPatches = new Map<number, Partial<RenderParams>>();
   /** Ukuran gambar asli yang terbuka (untuk membandingkan ukuran ekspor). */
   #imageSize: { width: number; height: number } | undefined;
+  #canUndoRemoval = false;
+  get canUndoRemoval(): boolean { return this.#canUndoRemoval; }
   /** Ekspor terakhir lebih kecil dari aslinya (difusi, Fase 2D). */
   lastExportLimited: { width: number; height: number } | undefined;
   #inFlight: number | undefined;
@@ -307,6 +310,7 @@ export class Engine {
       this.#confirmedParams = params;
       this.#pendingPatches.clear();
       this.#imageSize = { width: prepared.width, height: prepared.height };
+      this.#canUndoRemoval = false;
       this.#previewLongEdge = 1024;
       this.#interactionChanged = false;
       this.#depth.reset(guide);
@@ -340,7 +344,27 @@ export class Engine {
     if (this.#state.phase === 'editing') this.requestRender();
   }
 
+  async prepareRemoval(mask: RemovalMask): Promise<RemovalCrop> {
+    if (!this.#client || this.#state.phase !== 'editing') throw new Error('Open a photo first.');
+    return this.#client.prepareRemoval(mask);
+  }
+
+  async applyRemoval(crop?: RemovalCrop, output?: Float32Array): Promise<void> {
+    const client = this.#client, generation = this.#photoGeneration;
+    if (!client || this.#state.phase !== 'editing') throw new Error('Open a photo first.');
+    const changed = crop && output ? await client.applyRemoval(crop, output) : await client.undoRemoval();
+    if (generation !== this.#photoGeneration || client !== this.#client) return;
+    this.#paramsRevision += 1;
+    this.#depthMap = undefined;
+    this.#depth.reset(changed.guide);
+    this.#canUndoRemoval = !!crop;
+    this.#set({ original: changed.original });
+    this.requestRender();
+    if (this.#state.params.lensBlurEnabled) this.#depth.ensure();
+  }
+
   closePhoto(): void {
+    this.#canUndoRemoval = false;
     this.#formatPreview = false;
     this.#cancelRefinement();
     this.#openToken += 1;
