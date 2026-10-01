@@ -3,8 +3,8 @@
  * kini inline dari sumbernya), alert, dan toast konfirmasi singkat.
  */
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useDialogKeys } from '../hooks';
 import { overlay } from '../motion';
 import { Icon } from './Icon';
@@ -36,8 +36,15 @@ export function ActionSheet(props: ActionSheetProps) {
   return <AnimatePresence>{props.open && <ActionSheetBody {...props} />}</AnimatePresence>;
 }
 
+/** Muncul dari pemicunya: skala kecil (bukan 0,4) dengan pegas lembut. */
+const menuSpring = { type: 'spring' as const, duration: 0.34, bounce: 0.14 };
+/** Sorotan meluncur (Glide Select: 220 ms ease-out). */
+const glideTransition = { type: 'spring' as const, duration: 0.24, bounce: 0 };
+
 function ActionSheetBody({ anchor, message, label, actions, onCancel }: ActionSheetProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const rows = useRef<Array<HTMLButtonElement | null>>([]);
   useDialogKeys(ref, onCancel, false);
   useEffect(() => {
     const cleanup = ref.current ? activateModal(ref.current) : undefined;
@@ -47,6 +54,54 @@ function ActionSheetBody({ anchor, message, label, actions, onCancel }: ActionSh
   }, []);
   const left = anchor ? Math.min(Math.max(12, anchor.left), window.innerWidth - 282) : 16;
   const top = anchor ? anchor.bottom + 8 : 100;
+
+  // Sorotan: satu untuk seluruh menu, meluncur ke baris yang ditunjuk dan
+  // diingat posisinya, jadi masuk lagi meluncur dari sana (Glide Select).
+  const [hot, setHot] = useState<number | null>(null);
+  const [glide, setGlide] = useState<{ y: number; h: number } | null>(null);
+  const shown = useRef(false);
+  useLayoutEffect(() => {
+    if (hot === null) return;
+    const row = rows.current[hot];
+    if (row) setGlide({ y: row.offsetTop, h: row.offsetHeight });
+  }, [hot]);
+
+  // Sentuh: tekan baris, geser ke baris lain, lepas = pilih (seperti menu iOS).
+  const press = useRef<{ id: number } | null>(null);
+  const swallowClick = useRef(false);
+  const rowAt = (clientY: number) => rows.current.findIndex((r) => {
+    if (!r) return false;
+    const b = r.getBoundingClientRect();
+    return clientY >= b.top && clientY < b.bottom;
+  });
+  const items = [...actions.map((a) => ({ ...a, cancel: false })), { label: 'Cancel', onSelect: onCancel, cancel: true } as SheetAction & { cancel: boolean }];
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse') return;
+    press.current = { id: e.pointerId };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* sudah lepas */ }
+    const i = rowAt(e.clientY);
+    setHot(i >= 0 ? i : null);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse') {
+      const i = rowAt(e.clientY);
+      if (i >= 0) setHot(i);
+      return;
+    }
+    if (!press.current || press.current.id !== e.pointerId) return;
+    const i = rowAt(e.clientY);
+    setHot(i >= 0 ? i : null);
+  };
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!press.current || press.current.id !== e.pointerId) return;
+    press.current = null;
+    const i = rowAt(e.clientY);
+    swallowClick.current = true;
+    setTimeout(() => { swallowClick.current = false; }, 0);
+    if (i >= 0) items[i]!.onSelect();
+    else setHot(null);
+  };
+
   return (
     <>
       <div className="scrim" onClick={onCancel} aria-hidden="true" />
@@ -57,20 +112,53 @@ function ActionSheetBody({ anchor, message, label, actions, onCancel }: ActionSh
         aria-label={message ?? label}
         className="popover"
         style={{ left, top, transformOrigin: anchor ? `${anchor.left + anchor.width / 2 - left}px -8px` : 'top left' }}
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.16 } }}
-        transition={overlay()}
+        initial={{ opacity: 0, scale: 0.9, y: -4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.94, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+        transition={document.documentElement.dataset.size === 'regular' ? overlay() : menuSpring}
       >
         {message && <p className="t-footnote secondary" style={{ margin: 0, padding: '14px 16px 12px', textAlign: 'center' }}>{message}</p>}
-        {actions.map((a) => (
-          <button key={a.label} type="button" className={a.destructive ? 'popover-action destructive' : 'popover-action'} onClick={a.onSelect} data-menu={message ? undefined : ''}>
-            {a.icon && <Icon name={a.icon} size={18} />}
-            <span style={{ flexGrow: 1 }}>{a.label}</span>
-            {a.shortcut && <span className="t-footnote secondary" aria-hidden="true">{a.shortcut}</span>}
-          </button>
-        ))}
-        <button type="button" className="popover-action" onClick={onCancel}>Cancel</button>
+        <div
+          ref={listRef}
+          className="popover-list"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => { press.current = null; setHot(null); }}
+          onPointerLeave={(e) => { if (e.pointerType === 'mouse') setHot(null); }}
+        >
+          {glide && (
+            <motion.span
+              className="popover-glide"
+              aria-hidden="true"
+              initial={false}
+              animate={{ y: glide.y, height: glide.h, opacity: hot === null ? 0 : 1 }}
+              transition={shown.current ? glideTransition : { duration: 0, opacity: { duration: 0.12 } }}
+              onAnimationComplete={() => { shown.current = hot !== null; }}
+            />
+          )}
+          {items.map((a, i) => (
+            <motion.button
+              key={a.label}
+              ref={(el) => { rows.current[i] = el; }}
+              type="button"
+              className={a.destructive ? 'popover-action destructive' : 'popover-action'}
+              data-menu={message || a.cancel ? undefined : ''}
+              initial={{ opacity: 0, y: -3 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: 0.03 + i * 0.02, ease: [0.23, 1, 0.32, 1] }}
+              // Fokus otomatis saat membuka (aksesibilitas) tidak menyorot di HP;
+              // hanya fokus keyboard yang terlihat (:focus-visible).
+              onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) setHot(i); }}
+              data-hot={hot === i || undefined}
+              onClick={() => { if (!swallowClick.current) a.onSelect(); }}
+            >
+              {a.icon && <Icon name={a.icon} size={18} />}
+              <span style={{ flexGrow: 1 }}>{a.label}</span>
+              {a.shortcut && <span className="t-footnote secondary" aria-hidden="true">{a.shortcut}</span>}
+            </motion.button>
+          ))}
+        </div>
       </motion.div>
     </>
   );

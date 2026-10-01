@@ -696,6 +696,27 @@ html:not([data-size="regular"]) .dialog-only { display: none; }
   min-height: 46px; border: 0; border-top: 1px solid var(--separator); background: transparent;
   font-size: 1rem; cursor: pointer; color: var(--blue-text);
 }
+/*
+ * Menu (React Bits Micro "Glide Select"): satu sorotan meluncur di antara
+ * baris, mengikuti kursor, fokus keyboard, atau jari (tekan-geser-lepas).
+ * Kontinuitas sudut: popover R_menu, border 1 px + padding --inset-menu,
+ * jadi sorotan dan baris = R_menu - inset - 1.
+ */
+.popover { --inset-menu: 6px; }
+.popover-list { position: relative; display: flex; flex-direction: column; padding: var(--inset-menu); touch-action: none; }
+.popover-glide {
+  position: absolute; left: var(--inset-menu); right: var(--inset-menu); top: 0;
+  border-radius: max(0px, calc(var(--r-menu) - var(--inset-menu) - 1px));
+  background: rgba(255, 255, 255, 0.12); pointer-events: none; will-change: transform, height;
+}
+.popover-list .popover-action { position: relative; z-index: 1; border-radius: max(0px, calc(var(--r-menu) - var(--inset-menu) - 1px)); border-top-color: transparent; background: transparent; }
+/* Pemisah lurus; disembunyikan di sekitar baris yang tersorot (seperti menu iOS). */
+.popover-list .popover-action + .popover-action::before {
+  content: ''; position: absolute; left: 12px; right: 12px; top: -0.5px; height: 1px; background: var(--separator);
+  transition: opacity 0.15s;
+}
+.popover-list .popover-action[data-hot]::before, .popover-list .popover-action[data-hot] + .popover-action::before { opacity: 0; }
+.popover-list .popover-action:hover, .popover-list .popover-action:active { background: transparent; }
 .popover-action:hover { background: var(--hover); }
 .popover-action.destructive { color: var(--red); font-weight: 600; }
 .popover-action[data-menu] {
@@ -814,7 +835,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
  * sepanjang radius nominal x 1,528 (border-radius inline dipasang
  * installSquircleGeometry). Diagonalnya = lingkaran beradius nominal.
  */
-:where(.icon-btn, .capsule, .photo-status-pill, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
+:where(.icon-btn, .capsule, .photo-status-pill, .popover-glide, .segmented, .segment, .segment-pill, .tabs, .tab, .tab-pill, .mobile-toolbar, .mobile-adjustments, .dropzone-cta,
        .list, .search-field, .callout, .sheet, .alert, .popover, .toast, .option, .nested-stock-swap, .choice-chip,
        .path-segment, .source-row, .step-btn, .popup select, .slider-zero, .compact-select, [style*="border-radius"]) {
   corner-shape: superellipse(1.704);
