@@ -115,12 +115,20 @@ export function planTiles(
   height: number,
   maxBytes: number,
   overlap: number,
+  forceTiling = false,
 ): TileSpec[] {
   if (width <= 0 || height <= 0) return [];
+  if (!forceTiling && width * height * BYTES_PER_PIXEL <= maxBytes) return [{
+    tileOriginX: 0, tileOriginY: 0, activeOriginX: 0, activeOriginY: 0,
+    activeWidth: width, activeHeight: height, tileWidth: width, tileHeight: height,
+  }];
 
   const maxPixels = Math.max(1, Math.floor(maxBytes / BYTES_PER_PIXEL));
   const budgetSide = Math.max(1, Math.floor(Math.sqrt(maxPixels)));
   const activeSide = Math.max(1, budgetSide - 2 * overlap);
+  if (!forceTiling && Math.min(width, 2 * overlap + 1) * Math.min(height, 2 * overlap + 1) > maxPixels) {
+    throw new RangeError('Spatial blur margins exceed the GPU tile budget. Reduce resolution or use a larger film format.');
+  }
 
   const tilesX = Math.max(1, Math.ceil(width / activeSide));
   const tilesY = Math.max(1, Math.ceil(height / activeSide));

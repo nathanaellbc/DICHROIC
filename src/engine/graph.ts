@@ -363,14 +363,9 @@ export class RenderGraph {
   /**
    * Task 19: titik masuk publik. `options.maxBufferBytes`, bila diberikan,
    * diteruskan ke `planTiles` (lih. `tiling.ts`) untuk merencanakan grid
-   * tile; "tiling jika perlu" (rencana Task 19) diputuskan dari HASIL
-   * perencanaan itu sendiri (`tiles.length > 1`), bukan dari perbandingan
-   * ukuran terpisah -- untuk gambar kecil dengan apron produksi (256px
-   * OFX vs gambar 32-64px), `params.width*height` sudah lebih kecil dari
-   * budget apa pun yang masuk akal SEKALIGUS apron sendirian sudah
-   * melebihi gambar; satu perbandingan ukuran tunggal tidak bisa
-   * menangkap kedua kasus itu sekaligus, sementara "berapa tile yang
-   * `planTiles` hasilkan" selalu benar oleh konstruksi.
+   * tile. Gambar yang muat memakai satu frame utuh: batas gambar sendiri
+   * sudah mencakup seluruh konteks blur, tanpa apron tambahan. Pengujian
+   * parity dapat memaksa tiling lewat `forceTiling`.
    *
    * `options.overlap` — BUKAN bagian tanda tangan yang dituliskan rencana
    * (`{ maxBufferBytes?: number }` saja) tapi tanpanya pemanggil tidak
@@ -389,6 +384,8 @@ export class RenderGraph {
     collect: TapName,
     options?: {
       maxBufferBytes?: number;
+      /** Diagnostic parity tests may deliberately tile an image that already fits. */
+      forceTiling?: boolean;
       overlap?: number;
       frame?: FrameParams;
       /**
@@ -404,7 +401,7 @@ export class RenderGraph {
     const maxBufferBytes = options?.maxBufferBytes;
     if (maxBufferBytes !== undefined) {
       const overlap = options?.overlap ?? 0;
-      const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap);
+      const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap, options?.forceTiling);
       if (tiles.length > 1) {
         const rgba = await this.runTiled(input, params, collect, tiles, frame);
         return output === 'rgb' ? packRgb(rgba, params.width * params.height) : rgba;

@@ -181,6 +181,16 @@ class OwnedArenaProvider implements ArenaProvider {
 /** Byte maksimum satu bidang FFT difusi (dari tiga; lih. `fitForDiffusion`). */
 export const DIFFUSION_PLANE_BUDGET = 256 * 1024 * 1024;
 
+/** Bound interactive GPU work, including the grain stage's three-layer buffer. */
+export function previewRenderLongEdge(width: number, height: number, requested: number, params: RenderParams, bindingBytes: number, memoryBytes = imageMemoryBudget()): number {
+  const pixels = Math.max(1, Math.floor(Math.min(8_388_608, memoryBytes / 256, bindingBytes / (params.grainEnabled ? 48 : 16))));
+  const native = Math.max(width, height);
+  let edge = Math.min(native, Math.max(1, Math.round(requested)), Math.floor(Math.sqrt(pixels * native / Math.min(width, height))));
+  const fits = (v: number) => v * Math.max(1, Math.round(v * Math.min(width, height) / native)) <= pixels;
+  while (edge > 1 && !fits(edge)) edge--;
+  return edge;
+}
+
 /**
  * Sisi panjang terbesar (<= asli) tempat render penuh dengan difusi aktif
  * muat: frame utuh dalam satu binding storage, dan tiap bidang FFT df64
@@ -234,6 +244,7 @@ export class Session {
   #imageId = 0;
   #photoId = 0;
   #preview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
+  #draftPreview: { imageId: number; longEdge: number; image: ScaledImage } | undefined;
   #originalPreview: { imageId: number; longEdge: number; frame: Frame } | undefined;
   /** Peta kedalaman foto terbuka (lens blur); dihapus saat `open`. */
   #depth: DepthMap | undefined;
@@ -366,6 +377,7 @@ export class Session {
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#draftPreview = undefined;
     this.#originalPreview = undefined;
     this.#depth = undefined;
     this.#depthId += 1;
@@ -446,6 +458,7 @@ export class Session {
       this.#paramsVersion += 1;
       this.#depthId += 1;
       this.#preview = undefined;
+      this.#draftPreview = undefined;
       this.#originalPreview = undefined;
       this.#cache.clear();
       this.#previewCache.clear();
@@ -580,7 +593,7 @@ export class Session {
     const key = this.cacheKey(quality, longEdge);
     const frame =
       quality === 'preview'
-        ? this.fitForDiffusion(this.previewImage(longEdge), params)
+        ? this.fitForDiffusion(this.previewImage(previewRenderLongEdge(image.width, image.height, longEdge ?? this.previewMaxLongEdge, params, this.engine.maxStorageBufferBindingSize)), params)
         : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
     let rgb: Float32Array;
     try {
@@ -642,15 +655,16 @@ export class Session {
   }
 
   private previewImage(longEdge = this.previewMaxLongEdge): ScaledImage {
-    if (this.#preview?.imageId !== this.#imageId || this.#preview.longEdge !== longEdge) {
-      const image = this.#image!;
-      this.#preview = {
-        imageId: this.#imageId,
-        longEdge,
-        image: boxDownscale(image.rgba, image.width, image.height, longEdge),
-      };
+    for (const cached of [this.#preview, this.#draftPreview]) {
+      if (cached?.imageId === this.#imageId && cached.longEdge === longEdge) return cached.image;
     }
-    return this.#preview.image;
+    const image = this.#image!;
+    const cached = { imageId: this.#imageId, longEdge, image: boxDownscale(image.rgba, image.width, image.height, longEdge) };
+    // Keep both refinement and draft inputs: switching quality must not scan
+    // the entire 44 MP original again on every parameter change.
+    if (longEdge <= 512) this.#draftPreview = cached;
+    else this.#preview = cached;
+    return cached.image;
   }
 
   /** Comparison pixels depend only on the source and size, never slider values. */
@@ -810,6 +824,7 @@ export class Session {
     this.#photoId = 0;
     this.#imageId += 1;
     this.#preview = undefined;
+    this.#draftPreview = undefined;
     this.#originalPreview = undefined;
     this.#depth = undefined;
     this.#depthId += 1;

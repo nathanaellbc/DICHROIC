@@ -175,7 +175,7 @@ describe('Task 19 -- gerbang bit-identik (full-frame vs ter-tile)', () => {
       const TEST_OVERLAP_PX = 16;
       expect(estimateTileOverlap(flags)).toBeGreaterThanOrEqual(TEST_OVERLAP_PX);
 
-      const plannedTiles = planTiles(meta.width, meta.height, 65536, TEST_OVERLAP_PX);
+      const plannedTiles = planTiles(meta.width, meta.height, 65536, TEST_OVERLAP_PX, true);
       expect(plannedTiles.length).toBe(4);
 
       const fullFrameGraph = new RenderGraph(engine);
@@ -186,7 +186,7 @@ describe('Task 19 -- gerbang bit-identik (full-frame vs ter-tile)', () => {
       const tiledGraph = new RenderGraph(engine);
       for (const stage of fullChain(engine.device, arenas)) tiledGraph.addStage(stage);
       const tiled = await tiledGraph.run(inputRgba, params, Tap.RGB_OUT, {
-        maxBufferBytes: 65536,
+        maxBufferBytes: 65536, forceTiling: true,
         overlap: TEST_OVERLAP_PX,
       });
       tiledGraph.dispose();
@@ -371,7 +371,7 @@ describe('Task 19b -- gerbang bit-identik pada skala apron produksi (agenda #3)'
       const budgetSide = ACTIVE_SIDE_PX + 2 * overlap;
       const maxBufferBytes = budgetSide * budgetSide * 16;
 
-      const plannedTiles = planTiles(width, height, maxBufferBytes, overlap);
+      const plannedTiles = planTiles(width, height, maxBufferBytes, overlap, true);
       expect(plannedTiles.length).toBeGreaterThan(1);
 
       const fullFrameGraph = new RenderGraph(engine);
@@ -382,7 +382,7 @@ describe('Task 19b -- gerbang bit-identik pada skala apron produksi (agenda #3)'
       const tiledGraph = new RenderGraph(engine);
       for (const stage of productionScaleChain(engine.device, arenas)) tiledGraph.addStage(stage);
       const tiled = await tiledGraph.run(inputRgba, params, Tap.RGB_OUT, {
-        maxBufferBytes,
+        maxBufferBytes, forceTiling: true,
         overlap,
       });
       tiledGraph.dispose();
@@ -449,7 +449,7 @@ describe('Fase 2A.5 -- tiling di rezim resolusi produksi (IIR)', () => {
         createDirStage(engine.device, arenas),
       ];
       const maxBufferBytes = (300 + 2 * overlap) * (300 + 2 * overlap) * 16;
-      expect(planTiles(width, height, maxBufferBytes, overlap).length).toBe(20);
+      expect(planTiles(width, height, maxBufferBytes, overlap, true).length).toBe(20);
 
       const fullGraph = new RenderGraph(engine);
       for (const stage of chain()) fullGraph.addStage(stage);
@@ -458,7 +458,7 @@ describe('Fase 2A.5 -- tiling di rezim resolusi produksi (IIR)', () => {
 
       const tiledGraph = new RenderGraph(engine);
       for (const stage of chain()) tiledGraph.addStage(stage);
-      const tiled = await tiledGraph.run(inputRgba, params, Tap.CMY_FILM, { frame, maxBufferBytes, overlap });
+      const tiled = await tiledGraph.run(inputRgba, params, Tap.CMY_FILM, { frame, maxBufferBytes, overlap, forceTiling: true });
       tiledGraph.dispose();
 
       let maxAbs = 0;
