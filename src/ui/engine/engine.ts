@@ -358,8 +358,12 @@ export class Engine {
     this.#depthMap = undefined;
     this.#depth.reset(changed.guide);
     this.#canUndoRemoval = !!crop;
-    this.#set({ original: changed.original });
-    this.requestRender();
+    // Never return to a frame containing the pre-retouch source while grading
+    // catches up. Apply stays pending until a new graded preview is available.
+    this.#formatPreview = false;
+    this.#cancelRefinement();
+    this.#set({ original: changed.original, frame: changed.original });
+    await this.#renderOnce();
     if (this.#state.params.lensBlurEnabled) this.#depth.ensure();
   }
 

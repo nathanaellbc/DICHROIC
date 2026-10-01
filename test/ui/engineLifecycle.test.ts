@@ -9,6 +9,7 @@ const client = vi.hoisted(() => ({
   setParams: vi.fn(), render: vi.fn(), close: vi.fn(),
   dispose: vi.fn(), shutdown: vi.fn(),
   renderExport: vi.fn(), exportImage: vi.fn(), exportCube: vi.fn(), lastFullSize: vi.fn(),
+  applyRemoval: vi.fn(), undoRemoval: vi.fn(),
 }));
 vi.mock('../../src/session/client', () => ({ SessionClient: { attach: () => client } }));
 vi.mock('../../src/depth/model', () => ({ depthProfile: async () => ({ backend: 'wasm', guideMaxEdge: 16 }), firstDownloadBytes: async () => 1 }));
@@ -43,6 +44,24 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('photo lifecycle', () => {
+  it('keeps Apply pending until the retouched source has a graded preview', async () => {
+    const engine = new Engine(); await engine.openFile(file('retouch.png'));
+    const retouched = { ...photo.original, pixels: Uint8ClampedArray.of(10, 20, 30, 255) };
+    client.undoRemoval.mockResolvedValue({ original: retouched, guide: photo.guide });
+    const rendering = deferred<RenderResult>(); client.render.mockReturnValueOnce(rendering.promise);
+    let completed = false;
+    const applying = engine.applyRemoval().then(() => { completed = true; });
+    await flush();
+    expect(completed).toBe(false);
+    expect(engine.getState().frame).toBe(retouched);
+    expect(engine.getState().original).toBe(retouched);
+    rendering.resolve({ ...frame, rgb: Float32Array.of(.1, .2, .3) });
+    await applying;
+    expect(completed).toBe(true);
+    expect(engine.getState().frame).not.toBe(retouched);
+    expect(engine.getState().frame!.pixels[0]).toBe(26);
+    engine.closePhoto();
+  });
   it('film format gives a small preview, coalesces changes, then restores acquired detail', async () => {
     vi.useFakeTimers();
     const engine = new Engine();
