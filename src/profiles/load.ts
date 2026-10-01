@@ -122,7 +122,10 @@ async function fetchBytes(url: string): Promise<ArrayBuffer> {
     }
     return response.arrayBuffer();
   }
-  const { readFile } = await import('node:fs/promises');
+  // Spesifier lewat variabel: bundler browser tidak menyelesaikannya (dulu
+  // menjadi modul kosong yang ditaruh Rollup di chunk entry worker sesi).
+  const fsModule = 'node:fs/promises';
+  const { readFile } = (await import(/* @vite-ignore */ fsModule)) as typeof import('node:fs/promises');
   const buf = await readFile(url);
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }

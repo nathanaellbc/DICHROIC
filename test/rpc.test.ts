@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { MessageChannel } from 'node:worker_threads';
 import type { MessagePort as NodeMessagePort } from 'node:worker_threads';
 import { SessionClient } from '../src/session/client';
-import { serveSession } from '../src/session/worker';
+import { serveSession } from '../src/session/server';
 import type { MessagePortLike, SessionLike } from '../src/session/protocol';
 import { transferablesOf } from '../src/session/protocol';
 import { UnverifiedParameterError } from '../src/params/registry';
@@ -13,7 +13,7 @@ import type { ExportFormat, RenderResult } from '../src/session/session';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodeImage, DecodeError } from '../src/io';
-import type { ServeOptions } from '../src/session/worker';
+import type { ServeOptions } from '../src/session/server';
 
 /** Adaptor `MessagePort` Node ke bentuk DOM (`addEventListener` + `event.data`). */
 function domPort(port: NodeMessagePort): MessagePortLike {

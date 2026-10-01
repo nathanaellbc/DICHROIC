@@ -1,86 +1,63 @@
 /**
- * Sisi worker RPC `Session`. `serveSession` bebas lingkungan (diuji di Node
- * dengan `MessageChannel`); entry browser di bawah memanggilnya dengan
- * `self` bila modul ini berjalan sebagai Dedicated Worker.
+ * Entry Dedicated Worker `Session`: bootstrap kecil, sengaja tanpa import
+ * statis.
  *
- * Panggilan dilayani BERURUTAN sesuai kedatangan, kecuali `render`,
- * `exportCube`, `renderExport`, `exportImage`, dan `decode` yang asinkron: dimulai berurutan
- * tapi boleh selesai tidak berurutan (antrean terbaru-menang ada di `Session`
- * sendiri). `decode` tidak butuh `init`.
+ * Kenapa: dulu entry ini berisi server-nya sendiri, dan Rollup menaruh kode
+ * bersama (mis. `DecodeError`) di chunk entry, sehingga chunk decoder yang
+ * dimuat dinamis (`jpeg`, `png`, `tiff`, `exr`, `raw`) meng-import file entry
+ * worker. Safari iOS mengevaluasi ulang modul itu saat di-import, sehingga
+ * terpasang `serveSession` KEDUA yang tak pernah menerima `init`. Pada RPC
+ * berikutnya salinan itu langsung membalas `RPC "stageOpen" sebelum "init"`,
+ * dan balasan galat itu tiba lebih dulu dari balasan sesi yang sebenarnya
+ * (iOS mengubah foto galeri menjadi JPEG, jadi decoder JPEG hampir selalu
+ * dimuat). Chrome tidak mengevaluasi ulang, jadi hanya terlihat di iPhone.
+ *
+ * Sekarang server ada di `server.ts` (dimuat dinamis), tidak ada chunk yang
+ * meng-import entry ini, dan penanda global menjamin satu server per worker.
+ * Pesan yang tiba selagi `server.ts` dimuat ditampung lalu dilayani berurutan.
  */
 
-import type { DecodedImage } from '../io/decoded';
-import { decodeImage } from '../io';
-import type { MessagePortLike, RpcError, RpcRequest, RpcResponse, SessionInit, SessionLike } from './protocol';
-import { cloneTypedArrays, transferablesOf } from './protocol';
-import { Session } from './session';
+import type { MessagePortLike } from './protocol';
 
-export interface ServeOptions {
-  /** Decoder untuk RPC `decode`; bawaan `io/decodeImage` (test menyuntik `wasmBinary` LibRaw). */
-  decode?: (bytes: Uint8Array, name?: string) => Promise<DecodedImage>;
+/** Penanda di scope worker: server sudah (sedang) dipasang. */
+export const SERVER_FLAG = '__dichroicSessionServer';
+
+type WorkerScope = MessagePortLike & {
+  importScripts?: unknown;
+  name?: string;
+  [SERVER_FLAG]?: true;
+};
+
+/**
+ * Pasang server sekali per scope. `load` memuat `server.ts` (disuntik oleh
+ * test). Mengembalikan `false` bila server sudah terpasang.
+ */
+export function bootWorker(
+  scope: WorkerScope,
+  load: () => Promise<{ startWorker(scope: MessagePortLike, backlog: ReadonlyArray<{ data?: unknown }>): void }>,
+): boolean {
+  if (scope[SERVER_FLAG]) return false;
+  scope[SERVER_FLAG] = true;
+  const backlog: Array<{ data?: unknown }> = [];
+  const hold = (event: { data?: unknown }) => backlog.push(event);
+  scope.addEventListener('message', hold);
+  void load().then(
+    ({ startWorker }) => {
+      scope.removeEventListener?.('message', hold);
+      startWorker(scope, backlog);
+    },
+    (error: unknown) => {
+      // Modul server gagal dimuat (jaringan/offline): gagalkan semua RPC.
+      scope.removeEventListener?.('message', hold);
+      const message = error instanceof Error ? error.message : String(error);
+      scope.postMessage({ id: 0, ok: false, error: { name: 'Error', message: `The image worker failed to load: ${message}` } });
+    },
+  );
+  return true;
 }
 
-export function serveSession(
-  port: MessagePortLike,
-  factory: (init: SessionInit) => Promise<SessionLike>,
-  options: ServeOptions = {},
-): void {
-  const decode = options.decode ?? ((bytes: Uint8Array, name?: string) => decodeImage(bytes, name));
-  let session: Promise<SessionLike> | undefined;
-
-  const reply = (response: RpcResponse, transfer: Transferable[] = []): void => {
-    port.postMessage(response, transfer);
-  };
-
-  port.addEventListener('message', (event) => {
-    const request = event.data as RpcRequest;
-    void (async () => {
-      try {
-        let result: unknown;
-        if (request.method === 'decode') {
-          // Gambar hasil decode milik penerima saja: DITRANSFER, tidak disalin
-          // (bisa ratusan MB untuk RAW besar).
-          const image = await decode(...request.args);
-          reply({ id: request.id, ok: true, result: image }, transferablesOf(image));
-          return;
-        }
-        if (request.method === 'init') {
-          session = factory(request.args[0] as SessionInit);
-          await session;
-        } else {
-          if (!session) throw new Error(`RPC "${request.method}" sebelum "init".`);
-          const target = await session;
-          const method = target[request.method] as (...args: unknown[]) => unknown;
-          result = await method.apply(target, request.args);
-        }
-        // Berkas ekspor tidak disimpan Session, jadi langsung DITRANSFER tanpa
-        // salinan (dulu satu salinan seukuran berkas per encode). Hasil lain
-        // bisa berupa array yang di-cache Session: disalin dulu.
-        const copy = request.method === 'exportImage' ? result : cloneTypedArrays(result);
-        reply({ id: request.id, ok: true, result: copy }, transferablesOf(copy));
-      } catch (e) {
-        reply({ id: request.id, ok: false, error: serializeError(e) });
-      }
-    })();
-  });
-  port.start?.();
-}
-
-function serializeError(e: unknown): RpcError {
-  if (e instanceof Error) {
-    const data: Record<string, unknown> = {};
-    for (const key of ['field', 'value', 'baseline', 'format', 'reason'] as const) {
-      if (key in e) data[key] = (e as unknown as Record<string, unknown>)[key];
-    }
-    return { name: e.name, message: e.message, data };
-  }
-  return { name: 'Error', message: String(e) };
-}
-
-// Entry browser: hanya aktif di dalam Dedicated Worker (punya importScripts).
-const scope = globalThis as unknown as { importScripts?: unknown } & MessagePortLike;
-if (typeof scope.importScripts === 'function') {
-  serveSession(scope, (init) => Session.create({ assetsBaseUrl: init.assetsBaseUrl,
-    onDeviceLost: (error) => scope.postMessage({ id: 0, ok: false, error: serializeError(error) }),
-  }));
+// Hanya di Dedicated Worker (punya importScripts), bukan thread pthread Emscripten.
+const scope = globalThis as unknown as WorkerScope;
+if (typeof scope.importScripts === 'function' && !scope.name?.startsWith('em-pthread')) {
+  bootWorker(scope, () => import('./server'));
 }
