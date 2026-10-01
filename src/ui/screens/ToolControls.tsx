@@ -35,13 +35,10 @@ import type { ChoiceTool, LensTool, StepperTool, Tool, ToolGroup } from '../mode
 /** Status peta kedalaman dan aksi lens blur (grup Lens). */
 export interface LensContext {
   depth: DepthState;
-  /** Mode pilih titik fokus aktif di foto. */
-  picking: boolean;
   /** Rasio lebar/tinggi foto (readout kedalaman ruang). */
   aspect: number;
   onDownload: () => void;
   onRetry: () => void;
-  onPickFocus: () => void;
 }
 
 export interface ToolContext {
@@ -311,12 +308,10 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
     case 'ready':
       status = (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <PressButton className="capsule bordered" aria-pressed={lens.picking} onClick={lens.onPickFocus} style={lens.picking ? { background: 'var(--blue)', color: '#fff' } : undefined}>
-            <Icon name="focus" size={16} /> {lens.picking ? 'Done' : 'Pick Focus'}
-          </PressButton>
           <span className="t-footnote secondary">
             Depth ready · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
           </span>
+          <span className="t-footnote secondary">Drag the focus pin on the photo to focus.</span>
         </div>
       );
       break;

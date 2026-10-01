@@ -99,16 +99,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     onOpenList: (tool) => setSheet({ kind: 'list', toolId: tool.id }),
     lens: {
       depth: state.depth,
-      picking,
       aspect: state.frame ? state.frame.width / state.frame.height : 1.5,
       onDownload: () => engine.downloadDepth(),
       onRetry: () => engine.retryDepth(),
-      onPickFocus: () => {
-        if (picking && focusPreview && (focusPreview.x !== state.params.lensFocusX || focusPreview.y !== state.params.lensFocusY)) {
-          engine.setParams({ lensFocusX: focusPreview.x, lensFocusY: focusPreview.y });
-        }
-        setPickingFocus(!picking);
-      },
     },
   };
 
@@ -196,13 +189,15 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       focus={{
         x: state.params.lensFocusX,
         y: state.params.lensFocusY,
-        show: group === 'lens' && state.params.lensBlurEnabled,
+        show: group === 'lens' && state.params.lensBlurEnabled && state.depth.status === 'ready',
         picking,
-        // Focus point and depth-of-field mask follow a held drag until Done.
+        onStart: () => setPickingFocus(true),
+        // Preview only while held; commit a single render on release.
         onPreview: (x, y) => setFocusPreview((previous) => previous?.x === x && previous.y === y ? previous : { x, y }),
-        onPreviewCancel: () => setFocusPreview(null),
+        onPreviewCancel: () => { setFocusPreview(null); setPickingFocus(false); },
         onPick: (lensFocusX, lensFocusY) => {
           setFocusPreview(null);
+          setPickingFocus(false);
           if (lensFocusX !== state.params.lensFocusX || lensFocusY !== state.params.lensFocusY) engine.setParams({ lensFocusX, lensFocusY });
         },
         onCancel: () => setPickingFocus(false),
