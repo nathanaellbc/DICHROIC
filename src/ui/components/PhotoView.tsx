@@ -129,11 +129,19 @@ export function PhotoView({
   const [view, setView] = useState<View>(FIT);
   const reducedMotion = useReducedMotion();
   const returnAnimation = useRef<{ stop: () => void } | null>(null);
+  const wheelFrame = useRef(0);
+  const wheelTarget = useRef<View | null>(null);
   const stopReturn = () => {
     returnAnimation.current?.stop();
     returnAnimation.current = null;
+    cancelAnimationFrame(wheelFrame.current);
+    wheelFrame.current = 0;
+    wheelTarget.current = null;
   };
-  useEffect(() => () => returnAnimation.current?.stop(), []);
+  useEffect(() => () => {
+    returnAnimation.current?.stop();
+    cancelAnimationFrame(wheelFrame.current);
+  }, []);
   const holdTimer = useRef(0);
   const splitDrag = useRef(false);
   const pointers = useRef(new Map<number, Point>());
@@ -189,7 +197,7 @@ export function PhotoView({
   }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey]);
 
   useEffect(() => {
-    returnAnimation.current?.stop();
+    stopReturn();
     setView(FIT);
   }, [photoKey]);
 
@@ -257,9 +265,9 @@ export function PhotoView({
     const clamped = Math.min(MAX_ZOOM, Math.max(1, s));
     return clampView({ s: clamped, tx: ax - rect.left - p.x * clamped * rect.width, ty: ay - rect.top - p.y * clamped * rect.height });
   };
-  const latest = useRef({ clampView, zoomAt });
-  useEffect(() => {
-    latest.current = { clampView, zoomAt };
+  const latest = useRef({ clampView, zoomAt, view, reducedMotion });
+  useLayoutEffect(() => {
+    latest.current = { clampView, zoomAt, view, reducedMotion };
   });
 
   const local = (clientX: number, clientY: number): Point => {
@@ -272,20 +280,54 @@ export function PhotoView({
   useEffect(() => {
     const el = areaRef.current;
     if (!el) return;
+    let previousTime = 0;
+    const advance = (now: number) => {
+      const target = wheelTarget.current;
+      if (!target) { wheelFrame.current = 0; return; }
+      const from = latest.current.view;
+      // Frame-rate-independent easing, retargeted from the current displayed
+      // view. A wheel notch changes the destination, never jumps the photo.
+      const dt = Math.min(64, Math.max(1, now - previousTime));
+      previousTime = now;
+      const amount = 1 - Math.exp(-dt / 70);
+      const settled = Math.abs(target.s - from.s) < 0.0001 && Math.abs(target.tx - from.tx) < 0.05 && Math.abs(target.ty - from.ty) < 0.05;
+      const next = settled ? target : {
+        s: from.s + (target.s - from.s) * amount,
+        tx: from.tx + (target.tx - from.tx) * amount,
+        ty: from.ty + (target.ty - from.ty) * amount,
+      };
+      latest.current.view = next;
+      setView(next);
+      if (settled) { wheelTarget.current = null; wheelFrame.current = 0; }
+      else wheelFrame.current = requestAnimationFrame(advance);
+    };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       returnAnimation.current?.stop();
+      returnAnimation.current = null;
       const box = el.getBoundingClientRect();
-      const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002));
-      setView((v) => latest.current.zoomAt(v, v.s * factor, e.clientX - box.left, e.clientY - box.top));
+      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1);
+      const factor = Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002));
+      const from = wheelTarget.current ?? latest.current.view;
+      const target = latest.current.zoomAt(from, from.s * factor, e.clientX - box.left, e.clientY - box.top);
+      if (latest.current.reducedMotion) {
+        latest.current.view = target;
+        setView(target);
+        return;
+      }
+      wheelTarget.current = target;
+      if (!wheelFrame.current) {
+        previousTime = performance.now();
+        wheelFrame.current = requestAnimationFrame(advance);
+      }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    return () => { el.removeEventListener('wheel', onWheel); cancelAnimationFrame(wheelFrame.current); };
   }, []);
 
   // Ukuran area berubah (rotasi, panel): jaga tampilan tetap sah.
   useEffect(() => {
-    returnAnimation.current?.stop();
+    stopReturn();
     setView((v) => latest.current.clampView(v));
   }, [area.width, area.height, rect.width, rect.height]);
 
