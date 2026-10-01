@@ -163,10 +163,10 @@ export function Switch({
   // Geometri dari CSS (`--switch-*`), diukur ulang saat kepadatan berubah.
   const geo = useRef({ travel: 20, knob: 27 });
   const knobBase = useMotionValue(27);
-  const x = useMotionValue(0);
+  const x = useMotionValue(checked ? (typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular' ? 10 : 20) : 0);
   const press = useSpring(0, LENS_SPRING);
   const flow = useSpring(useVelocity(x), { stiffness: 320, damping: 40, mass: 0.6 });
-  const grow = useTransform(press, (p) => p * SWITCH_GROW);
+  const grow = useTransform([press, knobBase], ([p, k]: number[]) => p! * SWITCH_GROW * k! / 27);
   const knobWidth = useTransform([grow, knobBase], ([g, k]: number[]) => k! + g!);
   // Knob melebar ke arah tengah trek: ke kanan saat mati, ke kiri saat menyala.
   const left = useTransform([x, grow], ([xv, g]: number[]) => xv! - g! * (xv! / (geo.current.travel || 1)));

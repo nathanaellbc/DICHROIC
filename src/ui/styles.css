@@ -441,6 +441,7 @@ html[data-size="compact"] .photo-dropzone[data-drag-over="true"] { background: v
   background: var(--fill-strong); transition: background-color 0.2s;
 }
 .switch[aria-checked="true"] { background: var(--blue-fill); }
+html[data-size="regular"] .switch { --switch-width: 24px; --switch-height: 14px; --switch-inset: 1px; }
 .switch:disabled { opacity: 0.4; cursor: default; }
 /*
  * Knob: posisi, lebar, dan regangan digerakkan Motion (controls.tsx, gaya
