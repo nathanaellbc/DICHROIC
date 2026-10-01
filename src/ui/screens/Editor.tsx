@@ -565,7 +565,12 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
     <div
       style={{
         position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)',
-        display: 'grid', gridTemplateColumns: `${SIDEBAR_WIDTH}px minmax(0, 1fr) ${INSPECTOR_WIDTH}px`, gridTemplateRows: '52px minmax(0, 1fr)',
+        // Lebar panel dari styles.css (HP lanskap lebih sempit). Kolom tepi
+        // ikut melebar sebesar safe area (0 di desktop): latarnya sampai ke
+        // tepi layar, isinya diberi padding di styles.css.
+        display: 'grid',
+        gridTemplateColumns: `calc(var(--sidebar-w, ${SIDEBAR_WIDTH}px) + var(--safe-left)) minmax(0, 1fr) calc(var(--inspector-w, ${INSPECTOR_WIDTH}px) + var(--safe-right))`,
+        gridTemplateRows: '52px minmax(0, 1fr)',
       }}
     >
       <header className="window-toolbar editor-frost" style={{ gridColumn: '1 / -1' }}>

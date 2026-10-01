@@ -123,6 +123,26 @@ html[data-size="regular"] {
   --icon-btn: 30px;
 }
 
+/*
+ * HP diputar lanskap (hooks.ts readSizeClass): tata letak PC. Panel lebih
+ * sempit supaya foto tetap lega di 852 x 393, dan kontrol sedikit lebih
+ * besar dari kepadatan macOS karena disentuh jari.
+ */
+html[data-phone] {
+  --sidebar-w: 200px;
+  --inspector-w: 264px;
+  --h-control: 32px;
+  --h-control-lg: 36px;
+  --h-row: 36px;
+  --icon-btn: 36px;
+}
+
+/* Safe area (Dynamic Island, home indicator): latar sampai tepi, isi menjauh. 0 di desktop. */
+html[data-phone] .window-toolbar { padding-left: calc(16px + var(--safe-left)); padding-right: calc(10px + var(--safe-right)); }
+html[data-phone] nav[aria-label="Stocks"] { padding-left: var(--safe-left); padding-bottom: var(--safe-bottom); }
+html[data-phone] aside[aria-label="Parameters"] { padding-right: var(--safe-right); padding-bottom: var(--safe-bottom); }
+html[data-phone] .status-bar { padding-bottom: var(--safe-bottom); height: calc(28px + var(--safe-bottom)); }
+
 html {
   font-size: 17px;
   -webkit-text-size-adjust: 100%;

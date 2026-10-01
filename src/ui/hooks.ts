@@ -7,10 +7,12 @@ export function useEngineState(): EngineState {
 }
 
 export interface SizeClass {
-  /** `regular`: lebar ≥ 1080 dan tinggi ≥ 560 (iPad lanskap, desktop). */
+  /** `regular`: lebar ≥ 1080 dan tinggi ≥ 560 (iPad lanskap, desktop), atau HP lanskap. */
   width: 'compact' | 'regular';
-  /** Compact dengan tinggi pendek (iPhone lanskap): panel pindah ke samping. */
+  /** Compact dengan tinggi pendek (jendela desktop pendek): panel pindah ke samping. */
   landscape: boolean;
+  /** HP diputar lanskap: tata letak PC dengan panel lebih sempit dan safe area. */
+  phone: boolean;
 }
 
 /**
@@ -20,11 +22,17 @@ export interface SizeClass {
  */
 const REGULAR_MIN_WIDTH = 1080;
 
+/** Tinggi maksimum layar HP dalam posisi lanskap (iPhone Pro Max: 430). */
+const PHONE_LANDSCAPE_MAX_HEIGHT = 560;
+
 function readSizeClass(): SizeClass {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const regular = w >= REGULAR_MIN_WIDTH && h >= 560;
-  return { width: regular ? 'regular' : 'compact', landscape: !regular && w > h && h < 520 };
+  // Layar sentuh yang diputar lanskap dan pendek = HP: pakai tata letak PC.
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  const phone = coarse && w > h && h < PHONE_LANDSCAPE_MAX_HEIGHT;
+  const regular = phone || (w >= REGULAR_MIN_WIDTH && h >= 560);
+  return { width: regular ? 'regular' : 'compact', landscape: !regular && w > h && h < 520, phone };
 }
 
 export function useSizeClass(): SizeClass {
@@ -32,7 +40,7 @@ export function useSizeClass(): SizeClass {
   useEffect(() => {
     const onResize = () => setSize((prev) => {
       const next = readSizeClass();
-      return prev.width === next.width && prev.landscape === next.landscape ? prev : next;
+      return prev.width === next.width && prev.landscape === next.landscape && prev.phone === next.phone ? prev : next;
     });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);

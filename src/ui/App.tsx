@@ -20,7 +20,10 @@ export function App() {
   // Kepadatan (styles.css): ukuran iOS di compact, kepadatan macOS di regular.
   useLayoutEffect(() => {
     document.documentElement.dataset.size = wide ? 'regular' : 'compact';
-  }, [wide]);
+    // HP lanskap: tata letak PC, dengan panel sempit dan safe area (styles.css).
+    if (size.phone) document.documentElement.dataset.phone = '';
+    else delete document.documentElement.dataset.phone;
+  }, [wide, size.phone]);
 
   const openFile = useCallback((file: File) => void engine.openFile(file), []);
   const picker = useFilePicker(openFile);
