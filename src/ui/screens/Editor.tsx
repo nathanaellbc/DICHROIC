@@ -446,8 +446,8 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
   const topBarTop = 'max(var(--safe-top), 12px)';
   const photoTop = 'calc(max(var(--safe-top), 12px) + 68px)';
   const photoStyle: React.CSSProperties = landscape
-    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)' }
-    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto ? photoBottom : 'var(--safe-bottom)' };
+    ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: hasPhoto && !removing ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)' }
+    : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto && !removing ? photoBottom : 'var(--safe-bottom)' };
 
   return (
     <div className={`mobile-editor${landscape ? ' is-landscape' : ''}`} style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: 'var(--bg)' }}>
@@ -458,10 +458,10 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
-          right: landscape && hasPhoto && !removing ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+          right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
-        {removing ? <div className="mobile-brand"><span>Remove Object</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
+        {removing ? <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
           <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Your pocket darkroom</span></div>
           <PressButton className="icon-btn plain" aria-label="Open Photo" onClick={onOpenFile}><Icon name="open" size={20} /></PressButton>
         </> : <>
@@ -511,7 +511,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       <section
         ref={panelRef}
         aria-label={removing ? 'Object removal controls' : 'Adjustments'}
-        className={removing ? 'remove-controls-floating' : 'panel editor-frost mobile-adjustments'}
+        className="panel editor-frost mobile-adjustments"
         hidden={!hasPhoto}
         inert={!hasPhoto}
         style={{
