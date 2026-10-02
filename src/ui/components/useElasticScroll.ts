@@ -11,7 +11,7 @@ function scrollLimit(el: HTMLDivElement): number {
   return Math.max(0, (track?.offsetWidth ?? 0) + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) - el.clientWidth);
 }
 
-/** Native scroll coordinates for wheels/focus, with pointer rubber-banding. */
+/** Native touch scrolling; mouse dragging keeps pointer rubber-banding. */
 export function useElasticScroll() {
   const ref = useRef<HTMLDivElement>(null);
   const offset = useMotionValue(0);
@@ -62,6 +62,13 @@ export function useElasticScroll() {
     handlers: {
       onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
         if (!e.isPrimary || e.button !== 0) return;
+        // Safari handles touch inertia on its scrolling thread. Do not capture
+        // the finger or rewrite scrollLeft on every touch pointermove.
+        if (e.pointerType === 'touch') {
+          reset();
+          suppressClick.current = false;
+          return;
+        }
         animation.current?.stop();
         suppressClick.current = false;
         const el = e.currentTarget;
