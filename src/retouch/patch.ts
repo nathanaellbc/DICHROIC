@@ -15,6 +15,7 @@ export function removalSample(output: Float32Array, channel: number, x: number, 
 }
 
 export function prepareRemoval(image: DecodedImage, selection: RemovalMask, revision: number): RemovalCrop {
+  if (image.rgba.length !== image.width * image.height * 4) throw new Error('Invalid removal source.');
   if (!['sRGB', 'Linear Rec.709'].includes(image.suggestedColorSpace)) throw new Error('Remove currently supports sRGB photos and Linear Rec.709 RAW. Convert other color spaces first.');
   const { width: mw, height: mh, data } = selection;
   if (mw < 1 || mh < 1 || !Number.isInteger(mw) || !Number.isInteger(mh) || data.length !== mw * mh) throw new Error('Invalid removal mask.');
@@ -24,7 +25,6 @@ export function prepareRemoval(image: DecodedImage, selection: RemovalMask, revi
   const cx = (l + r + 1) * image.width / mw / 2, cy = (t + b + 1) * image.height / mh / 2;
   const edge = Math.ceil(Math.max((r - l + 1) * image.width / mw, (b - t + 1) * image.height / mh) * 1.6);
   const width = Math.min(image.width, Math.max(32, edge)), height = Math.min(image.height, Math.max(32, edge));
-  if (width * height > 4_194_304) throw new Error('Brush a smaller area for a detailed result. Remove large objects in separate passes.');
   const x = Math.max(0, Math.min(image.width - width, Math.floor(cx - width / 2)));
   const y = Math.max(0, Math.min(image.height - height, Math.floor(cy - height / 2)));
   const n = PATCH_SIZE ** 2, rgb = new Float32Array(n * 3), mask = new Float32Array(n);
@@ -38,21 +38,29 @@ export function prepareRemoval(image: DecodedImage, selection: RemovalMask, revi
   return { revision, x, y, width, height, rgb, mask };
 }
 
-/** Only masked pixels change. The returned native float crop supports exact undo. */
+/** Only masked RGB pixels are backed up; unselected context and alpha never change. */
 export function applyRemoval(image: DecodedImage, crop: RemovalCrop, output: Float32Array): Float32Array {
   const n = PATCH_SIZE ** 2;
   if (output.length !== n * 3 || crop.mask.length !== n || output.some(v => !Number.isFinite(v))) throw new Error('Invalid LaMa result.');
-  if (![crop.x, crop.y, crop.width, crop.height].every(Number.isInteger) || crop.x < 0 || crop.y < 0 || crop.width < 1 || crop.height < 1 || crop.x + crop.width > image.width || crop.y + crop.height > image.height || crop.width * crop.height > 4_194_304) throw new Error('Invalid removal bounds.');
-  const backup = new Float32Array(crop.width * crop.height * 4);
+  if (![crop.x, crop.y, crop.width, crop.height].every(Number.isInteger) || crop.x < 0 || crop.y < 0 || crop.width < 1 || crop.height < 1 || crop.x + crop.width > image.width || crop.y + crop.height > image.height) throw new Error('Invalid removal bounds.');
+  let selectedPixels = 0;
+  for (let my = 0; my < PATCH_SIZE; my++) for (let mx = 0; mx < PATCH_SIZE; mx++) {
+    if (!crop.mask[my * PATCH_SIZE + mx]) continue;
+    const width = Math.ceil((mx + 1) * crop.width / PATCH_SIZE) - Math.ceil(mx * crop.width / PATCH_SIZE);
+    const height = Math.ceil((my + 1) * crop.height / PATCH_SIZE) - Math.ceil(my * crop.height / PATCH_SIZE);
+    selectedPixels += width * height;
+  }
+  const backup = new Float32Array(selectedPixels * 3);
+  let backupAt = 0;
   for (let y = 0; y < crop.height; y++) for (let x = 0; x < crop.width; x++) {
     const source = ((crop.y + y) * image.width + crop.x + x) * 4;
-    backup.set(image.rgba.subarray(source, source + 4), (y * crop.width + x) * 4);
     const mx = Math.min(511, Math.floor(x * 512 / crop.width)), my = Math.min(511, Math.floor(y * 512 / crop.height));
     if (!crop.mask[my * 512 + mx]) continue;
     // Soften the inner edge without modifying any pixel outside the mask.
     let alpha = 1;
     for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (!crop.mask[Math.max(0, Math.min(511, my + dy!)) * 512 + Math.max(0, Math.min(511, mx + dx!))]) alpha = 0.5;
     for (let c = 0; c < 3; c++) {
+      backup[backupAt++] = image.rgba[source + c]!;
       const encoded = removalSample(output, c, (x + 0.5) * 512 / crop.width - 0.5, (y + 0.5) * 512 / crop.height - 0.5);
       const value = image.encoding === 'linear' ? encoded <= 0.04045 ? encoded / 12.92 : ((encoded + 0.055) / 1.055) ** 2.4 : encoded;
       image.rgba[source + c] = image.rgba[source + c]! * (1 - alpha) + value * alpha;
@@ -62,5 +70,11 @@ export function applyRemoval(image: DecodedImage, crop: RemovalCrop, output: Flo
 }
 
 export function restoreRemoval(image: DecodedImage, crop: RemovalCrop, backup: Float32Array): void {
-  for (let y = 0; y < crop.height; y++) image.rgba.set(backup.subarray(y * crop.width * 4, (y + 1) * crop.width * 4), ((crop.y + y) * image.width + crop.x) * 4);
+  let backupAt = 0;
+  for (let y = 0; y < crop.height; y++) for (let x = 0; x < crop.width; x++) {
+    const mx = Math.min(511, Math.floor(x * PATCH_SIZE / crop.width)), my = Math.min(511, Math.floor(y * PATCH_SIZE / crop.height));
+    if (!crop.mask[my * PATCH_SIZE + mx]) continue;
+    const source = ((crop.y + y) * image.width + crop.x + x) * 4;
+    for (let c = 0; c < 3; c++) image.rgba[source + c] = backup[backupAt++]!;
+  }
 }
