@@ -94,6 +94,40 @@ export function estimateTileOverlap(flags: SpatialEffectFlags): number {
 /** RGBA f32 -- sama seperti asumsi ukuran piksel di seluruh `RenderGraph`/`graph.ts`. */
 const BYTES_PER_PIXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 
+/** Emulsion's export lattice and memory policy, adapted to our buffer graph. */
+export const EXPORT_TILE_LATTICE = 128;
+export function planExportTiles(
+  width: number, height: number, maxBufferBytes: number, overlap: number,
+  memoryBudget: number, bytesPerPixel = 160,
+): TileSpec[] {
+  const lattice = EXPORT_TILE_LATTICE;
+  const side = Math.min(Math.floor(Math.sqrt(maxBufferBytes / BYTES_PER_PIXEL)),
+    Math.floor(Math.sqrt(memoryBudget / bytesPerPixel)));
+  const apron = Math.ceil(overlap / lattice) * lattice;
+  // Like Emulsion, spatial context takes priority over the soft RAM budget.
+  // Storage binding limits remain hard limits.
+  let core = Math.max(256, Math.floor((side - 2 * apron) / lattice) * lattice);
+  const bindingSide = Math.floor(Math.sqrt(maxBufferBytes / BYTES_PER_PIXEL));
+  while (core > lattice && Math.min(width, core + 2 * apron) * Math.min(height, core + 2 * apron) > bindingSide ** 2) core -= lattice;
+  if (Math.min(width, core + 2 * apron) * Math.min(height, core + 2 * apron) * BYTES_PER_PIXEL > maxBufferBytes) {
+    throw new RangeError('Spatial blur margins exceed the GPU tile budget. Reduce resolution or use a larger film format.');
+  }
+  if (width <= side && height <= side) return [{
+    tileOriginX: 0, tileOriginY: 0, activeOriginX: 0, activeOriginY: 0,
+    activeWidth: width, activeHeight: height, tileWidth: width, tileHeight: height,
+  }];
+  const tiles: TileSpec[] = [];
+  for (let y = 0; y < height; y += core) for (let x = 0; x < width; x += core) {
+    const w = Math.min(core, width - x); const h = Math.min(core, height - y);
+    const ox = Math.max(0, x - apron); const oy = Math.max(0, y - apron);
+    tiles.push({ tileOriginX: ox, tileOriginY: oy, activeOriginX: x, activeOriginY: y,
+      activeWidth: w, activeHeight: h,
+      tileWidth: Math.min(width, Math.ceil((x + w + apron) / lattice) * lattice) - ox,
+      tileHeight: Math.min(height, Math.ceil((y + h + apron) / lattice) * lattice) - oy });
+  }
+  return tiles;
+}
+
 /**
  * Bagi gambar `width`x`height` menjadi grid tile, masing-masing dengan
  * sub-rektangel AKTIF yang bersama-sama menutupi gambar penuh TANPA celah

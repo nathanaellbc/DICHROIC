@@ -109,7 +109,15 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     return buffer;
   }
 
+  function releaseFrameResources(): void {
+    targets?.grid.destroy(); targets?.far.destroy(); targets?.near.destroy();
+    targets = undefined;
+    depthCache?.buffer.destroy(); depthCache = undefined;
+  }
+
   return {
+    releaseFrameResources,
+    dispose: () => { releaseFrameResources(); uniform.destroy(); },
     name: 'lensBlur',
     writesTaps: [Tap.LOG_E_FILM],
     spatialRadiusPx: 0,

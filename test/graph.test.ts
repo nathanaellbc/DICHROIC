@@ -1,12 +1,41 @@
 import { describe, it, expect } from 'vitest';
 import { acquireDevice } from '../src/engine/device';
-import { RenderGraph, ScratchPool, packRgb } from '../src/engine/graph';
+import { DEFAULT_FRAME, RenderGraph, ScratchPool, packRgb } from '../src/engine/graph';
 import type { Stage, StageContext } from '../src/engine/graph';
 import { createMaterializeActiveRegionStage } from '../src/engine/stages/materializeActiveRegion';
 import { Tap } from '../src/engine/taps';
 import type { TapName } from '../src/engine/taps';
 import type { CoreParams } from '../src/engine/params';
 import { gpuBufferUsage } from '../src/engine/webgpuGlobals';
+
+it('streams cropped export cores with the same pixels as a full GPU render', async () => {
+  const engine = await acquireDevice();
+  const graph = new RenderGraph(engine);
+  try {
+    graph.addStage(createIncrementStage(engine.device, Tap.RGB_OUT, 0.25));
+    graph.addStage(createIncrementStage(engine.device, Tap.RGB_OUT, 0.125));
+    const width = 513; const height = 259;
+    const input = Float32Array.from({ length: width * height * 4 }, (_, i) => i % 100 / 100);
+    const expected = await graph.run(input, paramsFor(width, height), Tap.RGB_OUT, { output: 'rgb' });
+    const stitched = new Float32Array(width * height * 3);
+    let count = 0;
+    await graph.runToTiles(input, paramsFor(width, height), Tap.RGB_OUT, (rgb, tile) => {
+      count++;
+      expect(rgb.length).toBe(tile.activeWidth * tile.activeHeight * 3);
+      for (let row = 0; row < tile.activeHeight; row++) stitched.set(
+        rgb.subarray(row * tile.activeWidth * 3, (row + 1) * tile.activeWidth * 3),
+        ((tile.activeOriginY + row) * width + tile.activeOriginX) * 3);
+    }, { maxBufferBytes: engine.maxStorageBufferBindingSize, memoryBudget: 256 ** 2 * 160,
+      overlap: 17, frame: DEFAULT_FRAME });
+    expect(count).toBeGreaterThan(1);
+    expect(stitched).toEqual(expected);
+    let cancelledDraws = 0;
+    await expect(graph.runToTiles(input, paramsFor(width, height), Tap.RGB_OUT,
+      () => { cancelledDraws++; }, { maxBufferBytes: engine.maxStorageBufferBindingSize,
+        memoryBudget: 256 ** 2 * 160, overlap: 17, frame: DEFAULT_FRAME, isCancelled: () => true })).rejects.toThrow(/cancelled/);
+    expect(cancelledDraws).toBe(0);
+  } finally { graph.dispose(); }
+});
 
 function paramsFor(width: number, height: number): CoreParams {
   return paramsForRegion(width, height, 0, 0, width, height);

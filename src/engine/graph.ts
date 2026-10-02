@@ -26,7 +26,7 @@ import type { CoreParams } from './params';
 import type { EngineDevice } from './device';
 import type { TapName } from './taps';
 import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
-import { planTiles } from './tiling';
+import { planExportTiles, planTiles } from './tiling';
 import type { TileSpec } from './tiling';
 
 /**
@@ -125,6 +125,8 @@ export interface StageContext {
 
 export interface Stage {
   dispose?: () => void;
+  /** Release frame-sized persistent textures/spectra without recompiling pipelines. */
+  releaseFrameResources?: () => void;
   name: string;
   /** Setiap tap kanonis yang ditulis tahap ini. Kosong untuk tahap murni internal. */
   writesTaps: readonly TapName[];
@@ -445,6 +447,37 @@ export class RenderGraph {
    * tanpa celah/tumpang-tindih (`tiling.test.ts`) — perulangan di bawah
    * karena itu boleh menimpa `output` tanpa penjaga tambahan.
    */
+  /** Stream only each tile's core; never allocate a float output for the whole photo. */
+  async runToTiles(
+    input: Float32Array, params: CoreParams, collect: TapName,
+    draw: (rgb: Float32Array, tile: TileSpec) => void,
+    options: { maxBufferBytes: number; memoryBudget: number; overlap: number;
+      frame: FrameParams; wholeFrame?: boolean; isCancelled?: () => boolean },
+  ): Promise<void> {
+    const tiles = options.wholeFrame ? planTiles(params.width, params.height, options.maxBufferBytes, options.overlap)
+      : planExportTiles(params.width, params.height, options.maxBufferBytes, options.overlap, options.memoryBudget);
+    if (options.wholeFrame && tiles.length !== 1) throw new RangeError('This effect requires a whole-frame render.');
+    for (const tile of tiles) {
+      if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
+      const whole = tiles.length === 1 && tile.tileWidth === params.width && tile.tileHeight === params.height;
+      const tileParams: CoreParams = whole ? params : {
+        ...params, width: tile.tileWidth, height: tile.tileHeight,
+        tileOriginX: tile.tileOriginX, tileOriginY: tile.tileOriginY,
+        activeOriginX: tile.activeOriginX - tile.tileOriginX,
+        activeOriginY: tile.activeOriginY - tile.tileOriginY,
+        activeWidth: tile.activeWidth, activeHeight: tile.activeHeight,
+      };
+      const region = { x: tile.activeOriginX - tile.tileOriginX, y: tile.activeOriginY - tile.tileOriginY,
+        width: tile.activeWidth, height: tile.activeHeight };
+      const rgb = await this.runSingleBuffer(whole ? input : extractTileInput(input, params.width, tile),
+        tileParams, collect, !whole, options.frame, 'rgb', region);
+      if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
+      draw(rgb, tile);
+      // Allow worker RPC (close, cancel, parameter updates) between GPU submissions.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
   private async runTiled(
     input: Float32Array,
     params: CoreParams,
@@ -507,6 +540,7 @@ export class RenderGraph {
     shrinkApron = false,
     frame: Readonly<FrameParams> = DEFAULT_FRAME,
     output: 'rgba' | 'rgb' = 'rgba',
+    readRegion?: ActiveRect,
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -670,13 +704,20 @@ export class RenderGraph {
         [front, back] = [back, front];
       }
 
-      const readback = this.pool.getFrame('readback', bytes);
-      encoder.copyBufferToBuffer(front, 0, readback, 0, bytes);
+      const readPixels = readRegion ? readRegion.width * readRegion.height : params.width * params.height;
+      const readback = this.pool.getFrame('readback', readPixels * 16);
+      if (readRegion) {
+        const rowBytes = readRegion.width * 16;
+        for (let row = 0; row < readRegion.height; row++) {
+          encoder.copyBufferToBuffer(front, ((readRegion.y + row) * params.width + readRegion.x) * 16,
+            readback, row * rowBytes, rowBytes);
+        }
+      } else encoder.copyBufferToBuffer(front, 0, readback, 0, bytes);
       device.queue.submit([encoder.finish()]);
 
       await readback.mapAsync(gpuMapMode.READ);
       const mapped = new Float32Array(readback.getMappedRange());
-      const result = output === 'rgb' ? packRgb(mapped, params.width * params.height) : mapped.slice(0, expectedFloats);
+      const result = output === 'rgb' ? packRgb(mapped, readPixels) : mapped.slice(0, readPixels * 4);
       readback.unmap();
 
       return result;
@@ -693,6 +734,10 @@ export class RenderGraph {
    * tile Task 19 selesai) — BUKAN di antara tile, yang justru meniadakan
    * tujuan pool (lih. dokumentasi `StageContext.scratch`). Idempoten.
    */
+  releaseFrameResources(): void {
+    for (const stage of this.stages) stage.releaseFrameResources?.();
+  }
+
   dispose(): void {
     if (this.#disposed) return;
     for (const stage of this.stages) stage.dispose?.();

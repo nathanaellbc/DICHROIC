@@ -320,7 +320,7 @@ function sample8(v: number): number {
  * Encode RGB float (0..1, interleaved, encoding colour space keluaran sudah
  * diterapkan) menjadi JPEG baseline.
  */
-export function encodeJpeg(rgb: Float32Array, width: number, height: number, options: JpegOptions): Uint8Array {
+export function encodeJpeg(rgb: Float32Array | Uint8Array, width: number, height: number, options: JpegOptions): Uint8Array {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 65535 || height > 65535) {
     throw new RangeError(`dimensi JPEG tidak sah: ${width}x${height}`);
   }
@@ -391,9 +391,9 @@ export function encodeJpeg(rgb: Float32Array, width: number, height: number, opt
       const dst = r * stripW;
       for (let x = 0; x < stripW; x += 1) {
         const s = src + Math.min(width - 1, x) * 3;
-        const R = sample8(rgb[s]!);
-        const G = sample8(rgb[s + 1]!);
-        const B = sample8(rgb[s + 2]!);
+        const R = rgb instanceof Uint8Array ? rgb[s]! : sample8(rgb[s]!);
+        const G = rgb instanceof Uint8Array ? rgb[s + 1]! : sample8(rgb[s + 1]!);
+        const B = rgb instanceof Uint8Array ? rgb[s + 2]! : sample8(rgb[s + 2]!);
         Y[dst + x] = 0.299 * R + 0.587 * G + 0.114 * B - 128;
         Cb[dst + x] = -0.168735892 * R - 0.331264108 * G + 0.5 * B;
         Cr[dst + x] = 0.5 * R - 0.418687589 * G - 0.081312411 * B;

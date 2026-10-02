@@ -5,6 +5,11 @@ export const IMAGE_BLOCK_BUDGET = 64 * 1024 * 1024;
 export const MOBILE_IMAGE_BUDGET = 768 * 1024 * 1024;
 export const MOBILE_PREVIEW_PIXELS = 1_572_864;
 
+/** Same export working-set targets as Emulsion (Safari workers included). */
+export function exportTileMemoryBudget(): number {
+  return (imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 192 : 640) * 1024 * 1024;
+}
+
 /** Limit GPU work and comparison frames to the same effective zoom size. */
 export function previewPixelBudget(budget = imageMemoryBudget()): number {
   return budget < IMAGE_RGBA_BUDGET ? MOBILE_PREVIEW_PIXELS : 8_388_608;

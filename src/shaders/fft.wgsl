@@ -37,6 +37,12 @@ struct FftParams {
   finalLog: u32,
   scale: f32,
   kernelSize: u32,
+  // Sub-rektangel (width x height) di dalam buffer tile selebar `bufWidth`
+  // yang dikonvolusi; render tanpa tile memakai origin 0 dan bufWidth = width.
+  bufWidth: u32,
+  originX: u32,
+  originY: u32,
+  pad0: u32,
 }
 
 @group(0) @binding(0) var<storage, read> src: array<vec4<f32>>;
@@ -155,7 +161,7 @@ fn fillImage(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgro
   }
   let ix = reflect(i32(x) - i32(r), i32(p.width));
   let iy = reflect(i32(y) - i32(r), i32(p.height));
-  let pixel = src[u32(iy) * p.width + u32(ix)];
+  let pixel = src[(p.originY + u32(iy)) * p.bufWidth + p.originX + u32(ix)];
   dst[t] = vec4<f32>(channel(pixel, p.chA), 0.0, channel(pixel, p.chB), 0.0);
 }
 
@@ -272,8 +278,9 @@ fn resolve(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroup
   let x = t % p.width;
   let y = t / p.width;
   let c = src[(y + p.radius) * p.nx + (x + p.radius)];
-  let original = aux[t];
-  var out = select(dst[t], original, p.chA == 0u);
+  let index = (p.originY + y) * p.bufWidth + p.originX + x;
+  let original = aux[index];
+  var out = select(dst[index], original, p.chA == 0u);
   let convA = (c.x + c.y) * p.scale;
   let convB = (c.z + c.w) * p.scale;
   var va = (1.0 - p.scatter) * channel(original, p.chA) + p.scatter * convA;
@@ -292,5 +299,5 @@ fn resolve(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroup
   } else {
     out.z = va;
   }
-  dst[t] = out;
+  dst[index] = out;
 }

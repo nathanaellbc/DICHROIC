@@ -35,7 +35,7 @@ export type DiffusionSite = 'camera' | 'print';
 /** Setelan difusi satu situs untuk satu render (`FrameParams`). */
 export type DiffusionFrame = DiffusionFilterConfig;
 
-const PARAM_BYTES = 64;
+const PARAM_BYTES = 80;
 const WORKGROUP = 256;
 const MAX_GROUPS_X = 32768;
 
@@ -131,6 +131,16 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
   const twiddleCache = new Map<number, GPUBuffer>();
   let kernelCache: KernelCache | undefined;
   const filterMemo = new Map<string, PrecomputedDiffusionFilter>();
+  const ownedBuffers = new Set<GPUBuffer>();
+
+  function releaseFrameResources(): void {
+    for (const buffer of ownedBuffers) buffer.destroy();
+    ownedBuffers.clear();
+    for (const buffer of twiddleCache.values()) buffer.destroy();
+    twiddleCache.clear();
+    kernelCache = undefined;
+    filterMemo.clear();
+  }
 
   function configOf(frame: Readonly<FrameParams>): DiffusionFrame {
     const config = site === 'camera' ? frame.cameraDiffusion : frame.printDiffusion;
@@ -169,6 +179,8 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
 
   return {
     name: `diffusion:${site}`,
+    releaseFrameResources,
+    dispose: releaseFrameResources,
     writesTaps: site === 'camera' ? [Tap.LOG_E_FILM] : [Tap.LOG_E_PRINT],
     spatialRadiusPx: 0,
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
@@ -207,6 +219,7 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
           usage: gpuBufferUsage.UNIFORM,
           mappedAtCreation: true,
         });
+        ownedBuffers.add(buffer);
         const range = buffer.getMappedRange();
         const u = new Uint32Array(range);
         const f = new Float32Array(range);
@@ -226,6 +239,10 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
         u[13] = fields.finalLog ?? 0;
         f[14] = fields.scale ?? 1;
         u[15] = fields.kernelSize ?? 1;
+        // Match the shader's region-aware layout; whole-frame origin is zero.
+        u[16] = width;
+        u[17] = 0;
+        u[18] = 0;
         buffer.unmap();
         return buffer;
       };
@@ -278,7 +295,7 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
       // Spektrum kernel (dua pasang: RG dan B), di-cache per bentuk PSF.
       const kernelKey = `${nx}x${ny}|${radius}|${JSON.stringify({ ...config, strength: 0 })}|${pixelSizeUm}|${width}x${height}`;
       if (!kernelCache || kernelCache.key !== kernelKey) {
-        kernelCache?.spectra.forEach((b) => b.destroy());
+        kernelCache?.spectra.forEach((b) => { b.destroy(); ownedBuffers.delete(b); });
         const spectra: GPUBuffer[] = [];
         for (const [a, b] of [
           [0, 1],
@@ -291,6 +308,7 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
             usage: gpuBufferUsage.STORAGE,
             mappedAtCreation: true,
           });
+          ownedBuffers.add(psfBuffer);
           new Float32Array(psfBuffer.getMappedRange()).set(packed);
           psfBuffer.unmap();
           const spectrum = ctx.device.createBuffer({
@@ -298,6 +316,7 @@ export function createDiffusionFftStage(device: GPUDevice, site: DiffusionSite, 
             size: planeBytes,
             usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST | gpuBufferUsage.COPY_SRC,
           });
+          ownedBuffers.add(spectrum);
           dispatch(pipelines.fillKernel, nx * ny, writeParams({ kernelSize: 2 * radius + 1 }), psfBuffer, spectrum, psfBuffer);
           const result = fft2d(spectrum, temp, false);
           if (result !== spectrum) encoder.copyBufferToBuffer(result, 0, spectrum, 0, planeBytes);

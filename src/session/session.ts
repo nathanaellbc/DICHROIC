@@ -41,15 +41,16 @@ import { loadAssets } from '../profiles/load';
 import { loadPrintCube } from '../profiles/printLuts';
 import type { AssetBundle } from '../profiles/load';
 import { RenderSupersededError, SessionStateError } from './errors';
+import { ExportPixels } from './exportPixels';
 import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
 import type { ScaledImage } from './downscale';
-import { originalFrame, rgbToCanvas } from '../io/display';
+import { originalFrame } from '../io/display';
 import type { Frame } from '../io/display';
 import { buildGuide } from '../depth/estimate';
 import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
+import { assertImageBudget, exportTileMemoryBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -262,6 +263,7 @@ export class Session {
    * terakhir pada sisi panjang apa pun (ekspor); kuncinya memuat sisi itu.
    */
   readonly #cache = new Map<RenderQuality, { key: string; result: RenderResult }>();
+  #exportCache: { key: string; result: ExportPixels } | undefined;
   /** Recent zoom/undo results, bounded by both RAM and entry count. */
   readonly #previewCache = new Map<string, RenderResult>();
   private readonly graphs = new Map<string, Promise<RenderGraph>>();
@@ -344,6 +346,7 @@ export class Session {
    */
   releaseExport(): void {
     this.#cache.delete('full');
+    this.#exportCache = undefined;
     this.exportVersion += 1;
     this.exportCleanupPending = true;
     if (!this.#busy) {
@@ -353,6 +356,7 @@ export class Session {
   }
 
   lastFullSize(): { width: number; height: number } | undefined {
+    if (this.#exportCache) return { width: this.#exportCache.result.width, height: this.#exportCache.result.height };
     const hit = this.#cache.get('full');
     return hit ? { width: hit.result.width, height: hit.result.height } : undefined;
   }
@@ -386,6 +390,7 @@ export class Session {
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();
+    this.#exportCache = undefined;
     this.#previewCache.clear();
   }
 
@@ -416,6 +421,7 @@ export class Session {
     this.#imageId += 1;
     this.#preview = undefined; this.#draftPreview = undefined; this.#originalPreview = undefined;
     this.#cache.clear(); this.#previewCache.clear();
+    this.#exportCache = undefined;
     this.#depth = undefined; this.#depthId += 1;
     // The full render was removed with #cache; keep preview buffers for the
     // immediate regrade and the next film/paper selection.
@@ -458,6 +464,7 @@ export class Session {
       if (this.staged !== staged) throw new RenderSupersededError();
       if (this.#image) {
         this.#cache.delete('full');
+        this.#exportCache = undefined;
         this.clearResources();
       }
       const original = originalFrame(image, this.previewMaxLongEdge);
@@ -499,6 +506,7 @@ export class Session {
       this.#draftPreview = undefined;
       this.#originalPreview = undefined;
       this.#cache.clear();
+      this.#exportCache = undefined;
       this.#previewCache.clear();
     }
     this.staged = undefined;
@@ -730,16 +738,65 @@ export class Session {
   }
 
   /** Render penuh untuk ekspor; render yang tersalip sebelum mulai diantrekan ulang. */
-  private async renderForExport(longEdge: number | undefined): Promise<RenderResult> {
+  private async renderForExport(longEdge: number | undefined): Promise<ExportPixels> {
+    const exportVersion = this.exportVersion;
     for (;;) {
       try {
         this.assertAlive();
         if (!this.#image) throw new SessionStateError('Ekspor sebelum open(): belum ada gambar.');
-        return await this.renderAt('full', this.exportLongEdge(longEdge));
+        const edge = this.exportLongEdge(longEdge);
+        const key = this.cacheKey('full', edge);
+        if (this.#exportCache?.key === key) return this.#exportCache.result;
+        return await this.enqueue(() => this.executeExport(edge));
       } catch (e) {
-        if (e instanceof RenderSupersededError) continue;
+        if (e instanceof RenderSupersededError && exportVersion === this.exportVersion) continue;
         throw e;
       }
+    }
+  }
+
+  /** Emulsion's export lifecycle: render, draw cores, yield, cache, release GPU work. */
+  private async executeExport(longEdge: number | undefined): Promise<ExportPixels> {
+    this.assertAlive();
+    const image = this.#image;
+    if (!image) throw new SessionStateError('The photo was closed.');
+    const params = this.#params;
+    const key = this.cacheKey('full', longEdge);
+    if (this.#exportCache?.key === key) return this.#exportCache.result;
+    // Drop the previous size before allocating its replacement.
+    this.#exportCache = undefined;
+    const version = this.exportVersion;
+    const cancelled = () => this.#disposed || version !== this.exportVersion || key !== this.cacheKey('full', longEdge);
+    const frame = this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
+    const pixels = new ExportPixels(frame.width, frame.height, params.outputColorSpace, this.bundle.manifest.outputColorSpaces);
+    // Reuse diagnostic/full renders without retaining another whole float frame.
+    const full = this.#cache.get('full');
+    let exportGraph: RenderGraph | undefined;
+    try {
+      if (full?.key === key) pixels.draw(full.result.rgb, 0, 0, frame.width, frame.height);
+      else {
+        const plan = buildRenderPlan(params, this.bundle, frame, 'image', this.#depth ? { depth: this.#depth } : {});
+        const graph = await this.graphFor(plan);
+        exportGraph = graph;
+        await graph.runToTiles(frame.rgba, plan.core, Tap.RGB_OUT,
+          (rgb, tile) => pixels.draw(rgb, tile.activeOriginX, tile.activeOriginY, tile.activeWidth, tile.activeHeight), {
+            maxBufferBytes: this.engine.maxStorageBufferBindingSize, memoryBudget: exportTileMemoryBudget(),
+            overlap: plan.overlap, frame: plan.frame, isCancelled: cancelled,
+            // FFT and lens gather currently require their complete global grid.
+            wholeFrame: plan.chain.cameraDiffusion || plan.chain.printDiffusion || plan.chain.lensBlur,
+          });
+      }
+      if (cancelled()) throw new RenderSupersededError();
+      this.#cache.delete('full');
+      this.#exportCache = { key, result: pixels };
+      return pixels;
+    } catch (error) {
+      if (cancelled()) throw new RenderSupersededError();
+      throw error;
+    } finally {
+      exportGraph?.releaseFrameResources();
+      this.#scratch?.release();
+      returnFreedMemory(this.engine.device);
     }
   }
 
@@ -829,25 +886,25 @@ export class Session {
     const exif = this.#image?.exif;
     const result = await this.renderForExport(options.longEdge);
     if (imageId !== this.#imageId) throw new RenderSupersededError();
-    const { rgb, width, height } = result;
+    const { width, height } = result;
     const outputColorSpace = result.outputColorSpace ?? this.#params.outputColorSpace;
     if (canvasFormat) {
       const colorSpace = outputColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
-      return this.canvasEncoder!.encode(rgbToCanvas(rgb, width, height, outputColorSpace, colorSpace, this.bundle.manifest.outputColorSpaces), width, height, canvasFormat, options.quality ?? 1, colorSpace);
+      return this.canvasEncoder!.encode(result.canvas(), width, height, canvasFormat, options.quality ?? 1, colorSpace);
     }
     const icc = this.iccFor(outputColorSpace);
     const exifOptions = { width, height, srgb: outputColorSpace === 'sRGB' };
     if (format === 'jpeg') {
       const quality = Math.min(100, Math.max(1, Math.round((options.quality ?? 1) * 100)));
       const app1 = exif && rewriteExif(exif, { ...exifOptions, maxBytes: EXIF_APP1_MAX_BYTES });
-      return encodeJpeg(rgb, width, height, { quality, ...(icc ? { icc } : {}), ...(app1 ? { exif: app1 } : {}) });
+      return encodeJpeg(result.rgb8, width, height, { quality, ...(icc ? { icc } : {}), ...(app1 ? { exif: app1 } : {}) });
     }
     if (format === 'tiff16') {
       const tiffExif = exif && exifForTiff(exif, exifOptions);
-      return encodeTiff16(rgb, width, height, { ...(icc ? { icc } : {}), ...(tiffExif ? { exif: tiffExif } : {}) });
+      return encodeTiff16(result.rgb16, width, height, { ...(icc ? { icc } : {}), ...(tiffExif ? { exif: tiffExif } : {}) });
     }
     const pngExif = exif && rewriteExif(exif, exifOptions);
-    return encodePng(rgb, width, height, format === 'png8' ? 8 : 16, {
+    return encodePng(format === 'png8' ? result.rgb8 : result.rgb16, width, height, format === 'png8' ? 8 : 16, {
       ...(icc ? { icc, iccName: outputColorSpace } : {}),
       ...(pngExif ? { exif: pngExif } : {}),
     });
@@ -868,6 +925,7 @@ export class Session {
     this.#depth = undefined;
     this.#depthId += 1;
     this.#cache.clear();
+    this.#exportCache = undefined;
     this.#previewCache.clear();
     this.cleanupPending = true;
     if (!this.#busy) this.clearResources();

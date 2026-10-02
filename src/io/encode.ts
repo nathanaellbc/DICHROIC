@@ -77,17 +77,20 @@ function withPngExtras(png: Uint8Array, extras: PngExtras): Uint8Array {
  * luar rentang tidak boleh membungkus (wrap-around) seperti konversi integer
  * mentah (Review Focus #5 rencana 2B).
  */
-export function quantize(rgb: Float32Array, bits: 8 | 16): Uint8Array | Uint16Array {
+export type RgbPixels = Float32Array | Uint8Array | Uint16Array;
+export function quantize(rgb: RgbPixels, bits: 8 | 16): Uint8Array | Uint16Array {
+  if (bits === 8 && rgb instanceof Uint8Array || bits === 16 && rgb instanceof Uint16Array) return rgb;
   const max = bits === 8 ? 255 : 65535;
+  const scale = rgb instanceof Uint8Array ? 255 : rgb instanceof Uint16Array ? 65535 : 1;
   const out = bits === 8 ? new Uint8Array(rgb.length) : new Uint16Array(rgb.length);
   for (let i = 0; i < rgb.length; i += 1) {
-    const v = rgb[i]!;
+    const v = rgb[i]! / scale;
     out[i] = v > 0 ? (v >= 1 ? max : Math.round(v * max)) : 0; // `v > 0` salah untuk NaN
   }
   return out;
 }
 
-function checkSize(rgb: Float32Array, width: number, height: number): void {
+function checkSize(rgb: RgbPixels, width: number, height: number): void {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
     throw new RangeError(`dimensi tidak sah: ${width}x${height}`);
   }
@@ -96,12 +99,12 @@ function checkSize(rgb: Float32Array, width: number, height: number): void {
   }
 }
 
-export function encodePng(rgb: Float32Array, width: number, height: number, bits: 8 | 16, extras: PngExtras = {}): Uint8Array {
+export function encodePng(rgb: RgbPixels, width: number, height: number, bits: 8 | 16, extras: PngExtras = {}): Uint8Array {
   checkSize(rgb, width, height);
   return withPngExtras(encode({ width, height, data: quantize(rgb, bits), depth: bits, channels: 3 }), extras);
 }
 
-export function encodeTiff16(rgb: Float32Array, width: number, height: number, extras: TiffExtras = {}): Uint8Array {
+export function encodeTiff16(rgb: RgbPixels, width: number, height: number, extras: TiffExtras = {}): Uint8Array {
   checkSize(rgb, width, height);
   return writeTiff16(quantize(rgb, 16) as Uint16Array, width, height, extras);
 }

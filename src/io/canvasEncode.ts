@@ -13,6 +13,7 @@
  */
 
 import { quantize } from './encode';
+import type { RgbPixels } from './encode';
 
 export type CanvasFormat = 'jpeg' | 'webp' | 'avif';
 
@@ -49,7 +50,7 @@ export interface CanvasEncoder {
  * yang SAMA dengan PNG 8-bit (`quantize`), jadi JPEG/WebP/AVIF berangkat dari
  * piksel yang identik dengan ekspor lossless.
  */
-export function rgbToRgba8(rgb: Float32Array, width: number, height: number): Uint8ClampedArray {
+export function rgbToRgba8(rgb: RgbPixels, width: number, height: number): Uint8ClampedArray {
   const n = width * height;
   const q = quantize(rgb.subarray(0, n * 3), 8);
   const out = new Uint8ClampedArray(n * 4);
