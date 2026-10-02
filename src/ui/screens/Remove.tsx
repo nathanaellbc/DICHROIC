@@ -9,7 +9,7 @@ import type { RemovalCrop } from '../../retouch/patch';
 import { removalSample } from '../../retouch/patch';
 
 type Stroke = { radius: number; points: Array<{ x: number; y: number }> };
-export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; onClose: () => void }) {
+export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, compact = false, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; compact?: boolean; onClose: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const worker = useRef<Worker | null>(null);
   const mounted = useRef(true);
@@ -120,21 +120,23 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
         onEnd: finish,
       }} />
     </div>, previewTarget)}
-    {createPortal(<div className="remove-controls">
-      <div className="mobile-tool-heading"><div><h2 className="t-headline" style={{ margin: 0 }}>Remove Object</h2><span className="t-caption secondary">Original · grading paused</span></div><PressButton className="capsule prominent" disabled={busy} onClick={onClose}>Done</PressButton></div>
-      <div className="t-footnote" style={{ display: 'flex', justifyContent: 'space-between' }}><span>Brush size</span><span className="tabular secondary">{size} px</span></div>
-      <Slider label="Brush size" value={size} min={8} max={100} step={1} defaultValue={32} valueText={`${size} px`} disabled={busy || !!result} onChange={setSize} />
-      <div className="remove-actions">
-        <PressButton className="capsule" aria-pressed={!moving} disabled={busy || !!result} onClick={() => setMoving(false)}><Icon name="erase" size={16} /> Brush</PressButton>
-        <PressButton className="capsule" aria-pressed={moving} onClick={() => setMoving(true)}><Icon name="move" size={16} /> Move</PressButton>
-        <PressButton className="capsule" disabled={busy || !strokes.length || !!result} onClick={() => setStrokes(strokes.slice(0, -1))}><Icon name="undo" size={16} /> Undo brush</PressButton>
-        <PressButton className="capsule" disabled={busy || (!strokes.length && !result)} onClick={() => { setStrokes([]); setResult(null); setBefore(false); }}>Clear</PressButton>
-        {canUndo && <PressButton className="capsule" disabled={busy || !!result} onClick={() => void apply(true)}>Undo removal</PressButton>}
-        {result ? <><PressButton className="capsule" aria-pressed={before} disabled={busy} onClick={() => setBefore(!before)}><Icon name="compare" size={16} /> {before ? 'After' : 'Before'}</PressButton><PressButton className="capsule prominent" disabled={busy} onClick={() => void apply()}>Apply</PressButton></> : <PressButton className="capsule prominent" disabled={busy || !strokes.length} onClick={() => void remove()}><Icon name={busy ? 'loader' : 'erase'} size={16} /> {busy ? 'Working…' : 'Remove'}</PressButton>}
+    {createPortal(<div className={`remove-controls${compact ? ' is-floating' : ''}`}>
+      <div className="mobile-tool-heading remove-heading">{!compact && <div><h2 className="t-headline" style={{ margin: 0 }}>Remove Object</h2><span className="t-caption secondary">Original · grading paused</span></div>}<PressButton className={`capsule prominent${compact ? ' remove-done' : ''}`} disabled={busy} onClick={onClose}>Done</PressButton></div>
+      <div className={compact ? 'remove-brush glass' : 'remove-brush'}>
+        <div className="t-footnote" style={{ display: 'flex', justifyContent: 'space-between' }}><span>Brush size</span><span className="tabular secondary">{size} px</span></div>
+        <Slider label="Brush size" value={size} min={8} max={100} step={1} defaultValue={32} valueText={`${size} px`} disabled={busy || !!result} onChange={setSize} />
       </div>
-      <p className="t-footnote secondary" role="status" style={{ margin: 0 }}>{status}</p>
-      {error && <p className="t-footnote" role="alert" style={{ color: 'var(--red-text)', margin: 0 }}>{error}</p>}
-      <p className="t-caption secondary" style={{ margin: 0 }}>Pinch with two fingers to zoom and move. Mouse: scroll to zoom, Move to drag. On-device LaMa · first use downloads 62 MB.</p>
+      <div className="remove-actions">
+        <PressButton className={compact ? 'capsule glass' : 'capsule'} aria-pressed={!moving} disabled={busy || !!result} onClick={() => setMoving(false)}><Icon name="erase" size={16} /> Brush</PressButton>
+        <PressButton className={compact ? 'capsule glass' : 'capsule'} aria-pressed={moving} onClick={() => setMoving(true)}><Icon name="move" size={16} /> Move</PressButton>
+        <PressButton className={compact ? 'capsule glass' : 'capsule'} disabled={busy || !strokes.length || !!result} onClick={() => setStrokes(strokes.slice(0, -1))}><Icon name="undo" size={16} /> {compact ? 'Undo' : 'Undo brush'}</PressButton>
+        <PressButton className={compact ? 'capsule glass' : 'capsule'} disabled={busy || (!strokes.length && !result)} onClick={() => { setStrokes([]); setResult(null); setBefore(false); }}>Clear</PressButton>
+        {canUndo && <PressButton className={compact ? 'capsule glass' : 'capsule'} disabled={busy || !!result} onClick={() => void apply(true)}>{compact ? 'Undo remove' : 'Undo removal'}</PressButton>}
+        {result ? <><PressButton className={compact ? 'capsule glass' : 'capsule'} aria-pressed={before} disabled={busy} onClick={() => setBefore(!before)}><Icon name="compare" size={16} /> {before ? 'After' : 'Before'}</PressButton><PressButton className={compact ? 'capsule prominent glass' : 'capsule prominent'} disabled={busy} onClick={() => void apply()}>Apply</PressButton></> : <PressButton className={compact ? 'capsule prominent glass' : 'capsule prominent'} disabled={busy || !strokes.length} onClick={() => void remove()}><Icon name={busy ? 'loader' : 'erase'} size={16} /> {busy ? 'Working…' : 'Remove'}</PressButton>}
+      </div>
+      <p className={compact ? 'remove-status glass-clear t-footnote' : 't-footnote secondary'} role="status" style={{ margin: 0 }}>{status}</p>
+      {error && <p className={compact ? 'remove-status glass-clear t-footnote' : 't-footnote'} role="alert" style={{ color: 'var(--red-text)', margin: 0 }}>{error}</p>}
+      <p className={compact ? 'sr-only' : 't-caption secondary'} style={{ margin: 0 }}>Pinch with two fingers to zoom and move. Mouse: scroll to zoom, Move to drag. On-device LaMa · first use downloads 62 MB.</p>
     </div>, controlsTarget)}
   </>;
 }

@@ -235,7 +235,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
-      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} onClose={() => setSheet(null)} />}
+      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} onClose={() => setSheet(null)} />}
 
       <Sheet
         open={sheet?.kind === 'stocks'}
@@ -458,7 +458,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
-          right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+          right: landscape && hasPhoto && !removing ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
         {removing ? <div className="mobile-brand"><span>Remove Object</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
@@ -511,7 +511,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       <section
         ref={panelRef}
         aria-label={removing ? 'Object removal controls' : 'Adjustments'}
-        className="panel editor-frost mobile-adjustments"
+        className={removing ? 'remove-controls-floating' : 'panel editor-frost mobile-adjustments'}
         hidden={!hasPhoto}
         inert={!hasPhoto}
         style={{
