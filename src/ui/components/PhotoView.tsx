@@ -110,6 +110,7 @@ export function PhotoView({
   onResolutionChange,
   content,
   brush,
+  fitInsets,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -124,6 +125,8 @@ export function PhotoView({
   onResolutionChange?: (longEdge: number) => void;
   /** Source retouching shares the same zoom/pan transform as the main preview. */
   content?: ReactNode;
+  /** Keep the fitted photo centered in the unobscured part of an overlay viewport. */
+  fitInsets?: { bottom?: number; right?: number };
   brush?: {
     enabled: boolean;
     onStart: (point: Point, displayedWidth: number) => void;
@@ -189,12 +192,14 @@ export function PhotoView({
   }, [rendering]);
 
   const shown = frame ?? original;
+  const fitWidth = Math.max(1, area.width - (fitInsets?.right ?? 0));
+  const fitHeight = Math.max(1, area.height - (fitInsets?.bottom ?? 0));
   let rect = { left: 0, top: 0, width: 0, height: 0 };
   if (shown && area.width > 0 && area.height > 0) {
-    const scale = Math.min(area.width / shown.width, area.height / shown.height);
+    const scale = Math.min(fitWidth / shown.width, fitHeight / shown.height);
     const width = Math.round(shown.width * scale);
     const height = Math.round(shown.height * scale);
-    rect = { left: Math.round((area.width - width) / 2), top: Math.round((area.height - height) / 2), width, height };
+    rect = { left: Math.round((fitWidth - width) / 2), top: Math.round((fitHeight - height) / 2), width, height };
   }
 
   // Foto baru mulai dari pas.
@@ -218,8 +223,8 @@ export function PhotoView({
     const s = Math.min(MAX_ZOOM, Math.max(1, v.s));
     return {
       s,
-      tx: clampAxis(v.tx, s, rect.width, rect.left, area.width),
-      ty: clampAxis(v.ty, s, rect.height, rect.top, area.height),
+      tx: clampAxis(v.tx, s, rect.width, rect.left, fitWidth),
+      ty: clampAxis(v.ty, s, rect.height, rect.top, fitHeight),
     };
   };
   const elasticView = (v: View): View => {
@@ -628,7 +633,7 @@ export function PhotoView({
         )}
       </AnimatePresence>
       {/* Status di kanan atas: Developing di sebelah zoom; geser mulus saat zoom muncul/hilang. */}
-      <div className="photo-status">
+      <div className="photo-status" style={fitInsets?.right ? { right: fitInsets.right + 10 } : undefined}>
         <AnimatePresence initial={false} mode="popLayout">
           {slow && (
             <motion.span

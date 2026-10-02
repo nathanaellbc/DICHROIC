@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PressButton, Slider } from '../components/controls';
 import { PhotoView } from '../components/PhotoView';
@@ -9,7 +9,7 @@ import type { RemovalCrop } from '../../retouch/patch';
 import { removalSample } from '../../retouch/patch';
 
 type Stroke = { radius: number; points: Array<{ x: number; y: number }> };
-export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, compact = false, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; compact?: boolean; onClose: () => void }) {
+export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, compact = false, landscape = false, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; compact?: boolean; landscape?: boolean; onClose: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const worker = useRef<Worker | null>(null);
   const mounted = useRef(true);
@@ -25,6 +25,25 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   const [before, setBefore] = useState(false);
   const [canUndo, setCanUndo] = useState(engine.canUndoRemoval);
   const [error, setError] = useState('');
+  const [fitInsets, setFitInsets] = useState<{ bottom?: number; right?: number }>({});
+  useLayoutEffect(() => {
+    if (!compact) return;
+    const panel = controlsTarget.closest('.mobile-adjustments');
+    if (!panel) return;
+    const measure = () => {
+      const preview = previewTarget.getBoundingClientRect();
+      const controls = panel.getBoundingClientRect();
+      const next: { bottom?: number; right?: number } = landscape
+        ? { right: Math.max(0, Math.round(preview.right - controls.left + 12)) }
+        : { bottom: Math.max(0, Math.round(preview.bottom - controls.top + 12)) };
+      setFitInsets(previous => previous.bottom === next.bottom && previous.right === next.right ? previous : next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(previewTarget);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [compact, landscape, previewTarget, controlsTarget]);
   const paintMask = (items: Stroke[]) => {
     const mask = document.createElement('canvas'); mask.width = original.width; mask.height = original.height;
     const ctx = mask.getContext('2d')!;
@@ -112,7 +131,7 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
     finally { setBusy(false); }
   };
   return <>
-    {createPortal(<div className="remove-preview"><PhotoView frame={original} compare={false} rendering={false} photoKey="removal" label="Original photo for object removal"
+    {createPortal(<div className="remove-preview"><PhotoView frame={original} compare={false} rendering={false} photoKey="removal" label="Original photo for object removal" fitInsets={fitInsets}
       content={<canvas ref={canvas} width={original.width} height={original.height} aria-label="Object removal brush canvas" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', maxHeight: 'none' }} />}
       brush={{ enabled: !moving && !busy && !result,
         onStart: (uv, width) => { active.current = { radius: size * original.width / width / 2, points: [point(uv)] }; draw([...strokes, active.current]); },

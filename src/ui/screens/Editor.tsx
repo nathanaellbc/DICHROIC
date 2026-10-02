@@ -235,7 +235,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
-      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} onClose={() => setSheet(null)} />}
+      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => setSheet(null)} />}
 
       <Sheet
         open={sheet?.kind === 'stocks'}
