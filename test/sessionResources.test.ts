@@ -139,6 +139,23 @@ describe('Session resource lifetime', () => {
     session.dispose();
   });
 
+  it('keeps the preview pool across removal and stock changes, then releases it on close', async () => {
+    const session = await create(); session.open(image());
+    await session.render('preview');
+    const pool = resources.scratch[0]!;
+    const mask = new Uint8Array(4).fill(1);
+    const crop = session.prepareRemoval({ width: 2, height: 2, data: mask });
+    await session.applyRemoval(crop, new Float32Array(512 * 512 * 3).fill(0.5));
+    await session.render('preview');
+    session.setParams({ filterMShift: 1 });
+    await session.render('preview');
+    expect(resources.scratch).toHaveLength(1);
+    expect(pool.release).not.toHaveBeenCalled();
+    await session.close();
+    expect(pool.release).toHaveBeenCalledOnce();
+    session.dispose();
+  });
+
   it('does not destroy resources still in use when a photo is closed', async () => {
     const session = await create(); session.open(image());
     let release!: () => void;

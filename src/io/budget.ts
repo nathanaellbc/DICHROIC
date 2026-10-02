@@ -3,6 +3,12 @@ export const IMAGE_RGBA_BUDGET = 2 * 1024 * 1024 * 1024;
 export const IMAGE_BLOCK_BUDGET = 64 * 1024 * 1024;
 /** Mobile source-decoding headroom; 48 MP browser-decoded photos exceed it. */
 export const MOBILE_IMAGE_BUDGET = 768 * 1024 * 1024;
+export const MOBILE_PREVIEW_PIXELS = 1_572_864;
+
+/** Limit GPU work and comparison frames to the same effective zoom size. */
+export function previewPixelBudget(budget = imageMemoryBudget()): number {
+  return budget < IMAGE_RGBA_BUDGET ? MOBILE_PREVIEW_PIXELS : 8_388_608;
+}
 
 /** Available in both the UI and workers; missing RAM hints are not zero RAM. */
 export function imageMemoryBudget(): number {
@@ -21,7 +27,7 @@ export function imageMemoryBudget(): number {
 
 /** Preview history is useful, but should hold fewer full preview frames on phones. */
 export function previewCacheBudgetBytes(budget = imageMemoryBudget()): number {
-  return budget < IMAGE_RGBA_BUDGET ? budget / 16 : budget / 8;
+  return budget < IMAGE_RGBA_BUDGET ? budget / 32 : budget / 8;
 }
 
 export function assertImageBudget(width: number, height: number, bytesPerPixel = 16, budget = imageMemoryBudget()): void {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { acquireDevice } from '../src/engine/device';
-import { RenderGraph, ScratchPool } from '../src/engine/graph';
+import { RenderGraph, ScratchPool, packRgb } from '../src/engine/graph';
 import type { Stage, StageContext } from '../src/engine/graph';
 import { createMaterializeActiveRegionStage } from '../src/engine/stages/materializeActiveRegion';
 import { Tap } from '../src/engine/taps';
@@ -465,6 +465,33 @@ describe('RenderGraph', () => {
     const params = paramsFor(2, 1);
     const input = new Float32Array([1, 2, 3, 4, 5, 6, 7, 8]);
     await expect(graph.run(input, params, Tap.RGB_IN, { output: 'rgb' })).resolves.toEqual(new Float32Array([1, 2, 3, 5, 6, 7]));
+    graph.dispose();
+  });
+
+  it('reuses frame buffers across renders without leaking pixels from a larger preview', async () => {
+    const engine = await acquireDevice();
+    const pool = new ScratchPool(engine.device);
+    const graph = new RenderGraph(engine, pool);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+    const large = new Float32Array(4 * 4 * 4).fill(0.25);
+    await expect(graph.run(large, paramsFor(4, 4), Tap.RGB_IN)).resolves.toEqual(large);
+    const ping = pool.getFrame('ping', large.byteLength);
+    const small = new Float32Array(2 * 2 * 4).fill(0.75);
+    await expect(graph.run(small, paramsFor(2, 2), Tap.RGB_IN)).resolves.toEqual(small);
+    expect(pool.getFrame('ping', small.byteLength)).toBe(ping);
+    pool.release();
+    graph.dispose();
+  });
+
+  it('stitches tiled RGB directly into three channels', async () => {
+    const engine = await acquireDevice();
+    const graph = new RenderGraph(engine);
+    graph.addStage(createMaterializeActiveRegionStage(engine.device));
+    const input = Float32Array.from({ length: 4 * 4 * 4 }, (_, i) => i / 64);
+    const result = await graph.run(input, paramsFor(4, 4), Tap.RGB_IN, {
+      maxBufferBytes: 64, forceTiling: true, output: 'rgb',
+    });
+    expect(result).toEqual(packRgb(input, 16));
     graph.dispose();
   });
 

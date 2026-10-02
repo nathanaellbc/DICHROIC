@@ -255,13 +255,24 @@ function stitchTileOutput(
   fullWidth: number,
   tileResult: Float32Array,
   tile: TileSpec,
+  channels: 3 | 4 = 4,
 ): void {
   const localOriginX = tile.activeOriginX - tile.tileOriginX;
   const localOriginY = tile.activeOriginY - tile.tileOriginY;
   for (let row = 0; row < tile.activeHeight; row += 1) {
     const srcRowStart = ((localOriginY + row) * tile.tileWidth + localOriginX) * 4;
-    const dstRowStart = ((tile.activeOriginY + row) * fullWidth + tile.activeOriginX) * 4;
-    output.set(tileResult.subarray(srcRowStart, srcRowStart + tile.activeWidth * 4), dstRowStart);
+    const dstRowStart = ((tile.activeOriginY + row) * fullWidth + tile.activeOriginX) * channels;
+    if (channels === 4) {
+      output.set(tileResult.subarray(srcRowStart, srcRowStart + tile.activeWidth * 4), dstRowStart);
+    } else {
+      for (let col = 0; col < tile.activeWidth; col++) {
+        const source = srcRowStart + col * 4;
+        const dest = dstRowStart + col * 3;
+        output[dest] = tileResult[source]!;
+        output[dest + 1] = tileResult[source + 1]!;
+        output[dest + 2] = tileResult[source + 2]!;
+      }
+    }
   }
 }
 
@@ -283,6 +294,7 @@ function stitchTileOutput(
  */
 export class ScratchPool {
   private readonly buffers = new Map<string, GPUBuffer>();
+  private readonly frameBuffers = new Map<string, GPUBuffer>();
   private retired: GPUBuffer[] = [];
 
   constructor(private readonly device: GPUDevice) {}
@@ -293,6 +305,19 @@ export class ScratchPool {
     if (existing) this.retired.push(existing);
     const buffer = this.device.createBuffer({ label: `scratch:${key}`, size: bytes, usage: PING_PONG_USAGE });
     this.buffers.set(key, buffer);
+    return buffer;
+  }
+
+  /** Reuse the large ping/pong/readback buffers across frames and stock changes. */
+  getFrame(key: 'ping' | 'pong' | 'readback', bytes: number): GPUBuffer {
+    const existing = this.frameBuffers.get(key);
+    if (existing && existing.size >= bytes) return existing;
+    if (existing) this.retired.push(existing);
+    const usage = key === 'readback'
+      ? gpuBufferUsage.COPY_DST | gpuBufferUsage.MAP_READ
+      : PING_PONG_USAGE;
+    const buffer = this.device.createBuffer({ label: `frame:${key}`, size: bytes, usage });
+    this.frameBuffers.set(key, buffer);
     return buffer;
   }
 
@@ -317,7 +342,9 @@ export class ScratchPool {
   release(): void {
     this.flushRetired();
     for (const buffer of this.buffers.values()) buffer.destroy();
+    for (const buffer of this.frameBuffers.values()) buffer.destroy();
     this.buffers.clear();
+    this.frameBuffers.clear();
     returnFreedMemory(this.device);
   }
 }
@@ -403,8 +430,7 @@ export class RenderGraph {
       const overlap = options?.overlap ?? 0;
       const tiles = planTiles(params.width, params.height, maxBufferBytes, overlap, options?.forceTiling);
       if (tiles.length > 1) {
-        const rgba = await this.runTiled(input, params, collect, tiles, frame);
-        return output === 'rgb' ? packRgb(rgba, params.width * params.height) : rgba;
+        return this.runTiled(input, params, collect, tiles, frame, output);
       }
     }
     return this.runSingleBuffer(input, params, collect, false, frame, output);
@@ -425,9 +451,10 @@ export class RenderGraph {
     collect: TapName,
     tiles: readonly TileSpec[],
     frame: Readonly<FrameParams>,
+    outputChannels: 'rgba' | 'rgb',
   ): Promise<Float32Array> {
     const { width, height } = params;
-    const output = new Float32Array(width * height * 4);
+    const output = new Float32Array(width * height * (outputChannels === 'rgb' ? 3 : 4));
 
     for (const tile of tiles) {
       const tileInput = extractTileInput(input, width, tile);
@@ -453,7 +480,7 @@ export class RenderGraph {
       // sebagai `centerRect` awal yang dibesarkan per-tahap, BUKAN sebagai
       // active rect tetap untuk seluruh tahap (beda dari sebelum Task 19b).
       const tileResult = await this.runSingleBuffer(tileInput, tileParams, collect, true, frame);
-      stitchTileOutput(output, width, tileResult, tile);
+      stitchTileOutput(output, width, tileResult, tile, outputChannels === 'rgb' ? 3 : 4);
     }
 
     return output;
@@ -518,44 +545,9 @@ export class RenderGraph {
     const { device } = this.engine;
     const bytes = input.byteLength;
 
-    // Review seluruh-branch, agenda #1 (`docs/superpowers/plans/2026-09-11-
-    // dichroic-phase1-engine.md`): `front`/`back` dialokasikan ulang di
-    // SINI, sekali per panggilan `runSingleBuffer` -- sejak Task 19 itu
-    // berarti SEKALI PER TILE (`runTiled` memanggil ini satu kali per
-    // `TileSpec`), bukan sekali per frame seperti sebelum tiling ada. Task 9
-    // menunda "apakah ini perlu dikolam seperti `StageContext.scratch()`" ke
-    // titik ini, dengan alasan "Dawn di sini rapuh terhadap pola alokasi".
-    //
-    // DIUKUR di sini sebelum diputuskan (sesi ini), bukan diasumsikan:
-    //   - Biaya create+destroy TERISOLASI sepasang buffer seukuran ini
-    //     (64x64x4x4 byte): ~0,059 ms/pasang (256 pasang, 15,15 ms total).
-    //   - Render 4-tile (hard_edge, fullChain, geometri "Task 19" gerbang
-    //     bit-identik di atas): rata-rata 37-40 ms per render (5 run),
-    //     8 alokasi ping-pong/run (2/tile) dari 216 alokasi buffer TOTAL
-    //     per run (~3,7%) -- kontribusi ping-pong terisolasi ke waktu
-    //     dinding: ~0,24 ms dari ~38 ms (~0,6%).
-    //   - Render 64-tile (8x8, geometri yang SAMA diperkecil overlap-nya):
-    //     440 ms total, 128 alokasi ping-pong (2/tile) -- kontribusi
-    //     terisolasi ~3,8 ms dari 440 ms (~0,9%). Keluaran tetap finite,
-    //     TIDAK ADA crash pada 64 tile (16x tile count gerbang bit-identik
-    //     di atas).
-    //   - Kerapuhan Dawn yang didokumentasikan di proyek ini
-    //     (`src/host/spectral.ts`, CATATAN LINGKUNGAN) SUDAH menyingkirkan
-    //     "tekanan alokasi" secara eksplisit sebagai tersangka pada segfault
-    //     yang ditemukan Task 11 -- itu kerja float CPU SETELAH device hidup,
-    //     TERBUKTI bukan soal create/destroy buffer sama sekali (400 MB
-    //     Float32Array dialokasikan+dibuang dengan device hidup, lolos).
-    //
-    // KEPUTUSAN: TIDAK dikolam. Kontribusi terukur create/destroy ke waktu
-    // dinding total berada di bawah 1% pada kedua skala yang diuji, dan
-    // tidak ada indikasi ketidakstabilan pada 64 tile. Mengolam `front`/
-    // `back` (menambah state lifecycle -- ukuran per-tile BERBEDA per tile
-    // pada tiling non-seragam, jadi kolam butuh logika resize/reuse yang
-    // `StageContext.scratch()` sudah punya untuk KASUS LAIN) akan menambah
-    // kerumitan tanpa manfaat terukur -- persis "jangan ubah kode tanpa
-    // alasan terukur" yang aturan proyek ini minta. Ukur ulang di sini kalau
-    // profil produksi sungguhan (bukan fixture test) suatu hari menunjukkan
-    // gambaran berbeda.
+    // Keep the largest preview's frame buffers for the next render. Repeated
+    // create/destroy cycles on iOS WebGPU can raise GPU-process memory pressure
+    // during film/paper changes; the pool grows only when resolution grows.
     const transient: GPUBuffer[] = [];
     const allocate = (descriptor: GPUBufferDescriptor): GPUBuffer => {
       const buffer = device.createBuffer(descriptor);
@@ -563,8 +555,8 @@ export class RenderGraph {
       return buffer;
     };
     try {
-      let front = allocate({ label: 'ping', size: bytes, usage: PING_PONG_USAGE });
-      let back = allocate({ label: 'pong', size: bytes, usage: PING_PONG_USAGE });
+      let front = this.pool.getFrame('ping', bytes);
+      let back = this.pool.getFrame('pong', bytes);
       // `input.buffer` bertipe `ArrayBufferLike` (bisa `SharedArrayBuffer`) di
       // definisi lib TS terbaru, sementara `writeBuffer` mensyaratkan
       // `ArrayBuffer` non-shared. `input` di sini SELALU `Float32Array` biasa
@@ -678,17 +670,13 @@ export class RenderGraph {
         [front, back] = [back, front];
       }
 
-      const readback = allocate({
-        label: 'readback',
-        size: bytes,
-        usage: gpuBufferUsage.COPY_DST | gpuBufferUsage.MAP_READ,
-      });
+      const readback = this.pool.getFrame('readback', bytes);
       encoder.copyBufferToBuffer(front, 0, readback, 0, bytes);
       device.queue.submit([encoder.finish()]);
 
       await readback.mapAsync(gpuMapMode.READ);
       const mapped = new Float32Array(readback.getMappedRange());
-      const result = output === 'rgb' ? packRgb(mapped, params.width * params.height) : mapped.slice();
+      const result = output === 'rgb' ? packRgb(mapped, params.width * params.height) : mapped.slice(0, expectedFloats);
       readback.unmap();
 
       return result;

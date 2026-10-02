@@ -25,7 +25,7 @@ const viewSpring = { type: 'spring' as const, duration: 0.42, bounce: 0 };
 const statusSpring = { type: 'spring' as const, duration: 0.3, bounce: 0.15 };
 import { Spinner } from './Overlays';
 import { Icon } from './Icon';
-import { imageMemoryBudget } from '../../io/budget';
+import { previewPixelBudget } from '../../io/budget';
 
 function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -202,7 +202,7 @@ export function PhotoView({
     if (!onResolutionChange || !sourceSize || rect.width === 0) return;
     const nativeEdge = Math.max(sourceSize.width, sourceSize.height);
     const needed = Math.ceil(Math.max(rect.width, rect.height) * view.s * (window.devicePixelRatio || 1) / 256) * 256;
-    const maxPixels = imageMemoryBudget() <= 1024 * 1024 * 1024 ? 8_388_608 : 64_000_000;
+    const maxPixels = previewPixelBudget();
     const memoryEdge = Math.floor(Math.sqrt(maxPixels * nativeEdge / Math.min(sourceSize.width, sourceSize.height)));
     const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), 180);
     return () => window.clearTimeout(timer);

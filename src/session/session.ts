@@ -49,7 +49,7 @@ import { buildGuide } from '../depth/estimate';
 import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, imageMemoryBudget, previewCacheBudgetBytes } from '../io/budget';
+import { assertImageBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -185,7 +185,7 @@ export const DIFFUSION_PLANE_BUDGET = 256 * 1024 * 1024;
 
 /** Bound interactive GPU work, including the grain stage's three-layer buffer. */
 export function previewRenderLongEdge(width: number, height: number, requested: number, params: RenderParams, bindingBytes: number, memoryBytes = imageMemoryBudget()): number {
-  const pixels = Math.max(1, Math.floor(Math.min(8_388_608, memoryBytes / 256, bindingBytes / (params.grainEnabled ? 48 : 16))));
+  const pixels = Math.max(1, Math.floor(Math.min(previewPixelBudget(memoryBytes), memoryBytes / 256, bindingBytes / (params.grainEnabled ? 48 : 16))));
   const native = Math.max(width, height);
   let edge = Math.min(native, Math.max(1, Math.round(requested)), Math.floor(Math.sqrt(pixels * native / Math.min(width, height))));
   const fits = (v: number) => v * Math.max(1, Math.round(v * Math.min(width, height) / native)) <= pixels;
@@ -417,7 +417,9 @@ export class Session {
     this.#preview = undefined; this.#draftPreview = undefined; this.#originalPreview = undefined;
     this.#cache.clear(); this.#previewCache.clear();
     this.#depth = undefined; this.#depthId += 1;
-    this.releaseExport();
+    // The full render was removed with #cache; keep preview buffers for the
+    // immediate regrade and the next film/paper selection.
+    this.exportVersion += 1;
     return { original: originalFrame(this.#image!, 1024), guide: buildGuide(this.#image!, 1024) };
   }
 
@@ -872,15 +874,18 @@ export class Session {
     return this.#busy ? new Promise((resolve) => this.idleWaiters.add(resolve)) : Promise.resolve();
   }
 
-  private clearResources(): void {
+  private clearResources(keepPreviewBuffers = false): void {
     this.cleanupPending = false;
     for (const graph of this.graphs.values()) void graph.then((g) => g.dispose(), () => {});
     this.graphs.clear();
     this.graphArenaKey = undefined;
-    this.#scratch?.release();
-    this.#scratch = undefined;
+    if (!keepPreviewBuffers) {
+      this.#scratch?.release();
+      this.#scratch = undefined;
+    }
     this.exportCleanupPending = false;
     this.ownedArenas?.destroy();
+    returnFreedMemory(this.engine.device);
   }
 
   dispose(): void {
@@ -925,7 +930,7 @@ export class Session {
     // All graph use is serialized by enqueue(). A new filter/stock variant
     // can safely retire the previous arenas and their dependent graphs here.
     if (this.graphArenaKey !== plan.arenaKey) {
-      if (this.graphArenaKey !== undefined) this.clearResources();
+      if (this.graphArenaKey !== undefined) this.clearResources(true);
       this.graphArenaKey = plan.arenaKey;
     }
     const key =
