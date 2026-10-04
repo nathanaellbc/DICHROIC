@@ -445,7 +445,10 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
 
   const topBarTop = 'max(var(--safe-top), 12px)';
   const photoTop = 'calc(max(var(--safe-top), 12px) + 68px)';
-  const photoStyle: React.CSSProperties = landscape
+  // Layar awal: latar penuh layar di belakang merek (tanpa pita hitam di atas).
+  const photoStyle: React.CSSProperties = !hasPhoto && !removing
+    ? { position: 'absolute', inset: 0 }
+    : landscape
     ? { position: 'absolute', top: photoTop, bottom: 'calc(var(--safe-bottom) + 12px)', left: 'calc(var(--safe-left) + 12px)', right: hasPhoto && !removing ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)' }
     : { position: 'absolute', top: photoTop, left: 0, right: 0, bottom: hasPhoto && !removing ? photoBottom : 'var(--safe-bottom)' };
 
