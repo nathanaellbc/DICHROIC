@@ -716,6 +716,7 @@ export function PhotoView({
           busy={slow}
           onClose={() => { setFullscreen(false); setFullscreenZoom(1); }}
           onZoom={setFullscreenZoom}
+          original={original && <FrameCanvas key={`o-${original.colorSpace}`} frame={original} />}
         >
           <FrameCanvas key={frame.colorSpace} frame={frame} />
         </PhotoLightbox>

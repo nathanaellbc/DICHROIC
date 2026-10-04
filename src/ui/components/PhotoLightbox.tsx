@@ -34,6 +34,8 @@ const PINCH_CLOSE = 0.72;
 const TAP_SLOP = 6;
 const TAP_MAX_MS = 250;
 const DOUBLE_TAP_MS = 280;
+/** Tahan selama ini (tanpa geser) untuk mengintip foto asli. */
+const HOLD_MS = 220;
 const IDENTITY: Zoom = { s: 1, x: 0, y: 0 };
 /** Seberapa jauh luncuran setelah lepas: jarak = kecepatan (px/ms) x ini. */
 const GLIDE_MS = 220;
@@ -62,7 +64,7 @@ function elasticScale(s: number): number {
   return s;
 }
 
-export function PhotoLightbox({ open, aspect, label, source, busy = false, onClose, onZoom, children }: {
+export function PhotoLightbox({ open, aspect, label, source, busy = false, onClose, onZoom, original, children }: {
   open: boolean;
   /** Ukuran piksel foto (hanya rasionya yang dipakai). */
   aspect: { width: number; height: number };
@@ -74,17 +76,19 @@ export function PhotoLightbox({ open, aspect, label, source, busy = false, onClo
   onClose: () => void;
   /** Skala zoom setelah gestur berhenti (untuk meminta render lebih tajam). */
   onZoom?: (scale: number) => void;
+  /** Foto asli seukuran render; tampil selama foto ditahan (juga saat zoom). */
+  original?: ReactNode;
   children: ReactNode;
 }) {
   return createPortal(
     <AnimatePresence>
-      {open && <Lightbox key="lightbox" aspect={aspect} label={label} source={source} busy={busy} onClose={onClose} onZoom={onZoom}>{children}</Lightbox>}
+      {open && <Lightbox key="lightbox" aspect={aspect} label={label} source={source} busy={busy} onClose={onClose} onZoom={onZoom} original={original}>{children}</Lightbox>}
     </AnimatePresence>,
     document.body,
   );
 }
 
-function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Omit<Parameters<typeof PhotoLightbox>[0], 'open'>) {
+function Lightbox({ aspect, label, source, busy, onClose, onZoom, original, children }: Omit<Parameters<typeof PhotoLightbox>[0], 'open'>) {
   const ref = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
@@ -110,6 +114,11 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
   const dim = useTransform(() => backdrop.get() * dragFade.get() * Math.min(1, pinchFade.get()));
   const closing = useRef(false);
   const [zoomed, setZoomed] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const holdTimer = useRef(0);
+  const peeked = useRef(false);
+  const endPeek = () => { window.clearTimeout(holdTimer.current); setPeek(false); };
+  useEffect(() => () => window.clearTimeout(holdTimer.current), []);
   const animations = useRef<Array<{ stop: () => void }>>([]);
 
   useEffect(() => {
@@ -220,6 +229,7 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
     dragY.stop();
     if (pointers.current.size === 2) {
       window.clearTimeout(tapTimer.current);
+      endPeek();
       const [a, b] = two();
       dragY.set(0);
       gesture.current = { kind: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, from: current(), minRaw: zs.get() };
@@ -228,6 +238,10 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
     if (pointers.current.size > 2) return;
     velocity.current = { x: 0, y: 0, t: performance.now(), px: p.x, py: p.y };
     gesture.current = { kind: 'pending', start: p, t: performance.now(), from: current() };
+    // Tahan tanpa geser: perlihatkan foto asli (seperti Photos), juga saat zoom.
+    peeked.current = false;
+    window.clearTimeout(holdTimer.current);
+    if (original) holdTimer.current = window.setTimeout(() => { peeked.current = true; setPeek(true); }, HOLD_MS);
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -253,6 +267,7 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
     const dy = p.y - (g as { start: Point }).start.y;
     if (g.kind === 'pending') {
       if (Math.hypot(dx, dy) < TAP_SLOP) return;
+      endPeek();
       gesture.current = g.from.s > 1.01 ? { kind: 'pan', start: g.start, from: g.from } : { kind: 'dismiss', start: g.start };
     }
     const cur = gesture.current!;
@@ -262,6 +277,7 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
 
   const onPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!pointers.current.delete(e.pointerId)) return;
+    endPeek();
     const g = gesture.current;
     if (!g) return;
     if (g.kind === 'pinch') {
@@ -286,7 +302,7 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
     if (e.type !== 'pointerup') { settleTo(clampZoom(current())); animate(dragY, 0, settleSpring); return; }
 
     if (g.kind === 'pending') {
-      if (performance.now() - g.t > TAP_MAX_MS) return;
+      if (peeked.current || performance.now() - g.t > TAP_MAX_MS) return;
       const p = { x: e.clientX, y: e.clientY };
       const prev = lastTap.current;
       if (prev && performance.now() - prev.t < DOUBLE_TAP_MS && Math.hypot(p.x - prev.p.x, p.y - prev.p.y) < 40) {
@@ -404,9 +420,18 @@ function Lightbox({ aspect, label, source, busy, onClose, onZoom, children }: Om
         >
           <motion.div className="lightbox-zoom" style={{ x: zx, y: zy, scale: zs }}>
             {children}
+            {/* Selalu terpasang (sudah tergambar), hanya disembunyikan: muncul seketika saat ditahan. */}
+            {original && <div className="lightbox-original" style={{ visibility: peek ? 'visible' : 'hidden' }}>{original}</div>}
           </motion.div>
         </motion.div>
       </motion.div>
+      <AnimatePresence>
+        {peek && (
+          <motion.span key="peek" className="glass-clear t-footnote photo-status-pill lightbox-peek" role="status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
+            Original
+          </motion.span>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {busy && (
           <motion.span key="busy" className="glass-clear t-footnote photo-status-pill lightbox-busy" role="status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ padding: '0 10px 0 7px' }}>

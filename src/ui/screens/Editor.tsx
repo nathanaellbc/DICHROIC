@@ -187,7 +187,10 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     <PhotoView
       frame={state.frame}
       focusMask={focusMask}
-      original={state.before ?? state.original}
+      // Pembanding/intip asli: `original` ikut resolusi render (tajam saat zoom).
+      // Setelah hapus objek, `before` (sebelum retouch, resolusi pembukaan) supaya
+      // pembanding tetap memperlihatkan foto aslinya.
+      original={engine.canUndoRemoval ? (state.before ?? state.original) : (state.original ?? state.before)}
       compare={compare}
       rendering={state.rendering && !state.interacting}
       photoKey={state.fileName ?? 'photo'}
