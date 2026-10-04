@@ -27,9 +27,37 @@ const FORMATS: ReadonlyArray<{ label: string; detail: string }> = [
  */
 export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: { onChoose: () => void; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
   const [over, setOver] = useState(false);
-  const depth = useRef(0);
   const touch = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches, []);
-  const hasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes('Files');
+
+  // Berkas bisa dijatuhkan di mana saja di jendela (pendengar `drop` di App);
+  // sorotan menyala selama berkas diseret di atas jendela mana pun.
+  useEffect(() => {
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
+    const enter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth += 1;
+      setOver(true);
+    };
+    const leave = () => {
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setOver(false);
+    };
+    const reset = () => {
+      depth = 0;
+      setOver(false);
+    };
+    window.addEventListener('dragenter', enter);
+    window.addEventListener('dragleave', leave);
+    window.addEventListener('drop', reset);
+    window.addEventListener('dragend', reset);
+    return () => {
+      window.removeEventListener('dragenter', enter);
+      window.removeEventListener('dragleave', leave);
+      window.removeEventListener('drop', reset);
+      window.removeEventListener('dragend', reset);
+    };
+  }, []);
 
   const status: { state: 'ready' | 'busy' | 'idle' | 'failed'; text: string } = engineFailed
     ? { state: 'failed', text: 'Darkroom stopped · choose a photo to retry' }
@@ -45,28 +73,12 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <div className="start-rays" aria-hidden="true" />
       <DotField className="start-dots" active={over} />
       <div className="start-dropframe" aria-hidden="true" />
-      <motion.button
-        type="button"
+      <motion.div
         className="photo-dropzone start-content"
         data-drag-over={over}
-        aria-label={`${title}. Choose Photo`}
         initial="hidden"
         animate="shown"
         variants={{ shown: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }}
-        onClick={onChoose}
-        onDragEnter={(e) => {
-          if (!hasFiles(e)) return;
-          depth.current += 1;
-          setOver(true);
-        }}
-        onDragLeave={() => {
-          depth.current = Math.max(0, depth.current - 1);
-          if (depth.current === 0) setOver(false);
-        }}
-        onDrop={() => {
-          depth.current = 0;
-          setOver(false);
-        }}
       >
         <motion.span className="start-emblem" aria-hidden="true" variants={rise}>
           <span className="start-emblem-core"><Icon name="photo" size={30} strokeWidth={1.8} color="#fff" /></span>
@@ -91,14 +103,14 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
             ])}
           </span>
           <motion.span className="start-description" variants={rise}>
-            Real film, simulated spectrally.{touch ? '' : ' Drag a file here, or click to browse.'}
+            Real film, simulated spectrally.{touch ? '' : ' Drop a file anywhere in this window.'}
           </motion.span>
         </span>
         <motion.span className="start-cta-wrap" variants={rise}>
           <span className="start-cta-glow" aria-hidden="true" />
-          <motion.span className="dropzone-cta start-cta" whileTap={{ scale: pressScale }} transition={pressRelease}>
+          <motion.button type="button" className="dropzone-cta start-cta" onClick={onChoose} whileTap={{ scale: pressScale }} transition={pressRelease}>
             <span className="start-cta-label"><Icon name="open" size={18} /> Choose Photo</span>
-          </motion.span>
+          </motion.button>
         </motion.span>
         <motion.span className="start-chips" variants={rise}>
           {FORMATS.map((f) => <span key={f.label} className="start-chip" title={f.detail}>{f.label}</span>)}
@@ -106,7 +118,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
         <motion.span className="start-privacy" variants={rise}>
           <Icon name="lock" size={13} /> Developed on this device. Nothing is uploaded.
         </motion.span>
-      </motion.button>
+      </motion.div>
     </div>
   );
 }
