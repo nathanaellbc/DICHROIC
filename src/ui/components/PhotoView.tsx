@@ -69,6 +69,8 @@ const DRAG_SLOP = 4;
 const TAP_MAX_MS = 220;
 /** Jeda menunggu ketukan kedua (zoom) sebelum membuka layar penuh. */
 const DOUBLE_TAP_MS = 240;
+/** Render tajam layar penuh dimulai setelah animasi buka (frame baru di-decode di thread utama). */
+const FULLSCREEN_RENDER_DELAY_MS = 520;
 
 /** Tampilan zoom: skala dan geser (px) sudut kiri-atas foto dari posisi pasnya. */
 interface View {
@@ -215,12 +217,19 @@ export function PhotoView({
   useEffect(() => {
     if (!onResolutionChange || !sourceSize || rect.width === 0) return;
     const nativeEdge = Math.max(sourceSize.width, sourceSize.height);
-    const needed = Math.ceil(Math.max(rect.width, rect.height) * view.s * (window.devicePixelRatio || 1) / 256) * 256;
+    const dpr = window.devicePixelRatio || 1;
+    let shownEdge = Math.max(rect.width, rect.height) * view.s;
+    // Layar penuh: render ulang setajam layar (sisi panjang kotak layar penuh x DPR).
+    if (fullscreen) {
+      const fit = Math.min(window.innerWidth / sourceSize.width, window.innerHeight / sourceSize.height);
+      shownEdge = Math.max(shownEdge, nativeEdge * fit);
+    }
+    const needed = Math.ceil(shownEdge * dpr / 256) * 256;
     const maxPixels = previewPixelBudget();
     const memoryEdge = Math.floor(Math.sqrt(maxPixels * nativeEdge / Math.min(sourceSize.width, sourceSize.height)));
-    const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), 180);
+    const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), fullscreen ? FULLSCREEN_RENDER_DELAY_MS : 180);
     return () => window.clearTimeout(timer);
-  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey]);
+  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey, fullscreen]);
 
   useEffect(() => {
     stopReturn();
@@ -580,7 +589,9 @@ export function PhotoView({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             transition={fade}
-            style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+            // Selama layar penuh (termasuk animasi buka/tutup) salinan di editor
+            // disembunyikan, supaya tidak tampak dua foto di balik latar yang memudar.
+            style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height, visibility: fullscreen ? 'hidden' : undefined }}
           >
             <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
               {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
@@ -700,6 +711,7 @@ export function PhotoView({
           aspect={frame}
           label={label}
           source={photoBox}
+          busy={slow}
           onClose={() => setFullscreen(false)}
         >
           <FrameCanvas key={frame.colorSpace} frame={frame} />

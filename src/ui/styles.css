@@ -423,7 +423,8 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .lightbox { position: fixed; inset: 0; z-index: 1000; outline: none; }
 .lightbox-backdrop { position: absolute; inset: 0; background: #000; }
 .lightbox-drag { position: absolute; inset: 0; touch-action: none; cursor: zoom-out; }
-.lightbox-photo { position: absolute; transform-origin: 0 0; will-change: transform; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5); }
+.lightbox-photo { position: absolute; transform-origin: 0 0; will-change: transform; }
+.lightbox-busy { position: absolute; z-index: 1; top: calc(max(var(--safe-top), 12px) + 12px); left: calc(var(--safe-left) + 12px); }
 .lightbox-close { position: absolute; top: calc(max(var(--safe-top), 12px) + 4px); right: calc(var(--safe-right) + 12px); z-index: 1; }
 
 /* Layar awal (belum ada foto). Gagasan dari React Bits (Dot Grid, Light Rays,

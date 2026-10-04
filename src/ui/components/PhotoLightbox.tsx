@@ -11,6 +11,7 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { activateModal } from '../modalFocus';
 import { Icon } from './Icon';
+import { Spinner } from './Overlays';
 
 export interface Box { left: number; top: number; width: number; height: number }
 
@@ -30,25 +31,27 @@ function fitBox(width: number, height: number): Box {
   return { left: (vw - w) / 2, top: (vh - h) / 2, width: w, height: h };
 }
 
-export function PhotoLightbox({ open, aspect, label, source, onClose, children }: {
+export function PhotoLightbox({ open, aspect, label, source, busy = false, onClose, children }: {
   open: boolean;
   /** Ukuran piksel foto (hanya rasionya yang dipakai). */
   aspect: { width: number; height: number };
   label: string;
   /** Posisi foto di editor saat ini (layar), tujuan animasi buka/tutup. */
   source: () => Box | null;
+  /** Render lebih tajam sedang berjalan. */
+  busy?: boolean;
   onClose: () => void;
   children: ReactNode;
 }) {
   return createPortal(
     <AnimatePresence>
-      {open && <Lightbox key="lightbox" aspect={aspect} label={label} source={source} onClose={onClose}>{children}</Lightbox>}
+      {open && <Lightbox key="lightbox" aspect={aspect} label={label} source={source} busy={busy} onClose={onClose}>{children}</Lightbox>}
     </AnimatePresence>,
     document.body,
   );
 }
 
-function Lightbox({ aspect, label, source, onClose, children }: Omit<Parameters<typeof PhotoLightbox>[0], 'open'>) {
+function Lightbox({ aspect, label, source, busy, onClose, children }: Omit<Parameters<typeof PhotoLightbox>[0], 'open'>) {
   const ref = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   const target = fitBox(aspect.width, aspect.height);
@@ -138,6 +141,13 @@ function Lightbox({ aspect, label, source, onClose, children }: Omit<Parameters<
           {children}
         </motion.div>
       </motion.div>
+      <AnimatePresence>
+        {busy && (
+          <motion.span key="busy" className="glass-clear t-footnote photo-status-pill lightbox-busy" role="status" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ padding: '0 10px 0 7px' }}>
+            <Spinner size={15} /> Developing
+          </motion.span>
+        )}
+      </AnimatePresence>
       <motion.button
         type="button"
         className="icon-btn glass lightbox-close"
