@@ -25,6 +25,8 @@ const viewSpring = { type: 'spring' as const, duration: 0.42, bounce: 0 };
 const statusSpring = { type: 'spring' as const, duration: 0.3, bounce: 0.15 };
 import { Spinner } from './Overlays';
 import { Icon } from './Icon';
+import { PhotoLightbox } from './PhotoLightbox';
+import type { Box } from './PhotoLightbox';
 import { previewPixelBudget } from '../../io/budget';
 
 function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperties }) {
@@ -63,6 +65,10 @@ const MAX_ZOOM = 8;
 const DOUBLE_CLICK_ZOOM = 2.5;
 /** Gerak (px) sebelum ketukan dianggap seretan. */
 const DRAG_SLOP = 4;
+/** Ketukan lebih lama dari ini adalah tahan (intip asli), bukan buka layar penuh. */
+const TAP_MAX_MS = 220;
+/** Jeda menunggu ketukan kedua (zoom) sebelum membuka layar penuh. */
+const DOUBLE_TAP_MS = 240;
 
 /** Tampilan zoom: skala dan geser (px) sudut kiri-atas foto dari posisi pasnya. */
 interface View {
@@ -141,6 +147,9 @@ export function PhotoView({
   const [slow, setSlow] = useState(false);
   const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FIT);
+  const [fullscreen, setFullscreen] = useState(false);
+  const tapTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(tapTimer.current), []);
   const reducedMotion = useReducedMotion();
   const returnAnimation = useRef<{ stop: () => void } | null>(null);
   const wheelFrame = useRef(0);
@@ -163,7 +172,7 @@ export function PhotoView({
   const pendingFocus = useRef<{ point: Point; pick: FocusOverlay['onPick'] } | null>(null);
   const gesture = useRef<
     | { kind: 'focus'; pointerId: number; offset: Point }
-    | { kind: 'pan'; x: number; y: number; view: View; moved: boolean }
+    | { kind: 'pan'; x: number; y: number; view: View; moved: boolean; t: number }
     | { kind: 'pinch'; dist: number; mid: Point; view: View }
     | { kind: 'tap'; x: number; y: number; moved: boolean }
     | { kind: 'brush'; pointerId: number }
@@ -452,7 +461,7 @@ export function PhotoView({
       setSplitFrom(e.clientX);
       return;
     }
-    gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false };
+    gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false, t: performance.now() };
     window.clearTimeout(holdTimer.current);
     if (!brush) holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
@@ -510,6 +519,13 @@ export function PhotoView({
         setAim(null);
       }
     }
+    // Ketukan singkat tanpa geser membuka layar penuh, ditunda sebentar supaya
+    // ketuk/klik dua kali tetap berarti zoom.
+    if (tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0
+        && performance.now() - g.t < TAP_MAX_MS && canFullscreen) {
+      window.clearTimeout(tapTimer.current);
+      tapTimer.current = window.setTimeout(() => setFullscreen(true), DOUBLE_TAP_MS);
+    }
     // Pinch yang tinggal satu jari berhenti; gestur satu jari berakhir saat dilepas.
     if (g?.kind !== 'pinch' || pointers.current.size < 2) gesture.current = null;
     splitDrag.current = false;
@@ -518,6 +534,7 @@ export function PhotoView({
     if (tracked && pointers.current.size === 0) settleView();
   };
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    window.clearTimeout(tapTimer.current);
     if (picking || brush?.enabled || (e.target as HTMLElement).closest('button, [role=slider]')) return;
     const p = local(e.clientX, e.clientY);
     animateView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
@@ -528,6 +545,13 @@ export function PhotoView({
   const sy = (v: number) => view.ty + v * view.s * rect.height;
 
   const showOriginal = !!original && !picking && (compare || peek);
+  const canFullscreen = !!frame && !content && !brush && !compare && !picking;
+  /** Posisi foto di layar sekarang (ikut zoom/geser): titik awal/akhir animasi layar penuh. */
+  const photoBox = (): Box | null => {
+    const box = areaRef.current?.getBoundingClientRect();
+    if (!box || rect.width === 0) return null;
+    return { left: box.left + rect.left + view.tx, top: box.top + rect.top + view.ty, width: rect.width * view.s, height: rect.height * view.s };
+  };
   const clip = compare ? `inset(0 ${(1 - split) * 100}% 0 0)` : 'inset(0 0 0 0)';
 
   return (
@@ -670,6 +694,17 @@ export function PhotoView({
           )}
         </AnimatePresence>
       </div>
+      {frame && (
+        <PhotoLightbox
+          open={fullscreen && canFullscreen}
+          aspect={frame}
+          label={label}
+          source={photoBox}
+          onClose={() => setFullscreen(false)}
+        >
+          <FrameCanvas key={frame.colorSpace} frame={frame} />
+        </PhotoLightbox>
+      )}
     </div>
   );
 }
