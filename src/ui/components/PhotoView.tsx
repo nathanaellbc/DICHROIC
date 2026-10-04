@@ -150,6 +150,8 @@ export function PhotoView({
   const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
   const [view, setView] = useState<View>(FIT);
   const [fullscreen, setFullscreen] = useState(false);
+  /** Zoom di layar penuh (1 = pas layar), untuk meminta render lebih tajam. */
+  const [fullscreenZoom, setFullscreenZoom] = useState(1);
   const tapTimer = useRef(0);
   useEffect(() => () => window.clearTimeout(tapTimer.current), []);
   const reducedMotion = useReducedMotion();
@@ -222,14 +224,14 @@ export function PhotoView({
     // Layar penuh: render ulang setajam layar (sisi panjang kotak layar penuh x DPR).
     if (fullscreen) {
       const fit = Math.min(window.innerWidth / sourceSize.width, window.innerHeight / sourceSize.height);
-      shownEdge = Math.max(shownEdge, nativeEdge * fit);
+      shownEdge = Math.max(shownEdge, nativeEdge * fit * fullscreenZoom);
     }
     const needed = Math.ceil(shownEdge * dpr / 256) * 256;
     const maxPixels = previewPixelBudget();
     const memoryEdge = Math.floor(Math.sqrt(maxPixels * nativeEdge / Math.min(sourceSize.width, sourceSize.height)));
     const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), fullscreen ? FULLSCREEN_RENDER_DELAY_MS : 180);
     return () => window.clearTimeout(timer);
-  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey, fullscreen]);
+  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey, fullscreen, fullscreenZoom]);
 
   useEffect(() => {
     stopReturn();
@@ -712,7 +714,8 @@ export function PhotoView({
           label={label}
           source={photoBox}
           busy={slow}
-          onClose={() => setFullscreen(false)}
+          onClose={() => { setFullscreen(false); setFullscreenZoom(1); }}
+          onZoom={setFullscreenZoom}
         >
           <FrameCanvas key={frame.colorSpace} frame={frame} />
         </PhotoLightbox>

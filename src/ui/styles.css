@@ -422,7 +422,10 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 /* Foto layar penuh (PhotoLightbox): di atas semua chrome, latar hitam pekat. */
 .lightbox { position: fixed; inset: 0; z-index: 1000; outline: none; }
 .lightbox-backdrop { position: absolute; inset: 0; background: #000; }
-.lightbox-drag { position: absolute; inset: 0; touch-action: none; cursor: zoom-out; }
+.lightbox-drag { position: absolute; inset: 0; touch-action: none; cursor: zoom-in; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.lightbox-drag[data-zoomed="true"] { cursor: grab; }
+.lightbox-drag[data-zoomed="true"]:active { cursor: grabbing; }
+.lightbox-zoom { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 .lightbox-photo { position: absolute; transform-origin: 0 0; will-change: transform; }
 .lightbox-busy { position: absolute; z-index: 1; top: calc(max(var(--safe-top), 12px) + 12px); left: calc(var(--safe-left) + 12px); }
 .lightbox-close { position: absolute; top: calc(max(var(--safe-top), 12px) + 4px); right: calc(var(--safe-right) + 12px); z-index: 1; }
