@@ -6,6 +6,8 @@ import { engine } from './engine/engine';
 import { startPwa } from './pwa';
 // Cadangan SF di luar perangkat Apple (Windows, Android): Inter, self-host dan ikut precache PWA.
 import '@fontsource-variable/inter/wght.css';
+// SF Pro (berkas di public/fonts/sf-pro/) untuk platform tanpa SF bawaan.
+import './fonts.css';
 import './styles.css';
 
 startPwa();

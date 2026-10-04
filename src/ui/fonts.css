@@ -1,0 +1,20 @@
+/*
+ * SF Pro di semua platform. Perangkat Apple memakai SF bawaan sistem lewat
+ * `-apple-system` di `--font`; di platform lain (Windows, Android) dipakai
+ * berkas SF Pro di public/fonts/sf-pro/ (berkas .otf resmi Apple; di mesin lain
+ * bisa diambil ulang dengan tools/install-sf-pro.ps1). Sengaja TIDAK di-precache
+ * PWA: perangkat Apple tidak pernah memintanya, jadi iPhone tidak mengunduh ~17 MB. `local()` lebih dulu supaya font yang terpasang
+ * di sistem tidak diunduh ulang. Bila berkasnya tidak ada, tumpukan font jatuh
+ * ke Inter Variable.
+ *
+ * Text untuk ukuran < 20 pt, Display untuk judul (pedoman tipografi Apple).
+ */
+@font-face { font-family: "DICHROIC SF Text"; font-weight: 400; font-style: normal; font-display: swap; src: local("SF Pro Text Regular"), local("SFProText-Regular"), url("/fonts/sf-pro/SF-Pro-Text-Regular.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Text"; font-weight: 500; font-style: normal; font-display: swap; src: local("SF Pro Text Medium"), local("SFProText-Medium"), url("/fonts/sf-pro/SF-Pro-Text-Medium.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Text"; font-weight: 600; font-style: normal; font-display: swap; src: local("SF Pro Text Semibold"), local("SFProText-Semibold"), url("/fonts/sf-pro/SF-Pro-Text-Semibold.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Text"; font-weight: 700; font-style: normal; font-display: swap; src: local("SF Pro Text Bold"), local("SFProText-Bold"), url("/fonts/sf-pro/SF-Pro-Text-Bold.otf") format("opentype"); }
+
+@font-face { font-family: "DICHROIC SF Display"; font-weight: 400; font-style: normal; font-display: swap; src: local("SF Pro Display Regular"), local("SFProDisplay-Regular"), url("/fonts/sf-pro/SF-Pro-Display-Regular.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Display"; font-weight: 500; font-style: normal; font-display: swap; src: local("SF Pro Display Medium"), local("SFProDisplay-Medium"), url("/fonts/sf-pro/SF-Pro-Display-Medium.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Display"; font-weight: 600; font-style: normal; font-display: swap; src: local("SF Pro Display Semibold"), local("SFProDisplay-Semibold"), url("/fonts/sf-pro/SF-Pro-Display-Semibold.otf") format("opentype"); }
+@font-face { font-family: "DICHROIC SF Display"; font-weight: 700; font-style: normal; font-display: swap; src: local("SF Pro Display Bold"), local("SFProDisplay-Bold"), url("/fonts/sf-pro/SF-Pro-Display-Bold.otf") format("opentype"); }

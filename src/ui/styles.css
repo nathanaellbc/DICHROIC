@@ -12,7 +12,9 @@
 :root {
   color-scheme: dark;
   /* SF di perangkat Apple; Inter (self-host) di tempat lain, supaya suaranya tetap satu. */
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "DICHROIC SF Text", "SF Pro Text", "Inter Variable", system-ui, sans-serif;
+  /* Judul >= 20 pt: SF Pro Display (fonts.css). Di Apple, -apple-system memilih ukuran optik sendiri. */
+  --font-display: -apple-system, BlinkMacSystemFont, "DICHROIC SF Display", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
 
   --bg: #000;
   --bg-elevated: rgba(28, 28, 30, 0.58);
@@ -210,6 +212,7 @@ input { caret-color: var(--blue); }
 }
 
 /* Gaya teks. Compact: gaya teks iOS (Large). Regular: skala macOS. */
+.t-large-title, .t-title2, .t-title3, .start-title { font-family: var(--font-display); }
 .t-large-title { font-size: 2rem; line-height: 1.206; font-weight: 700; letter-spacing: 0.01em; }
 .t-title2 { font-size: 1.294rem; line-height: 1.27; font-weight: 700; }
 .t-title3 { font-size: 1.176rem; line-height: 1.25; font-weight: 600; }
