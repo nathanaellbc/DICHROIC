@@ -821,6 +821,15 @@ html[data-size="regular"] .search-field input { font-size: 12px; }
 .sheet-title { margin: 0; text-align: center; }
 .sheet-content { flex-grow: 1; min-height: 0; touch-action: pan-y; padding-bottom: var(--safe-bottom); }
 .sheet.centered .sheet-content { padding-bottom: 0; }
+/*
+ * Sheet HP: daftar yang di-scroll mengalir sampai tepi bawah layar (di bawah
+ * home indicator); jarak aman masuk ke ujung isinya, bukan ke wadah. Dulu
+ * padding di wadah memotong daftar setinggi home indicator dan menyisakan
+ * pita kosong di bawahnya. Tombol aksi di bawah tetap di atas indikator.
+ */
+.sheet:not(.centered) .sheet-content { padding-bottom: 0; }
+.sheet:not(.centered) .sheet-content .scroll-y:last-child { padding-bottom: calc(var(--safe-bottom) + 32px) !important; scroll-padding-bottom: calc(var(--safe-bottom) + 16px); }
+.sheet:not(.centered) .sheet-actions { padding-bottom: max(var(--inset-dialog), var(--safe-bottom)); }
 /* Tombol aksi dialog desktop: rata kanan, lebar menurut isi (macOS). */
 .sheet-actions { padding: var(--inset-dialog); flex-shrink: 0; display: flex; gap: 10px; }
 .export-action-status { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 6px var(--inset-dialog) 0; }
