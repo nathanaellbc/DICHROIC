@@ -454,7 +454,7 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       <div style={{ ...photoStyle, zIndex: 0 }}>{photo}</div>
 
       <div
-        className="mobile-toolbar glass"
+        className={!hasPhoto && !removing ? 'mobile-toolbar is-bare' : 'mobile-toolbar glass'}
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
@@ -463,7 +463,6 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
       >
         {removing ? <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
           <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Your pocket darkroom</span></div>
-          <PressButton className="icon-btn plain" aria-label="Open Photo" onClick={onOpenFile}><Icon name="open" size={20} /></PressButton>
         </> : <>
         <PressButton className="icon-btn plain" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
           <Icon name="more" size={20} strokeWidth={2.4} />

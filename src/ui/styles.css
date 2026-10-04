@@ -382,6 +382,9 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
   justify-content: space-between; overflow: hidden;
 }
 .mobile-export { background: var(--blue-fill); color: var(--label); }
+/* Layar awal: merek polos tanpa wadah kaca dan tanpa tombol. */
+.mobile-toolbar.is-bare { background: transparent; border: 0; box-shadow: none; pointer-events: none; }
+.mobile-toolbar.is-bare .mobile-brand { padding-left: 4px; }
 .mobile-brand { flex: 1; min-width: 0; padding-left: 12px; display: flex; flex-direction: column; gap: 2px; }
 .mobile-brand > :first-child { font-size: 13px; font-weight: 650; letter-spacing: 0.12em; }
 .mobile-brand > :last-child { font-size: 11px; }
