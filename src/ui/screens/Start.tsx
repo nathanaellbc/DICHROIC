@@ -5,20 +5,12 @@
  */
 import { AnimatePresence, motion } from 'motion/react';
 import { useMemo, useRef, useState } from 'react';
-import { DotField } from '../components/DotField';
 import { Icon } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
 import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
 import { useEffect } from 'react';
 import { activateModal } from '../modalFocus';
 import { useDialogKeys } from '../hooks';
-
-const FORMATS: ReadonlyArray<{ label: string; detail: string }> = [
-  { label: 'RAW', detail: 'DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more' },
-  { label: 'JPEG', detail: 'JPEG photos' },
-  { label: 'PNG', detail: 'PNG images' },
-  { label: 'TIFF', detail: 'TIFF, 8, 16 or 32-bit' },
-  { label: 'OpenEXR', detail: 'High dynamic range OpenEXR' },];
 
 /**
  * Area foto kosong di editor (belum ada foto): wadah seret-lepas yang juga
@@ -59,73 +51,70 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
     };
   }, []);
 
-  const status: { state: 'ready' | 'busy' | 'idle' | 'failed'; text: string } = engineFailed
-    ? { state: 'failed', text: 'Darkroom stopped · choose a photo to retry' }
-    : enginePaused
-      ? { state: 'idle', text: 'Darkroom resting until you choose a photo' }
-      : engineReady
-        ? { state: 'ready', text: 'Darkroom ready' }
-        : { state: 'busy', text: 'Warming up the darkroom…' };
-  const title = touch ? 'Start with a photo' : over ? 'Drop to develop' : 'Drop in a photo';
+  // Status darkroom hanya sebagai teks kecil; tanpa titik berdenyut.
+  const status = engineFailed ? 'Darkroom stopped. Choose a photo to retry.'
+    : enginePaused ? 'Darkroom resting until you choose a photo.'
+      : engineReady ? null : 'Preparing the darkroom…';
+  const [lead, tail] = over ? ['Drop to develop.', 'Let go anywhere.'] : ['Develop your photo', 'on real film.'];
 
   return (
     <div className="empty-photo start-stage" data-drag-over={over}>
-      <div className="start-rays" aria-hidden="true" />
-      <DotField className="start-dots" active={over} />
+      {/* Satu cahaya biru samar yang "bernapas" pelan; satu-satunya hiasan. */}
+      <div className="start-glow" aria-hidden="true" />
       <div className="start-dropframe" aria-hidden="true" />
       <motion.div
         className="photo-dropzone start-content"
         data-drag-over={over}
         initial="hidden"
         animate="shown"
-        variants={{ shown: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } } }}
+        variants={{ shown: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } } }}
       >
-        <motion.span className="start-emblem" aria-hidden="true" variants={rise}>
-          <span className="start-emblem-core"><Icon name="photo" size={30} strokeWidth={1.8} color="#fff" /></span>
-        </motion.span>
-        <motion.span className="start-status" data-state={status.state} variants={rise} role="status" aria-live="polite">
-          <span className="start-status-dot" aria-hidden="true" />
-          {status.text}
-        </motion.span>
-        <span className="start-heading">
-          <span className="start-title" key={title}>
-            {title.split(' ').map((word, i, words) => [
-              i > 0 ? ' ' : null,
-              <motion.span
-                key={`${word}-${i}`}
-                className={i === words.length - 1 ? 'start-word start-shine' : 'start-word'}
-                initial={{ opacity: 0, filter: 'blur(10px)', y: 14 }}
-                animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                transition={{ duration: 0.55, delay: 0.12 + i * 0.08, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {word}
-              </motion.span>,
-            ])}
-          </span>
-          <motion.span className="start-description" variants={rise}>
-            Real film, simulated spectrally.{touch ? '' : ' Drop a file anywhere in this window.'}
-          </motion.span>
-        </span>
-        <motion.span className="start-cta-wrap" variants={rise}>
-          <span className="start-cta-glow" aria-hidden="true" />
-          <motion.button type="button" className="dropzone-cta start-cta" onClick={onChoose} whileTap={{ scale: pressScale }} transition={pressRelease}>
-            <span className="start-cta-label"><Icon name="open" size={18} /> Choose Photo</span>
+        {/* Judul dua nada ala apple.com: baris pertama putih, kedua abu-abu. */}
+        <h1 className="start-title" key={lead}>
+          <BlurWords text={lead} />
+          <span className="start-title-tail"><BlurWords text={tail} delay={0.18} /></span>
+        </h1>
+        <motion.p className="start-description" variants={rise}>
+          Spectral simulation of real film and print stocks, right on this device.
+        </motion.p>
+        <motion.div className="start-actions" variants={rise}>
+          <motion.button type="button" className="start-cta" onClick={onChoose} whileTap={{ scale: pressScale }} transition={pressRelease}>
+            Choose Photo
           </motion.button>
-        </motion.span>
-        <motion.span className="start-chips" variants={rise}>
-          {FORMATS.map((f) => <span key={f.label} className="start-chip" title={f.detail}>{f.label}</span>)}
-        </motion.span>
-        <motion.span className="start-privacy" variants={rise}>
-          <Icon name="lock" size={13} /> Developed on this device. Nothing is uploaded.
-        </motion.span>
+          {!touch && <span className="start-hint">or drop a file anywhere</span>}
+        </motion.div>
+        <motion.p className="start-footnote" variants={rise}>
+          RAW, JPEG, PNG, TIFF and OpenEXR. Nothing is uploaded.
+          {status && <span className="start-status" role="status" aria-live="polite">{status}</span>}
+        </motion.p>
       </motion.div>
     </div>
   );
 }
 
+/** Kata per kata muncul dari blur halus (Blur Text React Bits, versi singkat). */
+function BlurWords({ text, delay = 0 }: { text: string; delay?: number }) {
+  return (
+    <>
+      {text.split(' ').map((word, i) => [
+        i > 0 ? ' ' : null,
+        <motion.span
+          key={`${word}-${i}`}
+          className="start-word"
+          initial={{ opacity: 0, filter: 'blur(8px)', y: 8 }}
+          animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+          transition={{ duration: 0.7, delay: delay + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {word}
+        </motion.span>,
+      ])}
+    </>
+  );
+}
+
 const rise = {
-  hidden: { opacity: 0, y: 10 },
-  shown: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
+  hidden: { opacity: 0, y: 8 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] } },
 };
 
 export function OpeningCard({ opening, onCancel }: { opening?: { name: string; stage: string }; onCancel: () => void }) {

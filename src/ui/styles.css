@@ -462,138 +462,76 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .lightbox-busy { position: absolute; z-index: 1; top: calc(max(var(--safe-top), 12px) + 12px); left: calc(var(--safe-left) + 12px); }
 .lightbox-close { position: absolute; top: calc(max(var(--safe-top), 12px) + 4px); right: calc(var(--safe-right) + 12px); z-index: 1; }
 
-/* Layar awal (belum ada foto). Gagasan dari React Bits (Dot Grid, Light Rays,
-   Blur Text, Shiny Text, Star Border), ditulis ulang dengan palet DICHROIC:
-   hitam, grafit, satu biru. Hilang begitu foto terbuka, jadi tidak ada cahaya
-   yang menyentuh foto (Neutral Neighbour Rule). */
+/* Layar awal (belum ada foto): minimalis ala apple.com. Judul besar dua
+   nada, satu kalimat, satu tombol pil, catatan kecil. Satu-satunya hiasan
+   adalah cahaya biru samar yang bernapas pelan (gagasan Aurora React Bits,
+   sangat diredam) dan judul yang muncul dari blur (Blur Text). Hilang begitu
+   foto terbuka, jadi tidak ada cahaya yang menyentuh foto. */
 .start-stage { position: absolute; inset: 0; display: flex; overflow: hidden; isolation: isolate; background: #000; }
-.start-rays {
-  position: absolute; inset: -20% -30% auto; height: 90%; z-index: -2; pointer-events: none;
+.start-glow {
+  position: absolute; left: 50%; top: 58%; width: min(900px, 140vw); aspect-ratio: 1.6; z-index: -1; pointer-events: none;
+  transform: translate(-50%, -50%);
   background:
-    radial-gradient(ellipse 45% 55% at 50% 0%, rgba(0, 145, 255, 0.28), transparent 70%),
-    conic-gradient(from 180deg at 50% -8%, transparent 152deg, rgba(92, 184, 255, 0.07) 160deg, transparent 166deg,
-      rgba(0, 145, 255, 0.09) 174deg, transparent 179deg, rgba(92, 184, 255, 0.06) 186deg, transparent 192deg,
-      rgba(0, 145, 255, 0.08) 199deg, transparent 207deg);
-  filter: blur(18px); transform-origin: 50% 0;
-  animation: start-rays-sway 14s ease-in-out infinite alternate;
-  mask-image: linear-gradient(to bottom, #000 30%, transparent 100%);
+    radial-gradient(closest-side at 42% 50%, rgba(0, 112, 224, 0.22), transparent),
+    radial-gradient(closest-side at 62% 46%, rgba(92, 184, 255, 0.10), transparent);
+  filter: blur(40px); opacity: 0.9;
+  animation: start-glow 14s ease-in-out infinite alternate;
 }
-@keyframes start-rays-sway { from { transform: rotate(-3deg); opacity: 0.8; } to { transform: rotate(3deg); opacity: 1; } }
-.start-dots {
-  position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none;
-  mask-image: radial-gradient(ellipse 110% 95% at 50% 45%, #000 55%, transparent 100%);
+@keyframes start-glow {
+  from { transform: translate(-52%, -50%) scale(1); opacity: 0.7; }
+  to { transform: translate(-48%, -53%) scale(1.08); opacity: 1; }
 }
 .start-dropframe {
   position: absolute; inset: 16px; border-radius: var(--r-dialog); pointer-events: none;
-  border: 1.5px dashed rgba(255, 255, 255, 0.14); background: transparent;
-  transition: border-color 0.15s, background-color 0.15s, inset 0.2s;
+  border: 1px solid transparent; transition: border-color 0.2s, background-color 0.2s, inset 0.25s;
 }
-.start-stage[data-drag-over="true"] .start-dropframe { border-color: var(--blue); background: var(--blue-wash); inset: 12px; }
-html[data-size="compact"] .start-dropframe { opacity: 0; }
-html[data-size="compact"] .start-stage[data-drag-over="true"] .start-dropframe { opacity: 1; }
+.start-stage[data-drag-over="true"] .start-dropframe { border-color: rgba(0, 145, 255, 0.7); background: rgba(0, 145, 255, 0.06); inset: 12px; }
 
 .start-content {
   position: relative; flex: 1; min-height: 0; overflow-y: auto; margin: 0; padding: 32px 24px;
-  border: 0; background: transparent; font: inherit; color: inherit; text-align: center; cursor: default;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
-  scrollbar-width: thin; -webkit-tap-highlight-color: transparent;
+  text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  scrollbar-width: thin;
 }
 /* HP: latar mengisi seluruh layar; konten menjauhi merek dan tepi aman. */
 html[data-size="compact"] .start-content {
-  padding: calc(max(var(--safe-top), 12px) + 72px) calc(var(--safe-right) + 24px) calc(var(--safe-bottom) + 24px) calc(var(--safe-left) + 24px);
+  padding: calc(max(var(--safe-top), 12px) + 72px) calc(var(--safe-right) + 28px) calc(var(--safe-bottom) + 28px) calc(var(--safe-left) + 28px);
 }
-.start-cta:focus-visible { outline: 3px solid rgba(0, 145, 255, 0.6); outline-offset: 2px; }
 
-.start-emblem {
-  position: relative; width: 76px; height: 76px; border-radius: 22px; overflow: hidden; flex-shrink: 0;
-  display: flex; padding: 1px; box-sizing: border-box; background: rgba(255, 255, 255, 0.08);
-}
-.start-emblem::before {
-  content: ''; position: absolute; inset: -50%;
-  background: conic-gradient(from 0deg, transparent 0 62%, rgba(0, 145, 255, 0.0) 64%, var(--blue) 82%, var(--blue-text) 88%, transparent 92%);
-  animation: start-orbit 4.8s linear infinite;
-}
-.start-emblem-core {
-  position: relative; flex: 1; border-radius: 21px; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 50% 0%, rgba(0, 145, 255, 0.22), transparent 70%), #111113;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-@keyframes start-orbit { to { transform: rotate(1turn); } }
-
-.start-status {
-  display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 9999px;
-  font-size: 12px; font-weight: 500; color: var(--label-2);
-  background: rgba(28, 28, 30, 0.58); border: 1px solid var(--hairline);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-}
-.start-status-dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); flex-shrink: 0; }
-.start-status-dot::after {
-  content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit;
-  animation: start-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-.start-status[data-state="ready"] .start-status-dot { background: var(--green); }
-.start-status[data-state="idle"] .start-status-dot { background: var(--label-3); }
-.start-status[data-state="idle"] .start-status-dot::after { animation: none; }
-.start-status[data-state="failed"] .start-status-dot { background: var(--orange); }
-@keyframes start-ping { 75%, 100% { transform: scale(2.6); opacity: 0; } }
-
-.start-heading { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 520px; }
 .start-title {
-  display: block; text-wrap: balance;
-  font-size: clamp(30px, 7.4vw, 44px); line-height: 1.08; letter-spacing: -0.035em; font-weight: 700; color: #fff;
+  margin: 0; max-width: 12em; text-wrap: balance; color: #f5f5f7;
+  font-size: clamp(34px, 9.6vw, 56px); line-height: 1.07; letter-spacing: -0.028em; font-weight: 600;
 }
-html[data-size="regular"] .start-title { font-size: 40px; }
+html[data-size="regular"] .start-title { font-size: 48px; }
+.start-title-tail { display: block; color: #86868b; }
 .start-word { display: inline-block; will-change: transform, filter, opacity; }
-.start-shine {
-  background: linear-gradient(110deg, #fff 30%, var(--blue-text) 45%, #d6ecff 50%, var(--blue-text) 55%, #fff 70%);
-  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: start-shine 5s linear infinite; padding-bottom: 0.06em;
+.start-description {
+  margin: 18px 0 0; max-width: 30em; text-wrap: balance; color: #a1a1a6;
+  font-size: 17px; line-height: 1.47; letter-spacing: -0.01em;
 }
-@keyframes start-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-.start-description { font-size: 15px; line-height: 1.5; color: var(--label-2); max-width: 34ch; text-wrap: balance; }
-html[data-size="regular"] .start-description { font-size: 14px; max-width: 46ch; }
+html[data-size="regular"] .start-description { font-size: 15px; }
 
-.start-cta-wrap { position: relative; display: inline-flex; margin-top: 4px; }
-.start-cta-glow {
-  position: absolute; inset: 6px 10px -6px; border-radius: 9999px; background: var(--blue);
-  filter: blur(22px); opacity: 0.45; pointer-events: none;
-  animation: start-breathe 3.6s ease-in-out infinite;
+.start-actions { margin-top: 32px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.start-cta {
+  min-height: 48px; padding: 0 26px; border: 0; border-radius: 9999px; margin: 0; cursor: pointer;
+  background: #0071e3; color: #fff; font: inherit; font-size: 17px; font-weight: 500; letter-spacing: -0.01em;
+  transition: background-color 0.2s;
 }
-@keyframes start-breathe { 50% { opacity: 0.25; transform: scale(0.94); } }
-.dropzone-cta.start-cta {
-  position: relative; display: inline-flex; overflow: hidden; min-height: 52px; padding: 0 28px;
-  border-radius: var(--r-control); background: var(--blue-fill); font-size: 16px; font-weight: 600; color: #fff; border: 0; margin: 0; font-family: inherit; cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(92, 184, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-.start-cta::before, .start-cta::after {
-  content: ''; position: absolute; width: 300%; height: 60%; opacity: 0.75; pointer-events: none; mix-blend-mode: screen;
-  background: radial-gradient(circle, var(--blue-text), transparent 12%);
-}
-.start-cta::before { bottom: -18px; right: -250%; animation: start-star-bottom 5s linear infinite alternate; }
-.start-cta::after { top: -18px; left: -250%; animation: start-star-top 5s linear infinite alternate; }
-@keyframes start-star-bottom { 0% { transform: translateX(0); opacity: 0.9; } 100% { transform: translateX(-100%); opacity: 0; } }
-@keyframes start-star-top { 0% { transform: translateX(0); opacity: 0.9; } 100% { transform: translateX(100%); opacity: 0; } }
-.start-cta-label { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-@media (hover: hover) {
-  .start-cta:hover { background: #0a7ef0; }
-  .start-cta-wrap:hover .start-cta-glow { opacity: 0.6; }
-}
+html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; padding: 0 22px; }
+.start-cta:focus-visible { outline: 3px solid rgba(0, 145, 255, 0.6); outline-offset: 3px; }
+@media (hover: hover) { .start-cta:hover { background: #0077ed; } }
+.start-hint { font-size: 13px; color: #86868b; }
 
-.start-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 360px; }
-.start-chip {
-  height: 24px; padding: 0 10px; display: inline-flex; align-items: center; border-radius: 9999px;
-  font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--label-2);
-  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--hairline);
+.start-footnote {
+  margin: 44px 0 0; display: flex; flex-direction: column; gap: 4px; align-items: center;
+  font-size: 12px; line-height: 1.4; color: #6e6e73;
 }
-.start-privacy { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--label-2); }
+.start-status { color: #86868b; }
 
-@media (prefers-reduced-motion: reduce) {
-  .start-rays, .start-emblem::before, .start-status-dot::after, .start-shine, .start-cta-glow, .start-cta::before, .start-cta::after { animation: none; }
-  .start-cta::before, .start-cta::after { display: none; }
-}
+@media (prefers-reduced-motion: reduce) { .start-glow { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  html[data-size="compact"] .start-content { justify-content: flex-start; gap: 12px; padding: calc(max(var(--safe-top), 12px) + 60px) calc(var(--safe-right) + 16px) 12px calc(var(--safe-left) + 16px); }
-  html[data-size="compact"] .start-emblem { display: none; }
+  html[data-size="compact"] .start-content { justify-content: flex-start; padding: calc(max(var(--safe-top), 12px) + 56px) calc(var(--safe-right) + 16px) 12px calc(var(--safe-left) + 16px); }
+  html[data-size="compact"] .start-description, html[data-size="compact"] .start-footnote { display: none; }
+  html[data-size="compact"] .start-actions { margin-top: 20px; }
 }
 
 /* Switch: aksen biru (kontrol macOS/iOS pro, satu warna aksen). */
