@@ -402,7 +402,7 @@ function UndoButton({ state, className, size = 20 }: { state: EngineState; class
 // ---------------------------------------------------------------------------
 // Compact (iPhone)
 
-function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, onOpenFile, setSheet, onMenu, landscape, removing, removalControlsRef }: LayoutProps & { landscape: boolean }) {
+function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, setSheet, onMenu, landscape, removing, removalControlsRef }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
   // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
   const reduceMotion = useReducedMotion();
