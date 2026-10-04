@@ -83,6 +83,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [sheet, setSheet] = useState<SheetState>(null);
   const [removalPreview, setRemovalPreview] = useState<HTMLDivElement | null>(null);
   const [removalControls, setRemovalControls] = useState<HTMLDivElement | null>(null);
+  // Naik saat Done di Remove Object: foto utama memutar sapuan develop (asli -> hasil film).
+  const [revealCount, setRevealCount] = useState(0);
   const removing = sheet?.kind === 'remove' && !!state.original && !!engine.imageSize;
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
@@ -185,6 +187,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
   ) : (
     <PhotoView
+      reveal={revealCount}
       frame={state.frame}
       focusMask={focusMask}
       // Pembanding/intip asli: `original` ikut resolusi render (tajam saat zoom).
@@ -238,7 +241,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
-      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => setSheet(null)} />}
+      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => { setSheet(null); setRevealCount((n) => n + 1); }} />}
 
       <Sheet
         open={sheet?.kind === 'stocks'}

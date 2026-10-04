@@ -419,6 +419,21 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .mobile-editor.is-landscape .mobile-adjustments .tabs { gap: 0; }
 .mobile-editor.is-landscape #compact-groups-panel { flex: 1; min-height: 0; overflow-y: auto; }
 .mobile-editor.is-landscape #compact-groups-panel > * { flex-shrink: 0; }
+/*
+ * Sapuan develop setelah Remove Object (PhotoView `reveal`): satu garis biru
+ * tipis bercahaya dengan jejak samar di atasnya. Gagasan "scan line" React
+ * Bits, minimalis: tanpa partikel, hanya garis dan pudar.
+ */
+.photo-reveal-line {
+  position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--blue-text) 18%, #fff 50%, var(--blue-text) 82%, transparent);
+  box-shadow: 0 0 10px 1px rgba(0, 145, 255, 0.65), 0 0 28px 4px rgba(0, 145, 255, 0.25);
+}
+.photo-reveal-line::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 56px;
+  background: linear-gradient(to top, rgba(0, 145, 255, 0.16), transparent);
+}
+
 /* Foto layar penuh (PhotoLightbox): di atas semua chrome, latar hitam pekat. */
 .lightbox { position: fixed; inset: 0; z-index: 1000; outline: none; }
 .lightbox-backdrop { position: absolute; inset: 0; background: #000; }

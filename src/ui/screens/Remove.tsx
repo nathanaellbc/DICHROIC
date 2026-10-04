@@ -84,7 +84,8 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
       m.putImageData(pixels, 0, 0); ctx.drawImage(mask, 0, 0);
     }
   };
-  useEffect(() => { draw(); });
+  // Sebelum frame pertama tergambar: tanpa ini kanvas kosong (hitam) satu frame saat masuk Remove.
+  useLayoutEffect(() => { draw(); });
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; worker.current?.terminate(); clearTimeout(timer.current); cancelAnimationFrame(paintFrame.current); }; }, []);
   const point = (uv: { x: number; y: number }) => ({ x: uv.x * original.width, y: uv.y * original.height });
   const finish = (cancel: boolean) => {

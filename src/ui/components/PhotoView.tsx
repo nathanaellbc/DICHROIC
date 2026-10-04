@@ -65,6 +65,9 @@ const MAX_ZOOM = 8;
 const DOUBLE_CLICK_ZOOM = 2.5;
 /** Gerak (px) sebelum ketukan dianggap seretan. */
 const DRAG_SLOP = 4;
+/** Sapuan develop terakhir yang sudah diputar (pasang ulang karena rotasi tidak memutar ulang). */
+let lastReveal = 0;
+const REVEAL_TRANSITION = { duration: 0.75, ease: [0.65, 0, 0.35, 1] as [number, number, number, number] };
 /** Ketukan lebih lama dari ini adalah tahan (intip asli), bukan buka layar penuh. */
 const TAP_MAX_MS = 220;
 /** Jeda menunggu ketukan kedua (zoom) sebelum membuka layar penuh. */
@@ -119,6 +122,7 @@ export function PhotoView({
   content,
   brush,
   fitInsets,
+  reveal,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -135,6 +139,12 @@ export function PhotoView({
   content?: ReactNode;
   /** Keep the fitted photo centered in the unobscured part of an overlay viewport. */
   fitInsets?: { bottom?: number; right?: number };
+  /**
+   * Naik = putar sapuan "develop": garis cahaya tipis menyapu dari atas ke
+   * bawah, mengganti foto asli (`original`) dengan hasil film. Dipakai saat
+   * kembali dari Remove Object, yang memperlihatkan foto asli tanpa grading.
+   */
+  reveal?: number;
   brush?: {
     enabled: boolean;
     onStart: (point: Point, displayedWidth: number) => void;
@@ -155,6 +165,14 @@ export function PhotoView({
   const tapTimer = useRef(0);
   useEffect(() => () => window.clearTimeout(tapTimer.current), []);
   const reducedMotion = useReducedMotion();
+  // Sapuan develop: dipasang sebelum frame pertama (layout effect) supaya
+  // hasil film tidak sempat tampil dulu lalu tertimpa foto asli.
+  const [sweep, setSweep] = useState(0);
+  useLayoutEffect(() => {
+    if (!reveal || reveal <= lastReveal) return;
+    lastReveal = reveal;
+    if (!reducedMotion) setSweep(reveal);
+  }, [reveal, reducedMotion]);
   const returnAnimation = useRef<{ stop: () => void } | null>(null);
   const wheelFrame = useRef(0);
   const wheelTarget = useRef<View | null>(null);
@@ -186,6 +204,9 @@ export function PhotoView({
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
+    // Ukur sebelum frame pertama tergambar: tanpa ini, foto yang dipasang ulang
+    // (mis. kembali dari Remove Object) berukuran nol satu frame = kedipan hitam.
+    setArea({ width: el.clientWidth, height: el.clientHeight });
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
       setArea({ width, height });
@@ -581,7 +602,9 @@ export function PhotoView({
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <AnimatePresence mode="popLayout">
+      {/* initial={false}: foto yang sudah ada saat dipasang (ganti mode) tampil langsung;
+          hanya foto baru (photoKey berganti) yang memudar masuk. */}
+      <AnimatePresence mode="popLayout" initial={false}>
         {shown && (
           <motion.div
             key={photoKey}
@@ -607,6 +630,30 @@ export function PhotoView({
                 >
                   <FrameCanvas frame={original} />
                 </motion.div>
+              )}
+              {sweep > 0 && original && (
+                <>
+                  {/* Foto asli menyusut dari atas, menyingkap hasil film di bawahnya. */}
+                  <motion.div
+                    key={`reveal-${sweep}`}
+                    aria-hidden="true"
+                    initial={{ clipPath: 'inset(0% 0% 0% 0%)' }}
+                    animate={{ clipPath: 'inset(100% 0% 0% 0%)' }}
+                    transition={REVEAL_TRANSITION}
+                    onAnimationComplete={() => setSweep(0)}
+                    style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                  >
+                    <FrameCanvas frame={original} />
+                  </motion.div>
+                  <motion.div
+                    key={`reveal-line-${sweep}`}
+                    aria-hidden="true"
+                    className="photo-reveal-line"
+                    initial={{ top: '0%', opacity: 0 }}
+                    animate={{ top: '100%', opacity: [0, 1, 1, 0] }}
+                    transition={{ ...REVEAL_TRANSITION, opacity: { duration: REVEAL_TRANSITION.duration, times: [0, 0.08, 0.85, 1] } }}
+                  />
+                </>
               )}
             </div>
             {compare && !picking && (
