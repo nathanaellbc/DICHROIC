@@ -47,10 +47,24 @@ export function App() {
     };
   }, [openFile]);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, ms = 2200) => {
     setToast(message);
     window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 2200);
+    toastTimer.current = window.setTimeout(() => setToast(null), ms);
+  }, []);
+
+  // Pesan engine tak memblokir (mis. pulih dari GPU yang ditarik sistem).
+  useEffect(() => {
+    if (!state.notice) return;
+    showToast(state.notice, 4000);
+    engine.dismissNotice();
+  }, [state.notice, showToast]);
+
+  // Ke latar tanpa foto: lepas GPU lebih dulu (iOS menariknya juga), siapkan lagi saat kembali.
+  useEffect(() => {
+    const onVisibility = () => engine.setBackground(document.visibilityState === 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   if (state.engine === 'unsupported') return <UnsupportedScreen />;

@@ -57,6 +57,8 @@ export interface EngineState {
   /** A slider is being dragged or held with the keyboard. */
   interacting?: boolean;
   error?: AppError;
+  /** Pesan singkat tak memblokir (toast), mis. setelah pulih dari GPU yang hilang. */
+  notice?: string;
   /** Alasan teknis dari `acquireDevice` saat `engine === 'unsupported'`. */
   unsupportedReason?: string;
   /** `false` bila backend meruntuhkan aritmetika df64 (halation/DIR bisa meleset ~1e-3). */
@@ -65,6 +67,22 @@ export interface EngineState {
   depth: DepthState;
   /** Langkah undo/redo yang tersedia untuk foto terbuka. */
   history: { canUndo: boolean; canRedo: boolean };
+}
+
+/**
+ * Pulih otomatis dari GPU yang hilang paling sering sekali per jendela ini;
+ * kehilangan kedua yang lebih rapat dilaporkan sebagai galat (hindari loop
+ * bila GPU memang rusak atau fotonya terlalu berat untuk perangkat).
+ */
+const DEVICE_LOSS_RETRY_MS = 20_000;
+
+/**
+ * WebKit di iOS menarik device WebGPU saat app ke latar, memori menipis, atau
+ * proses GPU-nya diulang; alasannya `unknown` dengan pesan kosong. Session
+ * melaporkannya sebagai galat fatal berteks ini (session.ts).
+ */
+function isDeviceLoss(error: Error): boolean {
+  return /GPU device was lost/i.test(error.message);
 }
 
 /** Perubahan beruntun yang lebih rapat dari ini (satu seretan slider) jadi satu langkah undo. */
@@ -217,6 +235,46 @@ export class Engine {
     return this.#depthProfile;
   }
 
+  /** Berkas foto yang terbuka, untuk membukanya ulang setelah GPU hilang. */
+  #currentFile: File | undefined;
+  #lastDeviceLoss = 0;
+
+  /** Buka ulang foto yang sama setelah GPU hilang dan kembalikan semua parameternya. */
+  async #reopenAfterDeviceLoss(file: File, params: RenderParams, hadRetouch: boolean): Promise<void> {
+    await this.openFile(file);
+    if (this.#currentFile !== file || this.#state.phase !== 'editing') return;
+    // openFile memakai saran colour space input dan titik fokus berkas; pulihkan pilihan pengguna.
+    const current = this.#confirmedParams;
+    const patch: Partial<RenderParams> = {};
+    for (const key of Object.keys(params) as Array<keyof RenderParams>) {
+      if (params[key] !== current[key]) (patch as Record<string, unknown>)[key] = params[key];
+    }
+    if (Object.keys(patch).length > 0) this.setParams(patch, false);
+    this.#set({ notice: hadRetouch ? 'GPU reset by the system. Photo reopened; the object removal was lost.' : 'GPU reset by the system. Photo reopened.' });
+  }
+
+  dismissNotice(): void {
+    if (this.#state.notice) this.#set({ notice: undefined });
+  }
+
+  /**
+   * App ke latar tanpa foto terbuka: lepas worker dan device GPU lebih dulu
+   * (iOS akan menariknya juga), lalu siapkan lagi saat kembali.
+   */
+  setBackground(hidden: boolean): void {
+    if (hidden) {
+      if (!this.#client || this.#state.phase !== 'idle' || this.#state.fileName) return;
+      const client = this.#client;
+      this.#client = undefined;
+      this.#ready = undefined;
+      void client.close().then(() => client.dispose()).catch((error: unknown) =>
+        client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
+      this.#set({ engine: 'paused' });
+    } else if (!this.#client && this.#state.engine === 'paused' && this.#state.phase === 'idle') {
+      this.start();
+    }
+  }
+
   /** Menyalakan worker dan menyiapkan `Session` (aset, device WebGPU, self-test). */
   start(): void {
     if (this.#client) return;
@@ -230,7 +288,14 @@ export class Engine {
     }
     const client = SessionClient.attach(worker, (error) => {
       if (this.#client !== client) return;
+      // Diambil sebelum state direset: untuk membuka ulang foto yang sama.
+      const lostFile = this.#currentFile, lostParams = this.#confirmedParams, lostRetouch = this.#canUndoRemoval;
+      const recover = isDeviceLoss(error) && Date.now() - this.#lastDeviceLoss > DEVICE_LOSS_RETRY_MS;
+      if (isDeviceLoss(error)) this.#lastDeviceLoss = Date.now();
+      this.#currentFile = undefined;
+      this.#canUndoRemoval = false;
       this.#client = undefined;
+      this.#ready = undefined;
       this.#openToken += 1;
       this.#photoGeneration += 1;
       this.#pendingPatches.clear();
@@ -238,6 +303,16 @@ export class Engine {
       this.#imageSize = undefined;
       this.#dirty = false;
       this.#interactionChanged = false;
+      if (recover) {
+        // Tanpa alert: darkroom disiapkan ulang; foto yang terbuka dibuka lagi
+        // dengan pengaturannya, lalu toast singkat menjelaskan.
+        this.#clearHistory();
+        this.#set({ engine: 'paused', phase: 'idle', frame: undefined, original: undefined, before: undefined,
+          fileName: undefined, opening: undefined, rendering: false, interacting: false, error: undefined });
+        if (lostFile) void this.#reopenAfterDeviceLoss(lostFile, lostParams, lostRetouch);
+        else if (typeof document === 'undefined' || document.visibilityState === 'visible') this.start();
+        return;
+      }
       this.#set({ engine: 'failed', phase: 'idle', frame: undefined, original: undefined, before: undefined,
         fileName: undefined, opening: undefined, rendering: false, interacting: false, error: describeError(error) });
     });
@@ -309,6 +384,7 @@ export class Engine {
       const { params, original, guide, preview } = prepared;
       this.#photoGeneration += 1;
       this.#photoId = token;
+      this.#currentFile = file;
       this.#confirmedParams = params;
       this.#pendingPatches.clear();
       this.#imageSize = { width: prepared.width, height: prepared.height };
@@ -371,6 +447,7 @@ export class Engine {
   }
 
   closePhoto(): void {
+    this.#currentFile = undefined;
     this.#canUndoRemoval = false;
     this.#formatPreview = false;
     this.#cancelRefinement();

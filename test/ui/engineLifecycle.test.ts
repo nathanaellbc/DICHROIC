@@ -11,7 +11,8 @@ const client = vi.hoisted(() => ({
   renderExport: vi.fn(), exportImage: vi.fn(), exportCube: vi.fn(), lastFullSize: vi.fn(),
   applyRemoval: vi.fn(), undoRemoval: vi.fn(),
 }));
-vi.mock('../../src/session/client', () => ({ SessionClient: { attach: () => client } }));
+const failure = vi.hoisted(() => ({ report: undefined as undefined | ((error: Error) => void) }));
+vi.mock('../../src/session/client', () => ({ SessionClient: { attach: (_port: unknown, onFailure?: (error: Error) => void) => { failure.report = onFailure; return client; } } }));
 vi.mock('../../src/depth/model', () => ({ depthProfile: async () => ({ backend: 'wasm', guideMaxEdge: 16 }), firstDownloadBytes: async () => 1 }));
 import { Engine } from '../../src/ui/engine/engine';
 
@@ -44,6 +45,38 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('photo lifecycle', () => {
+  it('recovers from a GPU device loss: reopens the photo with its settings, no alert', async () => {
+    const engine = new Engine(); await engine.openFile(file('lost.png'));
+    engine.setParams({ filmExposureEv: 1 }); await flush();
+    client.stageOpen.mockClear();
+    failure.report!(new Error('The GPU device was lost (unknown): . Reopen the photo to retry.'));
+    for (let i = 0; i < 10; i++) await flush();
+    const state = engine.getState();
+    expect(state.error).toBeUndefined();
+    expect(client.stageOpen).toHaveBeenCalledOnce();
+    expect(state.phase).toBe('editing');
+    expect(state.fileName).toBe('lost.png');
+    expect(state.params.filmExposureEv).toBe(1);
+    expect(state.notice).toMatch(/GPU reset/);
+    // A second loss right after is reported instead of looping.
+    failure.report!(new Error('The GPU device was lost (unknown): . Reopen the photo to retry.'));
+    await flush();
+    expect(engine.getState().error?.message).toMatch(/GPU device was lost/);
+    engine.closePhoto();
+  });
+  it('recovers silently on the start screen when the GPU is lost with no photo open', async () => {
+    const engine = new Engine(); engine.start(); await flush();
+    failure.report!(new Error('The GPU device was lost (unknown): . Reopen the photo to retry.'));
+    await flush();
+    expect(engine.getState().error).toBeUndefined();
+    expect(['connecting', 'ready']).toContain(engine.getState().engine);
+  });
+  it('still reports other worker failures', async () => {
+    const engine = new Engine(); engine.start(); await flush();
+    failure.report!(new Error('The image worker stopped responding. Reopen the photo to retry.'));
+    expect(engine.getState().engine).toBe('failed');
+    expect(engine.getState().error).toBeDefined();
+  });
   it('keeps Apply pending until the retouched source has a graded preview', async () => {
     const engine = new Engine(); await engine.openFile(file('retouch.png'));
     const retouched = { ...photo.original, pixels: Uint8ClampedArray.of(10, 20, 30, 255) };
