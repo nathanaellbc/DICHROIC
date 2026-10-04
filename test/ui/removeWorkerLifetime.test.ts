@@ -61,6 +61,7 @@ beforeEach(() => {
   mocked.prepareRemoval.mockResolvedValue({
     revision: 1, x: 0, y: 0, width: 1, height: 1,
     rgb: new Float32Array(512 * 512 * 3), mask: new Float32Array(512 * 512).fill(1),
+    transform: { space: 'sRGB', encoding: 'encoded', gain: 1 },
   });
   mocked.applyRemoval.mockResolvedValue(undefined);
   host = document.createElement('div');

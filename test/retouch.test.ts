@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRemoval, prepareRemoval, restoreRemoval } from '../src/retouch/patch';
+import { applyRemoval, prepareRemoval, removalDisplayPatch, restoreRemoval } from '../src/retouch/patch';
 import type { DecodedImage } from '../src/io/decoded';
 
 function image(encoding: 'linear' | 'encoded' = 'encoded'): DecodedImage {
@@ -48,7 +48,50 @@ describe('LaMa source patches', () => {
     expect(crop.rgb.length).toBe(512 * 512 * 3);
     expect(crop.mask.length).toBe(512 * 512);
   });
-  it('does not silently flatten unsupported source color spaces', () => {
-    expect(() => prepareRemoval({ ...image(), suggestedColorSpace: 'Display P3' }, selection(), 1)).toThrow('color spaces');
+  // Model "identitas": mengembalikan masukannya, jadi area tersapu harus kembali
+  // ke nilai aslinya bila transformasi sumber <-> model benar-benar bolak-balik.
+  const identity = (crop: { rgb: Float32Array }) => {
+    const n = 512 * 512, planar = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) planar[c * n + i] = crop.rgb[i * 3 + c]!;
+    return planar;
+  };
+  const coloured = (space: string, encoding: 'linear' | 'encoded', rgb: [number, number, number]): DecodedImage => {
+    const photo = { ...image(encoding), suggestedColorSpace: space };
+    for (let i = 0; i < photo.rgba.length; i += 4) photo.rgba.set(rgb, i);
+    return photo;
+  };
+  it('passes encoded wide-gamut values (Display P3, Adobe RGB) through unchanged', () => {
+    for (const space of ['Display P3', 'Adobe RGB (1998)']) {
+      const photo = coloured(space, 'encoded', [0.9, 0.2, 0.1]);
+      const crop = prepareRemoval(photo, selection(), 1);
+      expect(Array.from(crop.rgb.slice(0, 3)).map((v) => +v.toFixed(5))).toEqual([0.9, 0.2, 0.1]);
+      applyRemoval(photo, crop, new Float32Array(512 * 512 * 3).fill(0.7));
+      expect(photo.rgba[(32 * 64 + 32) * 4]).toBeCloseTo(0.7);
+    }
+  });
+  it('round-trips linear RAW in ACES2065-1 and ACEScg primaries', () => {
+    for (const space of ['ACES2065-1', 'ACEScg', 'Linear Rec.2020', 'Linear P3-D65']) {
+      const photo = coloured(space, 'linear', [0.18, 0.12, 0.05]);
+      const crop = prepareRemoval(photo, selection(), 1);
+      applyRemoval(photo, crop, identity(crop));
+      const at = (32 * 64 + 32) * 4;
+      expect(photo.rgba[at]).toBeCloseTo(0.18, 4);
+      expect(photo.rgba[at + 1]).toBeCloseTo(0.12, 4);
+      expect(photo.rgba[at + 2]).toBeCloseTo(0.05, 4);
+    }
+  });
+  it('scales HDR highlights into the model range and restores their level', () => {
+    const photo = coloured('Linear Rec.709', 'linear', [4, 3, 2]);
+    const crop = prepareRemoval(photo, selection(), 1);
+    expect(crop.transform.gain).toBeCloseTo(4, 3);
+    expect(Math.max(...crop.rgb.slice(0, 3))).toBeLessThanOrEqual(1);
+    applyRemoval(photo, crop, identity(crop));
+    expect(photo.rgba[(32 * 64 + 32) * 4]).toBeCloseTo(4, 3);
+    expect(photo.rgba[(32 * 64 + 32) * 4 + 2]).toBeCloseTo(2, 3);
+  });
+  it('previews generated pixels through the same display conversion as the photo', () => {
+    const crop = prepareRemoval(image(), selection(), 1);
+    const patch = removalDisplayPatch(crop, new Float32Array(512 * 512 * 3).fill(0.5));
+    expect(patch[0]).toBeCloseTo(Math.round(0.5 * 255) / 255, 2);
   });
 });

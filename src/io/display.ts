@@ -91,20 +91,34 @@ export function srgbEncode(v: number): number {
  */
 export function originalFrame(image: DecodedImage, maxLongEdge: number): Frame {
   const scaled = boxDownscale(image.rgba, image.width, image.height, maxLongEdge);
-  const { width, height, rgba } = scaled;
-  const n = width * height;
+  return { width: scaled.width, height: scaled.height, ...sourceToDisplay(scaled.rgba, 4, scaled.width * scaled.height, image) };
+}
+
+/**
+ * Nilai sumber (ruang `suggestedColorSpace`/`encoding` gambar) -> piksel
+ * kanvas, konversi yang sama untuk pratinjau asli dan pratinjau hapus objek.
+ * `stride` 4 untuk RGBA, 3 untuk RGB rapat.
+ */
+export function sourceToDisplay(
+  values: Float32Array, stride: 3 | 4, n: number,
+  image: Pick<DecodedImage, 'suggestedColorSpace' | 'encoding'>,
+): { pixels: Uint8ClampedArray; colorSpace: PredefinedColorSpace } {
   if (image.suggestedColorSpace === 'Linear Rec.709' || Object.hasOwn(outputColorSpaces, image.suggestedColorSpace)) {
-    const rgb = new Float32Array(n * 3);
-    for (let i = 0; i < n; i += 1) rgb.set(rgba.subarray(i * 4, i * 4 + 3), i * 3);
+    let rgb = values;
+    if (stride === 4) {
+      rgb = new Float32Array(n * 3);
+      for (let i = 0; i < n; i += 1) rgb.set(values.subarray(i * 4, i * 4 + 3), i * 3);
+    }
     const colorSpace = canvasColorSpaceFor(image.suggestedColorSpace);
-    return { width, height, pixels: rgbToCanvas(rgb, width, height, image.suggestedColorSpace, colorSpace), colorSpace };
+    return { pixels: rgbToCanvas(rgb, n, 1, image.suggestedColorSpace, colorSpace), colorSpace };
   }
+  const rgba = values;
   const pixels = new Uint8ClampedArray(n * 4);
   const matrix = image.encoding === 'linear' ? TO_REC709[image.suggestedColorSpace] ?? TO_REC709['Linear Rec.709']! : undefined;
   for (let i = 0; i < n; i += 1) {
-    const r = rgba[i * 4]!;
-    const g = rgba[i * 4 + 1]!;
-    const b = rgba[i * 4 + 2]!;
+    const r = rgba[i * stride]!;
+    const g = rgba[i * stride + 1]!;
+    const b = rgba[i * stride + 2]!;
     const o = i * 4;
     if (matrix) {
       pixels[o] = srgbEncode(matrix[0] * r + matrix[1] * g + matrix[2] * b) * 255;
@@ -118,5 +132,5 @@ export function originalFrame(image: DecodedImage, maxLongEdge: number): Frame {
     pixels[o + 3] = 255;
   }
   const colorSpace = image.encoding === 'encoded' && image.suggestedColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
-  return { width, height, pixels, colorSpace };
+  return { pixels, colorSpace };
 }

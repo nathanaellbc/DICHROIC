@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PressButton, Slider } from '../components/controls';
 import { PhotoView } from '../components/PhotoView';
@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon';
 import { engine } from '../engine/engine';
 import type { Frame } from '../engine/display';
 import type { RemovalCrop } from '../../retouch/patch';
-import { removalSample } from '../../retouch/patch';
+import { removalDisplayPatch, removalSample } from '../../retouch/patch';
 
 type Stroke = { radius: number; points: Array<{ x: number; y: number }> };
 export function RemoveContent({ original, sourceSize, previewTarget, controlsTarget, compact = false, landscape = false, onClose }: { original: Frame; sourceSize: { width: number; height: number }; previewTarget: HTMLElement; controlsTarget: HTMLElement; compact?: boolean; landscape?: boolean; onClose: () => void }) {
@@ -23,6 +23,8 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   const [status, setStatus] = useState('Brush over the object, then choose Remove.');
   const [result, setResult] = useState<{ crop: RemovalCrop; output: Float32Array } | null>(null);
   const [before, setBefore] = useState(false);
+  // Keluaran model dikonversi ke piksel layar sekali per hasil (semua colour space).
+  const displayPatch = useMemo(() => (result && result.output.length ? removalDisplayPatch(result.crop, result.output) : null), [result]);
   const [canUndo, setCanUndo] = useState(engine.canUndoRemoval);
   const [error, setError] = useState('');
   const [fitInsets, setFitInsets] = useState<{ bottom?: number; right?: number }>({});
@@ -58,10 +60,11 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   const draw = (items = strokes) => {
     const el = canvas.current; if (!el) return;
     if (result && result.output.length === 0) return; // Buffer is transferring during Apply.
-    const ctx = el.getContext('2d')!;
+    // Kanvas di ruang warna foto asli (mis. Display P3), supaya campuran pratinjau tidak dikonversi ulang.
+    const ctx = el.getContext('2d', { colorSpace: original.colorSpace })!;
     ctx.putImageData(new ImageData(new Uint8ClampedArray(original.pixels), original.width, original.height, { colorSpace: original.colorSpace }), 0, 0);
-    if (result && !before) {
-      const { crop, output } = result, pixels = ctx.getImageData(0, 0, el.width, el.height);
+    if (result && !before && displayPatch) {
+      const { crop } = result, output = displayPatch!, pixels = ctx.getImageData(0, 0, el.width, el.height, { colorSpace: original.colorSpace });
       for (let y = 0; y < el.height; y++) for (let x = 0; x < el.width; x++) {
         const sx = x * sourceSize.width / el.width, sy = y * sourceSize.height / el.height;
         if (sx < crop.x || sy < crop.y || sx >= crop.x + crop.width || sy >= crop.y + crop.height) continue;
