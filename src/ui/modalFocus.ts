@@ -1,6 +1,8 @@
 const modalStack: HTMLElement[] = [];
 /** Lapisan latar dialog (aria-hidden, klik = tutup). */
 export const MODAL_SCRIM = '.scrim, .backdrop, .alert-scrim';
+/** Elemen yang tidak pernah dibuat inert oleh dialog (lihat activateModal). */
+export const MODAL_EXEMPT = '[data-modal-exempt]';
 const inertOwners = new WeakMap<HTMLElement, { count: number; previous: boolean }>();
 
 /** Trap keyboard focus and disable the background, including nested dialogs. */
@@ -13,6 +15,10 @@ export function activateModal(element: HTMLElement): () => void {
       // Latar modal (scrim/backdrop) menangkap ketukan untuk menutup: tidak boleh
       // ikut inert, kalau tidak ketukan di luar dialog tembus dan hilang.
       if (sibling.matches(MODAL_SCRIM)) continue;
+      // Input berkas tersembunyi dibuka dari dalam menu (Open Photo… di More).
+      // Bila ikut inert, iOS membuka pemilih foto tetapi berkas pilihan tidak
+      // pernah sampai (foto tidak terbuka). Tidak fokus-able, jadi aman dikecualikan.
+      if (sibling.matches(MODAL_EXEMPT)) continue;
       const owner = inertOwners.get(sibling) ?? { count: 0, previous: sibling.inert };
       owner.count += 1;
       inertOwners.set(sibling, owner);

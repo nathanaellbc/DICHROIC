@@ -73,7 +73,7 @@ export function App() {
 
   return (
     <>
-      <input ref={picker.ref} type="file" accept={ACCEPTED_FILES} className="sr-only" tabIndex={-1} aria-hidden="true" />
+      <input ref={picker.ref} type="file" accept={ACCEPTED_FILES} className="sr-only" tabIndex={-1} aria-hidden="true" data-modal-exempt="" />
       <main style={{ position: 'absolute', inset: 0 }}>
         <Editor
           state={state}

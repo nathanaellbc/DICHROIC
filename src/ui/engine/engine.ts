@@ -75,6 +75,8 @@ export interface EngineState {
  * bila GPU memang rusak atau fotonya terlalu berat untuk perangkat).
  */
 const DEVICE_LOSS_RETRY_MS = 20_000;
+/** Lama di latar (tanpa foto) sebelum worker/GPU dilepas. */
+const BACKGROUND_RELEASE_MS = 30_000;
 
 /**
  * WebKit di iOS menarik device WebGPU saat app ke latar, memori menipis, atau
@@ -262,18 +264,24 @@ export class Engine {
    * (iOS akan menariknya juga), lalu siapkan lagi saat kembali.
    */
   setBackground(hidden: boolean): void {
+    clearTimeout(this.#backgroundTimer);
     if (hidden) {
-      if (!this.#client || this.#state.phase !== 'idle' || this.#state.fileName) return;
-      const client = this.#client;
-      this.#client = undefined;
-      this.#ready = undefined;
-      void client.close().then(() => client.dispose()).catch((error: unknown) =>
-        client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
-      this.#set({ engine: 'paused' });
+      // Ditunda: pemilih foto iOS juga menyembunyikan halaman sebentar, dan
+      // darkroom yang sudah siap (shader ter-prewarm) jangan dibuang karenanya.
+      this.#backgroundTimer = setTimeout(() => {
+        if (!this.#client || this.#state.phase !== 'idle' || this.#state.fileName) return;
+        const client = this.#client;
+        this.#client = undefined;
+        this.#ready = undefined;
+        void client.close().then(() => client.dispose()).catch((error: unknown) =>
+          client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
+        this.#set({ engine: 'paused' });
+      }, BACKGROUND_RELEASE_MS);
     } else if (!this.#client && this.#state.engine === 'paused' && this.#state.phase === 'idle') {
       this.start();
     }
   }
+  #backgroundTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Menyalakan worker dan menyiapkan `Session` (aset, device WebGPU, self-test). */
   start(): void {
