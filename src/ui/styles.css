@@ -12,8 +12,8 @@
 :root {
   color-scheme: dark;
   /* SF di perangkat Apple; Inter (self-host) di tempat lain, supaya suaranya tetap satu. */
-  --font: -apple-system, BlinkMacSystemFont, "DICHROIC SF Text", "SF Pro Text", "Inter Variable", system-ui, sans-serif;
-  /* Judul >= 20 pt: SF Pro Display (fonts.css). Di Apple, -apple-system memilih ukuran optik sendiri. */
+  --font: -apple-system, BlinkMacSystemFont, "DICHROIC SF Display", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
+  /* Semua teks SF Pro Display (fonts.css), atas permintaan pemilik proyek. */
   --font-display: -apple-system, BlinkMacSystemFont, "DICHROIC SF Display", "SF Pro Display", "Inter Variable", system-ui, sans-serif;
 
   --bg: #000;

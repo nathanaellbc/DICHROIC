@@ -1,5 +1,5 @@
 # Mengambil SF Pro dari Apple Design Resources dan menaruh 8 berkas yang
-# dipakai src/ui/fonts.css (Text + Display, 400/500/600/700) di
+# dipakai src/ui/fonts.css (Display, 400/500/600/700) di
 # public/fonts/sf-pro/. Butuh 7-Zip (`7z` di PATH).
 #
 #   powershell -ExecutionPolicy Bypass -File tools/install-sf-pro.ps1
@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $dest = Join-Path $repo 'public\fonts\sf-pro'
 $work = Join-Path ([IO.Path]::GetTempPath()) "dichroic-sf-pro-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
-$wanted = foreach ($o in 'Text', 'Display') { foreach ($w in 'Regular', 'Medium', 'Semibold', 'Bold') { "SF-Pro-$o-$w.otf" } }
+$wanted = foreach ($o in @('Display')) { foreach ($w in 'Regular', 'Medium', 'Semibold', 'Bold') { "SF-Pro-$o-$w.otf" } }
 
 $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
 if (-not $sevenZip -and (Test-Path 'C:\Program Files\7-Zip\7z.exe')) { $sevenZip = 'C:\Program Files\7-Zip\7z.exe' }
@@ -35,7 +35,7 @@ try {
     $out = Join-Path $work "x$step"
     $step++
     & $sevenZip x -y -bso0 -bsp0 "-o$out" $archive | Out-Null
-    if (Get-ChildItem $out -Recurse -Filter 'SF-Pro-Text-Regular.otf' -ErrorAction SilentlyContinue) { break }
+    if (Get-ChildItem $out -Recurse -Filter 'SF-Pro-Display-Regular.otf' -ErrorAction SilentlyContinue) { break }
     Get-ChildItem $out -Recurse -File |
       Where-Object { $_.Extension -in '.pkg', '.cpio', '.gz', '.hfs', '.img' -or $_.Name -like 'Payload*' -or $_.Name -match '^\d+\.hfs$' } |
       Sort-Object Length -Descending |
