@@ -59,10 +59,13 @@ export function RemoveContent({ original, sourceSize, previewTarget, controlsTar
   };
   const draw = (items = strokes) => {
     const el = canvas.current; if (!el) return;
-    if (result && result.output.length === 0) return; // Buffer is transferring during Apply.
     // Kanvas di ruang warna foto asli (mis. Display P3), supaya campuran pratinjau tidak dikonversi ulang.
     const ctx = el.getContext('2d', { colorSpace: original.colorSpace })!;
     ctx.putImageData(new ImageData(new Uint8ClampedArray(original.pixels), original.width, original.height, { colorSpace: original.colorSpace }), 0, 0);
+    // Selama Apply, buffer hasil sedang diserahkan ke worker: tetap gambar foto
+    // asli (dulu return lebih awal, dan kanvas yang ukurannya berubah karena
+    // sumber hasil retouch tiba jadi kosong = pita hitam sampai Apply selesai).
+    if (result && result.output.length === 0) return;
     if (result && !before && displayPatch) {
       const { crop } = result, output = displayPatch!, pixels = ctx.getImageData(0, 0, el.width, el.height, { colorSpace: original.colorSpace });
       for (let y = 0; y < el.height; y++) for (let x = 0; x < el.width; x++) {

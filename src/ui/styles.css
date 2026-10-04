@@ -424,6 +424,20 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
  * tipis bercahaya dengan jejak samar di atasnya. Gagasan "scan line" React
  * Bits, minimalis: tanpa partikel, hanya garis dan pudar.
  */
+.photo-reveal { position: absolute; inset: 0; pointer-events: none; --reveal-d: 0.9s; --reveal-delay: 0.15s; --reveal-ease: cubic-bezier(0.65, 0, 0.35, 1); }
+/* Penutup (foto asli) turun; foto di dalamnya naik sama jauh = diam di tempat. */
+.photo-reveal-cover { position: absolute; inset: 0; overflow: hidden; will-change: transform; animation: photo-reveal-down var(--reveal-d) var(--reveal-ease) var(--reveal-delay) both; }
+.photo-reveal-photo { position: absolute; inset: 0; will-change: transform; animation: photo-reveal-up var(--reveal-d) var(--reveal-ease) var(--reveal-delay) both; }
+/* Garis di tepi atas penutup, bergerak bersamanya (tidak terpotong overflow). */
+.photo-reveal-scan { position: absolute; inset: 0; will-change: transform; animation: photo-reveal-down var(--reveal-d) var(--reveal-ease) var(--reveal-delay) both; }
+.photo-reveal-scan .photo-reveal-line { top: 0; animation: photo-reveal-line var(--reveal-d) linear var(--reveal-delay) both; }
+@keyframes photo-reveal-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes photo-reveal-up { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+@keyframes photo-reveal-line { 0% { opacity: 0; } 8% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
+/* Reduce Motion: pudar singkat tanpa gerak. */
+.photo-reveal.is-fade .photo-reveal-cover { animation: photo-reveal-fade 0.4s ease-out 0.1s both; }
+.photo-reveal.is-fade .photo-reveal-photo { animation: none; }
+@keyframes photo-reveal-fade { from { opacity: 1; } to { opacity: 0; } }
 .photo-reveal-line {
   position: absolute; left: 0; right: 0; height: 2px; margin-top: -1px; pointer-events: none;
   background: linear-gradient(90deg, transparent, var(--blue-text) 18%, #fff 50%, var(--blue-text) 82%, transparent);

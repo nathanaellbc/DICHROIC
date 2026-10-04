@@ -67,7 +67,6 @@ const DOUBLE_CLICK_ZOOM = 2.5;
 const DRAG_SLOP = 4;
 /** Sapuan develop terakhir yang sudah diputar (pasang ulang karena rotasi tidak memutar ulang). */
 let lastReveal = 0;
-const REVEAL_TRANSITION = { duration: 0.75, ease: [0.65, 0, 0.35, 1] as [number, number, number, number] };
 /** Ketukan lebih lama dari ini adalah tahan (intip asli), bukan buka layar penuh. */
 const TAP_MAX_MS = 220;
 /** Jeda menunggu ketukan kedua (zoom) sebelum membuka layar penuh. */
@@ -171,8 +170,9 @@ export function PhotoView({
   useLayoutEffect(() => {
     if (!reveal || reveal <= lastReveal) return;
     lastReveal = reveal;
-    if (!reducedMotion) setSweep(reveal);
-  }, [reveal, reducedMotion]);
+    // Reduce Motion: pudar singkat sebagai ganti sapuan (bukan tanpa transisi).
+    setSweep(reveal);
+  }, [reveal]);
   const returnAnimation = useRef<{ stop: () => void } | null>(null);
   const wheelFrame = useRef(0);
   const wheelTarget = useRef<View | null>(null);
@@ -632,28 +632,19 @@ export function PhotoView({
                 </motion.div>
               )}
               {sweep > 0 && original && (
-                <>
-                  {/* Foto asli menyusut dari atas, menyingkap hasil film di bawahnya. */}
-                  <motion.div
-                    key={`reveal-${sweep}`}
-                    aria-hidden="true"
-                    initial={{ clipPath: 'inset(0% 0% 0% 0%)' }}
-                    animate={{ clipPath: 'inset(100% 0% 0% 0%)' }}
-                    transition={REVEAL_TRANSITION}
-                    onAnimationComplete={() => setSweep(0)}
-                    style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                // Animasi CSS transform (compositor): tetap mulus walau thread
+                // utama sibuk memasang foto resolusi tinggi saat kembali dari
+                // Remove. Pembungkus turun sementara isinya naik sama jauh, jadi
+                // foto asli diam dan tepi atasnya menyingkap hasil film.
+                <div key={`reveal-${sweep}`} aria-hidden="true" className={`photo-reveal${reducedMotion ? ' is-fade' : ''}`}>
+                  <div
+                    className="photo-reveal-cover"
+                    onAnimationEnd={(e) => { if (e.target === e.currentTarget) setSweep(0); }}
                   >
-                    <FrameCanvas frame={original} />
-                  </motion.div>
-                  <motion.div
-                    key={`reveal-line-${sweep}`}
-                    aria-hidden="true"
-                    className="photo-reveal-line"
-                    initial={{ top: '0%', opacity: 0 }}
-                    animate={{ top: '100%', opacity: [0, 1, 1, 0] }}
-                    transition={{ ...REVEAL_TRANSITION, opacity: { duration: REVEAL_TRANSITION.duration, times: [0, 0.08, 0.85, 1] } }}
-                  />
-                </>
+                    <div className="photo-reveal-photo"><FrameCanvas frame={original} /></div>
+                  </div>
+                  {!reducedMotion && <div className="photo-reveal-scan"><div className="photo-reveal-line" /></div>}
+                </div>
               )}
             </div>
             {compare && !picking && (
