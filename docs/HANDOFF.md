@@ -115,6 +115,20 @@ ulang, tidak diimpor.
 
 ## UI: peta cepat
 
+- **Vectorscope (2026-10-05, permintaan pemilik "ala DaVinci Resolve" +
+  skin tone indicator).** `src/ui/model/vectorscope.ts` (Y'CbCr Rec.709
+  seperti Resolve pada timeline Rec.709: Cb kanan, Cr atas, lingkaran |C| 0.5,
+  target 75/100 %, sudut Rec.709 R 102.9 / Mg 49.7 / B 354.8 / Cy 282.9 /
+  G 229.7 / Yl 174.8 -- BUKAN sudut BT.601 lama; garis skin tone 123
+  derajat), `src/ui/components/Vectorscope.tsx` (trace kanvas log-density,
+  graticule SVG, colorize, zoom 2x). Membaca frame pratinjau (sinyal yang
+  tampil). Penempatan: desktop = panel di dasar inspector di atas Reset All
+  (sisi <= 38 % tinggi jendela, tombol toolbar + tombol V); HP = tombol di
+  kanan bawah (cermin Compare) dan overlay 132 px di pojok kanan atas foto,
+  ketuk untuk zoom 2x. Setelan per perangkat di
+  `localStorage['dichroic.scope.v1.{wide,compact}']`. Tes:
+  `test/ui/vectorscope.test.ts`.
+
 - `src/ui/engine/engine.ts` -- jembatan ke `SessionClient` di worker (decode
   sebelum `init` lewat `SessionClient.attach`, render pratinjau dikoalesikan,
   pembanding asli, ekspor). Bebas React; diamati lewat `useSyncExternalStore`.

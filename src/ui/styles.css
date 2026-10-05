@@ -1107,3 +1107,21 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
   .icon-btn.glass[aria-pressed="true"] { background: #fff; }
   .lucide { stroke-opacity: 1; }
 }
+
+/* Vectorscope (gaya DaVinci Resolve): selalu latar gelap seperti monitor scope. */
+.vectorscope { position: relative; flex-shrink: 0; border-radius: 50%; background: radial-gradient(circle, #121214 0%, #0b0b0c 70%, rgba(11, 11, 12, 0) 72%); }
+.scope-overlay {
+  z-index: 2; padding: 6px; border: 0; border-radius: 22px; cursor: pointer;
+  background: rgba(10, 10, 12, 0.72); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.14), 0 6px 20px rgba(0, 0, 0, 0.35); color: #fff;
+}
+.scope-overlay:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.scope-badge { position: absolute; left: 8px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.75); }
+.scope-panel { flex-shrink: 0; border-top: 1px solid var(--hairline); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; background: #0b0b0c; }
+.scope-panel-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.scope-chip {
+  height: 20px; padding: 0 6px; border: 0; border-radius: 6px; font: inherit; font-size: 10.5px; font-weight: 600;
+  color: var(--label-2); background: rgba(255, 255, 255, 0.07); cursor: pointer;
+}
+.scope-chip[aria-pressed='true'] { color: #fff; background: rgba(0, 145, 255, 0.55); }
+.scope-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }

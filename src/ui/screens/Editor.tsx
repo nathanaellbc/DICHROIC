@@ -10,7 +10,7 @@
  *   toolbar melayang di atas foto.
  *
  * Pintasan keyboard (di luar dialog dan kolom teks): ⌘/Ctrl+Z undo,
- * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto.
+ * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto, V vectorscope.
  */
 import { motion, useReducedMotion } from 'motion/react';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +22,9 @@ import type { TabItem } from '../components/controls';
 import { ActionSheet } from '../components/Overlays';
 import type { SheetAction } from '../components/Overlays';
 import { PhotoView } from '../components/PhotoView';
+import { Vectorscope } from '../components/Vectorscope';
+import { DEFAULT_SCOPE_PREFS } from '../model/vectorscope';
+import type { ScopePrefs } from '../model/vectorscope';
 import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
@@ -67,6 +70,33 @@ function recipe(s: Stocks): string {
   return isScanMode(s) ? `${film}, scanned` : `${film} → ${stockInfo(s.paper).short}`;
 }
 
+const SCOPE_STORAGE_KEY = 'dichroic.scope.v1';
+
+/** Setelan vectorscope, diingat per perangkat (terpisah HP/desktop karena `open`). */
+function useScopePrefs(wide: boolean): [ScopePrefs, (patch: Partial<ScopePrefs>) => void] {
+  const key = `${SCOPE_STORAGE_KEY}.${wide ? 'wide' : 'compact'}`;
+  const [prefs, setPrefs] = useState<ScopePrefs>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return { ...DEFAULT_SCOPE_PREFS, ...(JSON.parse(raw) as Partial<ScopePrefs>) };
+    } catch {
+      // Preferensi rusak: pakai bawaan.
+    }
+    return DEFAULT_SCOPE_PREFS;
+  });
+  const update = (patch: Partial<ScopePrefs>) =>
+    setPrefs((previous) => {
+      const next = { ...previous, ...patch };
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {
+        // Penyimpanan diblokir: tetap berlaku untuk sesi ini.
+      }
+      return next;
+    });
+  return [prefs, update];
+}
+
 export interface EditorProps {
   state: EngineState;
   wide: boolean;
@@ -99,6 +129,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     [picking, focusPreview, state.params],
   );
   const hasPhoto = !!state.frame;
+  const [scope, setScope] = useScopePrefs(wide);
 
   const ctx: ToolContext = {
     params: previewParams,
@@ -127,9 +158,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const onProcess = (process: string) => engine.setParams(choicePatch(findTool('process') as ChoiceTool, process, state.params));
 
   // Pintasan keyboard. Nilai terbaru lewat ref supaya pendengar dipasang sekali.
-  const keys = useRef({ hasPhoto, removing, onOpenFile, toggleCompare: () => {}, openExport: () => {} });
+  const keys = useRef({ hasPhoto, removing, onOpenFile, toggleCompare: () => {}, openExport: () => {}, toggleScope: () => {} });
   useEffect(() => {
-    keys.current = { hasPhoto, removing, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }) };
+    keys.current = { hasPhoto, removing, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }), toggleScope: () => setScope({ open: !scope.open }) };
   });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -160,6 +191,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       } else if (k.hasPhoto && key === 'e') {
         e.preventDefault();
         k.openExport();
+      } else if (k.hasPhoto && key === 'v') {
+        e.preventDefault();
+        k.toggleScope();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -226,7 +260,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     edited: hasPhoto && visibleTools(g, state.params).some((t) => isModified(t, state.params, state.defaults)),
   }));
 
-  const layoutProps = { state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, removing, removalControlsRef: setRemovalControls };
+  const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, removing, removalControlsRef: setRemovalControls };
 
   const menuActions: SheetAction[] = [
     { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
@@ -356,6 +390,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
 }
 
 interface LayoutProps {
+  scope: ScopePrefs;
+  setScope: (patch: Partial<ScopePrefs>) => void;
   removing: boolean;
   removalControlsRef: (node: HTMLDivElement | null) => void;
   state: EngineState;
@@ -408,7 +444,7 @@ function UndoButton({ state, className, size = 20 }: { state: EngineState; class
 // ---------------------------------------------------------------------------
 // Compact (iPhone)
 
-function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, setSheet, onMenu, landscape, removing, removalControlsRef }: LayoutProps & { landscape: boolean }) {
+function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, photo, setSheet, onMenu, landscape, removing, removalControlsRef }: LayoutProps & { landscape: boolean }) {
   const panelRef = useRef<HTMLElement>(null);
   // Tinggi bukan transform: MotionConfig tidak mematikannya, jadi eksplisit.
   const reduceMotion = useReducedMotion();
@@ -512,6 +548,42 @@ function CompactLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, tool
         </PressButton>
       )}
 
+      {/* Vectorscope: tombol di kanan bawah (cermin Compare, dalam jangkauan jempol),
+          scope di pojok kanan atas foto -- jauh dari panel dan jempol. */}
+      {hasPhoto && !removing && (
+        <PressButton
+          className="icon-btn glass"
+          aria-label="Vectorscope"
+          aria-keyshortcuts="V"
+          title="Vectorscope (V)"
+          aria-pressed={scope.open}
+          onClick={() => setScope({ open: !scope.open })}
+          style={{
+            position: 'absolute',
+            right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+            bottom: landscape ? 'calc(var(--safe-bottom) + 12px)' : panelSize.height + 12,
+          }}
+        >
+          <Icon name="scope" size={20} />
+        </PressButton>
+      )}
+      {hasPhoto && !removing && scope.open && (
+        <button
+          type="button"
+          className="scope-overlay"
+          aria-label={`Vectorscope, ${scope.zoom === 2 ? '2x zoom' : '1x'}. Tap to change zoom`}
+          onClick={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })}
+          style={{
+            position: 'absolute',
+            top: `calc(${photoTop} + 8px)`,
+            right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+          }}
+        >
+          <Vectorscope frame={state.frame} prefs={scope} size={landscape ? 116 : 132} />
+          {scope.zoom === 2 && <span className="scope-badge" aria-hidden="true">2×</span>}
+        </button>
+      )}
+
       <div style={{ position: 'absolute', left: 0, right: landscape ? panelSize.width : 0, top: 'calc(max(var(--safe-top), 12px) + 64px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         {!removing && <PreviewNote state={state} />}
       </div>
@@ -599,7 +671,51 @@ function RecipePath({ state, onReveal, disabled }: { state: EngineState; onRevea
   );
 }
 
-function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
+/**
+ * Vectorscope di inspector (desktop): menempel di bawah daftar parameter,
+ * di atas Reset All -- tidak menutupi foto, dan parameter tetap bisa digulir
+ * di atasnya. Sisi = lebar inspector, dibatasi 38 % tinggi jendela supaya
+ * jendela pendek tetap menyisakan ruang untuk kontrol.
+ */
+function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: ScopePrefs; setScope: (patch: Partial<ScopePrefs>) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState(220);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setSize(Math.max(140, Math.floor(Math.min(el.clientWidth - 24, window.innerHeight * 0.38))));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  const chip = (label: string, pressed: boolean, onClick: () => void, title: string) => (
+    <button type="button" className="scope-chip" aria-pressed={pressed} title={title} onClick={onClick}>{label}</button>
+  );
+  return (
+    <section ref={ref} aria-label="Vectorscope" className="scope-panel">
+      <div className="scope-panel-head">
+        <h2 className="t-footnote" style={{ margin: 0, fontWeight: 600 }}>Vectorscope</h2>
+        <span className="t-caption tertiary">Rec.709</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
+          {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
+          {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
+          {chip('Color', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize trace')}
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Vectorscope frame={state.frame} prefs={scope} size={size} onToggleZoom={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })} />
+      </div>
+    </section>
+  );
+}
+
+function WideLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   const edited = engine.isEdited();
   const [reveal, setReveal] = useState(0);
@@ -646,7 +762,10 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
         <PressButton className="icon-btn plain" aria-label="Before / After" aria-keyshortcuts="\" title="Before / After (\)" aria-pressed={compare} disabled={!hasPhoto} onClick={() => setCompare(!compare)}>
           <Icon name="compare" size={17} />
         </PressButton>
-        <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
+<PressButton className="icon-btn plain" aria-label="Vectorscope" aria-keyshortcuts="V" title="Vectorscope (V)" aria-pressed={scope.open} disabled={!hasPhoto} onClick={() => setScope({ open: !scope.open })}>
+          <Icon name="scope" size={17} />
+        </PressButton>
+                <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
         <PressButton className="capsule prominent" style={{ marginLeft: 6 }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>
           <Icon name="share" size={14} strokeWidth={2.2} /> Export
         </PressButton>
@@ -710,6 +829,7 @@ function WideLayout({ state, hasPhoto, ctx, group, setGroup, groupItems, compare
             ))}
           </div>
         </motion.div>
+        {hasPhoto && scope.open && <ScopePanel state={state} scope={scope} setScope={setScope} />}
         <div style={{ borderTop: '1px solid var(--hairline)', padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexShrink: 0 }}>
           <PressButton className="capsule bordered" disabled={!edited} onClick={() => engine.resetAll()}>
             Reset All
