@@ -160,13 +160,22 @@ export function shadeScope(trace: ScopeTrace, colorize: boolean, gain = 1): Uint
   return out;
 }
 
+export type ScopeKind = 'vectorscope' | 'waveform' | 'parade';
+
+export const SCOPE_KINDS: ReadonlyArray<{ value: ScopeKind; label: string; short: string }> = [
+  { value: 'waveform', label: 'Waveform', short: 'Wave' },
+  { value: 'parade', label: 'Parade', short: 'Parade' },
+  { value: 'vectorscope', label: 'Vectorscope', short: 'Vector' },
+];
+
 export interface ScopePrefs {
   /** Mobile: overlay tampil; desktop: panel inspector terbuka. */
   open: boolean;
+  kind: ScopeKind;
   zoom: 1 | 2;
   skinTone: boolean;
   colorize: boolean;
   targets: 75 | 100;
 }
 
-export const DEFAULT_SCOPE_PREFS: ScopePrefs = { open: false, zoom: 1, skinTone: true, colorize: false, targets: 75 };
+export const DEFAULT_SCOPE_PREFS: ScopePrefs = { open: false, kind: 'vectorscope', zoom: 1, skinTone: true, colorize: false, targets: 75 };

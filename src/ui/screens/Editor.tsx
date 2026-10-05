@@ -10,7 +10,7 @@
  *   toolbar melayang di atas foto.
  *
  * Pintasan keyboard (di luar dialog dan kolom teks): ⌘/Ctrl+Z undo,
- * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto, V vectorscope.
+ * ⇧⌘Z / Ctrl+Y redo, \ sebelum/sesudah, E ekspor, O buka foto, V scope (waveform/parade/vectorscope).
  */
 import { motion, useReducedMotion } from 'motion/react';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +23,8 @@ import { ActionSheet } from '../components/Overlays';
 import type { SheetAction } from '../components/Overlays';
 import { PhotoView } from '../components/PhotoView';
 import { Vectorscope } from '../components/Vectorscope';
-import { DEFAULT_SCOPE_PREFS } from '../model/vectorscope';
+import { Waveform } from '../components/Waveform';
+import { DEFAULT_SCOPE_PREFS, SCOPE_KINDS } from '../model/vectorscope';
 import type { ScopePrefs } from '../model/vectorscope';
 import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
@@ -548,14 +549,15 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
         </PressButton>
       )}
 
-      {/* Vectorscope: tombol di kanan bawah (cermin Compare, dalam jangkauan jempol),
-          scope di pojok kanan atas foto -- jauh dari panel dan jempol. */}
+      {/* Scope: tombol di kanan bawah (cermin Compare, dalam jangkauan jempol),
+          scope di pojok kanan atas foto -- jauh dari panel dan jempol. Ketuk
+          scope untuk berganti Waveform -> Parade -> Vectorscope. */}
       {hasPhoto && !removing && (
         <PressButton
           className="icon-btn glass"
-          aria-label="Vectorscope"
+          aria-label="Scopes"
           aria-keyshortcuts="V"
-          title="Vectorscope (V)"
+          title="Scopes (V)"
           aria-pressed={scope.open}
           onClick={() => setScope({ open: !scope.open })}
           style={{
@@ -567,22 +569,30 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
           <Icon name="scope" size={20} />
         </PressButton>
       )}
-      {hasPhoto && !removing && scope.open && (
-        <button
-          type="button"
-          className="scope-overlay"
-          aria-label={`Vectorscope, ${scope.zoom === 2 ? '2x zoom' : '1x'}. Tap to change zoom`}
-          onClick={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })}
-          style={{
-            position: 'absolute',
-            top: `calc(${photoTop} + 8px)`,
-            right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
-          }}
-        >
-          <Vectorscope frame={state.frame} prefs={scope} size={landscape ? 116 : 132} />
-          {scope.zoom === 2 && <span className="scope-badge" aria-hidden="true">2×</span>}
-        </button>
-      )}
+      {hasPhoto && !removing && scope.open && (() => {
+        const index = SCOPE_KINDS.findIndex((k) => k.value === scope.kind);
+        const kind = SCOPE_KINDS[index]!;
+        const next = SCOPE_KINDS[(index + 1) % SCOPE_KINDS.length]!;
+        return (
+          <button
+            type="button"
+            className="scope-overlay"
+            aria-label={`${kind.label}. Tap to show ${next.label}`}
+            onClick={() => setScope({ kind: next.value })}
+            style={{
+              position: 'absolute',
+              top: `calc(${photoTop} + 8px)`,
+              right: landscape ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
+            }}
+          >
+            {scope.kind === 'vectorscope'
+              ? <Vectorscope frame={state.frame} prefs={scope} size={landscape ? 116 : 132} />
+              : <Waveform frame={state.frame} parade={scope.kind === 'parade'} width={landscape ? 176 : 200} height={landscape ? 100 : 112} labels={false} />}
+            {scope.kind === 'vectorscope' && scope.zoom === 2 && <span className="scope-badge" aria-hidden="true">2×</span>}
+            <span className="scope-badge-kind" aria-hidden="true">{kind.short}</span>
+          </button>
+        );
+      })()}
 
       <div style={{ position: 'absolute', left: 0, right: landscape ? panelSize.width : 0, top: 'calc(max(var(--safe-top), 12px) + 64px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         {!removing && <PreviewNote state={state} />}
@@ -672,18 +682,19 @@ function RecipePath({ state, onReveal, disabled }: { state: EngineState; onRevea
 }
 
 /**
- * Vectorscope di inspector (desktop): menempel di bawah daftar parameter,
- * di atas Reset All -- tidak menutupi foto, dan parameter tetap bisa digulir
- * di atasnya. Sisi = lebar inspector, dibatasi 38 % tinggi jendela supaya
- * jendela pendek tetap menyisakan ruang untuk kontrol.
+ * Scope di inspector (desktop): menempel di bawah daftar parameter, di atas
+ * Reset All -- tidak menutupi foto, dan parameter tetap bisa digulir di
+ * atasnya. Waveform/parade selebar inspector (tinggi <= 30 % jendela),
+ * vectorscope persegi (<= 38 % tinggi jendela), supaya jendela pendek tetap
+ * menyisakan ruang untuk kontrol.
  */
 function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: ScopePrefs; setScope: (patch: Partial<ScopePrefs>) => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState(220);
+  const [box, setBox] = useState({ width: 240, height: 600 });
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const measure = () => setSize(Math.max(140, Math.floor(Math.min(el.clientWidth - 24, window.innerHeight * 0.38))));
+    const measure = () => setBox({ width: el.clientWidth - 24, height: window.innerHeight });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -696,20 +707,31 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
   const chip = (label: string, pressed: boolean, onClick: () => void, title: string) => (
     <button type="button" className="scope-chip" aria-pressed={pressed} title={title} onClick={onClick}>{label}</button>
   );
+  const vectorSize = Math.max(140, Math.floor(Math.min(box.width, box.height * 0.38)));
+  const waveWidth = Math.max(160, box.width);
+  const waveHeight = Math.max(96, Math.floor(Math.min(waveWidth * 0.62, box.height * 0.3)));
   return (
-    <section ref={ref} aria-label="Vectorscope" className="scope-panel">
+    <section ref={ref} aria-label="Scopes" className="scope-panel">
       <div className="scope-panel-head">
-        <h2 className="t-footnote" style={{ margin: 0, fontWeight: 600 }}>Vectorscope</h2>
-        <span className="t-caption tertiary">Rec.709</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+        <div role="tablist" aria-label="Scope" className="scope-tabs">
+          {SCOPE_KINDS.map((k) => (
+            <button key={k.value} type="button" role="tab" aria-selected={scope.kind === k.value} onClick={() => setScope({ kind: k.value })}>{k.label}</button>
+          ))}
+        </div>
+        <span className="t-caption tertiary" style={{ marginLeft: 'auto' }}>Rec.709</span>
+      </div>
+      {scope.kind === 'vectorscope' && (
+        <div style={{ display: 'flex', gap: 4 }}>
           {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
           {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
           {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
           {chip('Color', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize trace')}
         </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <Vectorscope frame={state.frame} prefs={scope} size={size} onToggleZoom={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })} />
+      )}
+      <div role="tabpanel" style={{ display: 'flex', justifyContent: 'center' }}>
+        {scope.kind === 'vectorscope'
+          ? <Vectorscope frame={state.frame} prefs={scope} size={vectorSize} onToggleZoom={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })} />
+          : <Waveform frame={state.frame} parade={scope.kind === 'parade'} width={waveWidth} height={waveHeight} />}
       </div>
     </section>
   );
@@ -762,7 +784,7 @@ function WideLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup, gr
         <PressButton className="icon-btn plain" aria-label="Before / After" aria-keyshortcuts="\" title="Before / After (\)" aria-pressed={compare} disabled={!hasPhoto} onClick={() => setCompare(!compare)}>
           <Icon name="compare" size={17} />
         </PressButton>
-<PressButton className="icon-btn plain" aria-label="Vectorscope" aria-keyshortcuts="V" title="Vectorscope (V)" aria-pressed={scope.open} disabled={!hasPhoto} onClick={() => setScope({ open: !scope.open })}>
+<PressButton className="icon-btn plain" aria-label="Scopes" aria-keyshortcuts="V" title="Scopes (V)" aria-pressed={scope.open} disabled={!hasPhoto} onClick={() => setScope({ open: !scope.open })}>
           <Icon name="scope" size={17} />
         </PressButton>
                 <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
