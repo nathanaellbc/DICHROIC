@@ -1116,7 +1116,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
   box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.14), 0 6px 20px rgba(0, 0, 0, 0.35); color: #fff;
 }
 .scope-overlay:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.scope-badge { position: absolute; left: 8px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.75); }
+.scope-badge { position: absolute; left: 8px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 3px #000; }
 .scope-panel { flex-shrink: 0; border-top: 1px solid var(--hairline); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; background: #0b0b0c; }
 .scope-panel-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .scope-chip {
@@ -1125,3 +1125,10 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 .scope-chip[aria-pressed='true'] { color: #fff; background: rgba(0, 145, 255, 0.55); }
 .scope-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.waveform { position: relative; flex-shrink: 0; border-radius: 8px; background: #0b0b0c; overflow: hidden; }
+.scope-overlay .waveform { border-radius: 14px; }
+.scope-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: rgba(255, 255, 255, 0.06); }
+.scope-tabs button { height: 20px; padding: 0 7px; border: 0; border-radius: 5px; font: inherit; font-size: 10.5px; font-weight: 600; color: var(--label-2); background: transparent; cursor: pointer; }
+.scope-tabs button[aria-selected='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }
+.scope-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.scope-badge-kind { position: absolute; right: 10px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.72); text-shadow: 0 1px 3px #000; }

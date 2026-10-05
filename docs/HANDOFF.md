@@ -128,6 +128,13 @@ ulang, tidak diimpor.
   ketuk untuk zoom 2x. Setelan per perangkat di
   `localStorage['dichroic.scope.v1.{wide,compact}']`. Tes:
   `test/ui/vectorscope.test.ts`.
+- **Waveform + RGB parade (2026-10-05).** `src/ui/model/waveform.ts`,
+  `src/ui/components/Waveform.tsx`: x = posisi gambar, y = level ter-encode,
+  graticule 10-bit 0/128/.../1023 berlabel di kiri seperti Resolve; waveform
+  = Y' Rec.709 putih, parade = R'/G'/B' sepertiga lebar masing-masing.
+  Desktop: tab Waveform/Parade/Vectorscope di panel scope (chip vectorscope
+  hanya di tab-nya). HP: ketuk overlay untuk berganti Waveform -> Parade ->
+  Vectorscope (200x112 / 132 px). Tes: `test/ui/waveform.test.ts`.
 
 - `src/ui/engine/engine.ts` -- jembatan ke `SessionClient` di worker (decode
   sebelum `init` lewat `SessionClient.attach`, render pratinjau dikoalesikan,
