@@ -35,13 +35,15 @@ export function Vectorscope({ frame, prefs, size, onToggleZoom }: { frame?: Fram
       if (!ctx) return;
       ctx.clearRect(0, 0, px, px);
       if (!frame) return;
-      const trace = accumulateScope(frame.pixels, frame.width, frame.height, px, (px / 2) * RADIUS_FRACTION, prefs.zoom);
-      ctx.putImageData(new ImageData(shadeScope(trace, prefs.colorize) as Uint8ClampedArray<ArrayBuffer>, px, px), 0, 0);
+      const radiusPx = (px / 2) * RADIUS_FRACTION;
+      const trace = accumulateScope(frame.pixels, frame.width, frame.height, px, radiusPx, prefs.zoom, undefined, prefs.range);
+      const scalePx = (radiusPx * prefs.zoom) / 0.5;
+      ctx.putImageData(new ImageData(shadeScope(trace, prefs.colorize, 1, scalePx) as Uint8ClampedArray<ArrayBuffer>, px, px), 0, 0);
     });
     return () => {
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [frame, prefs.zoom, prefs.colorize, size]);
+  }, [frame, prefs.zoom, prefs.colorize, prefs.range, size]);
 
   const c = 50;
   const R = 50 * RADIUS_FRACTION;
@@ -50,12 +52,13 @@ export function Vectorscope({ frame, prefs, size, onToggleZoom }: { frame?: Fram
   const ticks = Array.from({ length: 36 }, (_, i) => i * 10);
   const skin = (SKIN_TONE_ANGLE_DEG * Math.PI) / 180;
   const box = 0.03 * scale;
+  const style = prefs.style;
 
   return (
     <div
       className="vectorscope"
       role="img"
-      aria-label={`Vectorscope, Rec.709, ${prefs.targets}% targets${prefs.zoom === 2 ? ', 2x zoom' : ''}${prefs.skinTone ? ', skin tone line' : ''}`}
+      aria-label={`Vectorscope, Rec.709, ${prefs.range === 'all' ? 'all levels' : `${prefs.range} levels`}, ${prefs.targets}% targets${prefs.zoom === 2 ? ', 2x zoom' : ''}${prefs.skinTone ? ', skin tone line' : ''}`}
       style={{ width: size, height: size }}
       onDoubleClick={onToggleZoom}
     >
@@ -66,22 +69,38 @@ export function Vectorscope({ frame, prefs, size, onToggleZoom }: { frame?: Fram
             <rect x={0} y={0} width={100} height={100} />
           </clipPath>
         </defs>
-        <circle cx={c} cy={c} r={R} fill="none" stroke="rgba(255,255,255,0.32)" strokeWidth={0.5} />
-        {ticks.map((deg) => {
+        {style !== 'off' && <circle cx={c} cy={c} r={R} fill="none" stroke="rgba(255,255,255,0.32)" strokeWidth={0.5} />}
+        {style === 'standard' && ticks.map((deg) => {
           const a = (deg * Math.PI) / 180;
           const long = deg % 30 === 0;
           const r0 = R - (long ? 2.2 : 1.2);
           return <line key={deg} x1={c + Math.cos(a) * r0} y1={c - Math.sin(a) * r0} x2={c + Math.cos(a) * R} y2={c - Math.sin(a) * R} stroke="rgba(255,255,255,0.32)" strokeWidth={0.4} />;
         })}
-        <line x1={c - R} y1={c} x2={c + R} y2={c} stroke="rgba(255,255,255,0.14)" strokeWidth={0.35} />
-        <line x1={c} y1={c - R} x2={c} y2={c + R} stroke="rgba(255,255,255,0.14)" strokeWidth={0.35} />
+        {(style === 'standard' || style === 'simplified') && (
+          <>
+            <line x1={c - R} y1={c} x2={c + R} y2={c} stroke="rgba(255,255,255,0.14)" strokeWidth={0.35} />
+            <line x1={c} y1={c - R} x2={c} y2={c + R} stroke="rgba(255,255,255,0.14)" strokeWidth={0.35} />
+          </>
+        )}
         <g clipPath="url(#vectorscope-clip)">
+          {style === 'hueVectors' && scopeTargets(1).map((t) => {
+            const a = Math.atan2(t.cr, t.cb);
+            const lx = c + Math.cos(a) * (R + 4.5);
+            const ly = c - Math.sin(a) * (R + 4.5);
+            return (
+              <g key={t.label}>
+                <line x1={c} y1={c} x2={c + Math.cos(a) * R} y2={c - Math.sin(a) * R} stroke={t.color} strokeOpacity={0.5} strokeWidth={0.4} />
+                <text x={lx} y={ly + 1.5} textAnchor="middle" fontSize={4.2} fontWeight={600} fill={t.color} fillOpacity={0.9}>{t.label}</text>
+              </g>
+            );
+          })}
           {prefs.skinTone && (
             <line x1={c} y1={c} x2={c + Math.cos(skin) * R * 1.05} y2={c - Math.sin(skin) * R * 1.05} stroke="rgba(255,196,150,0.85)" strokeWidth={0.55} />
           )}
-          {targets.map((t) => {
+          {(style === 'standard' || style === 'simplified') && targets.map((t) => {
             const x = c + t.cb * scale;
             const y = c - t.cr * scale;
+            if (style === 'simplified') return <circle key={t.label} cx={x} cy={y} r={0.9} fill={t.color} fillOpacity={0.85} />;
             return (
               <g key={t.label}>
                 <rect x={x - box} y={y - box} width={box * 2} height={box * 2} fill="none" stroke={t.color} strokeOpacity={0.9} strokeWidth={0.5} />

@@ -6,12 +6,35 @@
  */
 import { useEffect, useRef } from 'react';
 import type { Frame } from '../engine/display';
-import { WAVEFORM_LINES_10BIT, accumulateWaveform, paradeGap, shadeWaveform } from '../model/waveform';
+import { WAVEFORM_LINES_10BIT, accumulateWaveform, laneBox, shadeWaveform } from '../model/waveform';
+import type { ChannelId, WaveLayout } from '../model/waveform';
 
 /** Lebar kolom label skala (px CSS); 0 tanpa label (overlay HP). */
 const GUTTER = 28;
 
-export function Waveform({ frame, parade, width, height, labels = true }: { frame?: Frame; parade: boolean; width: number; height: number; labels?: boolean }) {
+const LANE_LABEL: Record<ChannelId, string> = { y: 'Y', r: 'R', g: 'G', b: 'B', cb: 'Cb', cr: 'Cr' };
+const LANE_COLOR: Record<ChannelId, string> = { y: '#e8e8ea', r: '#ff5a50', g: '#4be06a', b: '#6f8dff', cb: '#7f9dff', cr: '#ff7a8a' };
+
+export function Waveform({
+  frame,
+  layout,
+  colorize,
+  lowPass,
+  extents,
+  width,
+  height,
+  labels = true,
+}: {
+  frame?: Frame;
+  layout: WaveLayout;
+  colorize: boolean;
+  lowPass: boolean;
+  extents: boolean;
+  width: number;
+  height: number;
+  labels?: boolean;
+}) {
+  const layoutKey = `${layout.lanes}:${layout.channels.join(',')}`;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gutter = labels ? GUTTER : 0;
   const plotWidth = Math.max(32, width - gutter);
@@ -32,23 +55,26 @@ export function Waveform({ frame, parade, width, height, labels = true }: { fram
       if (!ctx) return;
       ctx.clearRect(0, 0, w, h);
       if (!frame) return;
-      const trace = accumulateWaveform(frame.pixels, frame.width, frame.height, w, h, parade);
-      ctx.putImageData(new ImageData(shadeWaveform(trace) as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
+      const trace = accumulateWaveform(frame.pixels, frame.width, frame.height, w, h, layout, { lowPass });
+      ctx.putImageData(new ImageData(shadeWaveform(trace, colorize, extents) as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
     });
     return () => {
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [frame, parade, plotWidth, plotHeight]);
+    // `layoutKey` mewakili `layout` (objek baru tiap render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frame, layoutKey, colorize, lowPass, extents, plotWidth, plotHeight]);
 
   const yOf = (code: number) => pad + (1 - code / 1023) * (plotHeight - 1) + 0.5;
-  const gapCss = parade ? paradeGap(plotWidth) : 0;
-  const lane = parade ? (plotWidth - 2 * gapCss) / 3 : plotWidth;
+  const laneCount = layout.lanes ? layout.channels.length : 1;
+  const lanes = Array.from({ length: laneCount }, (_, i) => laneBox(plotWidth, laneCount, i));
+  const parade = layout.lanes;
 
   return (
     <div
       className="waveform"
       role="img"
-      aria-label={parade ? 'RGB parade, Rec.709, 10-bit scale' : "Waveform, luma Y' Rec.709, 10-bit scale"}
+      aria-label={`${parade ? 'Parade' : 'Waveform'} ${layout.channels.map((c) => LANE_LABEL[c]).join('')}, Rec.709, 10-bit scale`}
       style={{ width, height }}
     >
       <canvas ref={canvasRef} style={{ position: 'absolute', left: gutter, top: pad, width: plotWidth, height: plotHeight }} />
@@ -63,10 +89,15 @@ export function Waveform({ frame, parade, width, height, labels = true }: { fram
             )}
           </g>
         ))}
-        {parade && [1, 2].map((i) => {
-          const x = gutter + i * lane + (i - 0.5) * gapCss;
+        {parade && lanes.slice(1).map((box, i) => {
+          const x = gutter + box.x - (box.x - (lanes[i]!.x + lanes[i]!.width)) / 2;
           return <line key={i} x1={x} x2={x} y1={pad} y2={pad + plotHeight} stroke="rgba(255,255,255,0.18)" strokeWidth={1} />;
         })}
+        {parade && labels && lanes.map((box, i) => (
+          <text key={i} x={gutter + box.x + 4} y={pad + 10} fontSize={9} fontWeight={700} fill={colorize ? LANE_COLOR[layout.channels[i]!] : 'rgba(255,255,255,0.6)'}>
+            {LANE_LABEL[layout.channels[i]!]}
+          </text>
+        ))}
       </svg>
     </div>
   );

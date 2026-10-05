@@ -25,7 +25,8 @@ import { PhotoView } from '../components/PhotoView';
 import { Vectorscope } from '../components/Vectorscope';
 import { Waveform } from '../components/Waveform';
 import { DEFAULT_SCOPE_PREFS, SCOPE_KINDS } from '../model/vectorscope';
-import type { ScopePrefs } from '../model/vectorscope';
+import type { ParadeMode, ScopePrefs, ScopeRange, VectorStyle, WaveMode } from '../model/vectorscope';
+import { paradeLayout, waveformLayout } from '../model/waveform';
 import { Sheet } from '../components/Sheet';
 import { engine } from '../engine/engine';
 import type { EngineState } from '../engine/engine';
@@ -71,7 +72,8 @@ function recipe(s: Stocks): string {
   return isScanMode(s) ? `${film}, scanned` : `${film} → ${stockInfo(s.paper).short}`;
 }
 
-const SCOPE_STORAGE_KEY = 'dichroic.scope.v1';
+// v2: bawaan Resolve (Colorize menyala, mode waveform/parade). Setelan v1 diabaikan.
+const SCOPE_STORAGE_KEY = 'dichroic.scope.v2';
 
 /** Setelan vectorscope, diingat per perangkat (terpisah HP/desktop karena `open`). */
 function useScopePrefs(wide: boolean): [ScopePrefs, (patch: Partial<ScopePrefs>) => void] {
@@ -587,7 +589,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
           >
             {scope.kind === 'vectorscope'
               ? <Vectorscope frame={state.frame} prefs={scope} size={landscape ? 116 : 132} />
-              : <Waveform frame={state.frame} parade={scope.kind === 'parade'} width={landscape ? 176 : 200} height={landscape ? 100 : 112} labels={false} />}
+              : <Waveform frame={state.frame} layout={scope.kind === 'parade' ? paradeLayout(scope.paradeMode) : waveformLayout(scope.waveMode, scope.waveChannels)} colorize={scope.waveColorize} lowPass={scope.lowPass} extents={scope.extents} width={landscape ? 176 : 200} height={landscape ? 100 : 112} labels={false} />}
             {scope.kind === 'vectorscope' && scope.zoom === 2 && <span className="scope-badge" aria-hidden="true">2×</span>}
             <span className="scope-badge-kind" aria-hidden="true">{kind.short}</span>
           </button>
@@ -707,9 +709,26 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
   const chip = (label: string, pressed: boolean, onClick: () => void, title: string) => (
     <button type="button" className="scope-chip" aria-pressed={pressed} title={title} onClick={onClick}>{label}</button>
   );
+  const choice = <V extends string>(label: string, items: ReadonlyArray<[V, string]>, value: V, onChange: (v: V) => void) => (
+    <div role="radiogroup" aria-label={label} className="scope-tabs">
+      {items.map(([v, text]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} aria-selected={value === v} onClick={() => onChange(v)}>{text}</button>
+      ))}
+    </div>
+  );
+  const traceChips = (
+    <>
+      {chip('Colorize', scope.waveColorize, () => setScope({ waveColorize: !scope.waveColorize }), 'Colorize: R, G, B traces in their colors (off: white)')}
+      {chip('Low Pass', scope.lowPass, () => setScope({ lowPass: !scope.lowPass }), 'Low pass filter: reduces noise in the trace')}
+      {chip('Extents', scope.extents, () => setScope({ extents: !scope.extents }), 'Extents: outline the highest and lowest values')}
+    </>
+  );
+  const styles: ReadonlyArray<[VectorStyle, string]> = [['standard', 'Standard'], ['simplified', 'Simplified'], ['hueVectors', 'Hue Vectors'], ['off', 'Off']];
+  const styleIndex = styles.findIndex(([v]) => v === scope.style);
   const vectorSize = Math.max(140, Math.floor(Math.min(box.width, box.height * 0.38)));
   const waveWidth = Math.max(160, box.width);
   const waveHeight = Math.max(96, Math.floor(Math.min(waveWidth * 0.62, box.height * 0.3)));
+  const layout = scope.kind === 'parade' ? paradeLayout(scope.paradeMode) : waveformLayout(scope.waveMode, scope.waveChannels);
   return (
     <section ref={ref} aria-label="Scopes" className="scope-panel">
       <div className="scope-panel-head">
@@ -720,18 +739,39 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
         </div>
         <span className="t-caption tertiary" style={{ marginLeft: 'auto' }}>Rec.709</span>
       </div>
-      {scope.kind === 'vectorscope' && (
-        <div style={{ display: 'flex', gap: 4 }}>
-          {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
-          {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
-          {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
-          {chip('Color', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize trace')}
-        </div>
-      )}
+      <div className="scope-options">
+        {scope.kind === 'waveform' && (
+          <>
+            {choice<WaveMode>('Waveform channels', [['y', 'Y'], ['rgb', 'RGB'], ['cbcr', 'CbCr']], scope.waveMode, (waveMode) => setScope({ waveMode }))}
+            {scope.waveMode === 'rgb' && (['R', 'G', 'B'] as const).map((name, i) => (
+              <Fragment key={name}>
+                {chip(name, scope.waveChannels[i]!, () => {
+                  const next = [...scope.waveChannels] as [boolean, boolean, boolean];
+                  next[i] = !next[i];
+                  if (next.some(Boolean)) setScope({ waveChannels: next });
+                }, `Show ${name} channel`)}
+              </Fragment>
+            ))}
+          </>
+        )}
+        {scope.kind === 'parade' && choice<ParadeMode>('Parade components', [['rgb', 'RGB'], ['yrgb', 'YRGB'], ['ycbcr', 'YCbCr']], scope.paradeMode, (paradeMode) => setScope({ paradeMode }))}
+        {scope.kind === 'vectorscope' && choice<ScopeRange>('Vectorscope range', [['all', 'All'], ['low', 'Low'], ['mid', 'Mid'], ['high', 'High']], scope.range, (range) => setScope({ range }))}
+      </div>
+      <div className="scope-options">
+        {scope.kind === 'vectorscope' ? (
+          <>
+            {chip(styles[styleIndex]![1], false, () => setScope({ style: styles[(styleIndex + 1) % styles.length]![0] }), 'Graticule style: Standard, Simplified, Hue Vectors, Off')}
+            {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
+            {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
+            {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
+            {chip('Colorize', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize: false color by hue (off: white)')}
+          </>
+        ) : traceChips}
+      </div>
       <div role="tabpanel" style={{ display: 'flex', justifyContent: 'center' }}>
         {scope.kind === 'vectorscope'
           ? <Vectorscope frame={state.frame} prefs={scope} size={vectorSize} onToggleZoom={() => setScope({ zoom: scope.zoom === 2 ? 1 : 2 })} />
-          : <Waveform frame={state.frame} parade={scope.kind === 'parade'} width={waveWidth} height={waveHeight} />}
+          : <Waveform frame={state.frame} layout={layout} colorize={scope.waveColorize} lowPass={scope.lowPass} extents={scope.extents} width={waveWidth} height={waveHeight} />}
       </div>
     </section>
   );
