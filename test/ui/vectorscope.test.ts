@@ -60,3 +60,28 @@ describe('vectorscope Rec.709', () => {
     expect(lit.length).toBeLessThanOrEqual(4);
   });
 });
+
+describe('vectorscope Resolve: Colorize dan rentang', () => {
+  it('Colorize = warna palsu posisi: arah merah kemerahan, pusat putih', async () => {
+    const { falseColor, toCbCr } = await import('../../src/ui/model/vectorscope');
+    const [cb, cr] = toCbCr(1, 0, 0);
+    const [r, g, b] = falseColor(cb, cr);
+    expect(r).toBe(1);
+    expect(g).toBeLessThan(0.2);
+    expect(b).toBeLessThan(0.2);
+    expect(falseColor(0, 0)).toEqual([1, 1, 1]);
+    const [r2, g2, b2] = falseColor(...toCbCr(0, 0, 1));
+    expect(b2).toBe(1);
+    expect(Math.max(r2, g2)).toBeLessThan(0.3);
+  });
+
+  it('rentang Low/Mid/High menyaring piksel menurut Y\'', async () => {
+    const { accumulateScope } = await import('../../src/ui/model/vectorscope');
+    const px = new Uint8ClampedArray([40, 10, 10, 255, 250, 200, 200, 255]);
+    const count = (range: 'all' | 'low' | 'mid' | 'high') => accumulateScope(px, 2, 1, 64, 25, 1, undefined, range).density.reduce((a, b) => a + b, 0);
+    expect(count('all')).toBe(2);
+    expect(count('low')).toBe(1);
+    expect(count('high')).toBe(1);
+    expect(count('mid')).toBe(0);
+  });
+});

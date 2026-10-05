@@ -135,6 +135,14 @@ ulang, tidak diimpor.
   Desktop: tab Waveform/Parade/Vectorscope di panel scope (chip vectorscope
   hanya di tab-nya). HP: ketuk overlay untuk berganti Waveform -> Parade ->
   Vectorscope (200x112 / 132 px). Tes: `test/ui/waveform.test.ts`.
+- **Opsi scope setara Resolve (2026-10-05).** Dokumentasi Blackmagic diblokir
+  proxy container; opsi diambil dari ringkasan manual Resolve 18.6 lewat
+  pencarian: Colorize MENYALA bawaan (vectorscope = warna palsu menurut
+  posisi hue, `falseColor`; waveform/parade = R/G/B dijumlahkan, netral
+  putih); waveform Y / RGB (R, G, B bisa dimatikan) / CbCr; parade RGB / YRGB /
+  YCbCr; Low Pass Filter dan Extents; vectorscope rentang All/Low/Mid/High
+  dan gaya graticule Standard / Simplified / Hue Vectors / Off. Kunci
+  preferensi naik ke `dichroic.scope.v2.*` supaya bawaan baru berlaku.
 
 - `src/ui/engine/engine.ts` -- jembatan ke `SessionClient` di worker (decode
   sebelum `init` lewat `SessionClient.attach`, render pratinjau dikoalesikan,

@@ -1132,3 +1132,6 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .scope-tabs button[aria-selected='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }
 .scope-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .scope-badge-kind { position: absolute; right: 10px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.72); text-shadow: 0 1px 3px #000; }
+.scope-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.scope-options:empty { display: none; }
+.scope-tabs button[aria-checked='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }

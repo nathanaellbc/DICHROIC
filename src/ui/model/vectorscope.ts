@@ -79,6 +79,16 @@ export interface ScopeTrace {
  * dicuplik merata sampai `maxSamples`. Jitter deterministik +-0.5 LSB
  * menghapus pola kisi kuantisasi 8-bit (Resolve membaca 10/12-bit).
  */
+/** Rentang tonal vectorscope Resolve: semua, atau hanya Low/Mid/High (Y' sepertiga). */
+export type ScopeRange = 'all' | 'low' | 'mid' | 'high';
+
+export function inRange(y: number, range: ScopeRange): boolean {
+  if (range === 'all') return true;
+  if (range === 'low') return y < 1 / 3;
+  if (range === 'mid') return y >= 1 / 3 && y < 2 / 3;
+  return y >= 2 / 3;
+}
+
 export function accumulateScope(
   pixels: Uint8ClampedArray,
   width: number,
@@ -87,6 +97,7 @@ export function accumulateScope(
   radiusPx: number,
   zoom: 1 | 2,
   maxSamples = 600_000,
+  range: ScopeRange = 'all',
 ): ScopeTrace {
   const density = new Float32Array(size * size);
   const color = new Float32Array(size * size * 3);
@@ -108,8 +119,9 @@ export function accumulateScope(
       const r = pixels[i]! / 255 + jitter();
       const g = pixels[i + 1]! / 255 + jitter();
       const b = pixels[i + 2]! / 255 + jitter();
-      const [cb, cr] = toCbCr(r, g, b);
       samples += 1;
+      if (range !== 'all' && !inRange(REC709_LUMA.r * r + REC709_LUMA.g * g + REC709_LUMA.b * b, range)) continue;
+      const [cb, cr] = toCbCr(r, g, b);
       const px = Math.floor(centre + cb * scale);
       const py = Math.floor(centre - cr * scale);
       if (px < 0 || py < 0 || px >= size || py >= size) continue;
@@ -124,18 +136,41 @@ export function accumulateScope(
 }
 
 /**
+ * Warna palsu Colorize Resolve untuk satu posisi Cb/Cr: hue arah posisi itu
+ * pada saturasi penuh, memudar ke putih di dekat pusat (saturasi rendah).
+ * Jadi warna trace menunjukkan WARNA APA yang ada di posisi itu, seperti
+ * vectorscope Resolve dengan Colorize.
+ */
+export function falseColor(cb: number, cr: number): [number, number, number] {
+  const c = Math.hypot(cb, cr);
+  if (c < 1e-6) return [1, 1, 1];
+  const y = 0.5;
+  const r = y + CR_SCALE * cr;
+  const b = y + CB_SCALE * cb;
+  const g = (y - REC709_LUMA.r * r - REC709_LUMA.b * b) / REC709_LUMA.g;
+  const lo = Math.min(r, g, b);
+  const hi = Math.max(r, g, b) - lo || 1;
+  const hue = [(r - lo) / hi, (g - lo) / hi, (b - lo) / hi];
+  const s = Math.min(1, c / 0.14);
+  const mix = hue.map((h) => 1 - s * (1 - h));
+  const m = Math.max(...mix);
+  return [mix[0]! / m, mix[1]! / m, mix[2]! / m];
+}
+
+/**
  * Trace -> RGBA. Kecerahan logaritmik terhadap kepadatan (fosfor scope):
  * satu piksel terisolasi tetap terlihat, area datar luas tidak membakar
- * putih. `gain` = kecerahan scope (Resolve: slider brightness). Mode putih
- * memakai abu-abu hangat yang lazim di Resolve; colorize memakai rata-rata
- * warna piksel bin itu, dinormalisasi ke kanal maksimum.
+ * putih. `gain` = kecerahan scope. Colorize memakai warna palsu posisi
+ * (`falseColor`), tanpa Colorize trace putih -- dua mode Resolve.
+ * `scale` = px kanvas per satuan Cb/Cr (untuk memetakan bin ke posisi).
  */
-export function shadeScope(trace: ScopeTrace, colorize: boolean, gain = 1): Uint8ClampedArray {
-  const { size, density, color, samples } = trace;
+export function shadeScope(trace: ScopeTrace, colorize: boolean, gain = 1, scale = trace.size): Uint8ClampedArray {
+  const { size, density, samples } = trace;
   const out = new Uint8ClampedArray(size * size * 4);
   // Referensi: kepadatan bin bila semua sampel jatuh di ~1/400 luas kisi.
   const ref = Math.max(1, (samples / (size * size)) * 400);
   const norm = 1 / Math.log1p(ref);
+  const centre = size / 2;
   for (let k = 0; k < size * size; k += 1) {
     const d = density[k]!;
     if (d <= 0) continue;
@@ -144,13 +179,9 @@ export function shadeScope(trace: ScopeTrace, colorize: boolean, gain = 1): Uint
     let g = 0.95;
     let b = 0.97;
     if (colorize) {
-      r = color[k * 3]! / d;
-      g = color[k * 3 + 1]! / d;
-      b = color[k * 3 + 2]! / d;
-      const m = Math.max(r, g, b, 1e-6);
-      r /= m;
-      g /= m;
-      b /= m;
+      const cb = ((k % size) + 0.5 - centre) / scale;
+      const cr = (centre - Math.floor(k / size) - 0.5) / scale;
+      [r, g, b] = falseColor(cb, cr);
     }
     out[k * 4] = r * 255;
     out[k * 4 + 1] = g * 255;
@@ -168,14 +199,49 @@ export const SCOPE_KINDS: ReadonlyArray<{ value: ScopeKind; label: string; short
   { value: 'vectorscope', label: 'Vectorscope', short: 'Vector' },
 ];
 
+/** Gaya graticule vectorscope Resolve ("Vectorscope Scale Style"). */
+export type VectorStyle = 'standard' | 'simplified' | 'hueVectors' | 'off';
+export type WaveMode = 'y' | 'rgb' | 'cbcr';
+export type ParadeMode = 'rgb' | 'yrgb' | 'ycbcr';
+
 export interface ScopePrefs {
   /** Mobile: overlay tampil; desktop: panel inspector terbuka. */
   open: boolean;
   kind: ScopeKind;
+  // Vectorscope
   zoom: 1 | 2;
   skinTone: boolean;
   colorize: boolean;
   targets: 75 | 100;
+  range: ScopeRange;
+  style: VectorStyle;
+  // Waveform / parade
+  waveMode: WaveMode;
+  /** Kanal R, G, B yang tampil di waveform mode RGB. */
+  waveChannels: [boolean, boolean, boolean];
+  paradeMode: ParadeMode;
+  waveColorize: boolean;
+  lowPass: boolean;
+  extents: boolean;
 }
 
-export const DEFAULT_SCOPE_PREFS: ScopePrefs = { open: false, kind: 'vectorscope', zoom: 1, skinTone: true, colorize: false, targets: 75 };
+/**
+ * Bawaan seperti Resolve: Colorize menyala (vectorscope berwarna palsu,
+ * waveform/parade berwarna kanal), graticule Standard dengan target 75 %.
+ */
+export const DEFAULT_SCOPE_PREFS: ScopePrefs = {
+  open: false,
+  kind: 'vectorscope',
+  zoom: 1,
+  skinTone: true,
+  colorize: true,
+  targets: 75,
+  range: 'all',
+  style: 'standard',
+  waveMode: 'rgb',
+  waveChannels: [true, true, true],
+  paradeMode: 'rgb',
+  waveColorize: true,
+  lowPass: false,
+  extents: false,
+};
