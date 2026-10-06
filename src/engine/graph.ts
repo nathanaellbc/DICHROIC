@@ -121,6 +121,12 @@ export interface StageContext {
    * tidak menciptakan buffer baru per tile per tahap dan meledakkan VRAM.
    */
   scratch(label: string, bytes: number): GPUBuffer;
+  /**
+   * Buffer kecil yang hanya hidup selama render ini (uniform per tahap);
+   * dihancurkan graf setelah GPU selesai. Pakai lewat `frameBuffer` di
+   * `transient.ts`. Jangan untuk sumber daya yang di-cache antar render.
+   */
+  transient?(descriptor: GPUBufferDescriptor): GPUBuffer;
 }
 
 export interface Stage {
@@ -474,7 +480,9 @@ export class RenderGraph {
     options: { maxBufferBytes: number; memoryBudget: number; overlap: number;
       /** Apron tile ekspor (baku `overlap`); lih. `EXPORT_APRON_SIGMAS`. */
       exportOverlap?: number;
-      frame: FrameParams; wholeFrame?: boolean; isCancelled?: () => boolean },
+      frame: FrameParams; wholeFrame?: boolean; isCancelled?: () => boolean;
+      /** Dipanggil sebelum tiap tile (`done` = tile selesai) dan sekali di akhir. */
+      onProgress?: (done: number, total: number, tile: TileSpec) => void },
   ): Promise<void> {
     const tiles = options.wholeFrame ? planTiles(params.width, params.height, options.maxBufferBytes, options.overlap)
       : planExportTiles(params.width, params.height, options.maxBufferBytes, options.exportOverlap ?? options.overlap, options.memoryBudget);
@@ -496,8 +504,9 @@ export class RenderGraph {
     // submit ditolak) dilaporkan sebagai `GpuMemoryError` supaya pemanggil
     // bisa mengecilkan tile dan mencoba lagi, bukan menulis piksel rusak.
     const scoped = typeof device.pushErrorScope === 'function';
-    for (const tile of tiles) {
+    for (const [index, tile] of tiles.entries()) {
       if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
+      options.onProgress?.(index, tiles.length, tile);
       const whole = tiles.length === 1 && tile.tileWidth === params.width && tile.tileHeight === params.height;
       const tileParams: CoreParams = whole ? params : {
         ...params, width: tile.tileWidth, height: tile.tileHeight,
@@ -532,6 +541,7 @@ export class RenderGraph {
       // Allow worker RPC (close, cancel, parameter updates) between GPU submissions.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
+    if (tiles.length) options.onProgress?.(tiles.length, tiles.length, tiles[tiles.length - 1]!);
   }
 
   private async runTiled(
@@ -747,6 +757,7 @@ export class RenderGraph {
           paramsBuffer: stageParamsBuffer,
           source: front,
           dest: back,
+          transient: allocate,
           scratch: (label, scratchBytes) => {
             let key = slots.get(label);
             if (key === undefined) { key = `slot${slots.size}`; slots.set(label, key); }

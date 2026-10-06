@@ -159,6 +159,24 @@ Belum diuji di iPhone fisik.
   perangkat; hanya WebP/AVIF (encoder kanvas) dibatasi kanvas browser
   (iOS 16,7 MP). Lens blur/difusi tetap diperkecil oleh
   `wholeFrameMemoryBudget` karena butuh frame utuh.
+- **Masih force close -> kebocoran buffer GPU per tile (2026-10-06).** Tiap
+  `encode()` membuat buffer uniform kecil (params/frame per tahap, ditambah
+  ~90 buffer bobot/params `GaussianBlur` untuk halation/DIR) dan tidak pernah
+  di-`destroy()` -- dibiarkan ke GC. Ekspor Source 24 MP = ~390 tile tanpa
+  jeda idle -> puluhan ribu buffer Metal menumpuk di proses GPU WebKit.
+  Sekarang semua lewat `ctx.transient` (`frameBuffer` di
+  `src/engine/transient.ts`, `BlurArgs.transient`) dan dihancurkan
+  `runSingleBuffer` setelah readback; dikunci tes di
+  `test/exportTiles.test.ts` (0 buffer kecil tersisa setelah render ber-tile).
+- `ExportPixels` hanya memegang piksel untuk format terpilih
+  (`exportTarget`: rgb8 / rgb16 / canvas) -- 24 MP: 73 MB, bukan 220 MB.
+  Ganti ke format dengan kedalaman lain = Develop lagi. Cache pratinjau CPU
+  dibuang saat ekspor mulai.
+- Kemajuan: `Session.exportProgress()` (RPC dilayani di sela tile) -> baris
+  status "tile n of N"; UI juga mencatat tahapnya di
+  `localStorage['dichroic.exportTiles.v1']`. Bila tab mati, lembar Ekspor
+  berikutnya menampilkan tahap terakhir (tile ke berapa / encode format apa)
+  -- minta pemilik mengirim teks itu bila masih crash.
 
 ## UI: peta cepat
 

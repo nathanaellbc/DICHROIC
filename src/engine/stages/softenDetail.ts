@@ -3,6 +3,7 @@ import { gpuBufferUsage } from '../webgpuGlobals';
 import { Tap } from '../taps';
 import type { Stage } from '../graph';
 import source from '../../shaders/softenDetail.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 export function createSoftenDetailStage(device: GPUDevice): Stage {
   const module = device.createShaderModule({ label: 'softenDetail', code: source });
@@ -19,7 +20,7 @@ export function createSoftenDetailStage(device: GPUDevice): Stage {
     encode(encoder, ctx) {
       const { width, height, fullWidth, fullHeight } = ctx.params;
       const { sigma, radius } = softenKernel(Math.max(fullWidth, fullHeight));
-      const settings = ctx.device.createBuffer({ label: 'softenDetail:settings', size: 48, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
+      const settings = frameBuffer(ctx, { label: 'softenDetail:settings', size: 48, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
       const mapped = settings.getMappedRange();
       new Uint32Array(mapped).set([width, height, radius, 0]);
       new Float32Array(mapped).set([ctx.frame.softenDetail?.amount ?? 0, sigma, 0, 0, ...(ctx.frame.softenDetail?.luma ?? [0.2126, 0.7152, 0.0722]), 0], 4);
@@ -33,7 +34,6 @@ export function createSoftenDetailStage(device: GPUDevice): Stage {
       for (const pipeline of pipelines) { const pass = encoder.beginComputePass({ label: 'softenDetail' }); pass.setPipeline(pipeline); pass.setBindGroup(0, group); pass.dispatchWorkgroups(Math.ceil(width / 16), Math.ceil(height / 8)); pass.end(); }
       // The graph submits synchronously after encode; release the transient
       // uniform after submission. Scratch buffers remain owned by the pool.
-      queueMicrotask(() => settings.destroy());
     },
   };
 }

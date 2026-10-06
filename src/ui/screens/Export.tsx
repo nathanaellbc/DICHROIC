@@ -19,13 +19,15 @@
  *  - Pilihan disimpan di `localStorage`.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ExportFormat } from '../../session/session';
+import type { ExportFormat, ExportProgress } from '../../session/session';
+import { exportTarget } from '../../session/exportTarget';
 import { DecryptedText } from '../components/DecryptedText';
 import { Icon } from '../components/Icon';
 import { PressButton, Segmented, Slider } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import { formatElapsed, ThoughtLine } from '../components/ThoughtLine';
 import { engine } from '../engine/engine';
+import { previousExportCrash } from '../engine/exportTiles';
 import { exportSizeLimits, longEdgeDetents } from '../model/exportSizes';
 import { formatBytes, prefersShareSheet, saveViaDownload, saveViaShare } from '../share';
 
@@ -133,6 +135,9 @@ export function ExportContent({
   const [file, setFile] = useState<{ value: File; key: string } | null>(null);
   const [cubeFile, setCubeFile] = useState<File | null>(null);
   const [encoding, setEncoding] = useState(false);
+  const [progress, setProgress] = useState<ExportProgress | null>(null);
+  // Ekspor sebelumnya mati (tab dimatikan iOS): tampilkan tahapnya sekali.
+  const [previousCrash] = useState(previousExportCrash);
   const [failure, setFailure] = useState<Failure | null>(null);
   const shareable = useMemo(prefersShareSheet, []);
   // The render starts only in the Develop click handler. A new click supersedes
@@ -151,7 +156,10 @@ export function ExportContent({
   );
   const selected = detents.find((d) => d.longEdge === prefs.longEdge) ?? detents[detents.length - 1]!;
   const request = selected.request;
-  const requestKey = String(request ?? 'source');
+  // 8- dan 16-bit dirender terpisah (memori iPhone): ganti ke format dengan
+  // kedalaman lain = Develop lagi.
+  const target = exportTarget(format, outputColorSpace);
+  const requestKey = `${request ?? 'source'}|${target}`;
   const encodeKey = `${requestKey}|${format}|${prefs.quality}`;
   const needsDevelop = mode === 'image' && developedFor !== requestKey;
   const rendering = mode === 'image' && !needsDevelop && renderingExport;
@@ -165,7 +173,11 @@ export function ExportContent({
     setEncoding(false);
     setDevelopedFor(requestKey);
     setRenderingExport(true);
-    void engine.renderExport(request, selected).then(
+    setProgress(null);
+    void engine.renderExport(request, selected, {
+      target,
+      onProgress: (p) => ticket === renderTicket.current && setProgress(p),
+    }).then(
       (size) => {
         if (ticket !== renderTicket.current) return;
         setRendered({ ...size, request });
@@ -293,7 +305,7 @@ export function ExportContent({
   const busy = !needsDevelop && !ready && !failure;
   // Thought Line follows the real render and encode phases after Develop.
   const steps = [
-    `Developing ${selected.width} × ${selected.height} on the GPU`,
+    `Developing ${selected.width} × ${selected.height} on the GPU${rendering && progress && progress.total > 1 ? ` · tile ${Math.min(progress.done + 1, progress.total)} of ${progress.total}` : ''}`,
     `Encoding ${info.name}${info.lossy ? ` · quality ${prefs.quality}` : ''}`,
   ];
   // Satu fase kerja dari render sampai berkas siap (tanpa celah satu frame
@@ -373,6 +385,11 @@ export function ExportContent({
                 {selected.label.startsWith('Max ·') && `${info.name} is encoded by the browser, which limits the canvas size; PNG, TIFF and JPEG export the full source. `}
                 Grain, halation and diffusion are physical sizes, so a smaller export is developed again at its own pixel pitch rather than resized.
               </p>
+              {previousCrash && (
+                <p className="list-footer t-footnote" role="status">
+                  The last export was stopped by the system during {previousCrash}. Develop now renders smaller tiles: slower, but within this device’s memory.
+                </p>
+              )}
             </div>
 
             <div className="list-section">

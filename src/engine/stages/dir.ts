@@ -9,6 +9,7 @@ import { dirRadiusPx } from '../spatialRadius';
 import { DEFAULT_DIR_SETTINGS, dirFrameValues } from '../../host/dirCouplers';
 import type { FrameParams } from '../graph';
 import source from '../../shaders/dir.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 /**
  * Tahap Dir (Task 13, diperluas Task 18c): transliterasi `SpektraDir.comp`
@@ -186,7 +187,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
       const diffusionTailPixel = spatial ? DIFFUSION_TAIL_UM / pixelSizeUm : 0;
 
       const dirValues = frameValues(ctx.frame);
-      const dirFrameBuffer = ctx.device.createBuffer({
+      const dirFrameBuffer = frameBuffer(ctx, {
         label: 'dir:frame',
         size: dirValues.byteLength,
         usage: gpuBufferUsage.STORAGE,
@@ -210,7 +211,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
         };
         const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
         writeCoreParams(overridden, staging);
-        const paramsBuffer = ctx.device.createBuffer({
+        const paramsBuffer = frameBuffer(ctx, {
           label: `dir:params:${operation}`,
           size: CORE_PARAMS_BYTES,
           usage: gpuBufferUsage.UNIFORM,
@@ -244,7 +245,7 @@ export function createDirStage(device: GPUDevice, arenas: Arenas, options?: DirS
       // Blur hanya di dalam active rect: di bawah tiling apron-menyusut, itu
       // satu-satunya wilayah tempat koreksi baru saja dihitung (lih.
       // `validInputRect`).
-      const geometry = { bufferWidth: width, bufferHeight: height, rect: validInputRect(ctx.params) };
+      const geometry = { bufferWidth: width, bufferHeight: height, rect: validInputRect(ctx.params), ...(ctx.transient ? { transient: ctx.transient } : {}) };
       const size = diffusionSizePixel;
       blur.encode(encoder, { ...geometry, src: corrRaw, dst: corrBase, scratch: junk, sigma: [size, size, size] });
       if (spatial) {

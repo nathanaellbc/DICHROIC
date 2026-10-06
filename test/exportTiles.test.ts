@@ -53,3 +53,40 @@ it('ekspor ter-tile dengan apron 5 sigma == frame utuh (<= 1e-5 rgb_out)', async
     expect(max, `jahitan rgb_out ${max.toExponential(2)}`).toBeLessThanOrEqual(1e-5);
   } finally { graph.dispose(); }
 }, 600_000);
+
+it('buffer uniform per tile dihancurkan setelah tiap tile (tidak menumpuk menunggu GC)', async () => {
+  const { engine, bundle, arenas } = await sharedResources('kodak_portra_400', PRINT);
+  const w = 768; const h = 512;
+  const img = scene(w, h);
+  const params = { ...BASELINE_RENDER_PARAMS, autoExposure: false, filmFormat: 'standard16' as const };
+  const plan = buildRenderPlan(params, bundle, img, 'image');
+  const graph = new RenderGraph(engine, new ScratchPool(engine.device));
+  const device = engine.device as GPUDevice & { createBuffer: GPUDevice['createBuffer'] };
+  const live = new Set<GPUBuffer>();
+  try {
+    for (const s of buildChain(engine.device, arenas, plan.chain)) graph.addStage(s);
+    const original = device.createBuffer.bind(device);
+    device.createBuffer = (descriptor: GPUBufferDescriptor) => {
+      const buffer = original(descriptor);
+      if (descriptor.size <= 4096) {
+        live.add(buffer); (buffer as unknown as { _l: string })._l = String(descriptor.label);
+        const destroy = buffer.destroy.bind(buffer);
+        buffer.destroy = () => { live.delete(buffer); destroy(); };
+      }
+      return buffer;
+    };
+    const budget = 24 * 2 ** 20;
+    const tiles = planExportTiles(w, h, 2 ** 31, plan.exportOverlap, budget).length;
+    expect(tiles).toBeGreaterThan(2);
+    let drawn = 0;
+    await graph.runToTiles(img.rgba, plan.core, Tap.RGB_OUT, () => { drawn += 1; }, {
+      maxBufferBytes: 2 ** 31, memoryBudget: budget, overlap: plan.overlap, exportOverlap: plan.exportOverlap, frame: plan.frame,
+    });
+    expect(drawn).toBe(tiles);
+    const labels: Record<string, number> = {}; for (const b of live) { const l = (b as unknown as { _l: string })._l; labels[l] = (labels[l] ?? 0) + 1; }
+    expect(labels).toEqual({});
+  } finally {
+    delete (device as unknown as Record<string, unknown>).createBuffer;
+    graph.dispose();
+  }
+}, 600_000);

@@ -8,6 +8,7 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { halationRadiusPx } from '../spatialRadius';
 import source from '../../shaders/halation.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 /**
  * Tahap Halation (Task 14): transliterasi `SpektraHalation.comp` (322
@@ -94,13 +95,11 @@ import source from '../../shaders/halation.wgsl?raw';
  * dengan slot0/1/2 yang sudah dioverride, lewat `mappedAtCreation` (bukan
  * `queue.writeBuffer`, yang runtutannya relatif terhadap `submit()` tunggal
  * di akhir `graph.run()` akan salah -- lih. catatan `mappedAtCreation` di
- * `arena.ts`). Buffer-buffer kecil ini (112 byte x 18) SENGAJA tidak
- * di-`destroy()` eksplisit -- `encode()` kembali sebelum `submit()`
- * dipanggil pemanggilnya, jadi men-destroy di sini berisiko use-after-
- * destroy dari sisi GPU; total memori yang dilepas ke GC JS (bukan VRAM
- * sungguhan sampai device/proses berakhir) untuk satu run tes berukuran
- * kecil ini diabaikan sengaja, konsisten dengan aturan "kualitas di atas
- * performa".
+ * `arena.ts`). Buffer-buffer kecil ini dibuat lewat `frameBuffer(ctx, ...)`
+ * (`ctx.transient`): `encode()` kembali sebelum `submit()`, jadi bukan
+ * tahap ini yang men-destroy-nya, melainkan `RenderGraph` setelah GPU
+ * selesai. Dulu dibiarkan ke GC -- ekspor ber-tile ratusan tile di iPhone
+ * menumpuk puluhan ribu buffer seperti ini di proses GPU.
  *
  * Empat scratch pixel-buffer (`rawA/B/C/D`, meniru `halationRawA..D` GLSL)
  * diperoleh lewat `ctx.scratch()` (pool milik `RenderGraph`), BUKAN
@@ -198,14 +197,14 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
 
       // Blur hanya di dalam active rect (lih. `validInputRect`).
       const rect = validInputRect(ctx.params);
-      const geometry = { bufferWidth: width, bufferHeight: height, rect };
+      const geometry = { bufferWidth: width, bufferHeight: height, rect, ...(ctx.transient ? { transient: ctx.transient } : {}) };
 
       const activeWidth = ctx.params.activeWidth === 0 ? ctx.params.width : ctx.params.activeWidth;
       const activeHeight =
         ctx.params.activeHeight === 0 ? ctx.params.height : ctx.params.activeHeight;
 
       // Fase 2C: `halation_amount` per render (binding 6).
-      const halationFrame = ctx.device.createBuffer({
+      const halationFrame = frameBuffer(ctx, {
         label: 'halation:frame',
         size: 16,
         usage: gpuBufferUsage.UNIFORM,
@@ -218,7 +217,7 @@ export function createHalationStage(device: GPUDevice, arenas: Arenas): Stage {
         const overridden: CoreParams = { ...ctx.params, slot0: operation };
         const staging = new ArrayBuffer(CORE_PARAMS_BYTES);
         writeCoreParams(overridden, staging);
-        const paramsBuffer = ctx.device.createBuffer({
+        const paramsBuffer = frameBuffer(ctx, {
           label: `halation:params:${operation}`,
           size: CORE_PARAMS_BYTES,
           usage: gpuBufferUsage.UNIFORM,

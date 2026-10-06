@@ -45,6 +45,8 @@ import { loadPrintCube } from '../profiles/printLuts';
 import type { AssetBundle } from '../profiles/load';
 import { RenderSupersededError, SessionStateError } from './errors';
 import { ExportPixels } from './exportPixels';
+import { exportTarget } from './exportTarget';
+import type { ExportTarget } from './exportTarget';
 import { PREVIEW_MAX_LONG_EDGE, boxDownscale, boxDownscaleRegion, boxDownscaleSize, measurementImage } from './downscale';
 import type { ScaledImage } from './downscale';
 import { originalFrame } from '../io/display';
@@ -104,6 +106,19 @@ export interface ExportRenderInfo {
 export interface ExportRenderOptions {
   /** Skala anggaran tile awal (0..1] yang dipelajari UI lintas sesi. */
   tileScale?: number;
+  /** Piksel yang disimpan (`exportTarget(format)`); baku `'rgb8'`. */
+  target?: ExportTarget;
+}
+
+/** Kemajuan render ekspor yang sedang berjalan (`Session.exportProgress`). */
+export interface ExportProgress {
+  done: number;
+  total: number;
+  tileWidth: number;
+  tileHeight: number;
+  width: number;
+  height: number;
+  tileScale: number;
 }
 
 export interface RenderResult {
@@ -299,6 +314,7 @@ export class Session {
   #scratch: ScratchPool | undefined;
   /** Skala anggaran tile ekspor yang dipelajari (1 = awal; dibagi dua tiap GPU kehabisan memori). */
   #tileScale = 1;
+  #exportProgress: ExportProgress | undefined;
 
   private constructor(
     private readonly engine: EngineDevice,
@@ -758,16 +774,16 @@ export class Session {
   }
 
   /** Render penuh untuk ekspor; render yang tersalip sebelum mulai diantrekan ulang. */
-  private async renderForExport(longEdge: number | undefined): Promise<ExportPixels> {
+  private async renderForExport(longEdge: number | undefined, target: ExportTarget): Promise<ExportPixels> {
     const exportVersion = this.exportVersion;
     for (;;) {
       try {
         this.assertAlive();
         if (!this.#image) throw new SessionStateError('Ekspor sebelum open(): belum ada gambar.');
         const edge = this.exportLongEdge(longEdge);
-        const key = this.cacheKey('full', edge);
+        const key = `${this.cacheKey('full', edge)}|${target}`;
         if (this.#exportCache?.key === key) return this.#exportCache.result;
-        return await this.enqueue(() => this.executeExport(edge));
+        return await this.enqueue(() => this.executeExport(edge, target));
       } catch (e) {
         if (e instanceof RenderSupersededError && exportVersion === this.exportVersion) continue;
         throw e;
@@ -782,20 +798,26 @@ export class Session {
    * kehabisan memori. Tile dibaca langsung dari foto sumber (tanpa frame
    * terskala utuh) kecuali efek yang butuh frame utuh.
    */
-  private async executeExport(longEdge: number | undefined): Promise<ExportPixels> {
+  private async executeExport(longEdge: number | undefined, target: ExportTarget): Promise<ExportPixels> {
     this.assertAlive();
     const image = this.#image;
     if (!image) throw new SessionStateError('The photo was closed.');
     const params = this.#params;
-    const key = this.cacheKey('full', longEdge);
+    const renderKey = this.cacheKey('full', longEdge);
+    const key = `${renderKey}|${target}`;
     if (this.#exportCache?.key === key) return this.#exportCache.result;
     // Drop the previous size before allocating its replacement.
     this.#exportCache = undefined;
     const version = this.exportVersion;
-    const cancelled = () => this.#disposed || version !== this.exportVersion || key !== this.cacheKey('full', longEdge);
+    const cancelled = () => this.#disposed || version !== this.exportVersion || renderKey !== this.cacheKey('full', longEdge);
     // Lepas working set pratinjau dulu: tanpa ini buffer pratinjau (~300 MB
-    // di HP) masih hidup saat buffer tile pertama dibuat.
+    // di HP) masih hidup saat buffer tile pertama dibuat. Salinan pratinjau
+    // di CPU juga dibuang; dibuat ulang dari sumber saat pratinjau berikutnya.
     this.#scratch?.release();
+    this.#preview = undefined;
+    this.#draftPreview = undefined;
+    this.#originalPreview = undefined;
+    this.#previewCache.clear();
     const size = boxDownscaleSize(image.width, image.height, longEdge ?? Math.max(image.width, image.height));
     // Frame virtual: tile diambil dari sumber lewat `boxDownscaleRegion`.
     const virtual: PlanImage = {
@@ -811,12 +833,12 @@ export class Session {
       frame = this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
       plan = buildRenderPlan(params, this.bundle, frame, 'image', extras);
     }
-    const pixels = new ExportPixels(frame.width, frame.height, params.outputColorSpace, this.bundle.manifest.outputColorSpaces);
+    const pixels = new ExportPixels(frame.width, frame.height, params.outputColorSpace, this.bundle.manifest.outputColorSpaces, target);
     // Reuse diagnostic/full renders without retaining another whole float frame.
     const full = this.#cache.get('full');
     let exportGraph: RenderGraph | undefined;
     try {
-      if (full?.key === key) pixels.draw(full.result.rgb, 0, 0, frame.width, frame.height);
+      if (full?.key === renderKey) pixels.draw(full.result.rgb, 0, 0, frame.width, frame.height);
       else {
         const graph = await this.graphFor(plan);
         exportGraph = graph;
@@ -827,6 +849,10 @@ export class Session {
           try {
             await graph.runToTiles(input, plan.core, Tap.RGB_OUT,
               (rgb, tile) => pixels.draw(rgb, tile.activeOriginX, tile.activeOriginY, tile.activeWidth, tile.activeHeight), {
+                onProgress: (done, total, tile) => {
+                  this.#exportProgress = { done, total, tileWidth: tile.tileWidth, tileHeight: tile.tileHeight,
+                    width: frame.width, height: frame.height, tileScale: this.#tileScale };
+                },
                 maxBufferBytes: this.engine.maxStorageBufferBindingSize,
                 memoryBudget: exportTileMemoryBudget(this.engine.limits?.maxBufferSize, this.#tileScale),
                 // Tile pakai apron ekspor 5 sigma (`plan.exportOverlap`); frame utuh tetap `overlap`.
@@ -853,6 +879,7 @@ export class Session {
       if (cancelled()) throw new RenderSupersededError();
       throw error;
     } finally {
+      this.#exportProgress = undefined;
       exportGraph?.releaseFrameResources();
       this.#scratch?.release();
       returnFreedMemory(this.engine.device);
@@ -870,8 +897,17 @@ export class Session {
     // Skala tile dari UI (mis. sudah dibagi dua karena tab mati di Develop
     // sebelumnya) tidak boleh menaikkan skala yang sudah dipelajari sesi ini.
     if (options.tileScale !== undefined) this.#tileScale = Math.min(this.#tileScale, clampTileScale(options.tileScale));
-    const { width, height } = await this.renderForExport(longEdge);
+    const { width, height } = await this.renderForExport(longEdge, options.target ?? 'rgb8');
     return { width, height, tileScale: this.#tileScale };
+  }
+
+  /**
+   * Kemajuan render ekspor (tile selesai / total), `undefined` bila tidak ada
+   * yang berjalan. RPC ini dilayani di sela tile, jadi UI bisa menampilkan
+   * kemajuan dan mencatat tahap terakhir sebelum tab mati.
+   */
+  exportProgress(): ExportProgress | undefined {
+    return this.#exportProgress;
   }
 
   /**
@@ -946,7 +982,7 @@ export class Session {
     }
     const imageId = this.#imageId;
     const exif = this.#image?.exif;
-    const result = await this.renderForExport(options.longEdge);
+    const result = await this.renderForExport(options.longEdge, exportTarget(format, this.#params.outputColorSpace));
     if (imageId !== this.#imageId) throw new RenderSupersededError();
     const { width, height } = result;
     const outputColorSpace = result.outputColorSpace ?? this.#params.outputColorSpace;

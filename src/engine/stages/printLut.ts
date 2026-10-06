@@ -3,6 +3,7 @@ import { Tap } from '../taps';
 import type { Stage } from '../graph';
 import type { PrintCube } from '../../profiles/printLuts';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { frameBuffer } from '../transient';
 
 /** Rec.709 linear -> Cineon -> tetrahedral LUT -> gamma 2.4 decode -> output primaries. */
 export function createPrintLutStage(device: GPUDevice, cube: PrintCube): Stage {
@@ -42,7 +43,7 @@ export function createPrintLutStage(device: GPUDevice, cube: PrintCube): Stage {
     name: 'printLut:Cineon', writesTaps: [Tap.RGB_PRE], dispose: () => lut.destroy(),
     encode(encoder, ctx) {
       if (!ctx.frame.cameraOutput) throw new Error('Missing LUT output primaries transform.');
-      const transform = device.createBuffer({ size: 64, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
+      const transform = frameBuffer(ctx, { size: 64, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
       new Float32Array(transform.getMappedRange()).set(ctx.frame.cameraOutput); transform.unmap();
       const group = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: ctx.source } }, { binding: 1, resource: { buffer: ctx.dest } },

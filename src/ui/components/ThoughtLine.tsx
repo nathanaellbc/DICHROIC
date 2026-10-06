@@ -124,7 +124,7 @@ export function ThoughtLine({ working, label, doneLabel, steps, activeStep, glyp
           {steps.slice(0, Math.max(1, activeStep + 1)).map((text, i) => {
             const done = !working || i < activeStep;
             return (
-              <div key={text} className="thought-line-step" data-done={done || undefined}>
+              <div key={i} className="thought-line-step" data-done={done || undefined}>
                 <span className="thought-line-mark" aria-hidden="true">
                   {done ? <Icon name="check" size={13} strokeWidth={3} /> : <i className="thought-line-pulse" />}
                 </span>

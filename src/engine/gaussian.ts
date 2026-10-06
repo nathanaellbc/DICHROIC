@@ -54,6 +54,12 @@ export interface BlurArgs {
   sigma: Vec3;
   /** Default 3.0, bawaan `fast_gaussian_filter`. */
   truncate?: number;
+  /**
+   * Pengalokasi buffer per render (`StageContext.transient`): buffer bobot
+   * dan params tiap pass dihancurkan graf setelah GPU selesai, tidak
+   * menumpuk menunggu GC (~90 buffer per tile ekspor).
+   */
+  transient?: (descriptor: GPUBufferDescriptor) => GPUBuffer;
 }
 
 export interface ExponentialArgs extends Omit<BlurArgs, 'sigma'> {
@@ -186,7 +192,7 @@ export class GaussianBlur {
       }
     }
 
-    const weights = this.device.createBuffer({
+    const weights = this.allocate(args, {
       label: 'gaussian:weights',
       size: kernels.byteLength,
       usage: gpuBufferUsage.STORAGE,
@@ -249,6 +255,10 @@ export class GaussianBlur {
     });
   }
 
+  private allocate(args: { transient?: BlurArgs['transient'] }, descriptor: GPUBufferDescriptor): GPUBuffer {
+    return args.transient ? args.transient(descriptor) : this.device.createBuffer(descriptor);
+  }
+
   private pass(
     encoder: GPUCommandEncoder,
     o: {
@@ -285,7 +295,7 @@ export class GaussianBlur {
     u32[45] = o.first ? 1 : 0;
     u32[46] = 0; // opaqueZero: penghalang reasosiasi df64 (lih. `opq` di gaussian.wgsl)
 
-    const params = this.device.createBuffer({
+    const params = this.allocate(o.args, {
       label: `gaussian:params:${o.op}`,
       size: PARAMS_BYTES,
       usage: gpuBufferUsage.UNIFORM,
@@ -296,7 +306,7 @@ export class GaussianBlur {
 
     const weights =
       o.weights ??
-      this.device.createBuffer({ label: 'gaussian:weights:none', size: STRIDE * 3 * 4, usage: gpuBufferUsage.STORAGE });
+      this.allocate(o.args, { label: 'gaussian:weights:none', size: STRIDE * 3 * 4, usage: gpuBufferUsage.STORAGE });
 
     const bindGroup = this.device.createBindGroup({
       layout: this.pipeline.getBindGroupLayout(0),
