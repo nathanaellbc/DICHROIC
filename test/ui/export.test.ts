@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { exportSizeLimits, longEdgeDetents, MOBILE_EXPORT_LIMITS } from '../../src/ui/model/exportSizes';
+import { exportSizeLimits, longEdgeDetents } from '../../src/ui/model/exportSizes';
 import { asciiName, exportFileName, formatBytes } from '../../src/ui/share';
 import { rgbToRgba8, clampQuality } from '../../src/io/canvasEncode';
 
@@ -24,13 +24,12 @@ describe('detent sisi panjang ekspor', () => {
     expect(detents.map((d) => d.longEdge)).toEqual([2048, 4096, null]);
   });
 
-  it('caps every iPhone export format at 4096 px while desktop PNG keeps Source', () => {
-    expect(exportSizeLimits(false, true)).toEqual(MOBILE_EXPORT_LIMITS);
-    expect(exportSizeLimits(true, true)).toEqual(MOBILE_EXPORT_LIMITS);
-    expect(exportSizeLimits(false, false)).toBeUndefined();
-    const detents = longEdgeDetents(8064, 6048, exportSizeLimits(false, true));
-    expect(detents.at(-1)).toMatchObject({ label: 'Max · 4096', width: 4096, height: 3072, request: 4096 });
-    expect(detents.at(-1)!.width * detents.at(-1)!.height).toBeLessThanOrEqual(MOBILE_EXPORT_LIMITS.area);
+  it('tanpa batas 4096 px: PNG/TIFF/JPEG = Source, hanya WebP/AVIF dibatasi kanvas', () => {
+    expect(exportSizeLimits(false)).toBeUndefined();
+    const full = longEdgeDetents(8064, 6048, exportSizeLimits(false));
+    expect(full.at(-1)).toMatchObject({ label: 'Source · 8064', width: 8064, height: 6048, request: undefined });
+    expect(full.map((d) => d.label)).toEqual(['2048', '4096', 'Source · 8064']);
+    expect(exportSizeLimits(true)).toBeDefined();
   });
 });
 

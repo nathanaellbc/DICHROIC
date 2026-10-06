@@ -154,6 +154,11 @@ Belum diuji di iPhone fisik.
   itu membagi dua skala -> tiap perangkat menemukan ukuran tile yang muat
   (lebih lambat bila perlu). Tes: `test/exportStream.test.ts`, tes retry di
   `test/session.test.ts`.
+- Batas ekspor HP 4096 px (`MOBILE_EXPORT_LIMITS`) dihapus atas permintaan
+  pemilik: PNG/TIFF/JPEG (encoder sendiri) = resolusi Source di semua
+  perangkat; hanya WebP/AVIF (encoder kanvas) dibatasi kanvas browser
+  (iOS 16,7 MP). Lens blur/difusi tetap diperkecil oleh
+  `wholeFrameMemoryBudget` karena butuh frame utuh.
 
 ## UI: peta cepat
 
