@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { engine } from './engine/engine';
+import { preventPageZoom } from './noZoom';
 import { startPwa } from './pwa';
 // Cadangan SF di luar perangkat Apple (Windows, Android): Inter, self-host dan ikut precache PWA.
 import '@fontsource-variable/inter/wght.css';
@@ -11,6 +12,7 @@ import './fonts.css';
 import './styles.css';
 
 startPwa();
+preventPageZoom();
 // Hanya mode dev: probe Playwright membaca state engine yang sama dengan UI.
 if (import.meta.env.DEV) Object.assign(window, { __dichroicEngine: engine });
 
