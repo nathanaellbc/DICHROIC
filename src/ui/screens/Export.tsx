@@ -146,8 +146,8 @@ export function ExportContent({
   const info = FORMAT_INFO[format];
   const source = engine.imageSize ?? { width: 1, height: 1 };
   const detents = useMemo(
-    () => longEdgeDetents(source.width, source.height, exportSizeLimits(info.lossy)),
-    [source.width, source.height, info.lossy],
+    () => longEdgeDetents(source.width, source.height, exportSizeLimits(format === 'webp' || format === 'avif')),
+    [source.width, source.height, format],
   );
   const selected = detents.find((d) => d.longEdge === prefs.longEdge) ?? detents[detents.length - 1]!;
   const request = selected.request;
@@ -370,7 +370,7 @@ export function ExportContent({
                 </div>
               )}
               <p className="list-footer t-footnote">
-                {selected.label.startsWith('Max · 4096') && 'Mobile exports are capped at a 4096 px long edge to keep the render within Safari’s working memory. '}
+                {selected.label.startsWith('Max ·') && `${info.name} is encoded by the browser, which limits the canvas size; PNG, TIFF and JPEG export the full source. `}
                 Grain, halation and diffusion are physical sizes, so a smaller export is developed again at its own pixel pitch rather than resized.
               </p>
             </div>
