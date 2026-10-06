@@ -94,36 +94,52 @@ export function estimateTileOverlap(flags: SpatialEffectFlags): number {
 /** RGBA f32 -- sama seperti asumsi ukuran piksel di seluruh `RenderGraph`/`graph.ts`. */
 const BYTES_PER_PIXEL = 4 * Float32Array.BYTES_PER_ELEMENT;
 
-/** Emulsion's export lattice and memory policy, adapted to our buffer graph. */
-export const EXPORT_TILE_LATTICE = 128;
+/** Sisi inti tile ekspor dibulatkan ke kelipatan ini (rapi, tanpa syarat kebenaran). */
+export const EXPORT_TILE_LATTICE = 64;
+/**
+ * Byte GPU per piksel tile rantai produksi penuh, TERUKUR (lavapipe, grain
+ * menyala): ping + pong + readback 48 B, lima slot scratch 144 B.
+ */
+export const EXPORT_GPU_BYTES_PER_PIXEL = 192;
+/** Inti tile minimum: di bawah ini kerja ulang apron membengkak tanpa batas. */
+export const EXPORT_MIN_CORE = 256;
+
+/**
+ * Tile ekspor: inti persegi selebar mungkin sehingga (inti + 2 apron)^2 x
+ * `bytesPerPixel` <= `memoryBudget` dan buffer RGBA f32-nya <= batas binding.
+ * Apron dipakai EKSAK (tanpa dibulatkan); tile di tepi gambar terpotong.
+ * Bila bahkan inti minimum tidak muat, anggaran lunak dilampaui (konteks
+ * spasial lebih penting), batas binding tetap keras.
+ */
 export function planExportTiles(
   width: number, height: number, maxBufferBytes: number, overlap: number,
-  memoryBudget: number, bytesPerPixel = 160,
+  memoryBudget: number, bytesPerPixel = EXPORT_GPU_BYTES_PER_PIXEL,
 ): TileSpec[] {
   const lattice = EXPORT_TILE_LATTICE;
-  const side = Math.min(Math.floor(Math.sqrt(maxBufferBytes / BYTES_PER_PIXEL)),
-    Math.floor(Math.sqrt(memoryBudget / bytesPerPixel)));
-  const apron = Math.ceil(overlap / lattice) * lattice;
-  // Like Emulsion, spatial context takes priority over the soft RAM budget.
-  // Storage binding limits remain hard limits.
-  let core = Math.max(256, Math.floor((side - 2 * apron) / lattice) * lattice);
+  const apron = Math.max(0, Math.ceil(overlap));
   const bindingSide = Math.floor(Math.sqrt(maxBufferBytes / BYTES_PER_PIXEL));
-  while (core > lattice && Math.min(width, core + 2 * apron) * Math.min(height, core + 2 * apron) > bindingSide ** 2) core -= lattice;
-  if (Math.min(width, core + 2 * apron) * Math.min(height, core + 2 * apron) * BYTES_PER_PIXEL > maxBufferBytes) {
-    throw new RangeError('Spatial blur margins exceed the GPU tile budget. Reduce resolution or use a larger film format.');
-  }
-  if (width <= side && height <= side) return [{
+  const side = Math.min(bindingSide, Math.floor(Math.sqrt(memoryBudget / bytesPerPixel)));
+  if (width * height * bytesPerPixel <= memoryBudget && width * height * BYTES_PER_PIXEL <= maxBufferBytes) return [{
     tileOriginX: 0, tileOriginY: 0, activeOriginX: 0, activeOriginY: 0,
     activeWidth: width, activeHeight: height, tileWidth: width, tileHeight: height,
   }];
+  let core = Math.max(EXPORT_MIN_CORE, Math.floor((side - 2 * apron) / lattice) * lattice);
+  const tileArea = (c: number) => Math.min(width, c + 2 * apron) * Math.min(height, c + 2 * apron);
+  while (core > lattice && tileArea(core) > bindingSide ** 2) core -= lattice;
+  if (tileArea(core) * BYTES_PER_PIXEL > maxBufferBytes) {
+    throw new RangeError('Spatial blur margins exceed the GPU tile budget. Reduce resolution or use a larger film format.');
+  }
+  // Bagi rata (bukan langkah `core` literal): tile terakhir tidak jomplang kecil.
+  const cols = Math.ceil(width / core);
+  const rows = Math.ceil(height / core);
   const tiles: TileSpec[] = [];
-  for (let y = 0; y < height; y += core) for (let x = 0; x < width; x += core) {
-    const w = Math.min(core, width - x); const h = Math.min(core, height - y);
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const x = Math.floor((i * width) / cols); const x1 = Math.floor(((i + 1) * width) / cols);
+    const y = Math.floor((j * height) / rows); const y1 = Math.floor(((j + 1) * height) / rows);
     const ox = Math.max(0, x - apron); const oy = Math.max(0, y - apron);
     tiles.push({ tileOriginX: ox, tileOriginY: oy, activeOriginX: x, activeOriginY: y,
-      activeWidth: w, activeHeight: h,
-      tileWidth: Math.min(width, Math.ceil((x + w + apron) / lattice) * lattice) - ox,
-      tileHeight: Math.min(height, Math.ceil((y + h + apron) / lattice) * lattice) - oy });
+      activeWidth: x1 - x, activeHeight: y1 - y,
+      tileWidth: Math.min(width, x1 + apron) - ox, tileHeight: Math.min(height, y1 + apron) - oy });
   }
   return tiles;
 }
