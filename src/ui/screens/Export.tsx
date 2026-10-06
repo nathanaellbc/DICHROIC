@@ -10,8 +10,8 @@
  *    pada pitch piksel itu, bukan di-resize.
  *  - Membuka lembar ini TIDAK me-render: pengguna menekan Develop dulu.
  *    Selama itu baris status Thought Line (React Bits Micro) menunjukkan
- *    langkah dan jamnya. Setelah selesai tombol berganti menjadi Save/
- *    Download, ketukan TERPISAH, karena `navigator.share` di iOS wajib di
+ *    langkah dan jamnya. Setelah selesai tombol berganti menjadi Save to
+ *    Photos (HP, tanpa Download) atau Download (desktop), ketukan TERPISAH, karena `navigator.share` di iOS wajib di
  *    dalam gestur dan menerima berkas yang sudah ada. Ukuran berkas yang
  *    ditampilkan TERUKUR, bukan perkiraan. Ganti format/kualitas setelah
  *    develop = encode ulang dari render yang sama; ganti sisi panjang =
@@ -454,18 +454,18 @@ export function ExportContent({
             Develop
           </PressButton>
         ) : shareable ? (
-          <>
-            <PressButton className="capsule bordered large" style={{ flex: '0 0 38%' }} disabled={!ready} onClick={doDownload}>
-              {ready ? <DecryptedText key={sizeLabel || 'ready'} text={sizeLabel ? `Download · ${sizeLabel}` : 'Download'} animateOn="mount" /> : 'Download'}
-            </PressButton>
-            <PressButton className="capsule prominent large" disabled={!ready} onClick={doShare}>
-              {busy ? (
-                <BusyButtonContent label={busyTitle} active={busy} />
-              ) : (
-                <DecryptedText key={sizeLabel || 'ready-share'} text="Save to Photos" animateOn="mount" />
-              )}
-            </PressButton>
-          </>
+          // HP: hanya Save to Photos (lembar share iOS juga menawarkan Save to Files).
+          <PressButton className="capsule prominent large" disabled={!ready} onClick={doShare}>
+            {busy ? (
+              <BusyButtonContent label={busyTitle} active={busy} />
+            ) : (
+              <DecryptedText
+                key={sizeLabel || 'ready-share'}
+                text={`${mode === 'image' ? 'Save to Photos' : 'Save'}${sizeLabel ? ` · ${sizeLabel}` : ''}`}
+                animateOn="mount"
+              />
+            )}
+          </PressButton>
         ) : (
           <PressButton className="capsule prominent large" disabled={!ready} onClick={doDownload}>
             {busy ? (

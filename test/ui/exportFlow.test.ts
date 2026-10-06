@@ -7,11 +7,12 @@ const worker = vi.hoisted(() => ({
   exportFormats: vi.fn(), renderExport: vi.fn(), exportImage: vi.fn(),
   exportCube: vi.fn(), releaseExport: vi.fn(),
 }));
+const shareSheet = vi.hoisted(() => ({ mobile: false }));
 vi.mock('../../src/ui/engine/engine', () => ({ engine: {
   imageSize: { width: 6000, height: 4000 }, ...worker,
 } }));
 vi.mock('../../src/ui/share', () => ({
-  prefersShareSheet: () => false,
+  prefersShareSheet: () => shareSheet.mobile,
   saveViaDownload: vi.fn(), saveViaShare: vi.fn(),
   formatBytes: (n: number) => `${n} B`,
 }));
@@ -81,6 +82,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  shareSheet.mobile = false;
   if (root) await act(async () => root.unmount());
   host?.remove();
   vi.unstubAllGlobals();
@@ -141,4 +143,21 @@ it('waits for another Develop after a size change and ignores an older render fi
   await finishEncode();
   expect(worker.exportImage).toHaveBeenCalledTimes(1);
   expect(worker.exportImage).toHaveBeenCalledWith('png8', { longEdge: 2048, quality: 0.92 });
+});
+
+it('HP (lembar share): hanya Save to Photos, tanpa tombol Download', async () => {
+  shareSheet.mobile = true;
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () => {
+    root.render(createElement(ExportContent, {
+      outputColorSpace: 'sRGB', inputColorSpace: 'sRGB', recipe: 'Portra 400',
+      onDone: vi.fn(), onCancel: vi.fn(), onError: vi.fn(),
+    }));
+  });
+  await click('Develop');
+  await finishEncode();
+  const labels = Array.from(host.querySelectorAll('button')).map((node) => node.textContent ?? '');
+  expect(labels.some((label) => label.includes('Download'))).toBe(false);
+  expect(button('Save to Photos').disabled).toBe(false);
 });
