@@ -5,14 +5,32 @@ export const IMAGE_BLOCK_BUDGET = 64 * 1024 * 1024;
 export const MOBILE_IMAGE_BUDGET = 768 * 1024 * 1024;
 export const MOBILE_PREVIEW_PIXELS = 1_572_864;
 
+/** Skala anggaran tile terkecil (1/16 dari awal) sebelum ekspor menyerah. */
+export const MIN_EXPORT_TILE_SCALE = 1 / 16;
+
+/** Working set GPU per piksel tile ekspor, terukur (lih. `EXPORT_GPU_BYTES_PER_PIXEL`). */
+const TILE_BYTES_PER_PIXEL = 192;
+/** Buffer terbesar rantai (ping/pong RGBA f32) per piksel. */
+const LARGEST_BUFFER_BYTES_PER_PIXEL = 16;
+
+export function clampTileScale(scale: number | undefined): number {
+  if (scale === undefined || !Number.isFinite(scale)) return 1;
+  return Math.min(1, Math.max(MIN_EXPORT_TILE_SCALE, scale));
+}
+
 /**
- * Anggaran GPU satu tile ekspor (`planExportTiles`, 192 B/px terukur). HP
- * 384 MB: tile ~1440 px persegi, inti >= 640 px dengan apron 5 sigma pada
- * ekspor 4096 px -- di bawah batas tab Safari iPhone bersama gambar sumber
- * dan buffer ekspor. Desktop 640 MB.
+ * Anggaran GPU satu tile ekspor (`planExportTiles`), adaptif:
+ *  - titik awal dari kelas perangkat (HP 384 MB, desktop 640 MB) tapi tidak
+ *    melebihi yang diizinkan GPU: buffer ping (16 B/px dari 192) tidak boleh
+ *    melewati `maxBufferSize` adapter;
+ *  - dikali `scale` hasil belajar: dibagi dua tiap kali GPU kehabisan memori
+ *    di tengah ekspor (`GpuMemoryError`) atau tab mati saat Develop (penanda
+ *    di UI), jadi tile mengecil sampai muat di perangkat itu.
  */
-export function exportTileMemoryBudget(): number {
-  return (imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 384 : 640) * 1024 * 1024;
+export function exportTileMemoryBudget(maxBufferSize = Number.POSITIVE_INFINITY, scale = 1): number {
+  const start = (imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 384 : 640) * 1024 * 1024;
+  const device = maxBufferSize * (TILE_BYTES_PER_PIXEL / LARGEST_BUFFER_BYTES_PER_PIXEL);
+  return Math.floor(Math.min(start, device) * clampTileScale(scale));
 }
 
 /**

@@ -93,7 +93,7 @@ class FakeSession implements SessionLike {
   }
   async renderExport(longEdge?: number) {
     this.calls.push(['renderExport', [longEdge]]);
-    return { width: longEdge ?? 4, height: 3 };
+    return { width: longEdge ?? 4, height: 3, tileScale: 1 };
   }
   async exportFormats(): Promise<ExportFormat[]> {
     return ['png8', 'png16', 'tiff16', 'jpeg'];
@@ -199,7 +199,7 @@ describe('RPC exportImage dan decode', () => {
   it('renderExport, exportFormats, dan opsi ekspor diteruskan apa adanya', async () => {
     const fake = new FakeSession();
     const client = await connect(fake);
-    expect(await client.renderExport(2048)).toEqual({ width: 2048, height: 3 });
+    expect(await client.renderExport(2048)).toEqual({ width: 2048, height: 3, tileScale: 1 });
     expect(await client.exportFormats()).toEqual(['png8', 'png16', 'tiff16', 'jpeg']);
     await client.exportImage('jpeg', { longEdge: 2048, quality: 0.8 });
     expect(fake.calls).toEqual([

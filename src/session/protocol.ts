@@ -11,7 +11,7 @@ import type { DepthMap } from '../host/lens';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Frame } from '../io/display';
 import type { Guide } from '../depth/estimate';
-import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, ExportRenderOptions, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
 
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
@@ -32,7 +32,7 @@ export interface SessionLike {
   prewarm(): Promise<void>;
   lastFullSize(): { width: number; height: number } | undefined;
   exportCube(size: number): Promise<string>;
-  renderExport(longEdge?: number): Promise<ExportRenderInfo>;
+  renderExport(longEdge?: number, options?: ExportRenderOptions): Promise<ExportRenderInfo>;
   exportFormats(): Promise<ExportFormat[]>;
   exportImage(format: ExportFormat, options?: ExportOptions): Promise<Uint8Array>;
   releaseExport(): void;

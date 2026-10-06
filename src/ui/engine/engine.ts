@@ -24,6 +24,7 @@ import { isScanMode, suggestedInput } from '../model/tools';
 import { stockInfo } from '../model/stocks';
 import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
+import { finishExportTiles, rememberExportTiles, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
 import { depthProfile, firstDownloadBytes } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
@@ -705,7 +706,17 @@ export class Engine {
    */
   async renderExport(longEdge: number | undefined, requested: { width: number; height: number }): Promise<{ width: number; height: number; limited: boolean }> {
     const token = this.#openToken;
-    const size = await this.#client!.renderExport(longEdge);
+    // Penanda selama Develop: bila tab dimatikan sistem (memori iOS) di
+    // tengah render, muatan berikutnya menemukannya dan memakai tile
+    // setengah ukuran (`startExportTiles`).
+    const tileScale = startExportTiles();
+    let size: Awaited<ReturnType<SessionClient['renderExport']>>;
+    try {
+      size = await this.#client!.renderExport(longEdge, { tileScale });
+    } finally {
+      finishExportTiles();
+    }
+    rememberExportTiles(size.tileScale);
     if (token !== this.#openToken) throw new RenderSupersededError();
     const limited = size.width < requested.width || size.height < requested.height;
     this.lastExportLimited = limited ? size : undefined;
