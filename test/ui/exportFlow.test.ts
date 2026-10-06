@@ -96,7 +96,7 @@ it('does no export rendering on open and prepares the file only after Develop', 
   worker.renderExport.mockReturnValueOnce(render.promise);
   await click('Develop');
   expect(worker.renderExport).toHaveBeenCalledTimes(1);
-  expect(worker.renderExport).toHaveBeenCalledWith(undefined, expect.objectContaining({ width: 6000, height: 4000 }));
+  expect(worker.renderExport).toHaveBeenCalledWith(undefined, expect.objectContaining({ width: 6000, height: 4000 }), expect.objectContaining({ target: 'rgb8' }));
   expect(host.querySelector('[data-testid="thought-line"]')?.getAttribute('data-working')).toBe('true');
   expect(worker.exportImage).not.toHaveBeenCalled();
   await act(async () => render.resolve({ width: 6000, height: 4000, limited: false }));
@@ -138,7 +138,7 @@ it('waits for another Develop after a size change and ignores an older render fi
   await click('2048');
   expect(worker.renderExport).toHaveBeenCalledTimes(1);
   await click('Develop');
-  expect(worker.renderExport).toHaveBeenLastCalledWith(2048, expect.objectContaining({ width: 2048, height: 1365 }));
+  expect(worker.renderExport).toHaveBeenLastCalledWith(2048, expect.objectContaining({ width: 2048, height: 1365 }), expect.objectContaining({ target: 'rgb8' }));
   await act(async () => old.resolve({ width: 6000, height: 4000, limited: false }));
   await finishEncode();
   expect(worker.exportImage).toHaveBeenCalledTimes(1);

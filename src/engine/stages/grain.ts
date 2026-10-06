@@ -5,6 +5,7 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { GRAIN_SPATIAL_RADIUS_PX } from '../tiling';
 import source from '../../shaders/grain.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 /**
  * Tahap Grain (Task 16): transliterasi `model/grain.py::apply_grain`
@@ -165,7 +166,7 @@ export function createGrainStage(
       const pixelSizeUm = (ctx.frame.filmFormatMm * 1000) / longEdge;
 
       // [pixel_size_um, grainSeed (Fase 2C), grainAmount (Fase 2C)] -- lih. `kFrame*` grain.wgsl.
-      const frameFloatsBuffer = ctx.device.createBuffer({
+      const frameFloatsBuffer = frameBuffer(ctx, {
         label: 'grain:frameFloats',
         size: 12,
         usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST,

@@ -3,7 +3,7 @@ import { boxDownscale, boxDownscaleRegion, boxDownscaleSize, measurementImage } 
 import { measureAutoExposureEv } from '../src/host/autoExposure';
 import { measureScenePivot } from '../src/host/cameraDevelop';
 import { MIN_EXPORT_TILE_SCALE, exportTileMemoryBudget } from '../src/io/budget';
-import { EXPORT_TILES_KEY, finishExportTiles, rememberExportTiles, startExportTiles } from '../src/ui/engine/exportTiles';
+import { EXPORT_TILES_KEY, finishExportEncode, finishExportTiles, noteExportStage, previousExportCrash, rememberExportTiles, startExportEncode, startExportTiles } from '../src/ui/engine/exportTiles';
 
 function noise(w: number, h: number): Float32Array {
   const out = new Float32Array(w * h * 4);
@@ -63,26 +63,37 @@ describe('anggaran tile adaptif', () => {
   let store: MemoryStore;
   beforeEach(() => { store = new MemoryStore(); });
 
-  it('Develop yang mati di tengah jalan membagi dua skala berikutnya', () => {
+  it('Develop yang mati di tengah jalan membagi dua skala berikutnya dan mencatat tahapnya', () => {
     expect(startExportTiles(store)).toBe(1);
-    finishExportTiles(store);
+    finishExportTiles(true, store);
     expect(startExportTiles(store)).toBe(1);
-    // Tab mati: finish tidak pernah terpanggil; muatan berikutnya (active = 0).
-    finishExportTiles(new MemoryStore());
+    noteExportStage('tile 12/35', store);
+    // Tab mati: finish tidak pernah terpanggil pada store ini.
+    finishExportTiles(false, new MemoryStore());
+    expect(previousExportCrash(store)).toBe('tile 12/35');
     expect(startExportTiles(store)).toBe(0.5);
-    finishExportTiles(store);
+    finishExportTiles(true, store);
+    expect(previousExportCrash(store)).toBeUndefined();
     rememberExportTiles(0.25, store);
     expect(startExportTiles(store)).toBe(0.25);
-    finishExportTiles(store);
+    finishExportTiles(true, store);
     expect(JSON.parse(store.getItem(EXPORT_TILES_KEY)!)).toEqual({ scale: 0.25, pending: false });
+  });
+
+  it('encode yang mati dicatat tanpa mengecilkan tile', () => {
+    startExportEncode('png8', store);
+    finishExportEncode(new MemoryStore());
+    expect(previousExportCrash(store)).toBe('Encoding png8');
+    expect(startExportTiles(store)).toBe(1);
+    finishExportTiles(true, store);
   });
 
   it('tidak pernah di bawah lantai, dan penyimpanan rusak = skala penuh', () => {
     store.setItem(EXPORT_TILES_KEY, JSON.stringify({ scale: MIN_EXPORT_TILE_SCALE, pending: true }));
     expect(startExportTiles(store)).toBe(MIN_EXPORT_TILE_SCALE);
-    finishExportTiles(store);
+    finishExportTiles(false, store);
     store.setItem(EXPORT_TILES_KEY, '{oops');
     expect(startExportTiles(store)).toBe(1);
-    finishExportTiles(store);
+    finishExportTiles(false, store);
   });
 });

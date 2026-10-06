@@ -9,6 +9,7 @@ import type { MidgrayTables } from '../../host/printExposure';
 import { preflashRaw } from '../../host/preflash';
 import type { PreflashTables } from '../../host/preflash';
 import source from '../../shaders/printScan.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 /**
  * Fase 2C: nilai `printFrame` (binding 5) untuk satu render -- faktor midgray
@@ -115,7 +116,7 @@ export function createPrintExposureStage(device: GPUDevice, arenas: Arenas): Sta
         ctx.params.hanatosWidth,
         ctx.params.hanatosHeight,
       );
-      const printFrame = ctx.device.createBuffer({
+      const printFrame = frameBuffer(ctx, {
         label: 'printScan:printFrame',
         size: 32,
         usage: gpuBufferUsage.UNIFORM,

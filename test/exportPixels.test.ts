@@ -26,6 +26,21 @@ describe('final export tiles', () => {
     expect(pixels.rgb8.byteLength + pixels.rgb16.byteLength).toBe(2 * 2 * 9);
   });
 
+  it('hanya mengalokasikan piksel untuk target format, nilainya sama dengan mode lengkap', () => {
+    const rgb = new Float32Array([0.5, 0.25, 1, 0.1, 0.9, 0.333]);
+    const all = new ExportPixels(2, 1, 'sRGB', spaces);
+    const eight = new ExportPixels(2, 1, 'sRGB', spaces, 'rgb8');
+    const sixteen = new ExportPixels(2, 1, 'sRGB', spaces, 'rgb16');
+    const canvas = new ExportPixels(2, 1, 'ProPhoto RGB', spaces, 'canvas');
+    for (const p of [all, eight, sixteen, canvas]) p.draw(rgb, 0, 0, 2, 1);
+    expect(eight.rgb8).toEqual(all.rgb8);
+    expect(sixteen.rgb16).toEqual(all.rgb16);
+    expect(() => eight.rgb16).toThrow(/8-bit|16-bit/);
+    expect(() => sixteen.rgb8).toThrow(/8-bit/);
+    expect([eight.bytes, sixteen.bytes, canvas.bytes]).toEqual([6, 12, 8]);
+    expect(canvas.canvas()).toEqual(rgbToCanvas(rgb, 2, 1, 'ProPhoto RGB', 'srgb', spaces));
+  });
+
   it('converts wide-gamut float tiles before clipping to integer samples', () => {
     const rgb = new Float32Array([1.1, -0.02, 0.5, 0.1, 0.5, 0.9]);
     const pixels = new ExportPixels(2, 1, 'ProPhoto RGB', spaces);

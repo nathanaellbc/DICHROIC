@@ -2,6 +2,7 @@ import { CORE_PARAMS_WGSL } from '../params';
 import { Tap } from '../taps';
 import type { Stage } from '../graph';
 import { gpuBufferUsage } from '../webgpuGlobals';
+import { frameBuffer } from '../transient';
 
 /** Finish the film bypass in selected output primaries and transfer function. */
 export function createCameraOutputStage(device: GPUDevice): Stage {
@@ -38,7 +39,7 @@ export function createCameraOutputStage(device: GPUDevice): Stage {
     name: 'cameraOutput', writesTaps: [Tap.RGB_OUT],
     encode(encoder, ctx) {
       if (!ctx.frame.cameraOutput) throw new Error('Film bypass requires an output color transform.');
-      const frame = device.createBuffer({ size: 64, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
+      const frame = frameBuffer(ctx, { size: 64, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
       new Float32Array(frame.getMappedRange()).set(ctx.frame.cameraOutput);
       frame.unmap();
       const group = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [

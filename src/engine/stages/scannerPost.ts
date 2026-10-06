@@ -5,6 +5,7 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { SPATIAL_EFFECT_RADIUS_PX } from '../tiling';
 import source from '../../shaders/scannerPost.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 
@@ -176,7 +177,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas, direct
       const glareBlurred = ctx.scratch('scannerPost:glareBlurred', floatBytes);
 
       // Fase 2C: amount unsharp dan mu glare per render (binding 12).
-      const scannerFrame = ctx.device.createBuffer({
+      const scannerFrame = frameBuffer(ctx, {
         label: 'scannerPost:frame',
         size: 16,
         usage: gpuBufferUsage.UNIFORM,
@@ -253,7 +254,7 @@ export function createScannerPostStage(device: GPUDevice, arenas: Arenas, direct
       const unsharpBlurred = ctx.scratch('scannerPost:glareBlurX', pixelBytes);
 
       const kernelData = buildUnsharpKernelBuffer(UNSHARP_SIGMA_PX);
-      const unsharpKernelBuffer = ctx.device.createBuffer({
+      const unsharpKernelBuffer = frameBuffer(ctx, {
         label: 'scannerPost:unsharpKernel',
         size: kernelData.byteLength,
         usage: gpuBufferUsage.STORAGE | gpuBufferUsage.COPY_DST,

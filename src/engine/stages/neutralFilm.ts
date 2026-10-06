@@ -4,6 +4,7 @@ import type { Stage } from '../graph';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import type { Arenas } from '../arena';
 import { midgrayDensityChannels, midgrayTablesFrom } from '../../host/printExposure';
+import { frameBuffer } from '../transient';
 
 /** Neutral negative: no stock colour/tone curve, with exposure/develop/texture retained. */
 export function createNeutralFilmStage(device: GPUDevice, operation: 'expose' | 'develop' | 'scene', arenas?: Arenas): Stage {
@@ -55,7 +56,7 @@ export function createNeutralFilmStage(device: GPUDevice, operation: 'expose' | 
         anchor ??= midgrayDensityChannels(midgrayTablesFrom((arena, name) => arenas[arena].values(name), ctx.params.hanatosWidth, ctx.params.hanatosHeight), arenas.dynamic.values('printMidgrayColorSpace')[0]!);
         values.set(anchor, 16);
       }
-      const buffer = device.createBuffer({ size: 112, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
+      const buffer = frameBuffer(ctx, { size: 112, usage: gpuBufferUsage.UNIFORM, mappedAtCreation: true });
       new Float32Array(buffer.getMappedRange()).set(values); buffer.unmap();
       const group = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: ctx.source } }, { binding: 1, resource: { buffer: ctx.dest } },

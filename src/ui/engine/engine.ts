@@ -19,12 +19,13 @@ import { BASELINE_RENDER_PARAMS } from '../../params/renderParams';
 import type { RenderParams } from '../../params/renderParams';
 import { SessionClient } from '../../session/client';
 import { RenderSupersededError } from '../../session/errors';
-import type { ExportFormat, ExportOptions } from '../../session/session';
+import type { ExportFormat, ExportOptions, ExportProgress } from '../../session/session';
+import type { ExportTarget } from '../../session/exportTarget';
 import { isScanMode, suggestedInput } from '../model/tools';
 import { stockInfo } from '../model/stocks';
 import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
-import { finishExportTiles, rememberExportTiles, startExportTiles } from './exportTiles';
+import { finishExportEncode, finishExportTiles, noteExportStage, rememberExportTiles, startExportEncode, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
 import { depthProfile, firstDownloadBytes } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
@@ -704,17 +705,36 @@ export class Engine {
    * dan saat sisi panjang berubah. `limited` = difusi FFT memaksa ukuran
    * lebih kecil dari yang diminta (Fase 2D).
    */
-  async renderExport(longEdge: number | undefined, requested: { width: number; height: number }): Promise<{ width: number; height: number; limited: boolean }> {
+  async renderExport(
+    longEdge: number | undefined, requested: { width: number; height: number },
+    options: { target?: ExportTarget; onProgress?: (progress: ExportProgress) => void } = {},
+  ): Promise<{ width: number; height: number; limited: boolean }> {
     const token = this.#openToken;
+    const client = this.#client!;
     // Penanda selama Develop: bila tab dimatikan sistem (memori iOS) di
     // tengah render, muatan berikutnya menemukannya dan memakai tile
-    // setengah ukuran (`startExportTiles`).
+    // setengah ukuran (`startExportTiles`); tahap terakhir ikut dicatat.
     const tileScale = startExportTiles();
     let size: Awaited<ReturnType<SessionClient['renderExport']>>;
+    let polling = true;
+    let ok = false;
+    const poll = async () => {
+      while (polling) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (!polling) break;
+        const progress = await client.exportProgress().catch(() => undefined);
+        if (!polling || !progress) continue;
+        noteExportStage(`tile ${progress.done + 1}/${progress.total} · ${progress.tileWidth}×${progress.tileHeight} px tiles · ${progress.width}×${progress.height}`);
+        options.onProgress?.(progress);
+      }
+    };
+    void poll();
     try {
-      size = await this.#client!.renderExport(longEdge, { tileScale });
+      size = await client.renderExport(longEdge, { tileScale, ...(options.target ? { target: options.target } : {}) });
+      ok = true;
     } finally {
-      finishExportTiles();
+      polling = false;
+      finishExportTiles(ok);
     }
     rememberExportTiles(size.tileScale);
     if (token !== this.#openToken) throw new RenderSupersededError();
@@ -734,7 +754,13 @@ export class Engine {
   async exportImage(format: ExportFormat, options?: ExportOptions): Promise<File> {
     const token = this.#openToken;
     const name = this.exportName(EXPORT_EXT[format]);
-    const bytes = await this.#client!.exportImage(format, options);
+    startExportEncode(format);
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.#client!.exportImage(format, options);
+    } finally {
+      finishExportEncode();
+    }
     if (token !== this.#openToken) throw new RenderSupersededError();
     if (!options) {
       // Difusi FFT butuh frame utuh; render penuh yang terlalu besar untuk

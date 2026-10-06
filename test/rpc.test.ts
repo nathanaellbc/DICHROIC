@@ -91,6 +91,9 @@ class FakeSession implements SessionLike {
   async exportCube(size: number): Promise<string> {
     return `LUT_3D_SIZE ${size}\n`;
   }
+  exportProgress() {
+    return undefined;
+  }
   async renderExport(longEdge?: number) {
     this.calls.push(['renderExport', [longEdge]]);
     return { width: longEdge ?? 4, height: 3, tileScale: 1 };

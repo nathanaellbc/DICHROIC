@@ -5,6 +5,7 @@ import type { Arenas } from '../arena';
 import { gpuBufferUsage } from '../webgpuGlobals';
 import { CAMERA_FRAME_FLOATS } from '../../host/cameraDevelop';
 import source from '../../shaders/filmExposure.wgsl?raw';
+import { frameBuffer } from '../transient';
 
 /**
  * Tahap FilmExposure (Task 11): transliterasi `SpektraFilmExposure.comp`,
@@ -41,7 +42,7 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas, camer
     writesTaps: [cameraOnly ? Tap.RGB_PRE : Tap.LOG_E_FILM],
     encode(encoder: GPUCommandEncoder, ctx: StageContext): void {
       // Fase 2C Task 9: pengali ruang ter-encode sebelum decode CCTF (binding 6).
-      const inputFrame = ctx.device.createBuffer({
+      const inputFrame = frameBuffer(ctx, {
         label: 'filmExposure:inputFrame',
         size: 16,
         usage: gpuBufferUsage.UNIFORM,
@@ -50,7 +51,7 @@ export function createFilmExposureStage(device: GPUDevice, arenas: Arenas, camer
       new Float32Array(inputFrame.getMappedRange()).set([ctx.frame.inputDecodeScale ?? 1, cameraOnly ? 1 : 0, 0, 0]);
       inputFrame.unmap();
       // "Camera Raw" (binding 7): nol semua = dilewati persis.
-      const cameraFrame = ctx.device.createBuffer({
+      const cameraFrame = frameBuffer(ctx, {
         label: 'filmExposure:cameraFrame',
         size: CAMERA_FRAME_FLOATS * 4,
         usage: gpuBufferUsage.UNIFORM,
