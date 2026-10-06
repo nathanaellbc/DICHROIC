@@ -404,15 +404,46 @@ describe('Session: exportImage (rencana 2B Task 7)', () => {
 
   it('longEdge: render ekspor sungguhan pada ukuran itu, tidak pernah memperbesar; cache dipakai ulang', async () => {
     session.open(gradientImage(96, 64));
-    expect(await session.renderExport(48)).toEqual({ width: 48, height: 32 });
+    expect(await session.renderExport(48)).toMatchObject({ width: 48, height: 32 });
     const small = await decodeImage(await session.exportImage('png16', { longEdge: 48 }));
     expect([small.width, small.height]).toEqual([48, 32]);
     expect(session.lastFullSize()).toEqual({ width: 48, height: 32 });
     // Lebih besar dari sumber = sumber.
-    expect(await session.renderExport(4096)).toEqual({ width: 96, height: 64 });
+    expect(await session.renderExport(4096)).toMatchObject({ width: 96, height: 64 });
     const full = await session.render('full');
-    expect(await session.renderExport()).toEqual({ width: full.width, height: full.height });
+    expect(await session.renderExport()).toMatchObject({ width: full.width, height: full.height });
     await expect(session.renderExport(0)).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it('GPU kehabisan memori di tengah ekspor: tile dikecilkan, diulang, hasil sama', async () => {
+    const s = await sharedSession();
+    const device = s['engine'].device as GPUDevice & { popErrorScope: GPUDevice['popErrorScope'] };
+    try {
+      s.open(gradientImage(96, 64));
+      const reference = await s.exportImage('png16', { longEdge: 72 });
+      s.open(gradientImage(96, 64));
+      const original = device.popErrorScope.bind(device);
+      let failures = 1;
+      device.popErrorScope = async () => {
+        const real = await original();
+        if (failures > 0) {
+          failures -= 1;
+          return { message: 'simulated out-of-memory' } as GPUError;
+        }
+        return real;
+      };
+      expect(await s.renderExport(72)).toEqual({ width: 72, height: 48, tileScale: 0.5 });
+      expect(failures).toBe(0);
+      expect(await s.exportImage('png16', { longEdge: 72 })).toEqual(reference);
+      // Skala dari UI (Develop sebelumnya mati) hanya boleh mengecilkan.
+      s.open(gradientImage(96, 64));
+      expect((await s.renderExport(72, { tileScale: 0.25 })).tileScale).toBe(0.25);
+      s.open(gradientImage(96, 64));
+      expect((await s.renderExport(72, { tileScale: 1 })).tileScale).toBe(0.25);
+    } finally {
+      delete (device as unknown as Record<string, unknown>).popErrorScope;
+      s.dispose();
+    }
   });
 
   it('ekspor yang tersalip sebelum mulai diantrekan ulang, tidak gagal', async () => {

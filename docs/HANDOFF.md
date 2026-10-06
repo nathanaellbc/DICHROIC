@@ -133,6 +133,28 @@ Perbaikan:
   ukurannya.
 Belum diuji di iPhone fisik.
 
+**Lanjutan: Develop masih force close -> tile adaptif gaya EMULSION.**
+- Puncak memori yang tersisa: buffer pratinjau (~300 MB di HP, pool scratch
+  bersama) masih hidup saat buffer tile pertama dibuat (buffer lama baru
+  dihancurkan setelah run), plus frame `boxDownscale` 4096 px (~200 MB)
+  ditahan sepanjang ekspor. Sekarang `executeExport` melepas pool dulu dan
+  membaca tiap tile langsung dari sumber (`boxDownscaleRegion`, identik bit
+  demi bit dengan `boxDownscale`); auto-exposure/pivot diukur dari kisi
+  256 px (`measurementImage`, `PlanImage.measure`) -- hasil sama persis.
+  Efek frame utuh (lens blur, difusi) tetap memakai frame utuh.
+- Ukuran tile tidak lagi tetap: `exportTileMemoryBudget(maxBufferSize, scale)`
+  = min(kelas perangkat, 12 x `maxBufferSize` adapter) x skala belajar.
+  `runToTiles` membungkus tiap tile dengan error scope `out-of-memory` +
+  `internal`; error -> `GpuMemoryError`, `Session` membagi dua skala,
+  melepas buffer, dan mengulang (lantai 1/16). Skala diteruskan ke UI
+  (`ExportRenderInfo.tileScale`).
+- Jetsam iOS tidak bisa ditangkap, jadi UI menyimpan penanda `pending` di
+  `localStorage['dichroic.exportTiles.v1']` selama Develop
+  (`src/ui/engine/exportTiles.ts`). Muatan berikutnya yang menemukan penanda
+  itu membagi dua skala -> tiap perangkat menemukan ukuran tile yang muat
+  (lebih lambat bila perlu). Tes: `test/exportStream.test.ts`, tes retry di
+  `test/session.test.ts`.
+
 ## UI: peta cepat
 
 - **Vectorscope (2026-10-05, permintaan pemilik "ala DaVinci Resolve" +

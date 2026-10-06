@@ -14,7 +14,8 @@
 
 import { acquireDevice } from '../engine/device';
 import type { EngineDevice } from '../engine/device';
-import { RenderGraph, ScratchPool, returnFreedMemory } from '../engine/graph';
+import { GpuMemoryError, RenderGraph, ScratchPool, returnFreedMemory } from '../engine/graph';
+import type { TileSource } from '../engine/graph';
 import { EXPORT_GPU_BYTES_PER_PIXEL } from '../engine/tiling';
 import { runPrecisionSelfTest } from '../engine/precisionSelfTest';
 import { Tap } from '../engine/taps';
@@ -32,6 +33,7 @@ import type { CanvasEncoder, CanvasFormat } from '../io/canvasEncode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
 import { buildRenderPlan, FILM_FORMAT_LONG_EDGE_MM, validateStocks } from '../params/plan';
+import type { PlanImage } from '../params/plan';
 import { diffusionFftBytes, diffusionRadiusPx } from '../engine/stages/diffusionFft';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
 import type { DepthMap } from '../host/lens';
@@ -43,7 +45,7 @@ import { loadPrintCube } from '../profiles/printLuts';
 import type { AssetBundle } from '../profiles/load';
 import { RenderSupersededError, SessionStateError } from './errors';
 import { ExportPixels } from './exportPixels';
-import { PREVIEW_MAX_LONG_EDGE, boxDownscale } from './downscale';
+import { PREVIEW_MAX_LONG_EDGE, boxDownscale, boxDownscaleRegion, boxDownscaleSize, measurementImage } from './downscale';
 import type { ScaledImage } from './downscale';
 import { originalFrame } from '../io/display';
 import type { Frame } from '../io/display';
@@ -51,7 +53,7 @@ import { buildGuide } from '../depth/estimate';
 import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, exportTileMemoryBudget, wholeFrameMemoryBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
+import { MIN_EXPORT_TILE_SCALE, assertImageBudget, clampTileScale, exportTileMemoryBudget, wholeFrameMemoryBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -95,6 +97,13 @@ export interface ExportOptions {
 export interface ExportRenderInfo {
   width: number;
   height: number;
+  /** Skala anggaran tile yang berhasil (lih. `exportTileMemoryBudget`); UI menyimpannya. */
+  tileScale: number;
+}
+
+export interface ExportRenderOptions {
+  /** Skala anggaran tile awal (0..1] yang dipelajari UI lintas sesi. */
+  tileScale?: number;
 }
 
 export interface RenderResult {
@@ -288,6 +297,8 @@ export class Session {
    * scratch seukuran frame. Dilepas setelah setiap render penuh (`execute`).
    */
   #scratch: ScratchPool | undefined;
+  /** Skala anggaran tile ekspor yang dipelajari (1 = awal; dibagi dua tiap GPU kehabisan memori). */
+  #tileScale = 1;
 
   private constructor(
     private readonly engine: EngineDevice,
@@ -764,7 +775,13 @@ export class Session {
     }
   }
 
-  /** Emulsion's export lifecycle: render, draw cores, yield, cache, release GPU work. */
+  /**
+   * Siklus ekspor gaya EMULSION: render per tile, gambar inti, yield, cache,
+   * lepas pekerjaan GPU. Ukuran tile adaptif (`exportTileMemoryBudget`):
+   * mulai dari skala yang dipelajari, dibagi dua dan diulang tiap kali GPU
+   * kehabisan memori. Tile dibaca langsung dari foto sumber (tanpa frame
+   * terskala utuh) kecuali efek yang butuh frame utuh.
+   */
   private async executeExport(longEdge: number | undefined): Promise<ExportPixels> {
     this.assertAlive();
     const image = this.#image;
@@ -776,7 +793,24 @@ export class Session {
     this.#exportCache = undefined;
     const version = this.exportVersion;
     const cancelled = () => this.#disposed || version !== this.exportVersion || key !== this.cacheKey('full', longEdge);
-    const frame = this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
+    // Lepas working set pratinjau dulu: tanpa ini buffer pratinjau (~300 MB
+    // di HP) masih hidup saat buffer tile pertama dibuat.
+    this.#scratch?.release();
+    const size = boxDownscaleSize(image.width, image.height, longEdge ?? Math.max(image.width, image.height));
+    // Frame virtual: tile diambil dari sumber lewat `boxDownscaleRegion`.
+    const virtual: PlanImage = {
+      width: size.width, height: size.height, rgba: image.rgba,
+      measure: measurementImage(image.rgba, image.width, image.height, size.width, size.height),
+    };
+    const extras = this.#depth ? { depth: this.#depth } : {};
+    let plan = buildRenderPlan(params, this.bundle, virtual, 'image', extras);
+    const wholeFrame = plan.chain.cameraDiffusion || plan.chain.printDiffusion || plan.chain.lensBlur;
+    let frame: PlanImage = virtual;
+    if (wholeFrame) {
+      // FFT and lens gather currently require their complete global grid.
+      frame = this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
+      plan = buildRenderPlan(params, this.bundle, frame, 'image', extras);
+    }
     const pixels = new ExportPixels(frame.width, frame.height, params.outputColorSpace, this.bundle.manifest.outputColorSpaces);
     // Reuse diagnostic/full renders without retaining another whole float frame.
     const full = this.#cache.get('full');
@@ -784,17 +818,32 @@ export class Session {
     try {
       if (full?.key === key) pixels.draw(full.result.rgb, 0, 0, frame.width, frame.height);
       else {
-        const plan = buildRenderPlan(params, this.bundle, frame, 'image', this.#depth ? { depth: this.#depth } : {});
         const graph = await this.graphFor(plan);
         exportGraph = graph;
-        await graph.runToTiles(frame.rgba, plan.core, Tap.RGB_OUT,
-          (rgb, tile) => pixels.draw(rgb, tile.activeOriginX, tile.activeOriginY, tile.activeWidth, tile.activeHeight), {
-            maxBufferBytes: this.engine.maxStorageBufferBindingSize, memoryBudget: exportTileMemoryBudget(),
-            // Tile pakai apron ekspor 5 sigma (`plan.exportOverlap`); frame utuh tetap `overlap`.
-            overlap: plan.overlap, exportOverlap: plan.exportOverlap, frame: plan.frame, isCancelled: cancelled,
-            // FFT and lens gather currently require their complete global grid.
-            wholeFrame: plan.chain.cameraDiffusion || plan.chain.printDiffusion || plan.chain.lensBlur,
-          });
+        const input: Float32Array | TileSource = wholeFrame ? frame.rgba
+          : (tile, into) => boxDownscaleRegion(image.rgba, image.width, image.height, size.width, size.height,
+            tile.tileOriginX, tile.tileOriginY, tile.tileWidth, tile.tileHeight, into);
+        for (;;) {
+          try {
+            await graph.runToTiles(input, plan.core, Tap.RGB_OUT,
+              (rgb, tile) => pixels.draw(rgb, tile.activeOriginX, tile.activeOriginY, tile.activeWidth, tile.activeHeight), {
+                maxBufferBytes: this.engine.maxStorageBufferBindingSize,
+                memoryBudget: exportTileMemoryBudget(this.engine.limits?.maxBufferSize, this.#tileScale),
+                // Tile pakai apron ekspor 5 sigma (`plan.exportOverlap`); frame utuh tetap `overlap`.
+                overlap: plan.overlap, exportOverlap: plan.exportOverlap, frame: plan.frame, isCancelled: cancelled,
+                wholeFrame,
+              });
+            break;
+          } catch (error) {
+            // GPU penuh: kecilkan tile dan ulang (piksel yang sudah tergambar ditimpa lagi).
+            if (!(error instanceof GpuMemoryError) || wholeFrame || this.#tileScale <= MIN_EXPORT_TILE_SCALE || cancelled()) throw error;
+            this.#tileScale = clampTileScale(this.#tileScale / 2);
+            graph.releaseFrameResources();
+            this.#scratch?.release();
+            returnFreedMemory(this.engine.device);
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          }
+        }
       }
       if (cancelled()) throw new RenderSupersededError();
       this.#cache.delete('full');
@@ -817,9 +866,12 @@ export class Session {
    * kualitas hanya meng-encode ulang. Ukuran yang dikembalikan bisa lebih
    * kecil dari permintaan bila difusi memaksa `fitForDiffusion`.
    */
-  async renderExport(longEdge?: number): Promise<ExportRenderInfo> {
+  async renderExport(longEdge?: number, options: ExportRenderOptions = {}): Promise<ExportRenderInfo> {
+    // Skala tile dari UI (mis. sudah dibagi dua karena tab mati di Develop
+    // sebelumnya) tidak boleh menaikkan skala yang sudah dipelajari sesi ini.
+    if (options.tileScale !== undefined) this.#tileScale = Math.min(this.#tileScale, clampTileScale(options.tileScale));
     const { width, height } = await this.renderForExport(longEdge);
-    return { width, height };
+    return { width, height, tileScale: this.#tileScale };
   }
 
   /**

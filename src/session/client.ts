@@ -20,7 +20,7 @@ import type { DepthMap } from '../host/lens';
 import { RenderSupersededError, SessionStateError } from './errors';
 import type { MessagePortLike, RpcError, RpcResponse, SessionInit, SessionMethod } from './protocol';
 import { transferablesOf } from './protocol';
-import type { ExportFormat, ExportOptions, ExportRenderInfo, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
+import type { ExportFormat, ExportOptions, ExportRenderInfo, ExportRenderOptions, RenderQuality, RenderResult, SessionDiagnostics, PreparedPhoto } from './session';
 
 export class SessionClient {
   #nextId = 1;
@@ -130,8 +130,8 @@ export class SessionClient {
   }
 
   /** Render ekspor saja pada sisi panjang itu (lihat `Session.renderExport`). */
-  renderExport(longEdge?: number): Promise<ExportRenderInfo> {
-    return this.call('renderExport', [longEdge]) as Promise<ExportRenderInfo>;
+  renderExport(longEdge?: number, options?: ExportRenderOptions): Promise<ExportRenderInfo> {
+    return this.call('renderExport', [longEdge, options]) as Promise<ExportRenderInfo>;
   }
 
   /** Format yang bisa di-encode worker ini (lihat `Session.exportFormats`). */

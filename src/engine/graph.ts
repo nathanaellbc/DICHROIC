@@ -231,6 +231,25 @@ function inflateActiveRect(
  * `materializeActiveRegion.wgsl`: sub-rektangel dari tata-letak 2D bukan
  * rentang byte kontigu.
  */
+/**
+ * Sumber piksel tile ekspor: isi `into` dengan RGBA tile (`tileOriginX/Y`,
+ * `tileWidth x tileHeight` di koordinat frame penuh) dan kembalikan
+ * subarray-nya. Dipakai ekspor yang membaca tile langsung dari foto sumber.
+ */
+export type TileSource = (tile: TileSpec, into: Float32Array) => Float32Array;
+
+/**
+ * GPU menolak pekerjaan satu tile karena memori (error scope `out-of-memory`
+ * atau `internal`). Ekspor menangkapnya, mengecilkan anggaran tile, lalu
+ * mengulang dengan tile yang lebih kecil.
+ */
+export class GpuMemoryError extends Error {
+  constructor(detail: string, readonly tilePixels: number) {
+    super(`The GPU ran out of memory rendering a ${tilePixels}-pixel tile: ${detail}`);
+    this.name = 'GpuMemoryError';
+  }
+}
+
 function extractTileInput(source: Float32Array, fullWidth: number, tile: TileSpec, into?: Float32Array): Float32Array {
   const floats = tile.tileWidth * tile.tileHeight * 4;
   const out = into ? into.subarray(0, floats) : new Float32Array(floats);
@@ -450,7 +469,7 @@ export class RenderGraph {
    */
   /** Stream only each tile's core; never allocate a float output for the whole photo. */
   async runToTiles(
-    input: Float32Array, params: CoreParams, collect: TapName,
+    input: Float32Array | TileSource, params: CoreParams, collect: TapName,
     draw: (rgb: Float32Array, tile: TileSpec) => void,
     options: { maxBufferBytes: number; memoryBudget: number; overlap: number;
       /** Apron tile ekspor (baku `overlap`); lih. `EXPORT_APRON_SIGMAS`. */
@@ -469,8 +488,14 @@ export class RenderGraph {
       maxTile = Math.max(maxTile, t.tileWidth * t.tileHeight);
       maxActive = Math.max(maxActive, t.activeWidth * t.activeHeight);
     }
-    const tileInput = tiles.length > 1 ? new Float32Array(maxTile * 4) : undefined;
+    const source = typeof input === 'function' ? input : undefined;
+    const tileInput = tiles.length > 1 || source ? new Float32Array(maxTile * 4) : undefined;
     const tileRgb = new Float32Array(maxActive * 3);
+    const device = this.engine.device;
+    // Error scope per tile: GPU yang kehabisan memori (buffer gagal dibuat,
+    // submit ditolak) dilaporkan sebagai `GpuMemoryError` supaya pemanggil
+    // bisa mengecilkan tile dan mencoba lagi, bukan menulis piksel rusak.
+    const scoped = typeof device.pushErrorScope === 'function';
     for (const tile of tiles) {
       if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
       const whole = tiles.length === 1 && tile.tileWidth === params.width && tile.tileHeight === params.height;
@@ -483,10 +508,27 @@ export class RenderGraph {
       };
       const region = { x: tile.activeOriginX - tile.tileOriginX, y: tile.activeOriginY - tile.tileOriginY,
         width: tile.activeWidth, height: tile.activeHeight };
-      const rgb = await this.runSingleBuffer(whole ? input : extractTileInput(input, params.width, tile, tileInput),
-        tileParams, collect, !whole, options.frame, 'rgb', region, tileRgb);
+      const pixels = source ? source(tile, tileInput!) : whole ? input as Float32Array : extractTileInput(input as Float32Array, params.width, tile, tileInput);
+      if (scoped) {
+        device.pushErrorScope('out-of-memory');
+        device.pushErrorScope('internal');
+      }
+      let rgb: Float32Array | undefined;
+      let failure: unknown;
+      try {
+        rgb = await this.runSingleBuffer(pixels, tileParams, collect, !whole, options.frame, 'rgb', region, tileRgb);
+      } catch (error) {
+        failure = error;
+      }
+      if (scoped) {
+        const internal = await device.popErrorScope().catch(() => null);
+        const oom = await device.popErrorScope().catch(() => null);
+        const gpuError = oom ?? internal;
+        if (gpuError) throw new GpuMemoryError(gpuError.message, tile.tileWidth * tile.tileHeight);
+      }
+      if (failure !== undefined) throw failure;
       if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
-      draw(rgb, tile);
+      draw(rgb!, tile);
       // Allow worker RPC (close, cancel, parameter updates) between GPU submissions.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }

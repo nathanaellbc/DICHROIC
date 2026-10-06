@@ -113,6 +113,13 @@ export interface PlanImage {
   width: number;
   height: number;
   rgba: Float32Array;
+  /**
+   * Gambar kecil untuk pengukuran (auto-exposure, pivot Camera Raw) bila
+   * `rgba` tidak memuat frame `width x height` utuh -- ekspor ber-tile yang
+   * membaca tile langsung dari sumber. Harus berisi nilai frame pada kisi
+   * pengukuran <= 256 px (`measurementImage`), jadi hasilnya identik.
+   */
+  measure?: { width: number; height: number; rgba: Float32Array };
 }
 
 const CUBE_DISABLED_EFFECTS = [
@@ -330,7 +337,8 @@ function cameraFrame(
   const rgbToXyz = Array.from({ length: 9 }, (_, i) => all[inputColorSpace * 9 + i]!);
   const decode = params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined;
   const scaled = decode && inputDecodeScale !== 1 ? (v: number) => decode(v * inputDecodeScale) : decode;
-  const pivot = measureScenePivot(image.rgba, image.width, image.height, lumaWeights(rgbToXyz), scaled);
+  const m = image.measure ?? image;
+  const pivot = measureScenePivot(m.rgba, m.width, m.height, lumaWeights(rgbToXyz), scaled);
   return cameraFrameValues(settings, rgbToXyz, pivot);
 }
 
@@ -421,9 +429,9 @@ export function buildRenderPlan(
   const autoEv =
     family === 'measured' && params.autoExposure
       ? measureAutoExposureEv(
-          image.rgba,
-          image.width,
-          image.height,
+          (image.measure ?? image).rgba,
+          (image.measure ?? image).width,
+          (image.measure ?? image).height,
           bundle.staticTable('inputMeterXyzMatrices'),
           inputColorSpace,
           params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined,
