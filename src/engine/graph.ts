@@ -231,8 +231,9 @@ function inflateActiveRect(
  * `materializeActiveRegion.wgsl`: sub-rektangel dari tata-letak 2D bukan
  * rentang byte kontigu.
  */
-function extractTileInput(source: Float32Array, fullWidth: number, tile: TileSpec): Float32Array {
-  const out = new Float32Array(tile.tileWidth * tile.tileHeight * 4);
+function extractTileInput(source: Float32Array, fullWidth: number, tile: TileSpec, into?: Float32Array): Float32Array {
+  const floats = tile.tileWidth * tile.tileHeight * 4;
+  const out = into ? into.subarray(0, floats) : new Float32Array(floats);
   for (let row = 0; row < tile.tileHeight; row += 1) {
     const srcRowStart = ((tile.tileOriginY + row) * fullWidth + tile.tileOriginX) * 4;
     const dstRowStart = row * tile.tileWidth * 4;
@@ -452,11 +453,24 @@ export class RenderGraph {
     input: Float32Array, params: CoreParams, collect: TapName,
     draw: (rgb: Float32Array, tile: TileSpec) => void,
     options: { maxBufferBytes: number; memoryBudget: number; overlap: number;
+      /** Apron tile ekspor (baku `overlap`); lih. `EXPORT_APRON_SIGMAS`. */
+      exportOverlap?: number;
       frame: FrameParams; wholeFrame?: boolean; isCancelled?: () => boolean },
   ): Promise<void> {
     const tiles = options.wholeFrame ? planTiles(params.width, params.height, options.maxBufferBytes, options.overlap)
-      : planExportTiles(params.width, params.height, options.maxBufferBytes, options.overlap, options.memoryBudget);
+      : planExportTiles(params.width, params.height, options.maxBufferBytes, options.exportOverlap ?? options.overlap, options.memoryBudget);
     if (options.wholeFrame && tiles.length !== 1) throw new RangeError('This effect requires a whole-frame render.');
+    // Satu buffer input dan satu buffer RGB untuk seluruh tile (dipakai lewat
+    // subarray): tanpa ini tiap tile meninggalkan puluhan MB sampah yang di
+    // Safari bisa menumpuk sebelum GC berjalan.
+    let maxTile = 0;
+    let maxActive = 0;
+    for (const t of tiles) {
+      maxTile = Math.max(maxTile, t.tileWidth * t.tileHeight);
+      maxActive = Math.max(maxActive, t.activeWidth * t.activeHeight);
+    }
+    const tileInput = tiles.length > 1 ? new Float32Array(maxTile * 4) : undefined;
+    const tileRgb = new Float32Array(maxActive * 3);
     for (const tile of tiles) {
       if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
       const whole = tiles.length === 1 && tile.tileWidth === params.width && tile.tileHeight === params.height;
@@ -469,8 +483,8 @@ export class RenderGraph {
       };
       const region = { x: tile.activeOriginX - tile.tileOriginX, y: tile.activeOriginY - tile.tileOriginY,
         width: tile.activeWidth, height: tile.activeHeight };
-      const rgb = await this.runSingleBuffer(whole ? input : extractTileInput(input, params.width, tile),
-        tileParams, collect, !whole, options.frame, 'rgb', region);
+      const rgb = await this.runSingleBuffer(whole ? input : extractTileInput(input, params.width, tile, tileInput),
+        tileParams, collect, !whole, options.frame, 'rgb', region, tileRgb);
       if (options.isCancelled?.()) throw new Error('Tile render cancelled.');
       draw(rgb, tile);
       // Allow worker RPC (close, cancel, parameter updates) between GPU submissions.
@@ -541,6 +555,8 @@ export class RenderGraph {
     frame: Readonly<FrameParams> = DEFAULT_FRAME,
     output: 'rgba' | 'rgb' = 'rgba',
     readRegion?: ActiveRect,
+    /** Tujuan RGB yang dipakai ulang (hanya `output: 'rgb'`); hasil = subarray-nya. */
+    rgbInto?: Float32Array,
   ): Promise<Float32Array> {
     if (this.#disposed) {
       throw new Error(
@@ -717,7 +733,7 @@ export class RenderGraph {
 
       await readback.mapAsync(gpuMapMode.READ);
       const mapped = new Float32Array(readback.getMappedRange());
-      const result = output === 'rgb' ? packRgb(mapped, readPixels) : mapped.slice(0, readPixels * 4);
+      const result = output === 'rgb' ? packRgb(mapped, readPixels, rgbInto) : mapped.slice(0, readPixels * 4);
       readback.unmap();
 
       return result;
@@ -748,8 +764,8 @@ export class RenderGraph {
 }
 
 /** RGBA -> RGB rapat (kanal alfa dibuang). */
-export function packRgb(rgba: Float32Array, pixels: number): Float32Array {
-  const rgb = new Float32Array(pixels * 3);
+export function packRgb(rgba: Float32Array, pixels: number, into?: Float32Array): Float32Array {
+  const rgb = into ? into.subarray(0, pixels * 3) : new Float32Array(pixels * 3);
   for (let p = 0; p < pixels; p += 1) {
     rgb[p * 3] = rgba[p * 4]!;
     rgb[p * 3 + 1] = rgba[p * 4 + 1]!;

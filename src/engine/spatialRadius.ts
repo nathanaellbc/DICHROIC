@@ -28,18 +28,29 @@ import type { Vec3 } from './gaussian';
 
 export const APRON_SIGMAS = 10;
 
+/**
+ * Apron tile EKSPOR: 5 sigma, bukan 10. Diukur (rantai penuh, pitch 8,5 um =
+ * ekspor 4096 px format 35 mm, highlight 20x): jahitan rgb_out terbesar
+ * 3,7e-6 pada apron 384 px (~4,9 sigma) -- setara derau f32 tile-vs-full
+ * (2e-6) dan di bawah ambang parity rgb_out 1e-5; 0,2 level 16-bit, 0,001
+ * level 8-bit. Apron 10 sigma (1100 px pada 4096 px) membuat tiap tile ekspor
+ * HP butuh ~6,5 MP x 192 B GPU (~1,26 GB) dan 66x kerja ulang: penyebab tab
+ * Safari iPhone dimatikan. Pratinjau dan gerbang parity tetap 10 sigma.
+ */
+export const EXPORT_APRON_SIGMAS = 5;
+
 /** Radius support satu blur `fast_gaussian_filter` bersigma `sigma` px. */
-export function blurSupportPx(sigma: number): number {
+export function blurSupportPx(sigma: number, sigmas = APRON_SIGMAS): number {
   if (!(sigma > 0)) return 0;
   if (sigma < SMALL_SIGMA_MAX) return Math.trunc(3 * sigma + 0.5);
-  return Math.ceil(APRON_SIGMAS * sigma);
+  return Math.ceil(sigmas * sigma);
 }
 
 /** Komponen campuran 3 Gaussian `fast_exponential_filter` (rasio sigma/lambda). */
 const EXP_RATIOS = [0.536, 1.5236, 2.7684];
 
-function exponentialSupportPx(decayPx: number): number {
-  return Math.max(...EXP_RATIOS.map((r) => blurSupportPx(r * decayPx)));
+function exponentialSupportPx(decayPx: number, sigmas = APRON_SIGMAS): number {
+  return Math.max(...EXP_RATIOS.map((r) => blurSupportPx(r * decayPx, sigmas)));
 }
 
 /**
@@ -47,11 +58,11 @@ function exponentialSupportPx(decayPx: number): number {
  * bounce `sigma_h * sqrt(k)`. Konstanta = `HalationParams` default Python,
  * sama dengan `stages/halation.ts`.
  */
-export function halationRadiusPx(pixelSizeUm: number, firstSigmaUm: Vec3): number {
-  const core = [2.2, 2.0, 1.6].map((um) => blurSupportPx(Math.max(um / pixelSizeUm, 1e-6)));
-  const tail = [9.3, 9.7, 9.1].map((um) => exponentialSupportPx(um / pixelSizeUm));
+export function halationRadiusPx(pixelSizeUm: number, firstSigmaUm: Vec3, sigmas = APRON_SIGMAS): number {
+  const core = [2.2, 2.0, 1.6].map((um) => blurSupportPx(Math.max(um / pixelSizeUm, 1e-6), sigmas));
+  const tail = [9.3, 9.7, 9.1].map((um) => exponentialSupportPx(um / pixelSizeUm, sigmas));
   const bounce = firstSigmaUm.flatMap((um) =>
-    [1, 2, 3].map((k) => blurSupportPx(Math.max((um / pixelSizeUm) * Math.sqrt(k), 1e-6))),
+    [1, 2, 3].map((k) => blurSupportPx(Math.max((um / pixelSizeUm) * Math.sqrt(k), 1e-6), sigmas)),
   );
   return Math.max(...core, ...tail, ...bounce);
 }
@@ -61,9 +72,22 @@ export function halationRadiusPx(pixelSizeUm: number, firstSigmaUm: Vec3): numbe
  * eksponensial 200 um. `diffusion_size_um <= 0` mematikan keduanya (Python
  * menolkan ukuran ekor bersamaan).
  */
-export function dirRadiusPx(pixelSizeUm: number, diffusionUm = 20): number {
+export function dirRadiusPx(pixelSizeUm: number, diffusionUm = 20, sigmas = APRON_SIGMAS): number {
   if (!(diffusionUm > 0)) return 0;
-  return Math.max(blurSupportPx(diffusionUm / pixelSizeUm), exponentialSupportPx(200 / pixelSizeUm));
+  return Math.max(blurSupportPx(diffusionUm / pixelSizeUm, sigmas), exponentialSupportPx(200 / pixelSizeUm, sigmas));
+}
+
+/**
+ * Support FIR sungguhan tahap kecil di hilir (blur grain sigma 0,65 px,
+ * unsharp scanner 0,7 px, blur glare 0,5 px: masing-masing `int(3 sigma +
+ * 0.5)` = 2 px), dijumlah dengan cadangan. Konstanta OFX 64/256 px di
+ * `productionOverlapPx` jauh di atas ini.
+ */
+export const EXPORT_FIR_MARGIN_PX = 8;
+
+/** Apron tile ekspor: halation + DIR pada `EXPORT_APRON_SIGMAS`, plus FIR kecil. */
+export function exportOverlapPx(radii: { halation: number; dir: number }): number {
+  return radii.halation + radii.dir + EXPORT_FIR_MARGIN_PX;
 }
 
 /**

@@ -15,6 +15,7 @@
 import { acquireDevice } from '../engine/device';
 import type { EngineDevice } from '../engine/device';
 import { RenderGraph, ScratchPool, returnFreedMemory } from '../engine/graph';
+import { EXPORT_GPU_BYTES_PER_PIXEL } from '../engine/tiling';
 import { runPrecisionSelfTest } from '../engine/precisionSelfTest';
 import { Tap } from '../engine/taps';
 import type { Arenas } from '../engine/arena';
@@ -50,7 +51,7 @@ import { buildGuide } from '../depth/estimate';
 import { applyRemoval, prepareRemoval, restoreRemoval } from '../retouch/patch';
 import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { Guide } from '../depth/estimate';
-import { assertImageBudget, exportTileMemoryBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
+import { assertImageBudget, exportTileMemoryBudget, wholeFrameMemoryBudget, imageMemoryBudget, previewCacheBudgetBytes, previewPixelBudget } from '../io/budget';
 
 export type RenderQuality = 'full' | 'preview';
 
@@ -207,6 +208,12 @@ export function diffusionRenderLongEdge(
   planeBudget = DIFFUSION_PLANE_BUDGET,
   /** Ekstensi lens blur aktif: juga butuh frame utuh dalam satu binding. */
   lensBlur = false,
+  /**
+   * Batas working set GPU frame utuh (byte): rantai penuh 192 B/px
+   * (`EXPORT_GPU_BYTES_PER_PIXEL`) ditambah bidang FFT difusi. HP memberi
+   * batas (`wholeFrameMemoryBudget`); desktop tak terbatas di sini.
+   */
+  frameBudget = Number.POSITIVE_INFINITY,
 ): number {
   const original = Math.max(width, height);
   const sites = [
@@ -227,13 +234,14 @@ export function diffusionRenderLongEdge(
       : { w: Math.max(1, Math.round(edge * aspect)), h: edge };
   const fits = (edge: number) => {
     const { w, h } = dims(edge);
-    return (
-      w * h * 16 <= maxBindingBytes &&
-      sites.every((site) => {
-        const radius = diffusionRadiusPx(site, (filmFormatMm * 1000) / Math.max(w, h), w, h);
-        return diffusionFftBytes(w, h, radius) / 3 <= planeLimit;
-      })
-    );
+    let fftBytes = 0;
+    const planesFit = sites.every((site) => {
+      const radius = diffusionRadiusPx(site, (filmFormatMm * 1000) / Math.max(w, h), w, h);
+      const bytes = diffusionFftBytes(w, h, radius);
+      fftBytes += bytes;
+      return bytes / 3 <= planeLimit;
+    });
+    return w * h * 16 <= maxBindingBytes && planesFit && w * h * EXPORT_GPU_BYTES_PER_PIXEL + fftBytes <= frameBudget;
   };
   let edge = original;
   while (edge > 256 && !fits(edge)) edge = Math.floor(edge * 0.9);
@@ -695,6 +703,7 @@ export class Session {
       this.engine.maxStorageBufferBindingSize,
       DIFFUSION_PLANE_BUDGET,
       lensBlur,
+      wholeFrameMemoryBudget(),
     );
     if (longEdge >= Math.max(image.width, image.height)) return image;
     return boxDownscale(image.rgba, image.width, image.height, longEdge);
@@ -781,7 +790,8 @@ export class Session {
         await graph.runToTiles(frame.rgba, plan.core, Tap.RGB_OUT,
           (rgb, tile) => pixels.draw(rgb, tile.activeOriginX, tile.activeOriginY, tile.activeWidth, tile.activeHeight), {
             maxBufferBytes: this.engine.maxStorageBufferBindingSize, memoryBudget: exportTileMemoryBudget(),
-            overlap: plan.overlap, frame: plan.frame, isCancelled: cancelled,
+            // Tile pakai apron ekspor 5 sigma (`plan.exportOverlap`); frame utuh tetap `overlap`.
+            overlap: plan.overlap, exportOverlap: plan.exportOverlap, frame: plan.frame, isCancelled: cancelled,
             // FFT and lens gather currently require their complete global grid.
             wholeFrame: plan.chain.cameraDiffusion || plan.chain.printDiffusion || plan.chain.lensBlur,
           });

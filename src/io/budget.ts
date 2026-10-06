@@ -5,9 +5,23 @@ export const IMAGE_BLOCK_BUDGET = 64 * 1024 * 1024;
 export const MOBILE_IMAGE_BUDGET = 768 * 1024 * 1024;
 export const MOBILE_PREVIEW_PIXELS = 1_572_864;
 
-/** Same export working-set targets as Emulsion (Safari workers included). */
+/**
+ * Anggaran GPU satu tile ekspor (`planExportTiles`, 192 B/px terukur). HP
+ * 384 MB: tile ~1440 px persegi, inti >= 640 px dengan apron 5 sigma pada
+ * ekspor 4096 px -- di bawah batas tab Safari iPhone bersama gambar sumber
+ * dan buffer ekspor. Desktop 640 MB.
+ */
 export function exportTileMemoryBudget(): number {
-  return (imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 192 : 640) * 1024 * 1024;
+  return (imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 384 : 640) * 1024 * 1024;
+}
+
+/**
+ * Working set GPU frame utuh untuk efek yang tidak bisa di-tile (lens blur,
+ * difusi FFT). HP 640 MB: ekspor dengan efek ini diperkecil (~3 MP) alih-alih
+ * membuat tab Safari dimatikan; desktop tidak dibatasi di sini.
+ */
+export function wholeFrameMemoryBudget(): number {
+  return imageMemoryBudget() < IMAGE_RGBA_BUDGET ? 640 * 1024 * 1024 : Number.POSITIVE_INFINITY;
 }
 
 /** Limit GPU work and comparison frames to the same effective zoom size. */

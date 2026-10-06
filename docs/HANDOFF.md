@@ -113,6 +113,26 @@ ulang, tidak diimpor.
 | PWA (manifest, ikon, precache, hosting COOP/COEP) | **selesai** | spec induk §5.3; README "Installing and hosting" |
 | Batch parameter 2, difusi FFT | **selesai** | spec Fase 2 §6b |
 
+## Ekspor iPhone force close (2026-10-06)
+
+Penyebab terukur: `planExportTiles` memakai apron pratinjau/parity (10 sigma +
+konstanta OFX 320 px = 1100 px pada ekspor 4096 px) dengan inti minimum
+256 px, sehingga ekspor HP 4096 px = 192 tile, kerja GPU 66,8x, dan tiap tile
+~6,5 MP x 192 B/px (TERUKUR, lavapipe) ~= 1,26 GB GPU -- jauh di atas anggaran
+192 MB yang dimaksud. Ditambah lens blur/difusi: frame utuh 4096 px ~2,4 GB.
+Perbaikan:
+- Apron ekspor 5 sigma fisik (`EXPORT_APRON_SIGMAS`, `plan.exportOverlap` =
+  halation + DIR + 8 px FIR): jahitan rgb_out terukur <= 3,7e-6, dikunci
+  `test/exportTiles.test.ts` (<= 1e-5). Pratinjau/parity tetap 10 sigma.
+- `planExportTiles`: apron eksak (tidak dibulatkan ke 128), inti kelipatan 64,
+  tile dibagi rata, 192 B/px terukur. HP: anggaran 384 MB -> 35 tile, kerja
+  4,4x, puncak ~357 MB per tile (`test/exportPixels.test.ts`).
+- Buffer input dan RGB tile dipakai ulang (tanpa puluhan MB sampah per tile).
+- Efek frame utuh (lens blur, difusi FFT) di HP: ukuran ekspor dibatasi agar
+  192 B/px + bidang FFT <= 640 MB (`wholeFrameMemoryBudget`); toast menyebut
+  ukurannya.
+Belum diuji di iPhone fisik.
+
 ## UI: peta cepat
 
 - **Vectorscope (2026-10-05, permintaan pemilik "ala DaVinci Resolve" +

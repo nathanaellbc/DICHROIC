@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { ExportPixels } from '../src/session/exportPixels';
 import { quantize } from '../src/io/encode';
 import { rgbToCanvas } from '../src/io/display';
-import { planExportTiles } from '../src/engine/tiling';
+import { EXPORT_GPU_BYTES_PER_PIXEL, planExportTiles } from '../src/engine/tiling';
+import { loadAssets } from '../src/profiles/load';
+import { buildRenderPlan } from '../src/params/plan';
+import { BASELINE_RENDER_PARAMS } from '../src/params/renderParams';
 import { outputColorSpaces } from '../public/data/manifest.json';
 import type { OutputColorSpaceSpec } from '../src/profiles/types';
 
@@ -31,19 +34,38 @@ describe('final export tiles', () => {
     expect(pixels.canvas()).toEqual(rgbToCanvas(rgb, 2, 1, 'ProPhoto RGB', 'srgb', spaces));
   });
 
-  it('uses a fixed 128px lattice, covers irregular images, and budgets scratch as well as ping-pong', () => {
+  it('covers irregular images exactly once and keeps every tile within the GPU budget', () => {
     const width = 2049; const height = 1025; const binding = 128 * 1024 * 1024;
     const budget = 16 * 1024 * 1024;
     const tiles = planExportTiles(width, height, binding, 0, budget);
+    expect(tiles.length).toBeGreaterThan(1);
     const coverage = new Uint8Array(width * height);
     for (const t of tiles) {
-      expect(t.tileOriginX % 128).toBe(0); expect(t.tileOriginY % 128).toBe(0);
-      expect(t.tileWidth * t.tileHeight * 160).toBeLessThanOrEqual(budget);
+      expect(t.tileWidth * t.tileHeight * EXPORT_GPU_BYTES_PER_PIXEL).toBeLessThanOrEqual(budget);
       for (let row = 0; row < t.activeHeight; row++) for (let col = 0; col < t.activeWidth; col++) {
         coverage[(t.activeOriginY + row) * width + t.activeOriginX + col]!++;
       }
     }
     expect(coverage.every((v) => v === 1)).toBe(true);
+  });
+
+  it('iPhone 4096 px export: 5-sigma apron keeps tiles near the mobile budget with little rework', async () => {
+    const bundle = await loadAssets('public/data');
+    const image = { width: 4096, height: 3072, rgba: new Float32Array(16) };
+    const plan = buildRenderPlan({ ...BASELINE_RENDER_PARAMS, autoExposure: false }, bundle, image, 'image');
+    // 10 sigma + konstanta OFX (pratinjau/parity) vs 5 sigma fisik (ekspor).
+    expect(plan.overlap).toBeGreaterThan(1000);
+    expect(plan.exportOverlap).toBeLessThan(plan.overlap / 2);
+    const budget = 384 * 1024 * 1024;
+    const tiles = planExportTiles(4096, 3072, 256 * 1024 * 1024, plan.exportOverlap, budget);
+    const work = tiles.reduce((a, t) => a + t.tileWidth * t.tileHeight, 0) / (4096 * 3072);
+    const peak = Math.max(...tiles.map((t) => t.tileWidth * t.tileHeight)) * EXPORT_GPU_BYTES_PER_PIXEL;
+    expect(peak).toBeLessThanOrEqual(budget);
+    expect(work).toBeLessThan(5); // dulu 66,8x (apron 10 sigma)
+    for (const t of tiles) {
+      expect(t.tileOriginX).toBe(Math.max(0, t.activeOriginX - plan.exportOverlap));
+      expect(t.tileOriginY).toBe(Math.max(0, t.activeOriginY - plan.exportOverlap));
+    }
   });
 
   it('includes the entire spatial apron while enforcing hard GPU binding limits', () => {

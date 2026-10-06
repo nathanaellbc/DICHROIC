@@ -40,3 +40,17 @@ describe('anggaran memori difusi FFT (Fase 2D Task 4)', () => {
     expect(diffusionRenderLongEdge(6000, 4000, printOnly, 2 * GB)).toBe(6000);
   });
 });
+
+describe('batas working set frame utuh (HP)', () => {
+  it('lens blur di HP: frame utuh diperkecil sampai 192 B/px muat 640 MB; desktop tidak', async () => {
+    const { diffusionRenderLongEdge } = await import('../src/session/session');
+    const { BASELINE_RENDER_PARAMS } = await import('../src/params/renderParams');
+    const params = { ...BASELINE_RENDER_PARAMS, lensBlurEnabled: true };
+    const budget = 640 * 1024 * 1024;
+    const mobile = diffusionRenderLongEdge(4096, 3072, params, 2 ** 31, undefined, true, budget);
+    expect(mobile).toBeLessThan(4096);
+    const h = Math.round((mobile * 3072) / 4096);
+    expect(mobile * h * 192).toBeLessThanOrEqual(budget);
+    expect(diffusionRenderLongEdge(4096, 3072, params, 2 ** 31, undefined, true)).toBe(4096);
+  });
+});

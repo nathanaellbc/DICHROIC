@@ -248,7 +248,7 @@ export function ExportContent({
   }, [mode, cubeSize]);
 
   const ready = mode === 'image' ? (!needsDevelop && !rendering && !encoding && file?.key === encodeKey ? file.value : null) : cubeFile;
-  const limitedNote = mode === 'image' && rendered?.limited ? ` at ${rendered.width} × ${rendered.height} (diffusion filter size limit)` : '';
+  const limitedNote = mode === 'image' && rendered?.limited ? ` at ${rendered.width} × ${rendered.height} (memory limit for lens blur or diffusion)` : '';
 
   // Keduanya menerima berkas yang SUDAH ada: tidak ada `await` antara
   // ketukan dan `navigator.share` (syarat iOS).

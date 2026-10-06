@@ -21,7 +21,7 @@
 
 import { FLAG_GLARE_ACTIVE, FLAG_INPUT_CCTF_DECODING, FLAG_UNSHARP_ACTIVE } from '../engine/params';
 import type { CoreParams } from '../engine/params';
-import { dirRadiusPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
+import { EXPORT_APRON_SIGMAS, dirRadiusPx, exportOverlapPx, halationRadiusPx, productionOverlapPx } from '../engine/spatialRadius';
 import type { FrameParams } from '../engine/graph';
 import { measureAutoExposureEv } from '../host/autoExposure';
 import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, invert3, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
@@ -77,6 +77,11 @@ export interface RenderPlan {
   chain: ChainSpec;
   /** Apron tiling (px) dari `estimateTileOverlap`; 0 untuk `cube`. */
   overlap: number;
+  /**
+   * Apron tile EKSPOR (px): halation + DIR pada 5 sigma + FIR kecil
+   * (`exportOverlapPx`), jahitan terukur <= 3,7e-6 di rgb_out. 0 untuk `cube`.
+   */
+  exportOverlap: number;
   /** Efek yang dimatikan mode ini -- ditulis ke header `.cube` (spec induk §7.2). */
   disabledEffects: string[];
   /** Nilai host per render (format film -> ukuran piksel). */
@@ -404,7 +409,9 @@ export function buildRenderPlan(
 
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
   const softenDetail = family === 'measured' && params.cameraSoftenDetail > 0;
-  const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm) + (softenDetail ? 2 * softenKernel(Math.max(image.width, image.height)).radius : 0);
+  const softenApron = softenDetail ? 2 * softenKernel(Math.max(image.width, image.height)).radius : 0;
+  const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm) + softenApron;
+  const exportOverlap = family === 'lut' ? 0 : exportApronPx(params, bundle, image, filmFormatMm) + softenApron;
 
   const inputColorSpace = validateInputColorSpace(bundle, params.inputColorSpace, params.inputCctfDecoding);
   // Auto-exposure diukur dari gambar ter-decode (bila decode), tapi Python
@@ -445,6 +452,7 @@ export function buildRenderPlan(
       ...(softenDetail ? { softenDetail: true } : {}),
     },
     overlap,
+    exportOverlap,
     disabledEffects: family === 'lut' ? [...CUBE_DISABLED_EFFECTS] : [],
     frame: {
       ...(!params.filmEnabled || printLut ? {
@@ -592,6 +600,19 @@ function exposureFrame(params: RenderParams, family: 'measured' | 'lut', filmFor
  * diffusion berjalan sebagai identitas (`bypassConvolution`) selama
  * `*DiffusionEnabled` locked ke false, jadi radiusnya 0.
  */
+/** Apron tile ekspor (5 sigma, `EXPORT_APRON_SIGMAS`); 0 untuk `lut`. */
+function exportApronPx(params: RenderParams, bundle: AssetBundle, image: PlanImage, filmFormatMm: number): number {
+  const pixelSizeUm = (filmFormatMm * 1000) / Math.max(image.width, image.height, 1);
+  const firstSigma = bundle.stockField(params.film, 'halationFirstSigmaUm');
+  if (!firstSigma) throw new Error(`Stock '${params.film}' tidak punya halationFirstSigmaUm`);
+  return exportOverlapPx({
+    halation: params.halationEnabled
+      ? halationRadiusPx(pixelSizeUm, [firstSigma[0]!, firstSigma[1]!, firstSigma[2]!], EXPORT_APRON_SIGMAS)
+      : 0,
+    dir: dirRadiusPx(pixelSizeUm, params.dirCouplersEnabled ? params.dirCouplersDiffusionUm : 0, EXPORT_APRON_SIGMAS),
+  });
+}
+
 function measuredOverlapPx(params: RenderParams, bundle: AssetBundle, image: PlanImage, filmFormatMm: number): number {
   const pixelSizeUm = (filmFormatMm * 1000) / Math.max(image.width, image.height, 1);
   const firstSigma = bundle.stockField(params.film, 'halationFirstSigmaUm');
