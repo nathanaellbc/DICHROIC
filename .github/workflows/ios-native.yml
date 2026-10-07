@@ -5,6 +5,8 @@ on:
     paths:
       - 'mobile/**'
       - 'native/**'
+      - 'src/engine/params.ts'
+      - 'src/shaders/curveDevelop.wgsl'
       - '.github/workflows/ios-native.yml'
 permissions:
   contents: read

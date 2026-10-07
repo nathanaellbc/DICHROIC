@@ -1,6 +1,9 @@
 //! First native vertical slice: bounded GPU exposure rendering, shared by iOS and desktop tests.
 //! Spectral film/paper stages are intentionally not approximated by this kernel.
 use std::{cell::RefCell, ffi::{c_char, c_void, CString}, panic::{catch_unwind, AssertUnwindSafe}, sync::mpsc};
+// This stage is under parity validation, not yet exposed as a finished film look.
+#[allow(dead_code)]
+mod curve_develop;
 
 const TILE_PIXELS: usize = 1024 * 1024;
 const TILE_BYTES: u64 = (TILE_PIXELS * 4) as u64;
