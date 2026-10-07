@@ -8,9 +8,13 @@ Implemented: native ImageIO photo decoding (including supported HEIC files),
 orientation correction, bounded 1600 px preview, a native Flutter texture,
 linear-light exposure adjustment, latest-value slider scheduling, and explicit
 full-resolution Develop to 8-bit sRGB PNG with the iOS share sheet. Preview
+supports pinch/elastic drag and cached original comparison. These gestures
+transform existing textures and do not schedule GPU develops. Export waits for
+the active preview and restores the latest pending adjustment afterward. Preview
 frames never pass through Dart as large pixel buffers and are not encoded as
 PNG. The native engine reuses three 4 MiB GPU buffers across tiles. Full photo
-decoding/output still consumes CPU memory; the current import ceiling is 50 MP.
+decoding/encoding still consumes CPU memory; export mutates one full-size pixel
+buffer with a bounded 4 MiB tile copy. The current import ceiling is 50 MP.
 
 The spectral film/paper pipeline, grain, diffusion, lens, erase, RAW decoding,
 wide-gamut/16-bit export, source metadata preservation, and complete web UI
@@ -18,6 +22,11 @@ are **not ported yet**. The exposure kernel is a platform proof, not a substitut
 for the existing film simulation. Future slices must reuse the original profile
 assets/WGSL and verify output against the web engine's parity fixtures before
 those features are advertised as available.
+
+The canonical curve-development shader now has a native compute stage with
+bounded float tiles. Its CoreParams layout is derived from the web declaration.
+Metal tests cover measured Portra 400 density and interpolation to 1e-5; this
+pre-DIR stage is not yet wired to the UI and is not final film/paper parity.
 
 ## Build without owning a Mac
 
@@ -33,16 +42,18 @@ created without Xcode on Windows. Custom native source lives in the plugin.
 The generated default identifier is `com.nathanaellbc.exposureIos`; confirm or
 replace it before registering the production App ID.
 
-Unsigned artifacts cannot be installed on your iPhone or sent to TestFlight.
-The first successful CI build still needs to be obtained. Local Flutter 3.44.0
-and Rust 1.85.0 toolchains were installed under the ignored `.tools/` directory.
-The WGSL exposure test and web TypeScript checks passed. Flutter analysis found
-four missing-braces lint issues; Flutter tests were not run. Rust tests were
-blocked by missing `dlltool.exe` in the local Windows GNU toolchain, before the
-engine source could be compiled. Swift/iOS compilation has not been verified,
-and no Codemagic build has run. See [the handoff notes](../docs/IOS_PORT_HANDOFF.md).
+Unsigned artifacts need signing before installation. The user chose not to buy
+Apple Developer membership: use the [Windows personal sideload guide](../docs/IOS_FREE_INSTALL.md)
+for the unsigned IPA, which AltStore Classic can sign with a free Apple Account.
+Actual installation on the user's iPhone is still unverified.
 
-After confirming active Apple Developer membership, create an App Store Connect
+GitHub Actions has successfully tested Rust on Metal, built the native
+XCFramework and compiled Swift/Flutter into an unsigned iOS app. Flutter analysis
+is clean and five local Flutter tests pass. See [the handoff notes](../docs/IOS_PORT_HANDOFF.md)
+for exact verified revisions and the latest build's status. No Codemagic run or
+real iPhone performance measurement has been verified yet.
+
+If paid distribution is chosen later, confirm active Apple Developer membership, create an App Store Connect
 app and connect signing in Codemagic. Store API keys/certificates in Codemagic's
 secure integration, not this repository. Add a signed workflow using that
 integration and `flutter build ipa --release`; only then distribute through
@@ -51,7 +62,7 @@ latency, memory pressure, and full-resolution export on the real iPhone.
 
 ## Next native slices
 
-1. Obtain a green unsigned iOS build and test this photo/render/export path on device.
+1. Sign the unsigned IPA for personal testing and exercise this photo/render/export path on device.
 2. Port the original asset/arena preparation and spectral film/paper shaders;
    establish parity before exposing the film menu.
 3. Port spatial stages with memory-aware tiling and preview refinement.

@@ -1,7 +1,7 @@
 # Catatan lanjutan port iOS
 
 Status: prototipe Flutter native pertama, belum port lengkap aplikasi web.
-Source disimpan apa adanya agar pekerjaan bisa dilanjutkan dari GitHub.
+Source dan perbaikan berikutnya sudah dikirim ke main GitHub.
 
 ## Yang sudah ditulis
 
@@ -9,29 +9,38 @@ Source disimpan apa adanya agar pekerjaan bisa dilanjutkan dari GitHub.
 - Bridge Swift untuk decode ImageIO/HEIC, orientasi foto, preview 1600 px, texture, dan export PNG 8-bit sRGB.
 - Engine Rust/wgpu dengan backend Metal iOS, kernel exposure linear-light, dan buffer GPU per tile.
 - Penjadwalan slider satu render aktif dengan nilai terbaru; export dijalankan setelah tombol ditekan.
+- Export menunggu render aktif; preview nilai slider terakhir dipulihkan setelah export.
+- Export in-place memakai satu buffer foto CPU dan salinan kerja maksimal 4 MiB, bukan buffer output seluruh foto kedua.
+- Pinch zoom/drag dengan batas elastis, spring dan reset double-tap pada texture yang sudah ada.
+- Before/after memakai texture import asli terpisah; membandingkan dan zoom tidak menjalankan develop.
+- Tahap curve development native memakai `src/shaders/curveDevelop.wgsl` asli dan layout CoreParams yang diturunkan saat build dari `src/engine/params.ts`.
 - Workflow Codemagic `exposure-ios-native` untuk build iOS unsigned, serta dependency lockfiles.
+- GitHub Actions macOS menjalankan tes Metal dan build; packaging IPA unsigned untuk sideload pribadi dan simulator universal disiapkan.
 
-Implementasi ini belum diverifikasi melalui build iOS atau perangkat asli.
+Build iOS unsigned pertama dan perbaikan export sudah berhasil di GitHub Actions.
+Pengujian perangkat asli belum dilakukan.
 Kernel exposure belum menggantikan sistem film/paper spectral aplikasi web.
-Decode dan output resolusi penuh masih menggunakan memori CPU; batas 50 MP
+CurveDevelop menghasilkan densitas sebelum DIR dan belum dihubungkan ke UI film.
+Decode dan encoding resolusi penuh masih menggunakan memori CPU; batas 50 MP
 bukan jaminan aplikasi bebas crash pada iPhone.
 
 ## Pemeriksaan yang sudah dilakukan
 
 - `npm run typecheck`: lulus.
 - `npx vitest run test/nativeExposure.test.ts`: lulus, satu test GPU WGSL.
-- Dart formatter: sudah dijalankan.
-- Flutter analyze: empat lint `curly_braces_in_flow_control_structures` pada `mobile/lib/main.dart` (baris 55, 95, 112, 119 saat catatan dibuat).
-- Flutter test: belum dijalankan karena rangkaian command berhenti setelah analyze.
-- Rust test: terhenti pada dependency Windows karena `dlltool.exe` tidak tersedia; source engine belum berhasil diperiksa compiler.
-- Swift, XCFramework, build iOS, dan pengujian iPhone: belum dilakukan.
+- Dart formatter dan Flutter analyze: lulus, tanpa lint tersisa.
+- Flutter test lokal: lima test lulus (latest-value scheduling, export ordering, comparison texture, elastic drag, pinch/reset).
+- Build Rust/Swift, XCFramework iPhone + arm64 simulator, Flutter analyze/test dan build iOS unsigned: lulus pada commit `bbe9f4f`, [run 37632022742](https://github.com/nathanaellbc/DICHROIC/actions/runs/37632022742).
+- CurveDevelop Metal tests: lulus pada langkah Rust run `37633653392`; mencakup profil Portra 400 terukur, interpolasi/gamma, alpha, dan batas tile pada toleransi 1e-5. Ini bukan parity final pipeline film/paper.
+- Build terbaru dengan comparison/gestures, simulator Intel + Apple Silicon, dan IPA packaging: lihat workflow Native iOS build; status akhir perlu dicatat setelah run terbaru selesai.
+- Pengujian iPhone, sideload, peak memory dan latency nyata belum dilakukan.
 
 ## Urutan pekerjaan berikutnya
 
-1. Perbaiki empat lint Flutter, lalu jalankan `flutter analyze` dan `flutter test` dari `mobile/`.
-2. Hubungkan repository GitHub ke Codemagic dan jalankan workflow unsigned. Perbaiki kegagalan Rust, Swift, Swift Package Manager, atau XCFramework sampai build hijau.
-3. Konfirmasi keanggotaan Apple Developer aktif dan bundle ID produksi. ID sementara yang dihasilkan adalah `com.nathanaellbc.exposureIos`.
-4. Buat aplikasi App Store Connect, konfigurasi signing lewat integrasi aman Codemagic, lalu tambahkan workflow `flutter build ipa --release` untuk TestFlight. Jangan simpan credential di repository. Artifact unsigned saat ini belum bisa dipasang ke iPhone.
+1. Pertahankan gerbang macOS/Metal dan Flutter test pada setiap perubahan native.
+2. Codemagic sudah dihubungkan pengguna. Jalankan `exposure-ios-native` jika ingin build dari sana; build verifikasi yang sudah hijau berasal dari GitHub Actions.
+3. Pengguna menolak membership Apple berbayar dan hanya memiliki Windows. Pakai jalur sideload pribadi gratis di [IOS_FREE_INSTALL.md](IOS_FREE_INSTALL.md), bukan TestFlight. ID sementara `com.nathanaellbc.exposureIos` dapat diganti melalui `IOS_BUNDLE_ID` saat prepare host.
+4. Verifikasi signing/install IPA via AltStore pada iPhone pengguna. Packaging unsigned bukan bukti instalasi berhasil. Jangan simpan credential di repository.
 5. Uji pada iPhone: orientasi/HEIC, slider cepat, texture, background/foreground, memory pressure, foto besar, export, dan share sheet. Ukur memori/latency sebelum menyatakan optimisasi berhasil.
 6. Port persiapan asset/arena dan shader film/paper spectral asli. Bandingkan hasil final dengan fixture/parity engine web sebelum membuka fitur film.
 7. Port grain, halation, DIR, diffusion/FFT, dan lens dengan pengelolaan memori dan tiling yang sesuai tiap tahap.
