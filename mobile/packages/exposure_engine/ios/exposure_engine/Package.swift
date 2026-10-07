@@ -8,9 +8,9 @@ let package = Package(
     dependencies: [.package(name: "FlutterFramework", path: "../FlutterFramework")],
     targets: [
         .binaryTarget(name: "ExposureNative", path: "Frameworks/ExposureNative.xcframework"),
-        .target(name: "exposure_engine", dependencies: ["ExposureNative", .product(name: "FlutterFramework", package: "FlutterFramework")], linkerSettings: [
+        .target(name: "exposure_engine", dependencies: ["ExposureNative", .product(name: "FlutterFramework", package: "FlutterFramework")], path: ".", sources: ["Sources/exposure_engine"], resources: [.copy("Resources")], linkerSettings: [
             .linkedFramework("Metal"), .linkedFramework("QuartzCore"),
-            .linkedFramework("CoreGraphics"), .linkedFramework("Foundation"), .linkedFramework("Accelerate"),
+            .linkedFramework("CoreGraphics"), .linkedFramework("Foundation"), .linkedFramework("Accelerate"), .linkedFramework("JavaScriptCore"),
             .linkedLibrary("c++")
         ])
     ]

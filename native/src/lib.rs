@@ -1,14 +1,85 @@
 //! First native vertical slice: bounded GPU exposure rendering, shared by iOS and desktop tests.
 //! Spectral film/paper stages are intentionally not approximated by this kernel.
-use std::{cell::RefCell, ffi::{c_char, c_void, CString}, panic::{catch_unwind, AssertUnwindSafe}, sync::mpsc};
+use std::{cell::RefCell, ffi::{c_char, c_void, CStr, CString}, panic::{catch_unwind, AssertUnwindSafe}, sync::mpsc};
 // This stage is under parity validation, not yet exposed as a finished film look.
 #[allow(dead_code)]
 mod curve_develop;
+pub mod gpu_graph;
 
 const TILE_PIXELS: usize = 1024 * 1024;
 const TILE_BYTES: u64 = (TILE_PIXELS * 4) as u64;
 const MAX_PIXELS: usize = 50_000_000;
 thread_local! { static LAST_ERROR: RefCell<CString> = RefCell::new(CString::new("").unwrap()); }
+thread_local! { static GRAPH_REPLY: RefCell<CString> = RefCell::new(CString::new("{}").unwrap()); }
+
+#[no_mangle]
+pub extern "C" fn dichroic_gpu_create(memory_budget: u64) -> *mut c_void {
+    match catch_unwind(AssertUnwindSafe(|| pollster::block_on(gpu_graph::GraphGpu::new(memory_budget)))) {
+        Ok(Ok(gpu)) => Box::into_raw(Box::new(gpu)).cast(),
+        Ok(Err(message)) => { error(message); std::ptr::null_mut() },
+        Err(_) => { error("Native compute initialization failed"); std::ptr::null_mut() },
+    }
+}
+
+/// # Safety
+/// Serialize calls. The input is a terminated UTF-8 descriptor; the returned
+/// string stays valid until the next execute call on this thread.
+#[no_mangle]
+pub unsafe extern "C" fn dichroic_gpu_execute(handle: *mut c_void, descriptor: *const c_char) -> *const c_char {
+    let operation = || -> Result<serde_json::Value, String> {
+        if handle.is_null() || descriptor.is_null() { return Err("Invalid native graph handle".into()); }
+        let request = CStr::from_ptr(descriptor).to_str().map_err(|e| e.to_string())?;
+        if request.len() > 8 * 1024 * 1024 { return Err("Native descriptor is too large".into()); }
+        let value = serde_json::from_str(request).map_err(|e| e.to_string())?;
+        (&mut *handle.cast::<gpu_graph::GraphGpu>()).command(&value)
+    };
+    let reply = match catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(Ok(value)) => serde_json::json!({"result": value}),
+        Ok(Err(message)) => serde_json::json!({"error": message}),
+        Err(_) => serde_json::json!({"error": "Native compute command failed"}),
+    };
+    GRAPH_REPLY.with(|slot| {
+        *slot.borrow_mut() = CString::new(reply.to_string()).unwrap();
+        slot.borrow().as_ptr()
+    })
+}
+
+/// # Safety
+/// Source bytes must be valid and immutable for this serialized call.
+#[no_mangle]
+pub unsafe extern "C" fn dichroic_gpu_upload(handle: *mut c_void, id: u64, offset: u64, bytes: *const u8, length: usize) -> i32 {
+    let operation = || -> Result<(), String> {
+        if handle.is_null() || bytes.is_null() { return Err("Invalid native upload".into()); }
+        (&*handle.cast::<gpu_graph::GraphGpu>()).write(id, offset, std::slice::from_raw_parts(bytes, length))
+    };
+    graph_status(operation)
+}
+
+/// # Safety
+/// Output bytes must be uniquely owned writable storage during this call.
+#[no_mangle]
+pub unsafe extern "C" fn dichroic_gpu_read(handle: *mut c_void, id: u64, offset: u64, output: *mut u8, length: usize) -> i32 {
+    let operation = || -> Result<(), String> {
+        if handle.is_null() || output.is_null() { return Err("Invalid native readback".into()); }
+        (&*handle.cast::<gpu_graph::GraphGpu>()).read(id, offset, std::slice::from_raw_parts_mut(output, length))
+    };
+    graph_status(operation)
+}
+
+fn graph_status(operation: impl FnOnce() -> Result<(), String>) -> i32 {
+    match catch_unwind(AssertUnwindSafe(operation)) {
+        Ok(Ok(())) => 0,
+        Ok(Err(message)) => { error(message); -1 },
+        Err(_) => { error("Native graph buffer operation failed"); -1 },
+    }
+}
+
+/// # Safety
+/// Destroy once, after all serialized work completes; never reuse this handle.
+#[no_mangle]
+pub unsafe extern "C" fn dichroic_gpu_destroy(handle: *mut c_void) {
+    if !handle.is_null() { drop(Box::from_raw(handle.cast::<gpu_graph::GraphGpu>())); }
+}
 
 fn error(message: impl AsRef<str>) {
     let message = message.as_ref().replace('\0', " ");

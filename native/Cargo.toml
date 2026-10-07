@@ -15,6 +15,8 @@ gpu-tests = []
 wgpu = { version = "=24.0.5", default-features = false, features = ["metal", "dx12", "wgsl"] }
 pollster = "=0.4.0"
 bytemuck = "1.21"
+serde_json = "=1.0.145"
+naga = { version = "=24.0.0", features = ["wgsl-in"] }
 
 [profile.release]
 lto = "thin"

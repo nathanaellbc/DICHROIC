@@ -77,6 +77,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     private var textureId: Int64 = -1
     private var originalTextureId: Int64 = -1
     private var engine: UnsafeMutableRawPointer?
+    private var graph: NativeGraphRuntime?
     private var photoURL: URL?
     private var preview: PhotoFrame?
     private var memoryObserver: NSObjectProtocol?
@@ -92,6 +93,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                 guard let self = self else { return }
                 self.preview = nil
                 if let engine = self.engine { exposure_destroy(engine); self.engine = nil }
+                if self.graph?.isBusy != true { self.graph = nil }
             }
         }
     }
@@ -110,6 +112,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if ["catalog", "controls", "patch", "develop", "developExport"].contains(call.method) {
+            handleGraph(call, result: result); return
+        }
         guard ["open", "render", "export", "close"].contains(call.method) else {
             result(FlutterMethodNotImplemented); return
         }
@@ -159,6 +164,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                     }
                 default:
                     photoURL = nil; preview = nil; texture.clear(); originalTexture.clear()
+                    graph = nil
                     if let handle = engine { exposure_destroy(handle); engine = nil }
                     value = nil
                 }
@@ -166,6 +172,58 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
             } catch {
                 DispatchQueue.main.async { result(FlutterError(code: "native_render", message: error.localizedDescription, details: nil)) }
             }
+        }
+    }
+
+    private func graphRuntime() throws -> NativeGraphRuntime {
+        if let graph = graph { return graph }
+        let graph = try NativeGraphRuntime(queue: queue)
+        graph.onPublish = { [weak self] pixels, width, height in
+            guard let self = self else { return }
+            try self.texture.publish(pixels, width: width, height: height)
+            DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
+        }
+        self.graph = graph
+        return graph
+    }
+
+    private func handleGraph(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any] ?? [:]
+        queue.async { [self] in
+            func finish(_ value: Any?) { DispatchQueue.main.async { result(value) } }
+            func fail(_ error: Error) { finish(FlutterError(code: "native_graph", message: error.localizedDescription, details: nil)) }
+            do {
+                let graph = try graphRuntime()
+                if call.method == "catalog" { finish(graph.catalog); return }
+                if call.method == "patch" { finish(try graph.patch(args)); return }
+                guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
+                if call.method == "controls" { finish(try graph.controlState(params)); return }
+                guard let url = photoURL else { throw NativeError.message("Open a photo first") }
+                guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
+                let frame = try preview ?? decode(url, longEdge: 1600)
+                preview = frame
+                graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
+                if call.method == "develop" {
+                    // The display texture has an sRGB encoding. Export retains
+                    // the chosen output gamut in its separately tagged image.
+                    params["outputColorSpace"] = "sRGB"
+                    try graph.request(operation: "preview", params: params, width: frame.width, height: frame.height) { outcome in
+                        switch outcome { case .success: finish(nil); case .failure(let error): fail(error) }
+                    }
+                } else {
+                    let full = try autoreleasepool { try decode(url, longEdge: nil) }
+                    graph.sourceRGBA = full.rgba; graph.sourceWidth = full.width; graph.sourceHeight = full.height
+                    try graph.request(operation: "export", params: params, width: full.width, height: full.height) { [weak self, weak graph] outcome in
+                        guard let self = self, let graph = graph else { fail(NativeError.message("Native renderer closed")); return }
+                        defer { graph.releaseExport() }
+                        do {
+                            try outcome.get()
+                            let colorSpace = params["outputColorSpace"] as? String ?? "sRGB"
+                            finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace).path)
+                        } catch { fail(error) }
+                    }
+                }
+            } catch { graph?.releaseExport(); fail(error) }
         }
     }
 
@@ -226,8 +284,20 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         return .message(String(cString: message))
     }
 
-    private func writePNG(_ rgba: Data, width: Int, height: Int) throws -> URL {
-        guard let space = CGColorSpace(name: CGColorSpace.sRGB), let provider = CGDataProvider(data: rgba as CFData),
+    private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB") throws -> URL {
+        let name: CFString
+        switch outputColorSpace {
+        case "sRGB": name = CGColorSpace.sRGB
+        case "Display P3": name = CGColorSpace.displayP3
+        case "Adobe RGB (1998)": name = CGColorSpace.adobeRGB1998
+        case "ProPhoto RGB": name = CGColorSpace.rommrgb
+        case "DCI-P3": name = CGColorSpace.dcip3
+        case "Linear Rec.2020": name = CGColorSpace.extendedLinearITUR_2020
+        case "Linear P3-D65": name = CGColorSpace.extendedLinearDisplayP3
+        case "ACEScg": name = CGColorSpace.acescgLinear
+        default: throw NativeError.message("This native export color profile is not available yet")
+        }
+        guard let space = CGColorSpace(name: name), let provider = CGDataProvider(data: rgba as CFData),
               let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
                 bytesPerRow: width * 4, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {

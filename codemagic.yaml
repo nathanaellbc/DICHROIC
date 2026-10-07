@@ -1,6 +1,6 @@
 workflows:
   exposure-ios-native:
-    name: Exposure native iOS prototype
+    name: Exposure native iOS
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -12,6 +12,12 @@ workflows:
         - $HOME/.cargo/git
         - $HOME/.pub-cache
     scripts:
+      - name: Build canonical native host and assets
+        script: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck
+          node mobile/scripts/build_host.mjs
       - name: Install Rust
         script: |
           set -euo pipefail

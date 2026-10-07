@@ -8,9 +8,10 @@ Pod::Spec.new do |s|
   s.source = { :path => '.' }
   s.source_files = 'exposure_engine/Sources/exposure_engine/**/*.swift'
   s.vendored_frameworks = 'exposure_engine/Frameworks/ExposureNative.xcframework'
+  s.resource_bundles = { 'ExposureHost' => ['exposure_engine/Resources/renderer.js', 'exposure_engine/Resources/data', 'exposure_engine/Resources/luts'] }
   s.dependency 'Flutter'
   s.platform = :ios, '16.0'
   s.swift_version = '5.9'
-  s.frameworks = 'Metal', 'QuartzCore', 'CoreGraphics', 'Foundation', 'Accelerate'
+  s.frameworks = 'Metal', 'QuartzCore', 'CoreGraphics', 'Foundation', 'Accelerate', 'JavaScriptCore'
   s.libraries = 'c++'
 end
