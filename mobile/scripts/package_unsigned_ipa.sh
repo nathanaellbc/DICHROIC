@@ -14,5 +14,6 @@ ditto "$app" "$staging/Payload/Runner.app"
 ditto -c -k --keepParent "$staging/Payload" "$output"
 # Packaging is not signing. AltStore must sign this file before installation.
 unzip -t "$output"
-unzip -Z1 "$output" | grep -q '^Payload/Runner.app/Info.plist$'
+unzip -Z1 "$output" > "$staging/entries.txt"
+grep -q '^Payload/Runner.app/Info.plist$' "$staging/entries.txt"
 echo "$output"
