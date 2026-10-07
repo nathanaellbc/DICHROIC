@@ -47,7 +47,10 @@ workflows:
           set -euo pipefail
           cd mobile
           flutter build ios --release --no-codesign
+      - name: Package unsigned IPA for personal sideloading
+        script: bash mobile/scripts/package_unsigned_ipa.sh
     artifacts:
       - mobile/build/ios/iphoneos/*.app
       - mobile/build/ios/iphoneos/*.app.dSYM
+      - mobile/build/ios/ipa/*.ipa
       - mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/ExposureNative.xcframework/**
