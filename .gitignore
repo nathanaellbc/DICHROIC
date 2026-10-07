@@ -21,6 +21,7 @@ mobile/.flutter-plugins-dependencies
 mobile/ios/
 mobile/packages/exposure_engine/.dart_tool/
 mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/
+mobile/packages/exposure_engine/ios/exposure_engine/Resources/
 native/target/
 native/.cargo-local/
 .tools/

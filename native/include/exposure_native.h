@@ -5,6 +5,12 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void *dichroic_gpu_create(uint64_t memory_budget);
+const char *dichroic_gpu_execute(void *handle, const char *descriptor);
+int32_t dichroic_gpu_upload(void *handle, uint64_t buffer_id, uint64_t offset, const uint8_t *bytes, size_t length);
+int32_t dichroic_gpu_read(void *handle, uint64_t buffer_id, uint64_t offset, uint8_t *output, size_t length);
+void dichroic_gpu_destroy(void *handle);
 /* All operations are serialized by the caller. Errors never cross the ABI. */
 void *exposure_create(void);
 void exposure_destroy(void *engine);

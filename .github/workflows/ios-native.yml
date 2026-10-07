@@ -5,10 +5,16 @@ on:
     paths:
       - 'mobile/**'
       - 'native/**'
-      - 'src/engine/params.ts'
-      - 'src/shaders/curveDevelop.wgsl'
-      - 'public/data/manifest.json'
-      - 'public/data/stocks.f32'
+      - 'src/native/**'
+      - 'src/engine/**'
+      - 'src/host/**'
+      - 'src/params/**'
+      - 'src/profiles/**'
+      - 'src/ui/model/**'
+      - 'src/shaders/**'
+      - 'public/data/**'
+      - 'public/luts/**'
+      - 'package-lock.json'
       - '.github/workflows/ios-native.yml'
 permissions:
   contents: read
@@ -21,6 +27,15 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Build canonical native host and assets
+        run: |
+          npm ci
+          npm run typecheck
+          node mobile/scripts/build_host.mjs
       - name: Install Flutter
         run: |
           git clone --depth 1 --branch 3.44.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"

@@ -170,6 +170,14 @@ export async function loadAssets(baseUrl: string): Promise<AssetBundle> {
   const hanatos = expandF16(new Uint16Array(await fetchBytes(join('hanatos.f16'))));
   const staticTables = new Float32Array(await fetchBytes(join('static.f32')));
 
+  return createAssetBundle(manifest, stocks, hanatos, staticTables);
+}
+
+/** Same canonical tables, supplied by native resource loading instead of fetch. */
+export function createAssetBundle(
+  manifest: Manifest, stocks: Float32Array, hanatos: Float32Array, staticTables: Float32Array,
+): AssetBundle {
+
   const byId = new Map(manifest.stocks.map((s) => [s.id, s]));
 
   function stockEntry(id: string): StockEntry {
