@@ -26,7 +26,8 @@ workflows:
           set -euo pipefail
           source "$HOME/.cargo/env"
           cd native
-          cargo test --features gpu-tests --locked
+          node scripts/curve_fixture.mjs --check
+          cargo test --features gpu-tests --locked -- --test-threads=1
       - name: Build native device and simulator library
         script: |
           set -euo pipefail

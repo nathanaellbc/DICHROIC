@@ -99,6 +99,40 @@ impl CurveDevelop {
 mod tests {
     use super::*;
     #[test]
+    fn measured_portra_curve_matches_dense_reference_samples() {
+        let fixture = include_bytes!("../testdata/portra400_curve.bin");
+        let count = u32::from_le_bytes(fixture[..4].try_into().unwrap()) as usize;
+        let values: Vec<f32> = fixture[4..].chunks_exact(4)
+            .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap())).collect();
+        assert_eq!(values.len(), count * 4);
+        let (exposure, density) = values.split_at(count);
+        let engine = pollster::block_on(Engine::new()).unwrap();
+        let stage = CurveDevelop::new(&engine, exposure, density).unwrap();
+        let input: Vec<_> = (0..4096).map(|i| {
+            let x = exposure[0] - 0.5 + (exposure[count - 1] - exposure[0] + 1.0) * i as f32 / 4095.0;
+            [x, x + 0.1, x - 0.1, 0.81]
+        }).collect();
+        let mut output = vec![[0.0; 4]; input.len()];
+        stage.render(&engine, &input, &mut output, 1.0).unwrap();
+        let mut max_error = 0.0f32;
+        for (raw, developed) in input.iter().zip(&output) {
+            for channel in 0..3 {
+                let x = raw[channel];
+                let expected = if x <= exposure[0] { density[channel] }
+                    else if x >= exposure[count - 1] { density[(count - 1) * 3 + channel] }
+                    else {
+                        let lo = exposure.windows(2).position(|v| x >= v[0] && x < v[1]).unwrap();
+                        let t = (x - exposure[lo]) / (exposure[lo + 1] - exposure[lo]);
+                        density[lo * 3 + channel] * (1.0 - t) + density[(lo + 1) * 3 + channel] * t
+                    };
+                max_error = max_error.max((developed[channel] - expected).abs());
+            }
+            assert_eq!(developed[3], raw[3]);
+        }
+        assert!(max_error < 1e-5, "Portra density error: {max_error}");
+    }
+
+    #[test]
     fn canonical_curve_matches_interpolation_and_reuses_tile_buffers() {
         let engine = pollster::block_on(Engine::new()).unwrap();
         // Nonuniform samples expose incorrect inverse-delta packing and indexing.
