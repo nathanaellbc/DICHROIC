@@ -47,6 +47,7 @@ import { RenderSupersededError, SessionStateError } from './errors';
 import { ExportPixels } from './exportPixels';
 import { exportTarget } from './exportTarget';
 import type { ExportTarget } from './exportTarget';
+import { SourcePixels } from './sourcePixels';
 import { PREVIEW_MAX_LONG_EDGE, boxDownscale, boxDownscaleRegion, boxDownscaleSize, measurementImage } from './downscale';
 import type { ScaledImage } from './downscale';
 import { originalFrame } from '../io/display';
@@ -94,6 +95,23 @@ export interface ExportOptions {
   longEdge?: number;
   /** Kualitas format lossy, (0, 1]; bawaan 1. Diabaikan format lossless. */
   quality?: number;
+}
+
+/**
+ * Foto terbuka: metadata `DecodedImage` + piksel sumber ringkas
+ * (`SourcePixels`, lossless). Hanya hapus objek yang mengubahnya ke f32.
+ */
+type SessionImage = Omit<DecodedImage, 'rgba'> & { pixels: SourcePixels };
+
+function toSessionImage(image: DecodedImage): SessionImage {
+  const { rgba, ...meta } = image;
+  return { ...meta, pixels: SourcePixels.from(rgba) };
+}
+
+/** `DecodedImage` kecil (sisi panjang <= `maxEdge`) untuk fungsi yang butuh RGBA f32. */
+function scaledDecoded(image: SessionImage, maxEdge: number): DecodedImage {
+  const { pixels, ...meta } = image;
+  return { ...meta, ...boxDownscale(pixels, image.width, image.height, maxEdge) };
 }
 
 export interface ExportRenderInfo {
@@ -275,7 +293,7 @@ export function diffusionRenderLongEdge(
 export class Session {
   #params: RenderParams = { ...BASELINE_RENDER_PARAMS };
   #paramsVersion = 0;
-  #image: DecodedImage | undefined;
+  #image: SessionImage | undefined;
   #imageId = 0;
   #removalUndo: { crop: RemovalCrop; backup: Float32Array } | undefined;
   #photoId = 0;
@@ -303,8 +321,8 @@ export class Session {
   private cleanupPending = false;
   private exportCleanupPending = false;
   private exportVersion = 0;
-  private staged: { id: number; image: DecodedImage; params: RenderParams; backup?: {
-    image: DecodedImage | undefined; params: RenderParams; depth: DepthMap | undefined; photoId: number;
+  private staged: { id: number; image: SessionImage; params: RenderParams; backup?: {
+    image: SessionImage | undefined; params: RenderParams; depth: DepthMap | undefined; photoId: number;
   } } | undefined;
   /**
    * Scratch GPU bersama semua graf: render berurutan (antrean di atas), jadi
@@ -406,16 +424,17 @@ export class Session {
     return { ...this.#params };
   }
 
-  open(image: DecodedImage): void {
+  open(image: DecodedImage | SessionImage): void {
     this.assertAlive();
     assertImageBudget(image.width, image.height);
-    if (image.rgba.length !== image.width * image.height * 4) {
+    const length = 'rgba' in image ? image.rgba.length : image.pixels.length;
+    if (length !== image.width * image.height * 4) {
       throw new RangeError(
         `DecodedImage ${image.width}x${image.height} butuh ${image.width * image.height * 4} float RGBA, ` +
-          `diterima ${image.rgba.length}.`,
+          `diterima ${length}.`,
       );
     }
-    this.#image = image;
+    this.#image = 'rgba' in image ? toSessionImage(image) : image;
     this.#removalUndo = undefined;
     this.#photoId = 0;
     this.#imageId += 1;
@@ -432,14 +451,14 @@ export class Session {
   prepareRemoval(selection: RemovalMask): RemovalCrop {
     this.assertAlive();
     if (!this.#image) throw new SessionStateError('Open a photo first.');
-    return prepareRemoval(this.#image, selection, this.#imageId);
+    return prepareRemoval(this.editableImage(), selection, this.#imageId);
   }
 
   async applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }> {
     while (this.#busy) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
     this.assertAlive();
     if (!this.#image || crop.revision !== this.#imageId) throw new RenderSupersededError();
-    this.#removalUndo = { crop, backup: applyRemoval(this.#image, crop, output) };
+    this.#removalUndo = { crop, backup: applyRemoval(this.editableImage(), crop, output) };
     return this.removalChanged();
   }
 
@@ -447,7 +466,7 @@ export class Session {
     while (this.#busy) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
     this.assertAlive();
     if (!this.#image || !this.#removalUndo) throw new SessionStateError('No removal to undo.');
-    restoreRemoval(this.#image, this.#removalUndo.crop, this.#removalUndo.backup);
+    restoreRemoval(this.editableImage(), this.#removalUndo.crop, this.#removalUndo.backup);
     this.#removalUndo = undefined;
     return this.removalChanged();
   }
@@ -461,7 +480,27 @@ export class Session {
     // The full render was removed with #cache; keep preview buffers for the
     // immediate regrade and the next film/paper selection.
     this.exportVersion += 1;
-    return { original: originalFrame(this.#image!, 1024), guide: buildGuide(this.#image!, 1024) };
+    const small = scaledDecoded(this.#image!, 1024);
+    return { original: originalFrame(small, 1024), guide: buildGuide(small, 1024) };
+  }
+
+  /**
+   * Foto sebagai RGBA f32 yang bisa diubah di tempat (hapus objek). Sumber
+   * ringkas (8/16-bit) diubah sekali ke f32: hasil LaMa bukan kode 8-bit.
+   */
+  private editableImage(): DecodedImage {
+    let image = this.#image!;
+    if (!image.pixels.float) {
+      image = { ...image, pixels: SourcePixels.float(image.pixels.toFloat()) };
+      this.#image = image;
+    }
+    const { pixels, ...meta } = image;
+    return { ...meta, rgba: pixels.float! };
+  }
+
+  /** Frame f32 seukuran sumber (render penuh tanpa downscale); salinan sementara bila sumber ringkas. */
+  private sourceFrame(image: SessionImage): ScaledImage {
+    return { width: image.width, height: image.height, rgba: image.pixels.toFloat() };
   }
 
   /**
@@ -491,9 +530,11 @@ export class Session {
     validateStocks(this.bundle, params.film, params.paper, params.process);
     // The previous source is retained until a replacement commits. Bound
     // their combined storage, too, so cancellation remains affordable.
-    assertImageBudget(image.width, image.height, 16, imageMemoryBudget() - (this.#image?.rgba.byteLength ?? 0));
+    assertImageBudget(image.width, image.height, 16, imageMemoryBudget() - (this.#image?.pixels.byteLength ?? 0));
     if (image.rgba.length !== image.width * image.height * 4) throw new RangeError('Invalid photo dimensions.');
-    const staged = { id, image, params };
+    // Diringkas sekarang: larik f32 hasil decode tidak dipegang lagi.
+    const source = toSessionImage(image);
+    const staged = { id, image: source, params };
     this.staged = staged;
     return this.enqueue(async () => {
       if (this.staged !== staged) throw new RenderSupersededError();
@@ -502,12 +543,12 @@ export class Session {
         this.#exportCache = undefined;
         this.clearResources();
       }
-      const original = originalFrame(image, this.previewMaxLongEdge);
-      const guide = buildGuide(image, guideMaxEdge);
-      const frame = boxDownscale(image.rgba, image.width, image.height, this.previewMaxLongEdge);
+      const original = originalFrame(scaledDecoded(source, this.previewMaxLongEdge), this.previewMaxLongEdge);
+      const guide = buildGuide(scaledDecoded(source, guideMaxEdge), guideMaxEdge);
+      const frame = boxDownscale(source.pixels, source.width, source.height, this.previewMaxLongEdge);
       const { rgb } = await this.renderFrameWithPlan(frame, params, 'image', null);
       if (this.staged !== staged) throw new RenderSupersededError();
-      return { original, guide, width: image.width, height: image.height, params,
+      return { original, guide, width: source.width, height: source.height, params,
         preview: { width: frame.width, height: frame.height, rgb, quality: 'preview', paramsVersion: this.#paramsVersion } };
     });
   }
@@ -675,7 +716,7 @@ export class Session {
     const frame =
       quality === 'preview'
         ? this.fitForDiffusion(this.previewImage(previewRenderLongEdge(image.width, image.height, longEdge ?? this.previewMaxLongEdge, params, this.engine.maxStorageBufferBindingSize)), params)
-        : this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
+        : this.fitForDiffusion(longEdge === undefined ? this.sourceFrame(image) : boxDownscale(image.pixels, image.width, image.height, longEdge), params);
     let rgb: Float32Array;
     try {
       rgb = await this.renderFrame(frame, params, 'image');
@@ -741,7 +782,7 @@ export class Session {
       if (cached?.imageId === this.#imageId && cached.longEdge === longEdge) return cached.image;
     }
     const image = this.#image!;
-    const cached = { imageId: this.#imageId, longEdge, image: boxDownscale(image.rgba, image.width, image.height, longEdge) };
+    const cached = { imageId: this.#imageId, longEdge, image: boxDownscale(image.pixels, image.width, image.height, longEdge) };
     // Keep both refinement and draft inputs: switching quality must not scan
     // the entire 44 MP original again on every parameter change.
     if (longEdge <= 512) this.#draftPreview = cached;
@@ -750,10 +791,10 @@ export class Session {
   }
 
   /** Comparison pixels depend only on the source and size, never slider values. */
-  private comparisonFrame(image: DecodedImage, longEdge: number): Frame {
-    if (image !== this.#image) return originalFrame(image, longEdge);
+  private comparisonFrame(image: SessionImage, longEdge: number): Frame {
+    if (image !== this.#image) return originalFrame(scaledDecoded(image, longEdge), longEdge);
     if (this.#originalPreview?.imageId !== this.#imageId || this.#originalPreview.longEdge !== longEdge) {
-      this.#originalPreview = { imageId: this.#imageId, longEdge, frame: originalFrame(image, longEdge) };
+      this.#originalPreview = { imageId: this.#imageId, longEdge, frame: originalFrame(scaledDecoded(image, longEdge), longEdge) };
     }
     return this.#originalPreview.frame;
   }
@@ -820,17 +861,16 @@ export class Session {
     this.#previewCache.clear();
     const size = boxDownscaleSize(image.width, image.height, longEdge ?? Math.max(image.width, image.height));
     // Frame virtual: tile diambil dari sumber lewat `boxDownscaleRegion`.
-    const virtual: PlanImage = {
-      width: size.width, height: size.height, rgba: image.rgba,
-      measure: measurementImage(image.rgba, image.width, image.height, size.width, size.height),
-    };
+    // `rgba` tidak dibaca rencana bila `measure` ada (lih. `PlanImage.measure`).
+    const measure = measurementImage(image.pixels, image.width, image.height, size.width, size.height);
+    const virtual: PlanImage = { width: size.width, height: size.height, rgba: measure.rgba, measure };
     const extras = this.#depth ? { depth: this.#depth } : {};
     let plan = buildRenderPlan(params, this.bundle, virtual, 'image', extras);
     const wholeFrame = plan.chain.cameraDiffusion || plan.chain.printDiffusion || plan.chain.lensBlur;
     let frame: PlanImage = virtual;
     if (wholeFrame) {
       // FFT and lens gather currently require their complete global grid.
-      frame = this.fitForDiffusion(longEdge === undefined ? image : boxDownscale(image.rgba, image.width, image.height, longEdge), params);
+      frame = this.fitForDiffusion(longEdge === undefined ? this.sourceFrame(image) : boxDownscale(image.pixels, image.width, image.height, longEdge), params);
       plan = buildRenderPlan(params, this.bundle, frame, 'image', extras);
     }
     const pixels = new ExportPixels(frame.width, frame.height, params.outputColorSpace, this.bundle.manifest.outputColorSpaces, target);
@@ -843,7 +883,7 @@ export class Session {
         const graph = await this.graphFor(plan);
         exportGraph = graph;
         const input: Float32Array | TileSource = wholeFrame ? frame.rgba
-          : (tile, into) => boxDownscaleRegion(image.rgba, image.width, image.height, size.width, size.height,
+          : (tile, into) => boxDownscaleRegion(image.pixels, image.width, image.height, size.width, size.height,
             tile.tileOriginX, tile.tileOriginY, tile.tileWidth, tile.tileHeight, into);
         for (;;) {
           try {

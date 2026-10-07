@@ -177,6 +177,16 @@ Belum diuji di iPhone fisik.
   `localStorage['dichroic.exportTiles.v1']`. Bila tab mati, lembar Ekspor
   berikutnya menampilkan tahap terakhir (tile ke berapa / encode format apa)
   -- minta pemilik mengirim teks itu bila masih crash.
+- **Laporan pemilik 2026-10-07: "tile 33/36 · 751×1253 px tiles · 3919×5525"**,
+  JPEG Source berhasil, PNG gagal; Develop ulang (tile lebih kecil) tetap
+  gagal. Jadi bukan GPU: memori CPU naik sedikit demi sedikit (halaman larik
+  piksel ekspor baru terpakai saat tile ditulis) dan tembus batas di tile
+  terakhir. Penyumbang terbesar: sumber RGBA f32 (21,6 MP = 346 MB) padahal
+  fotonya 8-bit. Sekarang `Session` memegang `SourcePixels`
+  (`src/session/sourcePixels.ts`): nilai yang semuanya `k/255` disimpan
+  Uint8 + tabel, `k/65535` Uint16 -- lossless, bit-identik (tes
+  `test/sourcePixels.test.ts`, tes sesi "sumber 8-bit diringkas"). 346 ->
+  86 MB. Hapus objek mengubah sumber ke f32 sekali (`editableImage`).
 
 ## UI: peta cepat
 
