@@ -9,6 +9,7 @@ import { acquireDevice } from '../src/engine/device';
 import { NativeRenderer, type NativeRenderHost } from '../src/native/renderer';
 import { gpuBufferUsage, gpuMapMode } from '../src/engine/webgpuGlobals';
 import { Tap } from '../src/engine/taps';
+import { encode } from 'fast-png';
 
 // Capture the real canonical planner/graph on Dawn. Rust replays exactly these
 // WGSL descriptors and binary inputs, without replacing any numerical gate.
@@ -25,9 +26,9 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
   const bundle = await loadAssets(join('public', 'data'));
   const width = 32, height = 24;
   const rgba = Float32Array.from({ length: width * height * 4 }, (_, i) =>
-    i % 4 === 3 ? 1 : 0.02 + 0.94 * ((i * 13) % 257) / 256);
+    i % 4 === 3 ? 1 : Math.round(255 * (0.02 + 0.94 * ((i * 13) % 257) / 256)) / 255);
   const baseline = { ...BASELINE_RENDER_PARAMS, inputColorSpace: 'sRGB', inputCctfDecoding: true,
-    grainEnabled: false, glareEnabled: false };
+    grainEnabled: false, glareEnabled: false, autoExposure: false };
   const cases = [baseline,
     { ...baseline, filmEnabled: false, paper: 'lut_kodak_2383_d55' },
     { ...baseline, cameraExposureEv: 0.75, cameraHsvSaturation: 1.2 },
@@ -150,12 +151,15 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
     },
   };
   const renderer = new NativeRenderer(host, bundle, plan => prepared.get(plan.arenaKey)!.shift()!);
+  const fixtures: { params: unknown; rgba: number[] }[] = [];
   try {
     for (const [index, params] of cases.entries()) {
       captureLabel = `case:${index}:rgb_out`;
       const rgb = await renderer.preview(params, rgba, width, height);
       expect(rgb.length).toBe(width * height * 3);
       expect(rgb.every(Number.isFinite)).toBe(true);
+      fixtures.push({ params, rgba: Array.from({ length: width * height * 4 }, (_, i) =>
+        i % 4 === 3 ? 255 : Math.round(255 * Math.max(0, Math.min(1, rgb[Math.floor(i / 4) * 3 + i % 4]!)))) });
       if (index === 2 && process.env.DICHROIC_TRACE_CAMERA === '1') {
         for (const tap of [Tap.LOG_E_FILM, Tap.CMY_FILM, Tap.LOG_E_PRINT, Tap.CMY_PRINT]) {
           captureLabel = `camera:${tap}`;
@@ -167,4 +171,11 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
   expect(resources.size).toBe(0);
   expect(gpuErrors).toEqual([]);
   writeFileSync(join(directory, 'trace.json'), JSON.stringify(trace));
+  // Byte fixtures exercise ImageIO -> JavaScriptCore -> Metal -> PNG on iOS.
+  // Keep the independent Dawn reference, never regenerate it in the iOS test.
+  if (process.env.DICHROIC_UPDATE_IOS_REFERENCE === '1') {
+    const target = 'mobile/assets/parity'; mkdirSync(target, { recursive: true });
+    writeFileSync(join(target, 'source.png'), encode({ width, height, channels: 4, data: Uint8Array.from(rgba, v => Math.round(v * 255)) }));
+    writeFileSync(join(target, 'dawn.json'), JSON.stringify({ width, height, cases: fixtures }));
+  }
 }, 120000);

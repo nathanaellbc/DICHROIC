@@ -3,11 +3,22 @@ import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
+import 'editor_widgets.dart';
 
 /// Gestures transform the cached native texture; they never schedule a develop.
 class PhotoViewport extends StatefulWidget {
-  const PhotoViewport({super.key, required this.photo});
+  const PhotoViewport({
+    super.key,
+    required this.photo,
+    this.focus,
+    this.onFocusStart,
+    this.onFocusPreview,
+    this.onFocusEnd,
+  });
   final NativePhoto photo;
+  final Offset? focus;
+  final VoidCallback? onFocusStart;
+  final ValueChanged<Offset>? onFocusPreview, onFocusEnd;
 
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
@@ -25,6 +36,8 @@ class _PhotoViewportState extends State<PhotoViewport>
   Offset _startFocal = Offset.zero;
   SpringSimulation? _xSpring, _ySpring, _scaleSpring;
   bool _before = false;
+  bool _picking = false;
+  Offset? _focus;
 
   @override
   void initState() {
@@ -167,12 +180,90 @@ class _PhotoViewportState extends State<PhotoViewport>
                       scale: _scale,
                       child: SizedBox.fromSize(
                         size: _image,
-                        child: Texture(
-                          textureId: _before
-                              ? widget.photo.originalTextureId ??
-                                    widget.photo.textureId
-                              : widget.photo.textureId,
-                          filterQuality: FilterQuality.medium,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Texture(
+                              textureId: _before
+                                  ? widget.photo.originalTextureId ??
+                                        widget.photo.textureId
+                                  : widget.photo.textureId,
+                              filterQuality: FilterQuality.medium,
+                            ),
+                            if (_picking && widget.photo.focusTextureId != null)
+                              IgnorePointer(
+                                child: Texture(
+                                  textureId: widget.photo.focusTextureId!,
+                                ),
+                              ),
+                            if (!_before && widget.focus != null)
+                              Positioned(
+                                left:
+                                    (_focus ?? widget.focus!).dx *
+                                        _image.width -
+                                    22,
+                                top:
+                                    (_focus ?? widget.focus!).dy *
+                                        _image.height -
+                                    22,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onPanStart: (_) {
+                                    setState(() {
+                                      _picking = true;
+                                      _focus = widget.focus;
+                                    });
+                                    widget.onFocusStart?.call();
+                                    widget.onFocusPreview?.call(_focus!);
+                                  },
+                                  onPanUpdate: (d) {
+                                    final point =
+                                        (_focus ?? widget.focus!) +
+                                        Offset(
+                                          d.delta.dx / (_image.width * _scale),
+                                          d.delta.dy / (_image.height * _scale),
+                                        );
+                                    setState(
+                                      () => _focus = Offset(
+                                        point.dx.clamp(0, 1),
+                                        point.dy.clamp(0, 1),
+                                      ),
+                                    );
+                                    widget.onFocusPreview?.call(_focus!);
+                                  },
+                                  onPanEnd: (_) {
+                                    widget.onFocusEnd?.call(_focus!);
+                                    setState(() {
+                                      _picking = false;
+                                      _focus = null;
+                                    });
+                                  },
+                                  onPanCancel: () {
+                                    widget.onFocusEnd?.call(
+                                      _focus ?? widget.focus!,
+                                    );
+                                    setState(() {
+                                      _picking = false;
+                                      _focus = null;
+                                    });
+                                  },
+                                  child: Transform.scale(
+                                    scale: 1 / _scale,
+                                    child: const SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: Center(
+                                        child: Glyph(
+                                          'focus',
+                                          color: Colors.white,
+                                          size: 28,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                     ),
@@ -192,7 +283,7 @@ class _PhotoViewportState extends State<PhotoViewport>
                       ? 'Show edited photo'
                       : 'Show original photo',
                   onPressed: () => setState(() => _before = !_before),
-                  icon: const Icon(Icons.compare_outlined),
+                  icon: const Glyph('compare'),
                 ),
               ),
             ),

@@ -11,9 +11,15 @@ dependencies:
     path: packages/exposure_engine
   image_picker: 1.2.0
   share_plus: 11.1.0
+  flutter_svg: 2.3.0
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: 5.0.0
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/parity/

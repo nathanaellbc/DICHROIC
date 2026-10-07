@@ -28,6 +28,8 @@ final class NativeGraphRuntime {
     var outputRGBA = Data()
     var onPublish: ((Data, Int, Int) throws -> Void)?
     var onProgress: ((Int, Int) -> Void)?
+    var onMask: ((Data, Int, Int) throws -> Void)?
+    private(set) var depthReady = false
 
     init(queue: DispatchQueue) throws {
         guard let context = JSContext(), let handle = dichroic_gpu_create(384 * 1024 * 1024) else {
@@ -86,6 +88,47 @@ final class NativeGraphRuntime {
     func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); sourceWidth = 0; sourceHeight = 0 }
 
     var isBusy: Bool { !pending.isEmpty }
+
+    func clearDepth() {
+        runtime?.invokeMethod("clearDepth", withArguments: [])
+        depthReady = false
+    }
+
+    func prepareDepth() throws -> (data: Data, width: Int, height: Int) {
+        guard let result = runtime?.invokeMethod("depthInput", withArguments: [previewWidth, previewHeight]),
+              let value = result.forProperty("data") else { throw GraphRuntimeError.message("Depth input is missing") }
+        try checkException()
+        let width = Int(result.forProperty("width").toInt32()), height = Int(result.forProperty("height").toInt32())
+        let bytes = try typedBytes(value)
+        return (Data(bytes: bytes.baseAddress!, count: bytes.count), width, height)
+    }
+
+    func finishDepth(_ data: Data, width: Int, height: Int) throws {
+        let buffer = try arrayBuffer(count: data.count) { data.copyBytes(to: $0) }
+        runtime?.invokeMethod("depthResult", withArguments: [buffer, width, height])
+        try checkException(); depthReady = true
+    }
+
+    func icc(_ name: String) throws -> Data {
+        guard let value = runtime?.invokeMethod("icc", withArguments: [name]) else { throw GraphRuntimeError.message("ICC profile is missing") }
+        try checkException()
+        let bytes = try typedBytes(value)
+        return Data(bytes: bytes.baseAddress!, count: bytes.count)
+    }
+
+    func focusPreview(_ params: [String: Any]) throws {
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: params), as: UTF8.self)
+        runtime?.invokeMethod("focusPreview", withArguments: [json]); try checkException()
+    }
+
+    func renderSize(_ params: [String: Any], width: Int, height: Int, requested: Int?, preview: Bool) throws -> Int {
+        var request: [String: Any] = ["params": params, "width": width, "height": height, "preview": preview]
+        if let requested = requested { request["requested"] = requested }
+        let result = try hostCall("renderSize", request)
+        guard let object = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any],
+              let edge = object["longEdge"] as? NSNumber else { throw GraphRuntimeError.message("Native render dimensions are missing") }
+        return edge.intValue
+    }
 
     func controlState(_ params: [String: Any]) throws -> String {
         try hostCall("controls", params)
@@ -251,6 +294,14 @@ final class NativeGraphRuntime {
             } catch { self.fail(error) }
         }
         let progress: @convention(block) (Int, Int) -> Void = { [weak self] done, total in self?.onProgress?(done, total) }
+        let mask: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
+            guard let self = self else { return }
+            do {
+                let bytes = try self.typedBytes(value)
+                let data = Data(bytes: bytes.baseAddress!, count: bytes.count)
+                try self.onMask?(data, width, height)
+            } catch { self.fail(error) }
+        }
         let complete: @convention(block) (Int, String) -> Void = { [weak self] id, json in
             guard let self = self, let completion = self.pending.removeValue(forKey: id) else { return }
             // Yield outside the JS call stack before the caller can destroy a
@@ -268,13 +319,13 @@ final class NativeGraphRuntime {
         for (name, block) in ["nativeCommand": command as Any, "nativeUpload": upload as Any,
             "nativeRead": read as Any, "nativeAsset": asset as Any, "nativeText": text as Any,
             "nativeInput": input as Any, "nativePublish": publish as Any, "nativeSource": source as Any,
-            "nativeOutput": output as Any, "nativeProgress": progress as Any, "nativeComplete": complete as Any,
+            "nativeOutput": output as Any, "nativeProgress": progress as Any, "nativeComplete": complete as Any, "nativeMask": mask as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeHost = { command: nativeCommand, upload: nativeUpload, read: nativeRead,
                 readAsset: nativeAsset, readText: nativeText, previewInput: () => new Float32Array(nativeInput()),
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
-                progress: nativeProgress, complete: nativeComplete };
+                progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask };
             """)
     }
 

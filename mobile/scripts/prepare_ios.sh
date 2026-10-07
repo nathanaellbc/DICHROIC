@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+flutter config --no-enable-swift-package-manager
 if [ ! -f ios/Runner.xcodeproj/project.pbxproj ]; then
   flutter create --platforms=ios --project-name=exposure_ios --org=com.nathanaellbc --empty --no-pub .
 fi
@@ -11,9 +12,9 @@ from pathlib import Path
 path = Path('ios/Runner/Info.plist')
 with path.open('rb') as stream:
     info = plistlib.load(stream)
-info['CFBundleDisplayName'] = 'Exposure'
-info['NSPhotoLibraryUsageDescription'] = 'Choose a photo to edit in Exposure.'
-info['NSCameraUsageDescription'] = 'Capture a photo to edit in Exposure.'
+info['CFBundleDisplayName'] = 'DICHROIC'
+info['NSPhotoLibraryUsageDescription'] = 'Choose a photo to edit in DICHROIC.'
+info['NSCameraUsageDescription'] = 'Capture a photo to edit in DICHROIC.'
 with path.open('wb') as stream:
     plistlib.dump(info, stream, fmt=plistlib.FMT_XML, sort_keys=False)
 project = Path('ios/Runner.xcodeproj/project.pbxproj')

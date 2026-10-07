@@ -73,9 +73,11 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
     private let texture = PreviewTexture()
     private let originalTexture = PreviewTexture()
+    private let focusTexture = PreviewTexture()
     private let registry: FlutterTextureRegistry
     private var textureId: Int64 = -1
     private var originalTextureId: Int64 = -1
+    private var focusTextureId: Int64 = -1
     private var engine: UnsafeMutableRawPointer?
     private var graph: NativeGraphRuntime?
     private var photoURL: URL?
@@ -87,6 +89,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         super.init()
         textureId = registry.register(texture)
         originalTextureId = registry.register(originalTexture)
+        focusTextureId = registry.register(focusTexture)
         memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil, queue: .main) { [weak self] _ in
             self?.queue.async { [weak self] in
@@ -109,10 +112,11 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         if let engine = engine { exposure_destroy(engine) }
         registry.unregisterTexture(textureId)
         registry.unregisterTexture(originalTextureId)
+        registry.unregisterTexture(focusTextureId)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if ["catalog", "controls", "patch", "develop", "developExport"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "focusPreview"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -131,7 +135,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                     try originalTexture.publish(frame.rgba, width: frame.width, height: frame.height)
                     try texture.publish(frame.rgba, width: frame.width, height: frame.height)
                     photoURL = url; preview = frame
-                    value = ["textureId": textureId, "originalTextureId": originalTextureId,
+                    graph?.clearDepth()
+                    focusTexture.clear()
+                    value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
                         "width": frame.width, "height": frame.height]
                     DispatchQueue.main.async {
                         self.registry.textureFrameAvailable(self.textureId)
@@ -163,7 +169,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                         return try writePNG(full.rgba, width: full.width, height: full.height).path
                     }
                 default:
-                    photoURL = nil; preview = nil; texture.clear(); originalTexture.clear()
+                    photoURL = nil; preview = nil; texture.clear(); originalTexture.clear(); focusTexture.clear()
                     graph = nil
                     if let handle = engine { exposure_destroy(handle); engine = nil }
                     value = nil
@@ -184,6 +190,11 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
         }
         self.graph = graph
+        graph.onMask = { [weak self] rgba, width, height in
+            guard let self = self else { return }
+            try self.focusTexture.publish(rgba, width: width, height: height)
+            DispatchQueue.main.async { self.registry.textureFrameAvailable(self.focusTextureId) }
+        }
         return graph
     }
 
@@ -198,11 +209,24 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                 if call.method == "patch" { finish(try graph.patch(args)); return }
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
+                if call.method == "focusPreview" { try graph.focusPreview(params); finish(nil); return }
                 guard let url = photoURL else { throw NativeError.message("Open a photo first") }
                 guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
-                let frame = try preview ?? decode(url, longEdge: 1600)
-                preview = frame
+                let measured = try preview ?? decode(url, longEdge: 1600)
+                preview = measured
+                let edge = try graph.renderSize(params, width: measured.width, height: measured.height, requested: 1600, preview: true)
+                let frame = edge < max(measured.width, measured.height) ? try decode(url, longEdge: edge) : measured
                 graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
+                if params["lensBlurEnabled"] as? Bool == true && !graph.depthReady {
+                    let guide = try decode(url, longEdge: 1024)
+                    graph.previewRGBA = guide.rgba; graph.previewWidth = guide.width; graph.previewHeight = guide.height
+                    let input = try graph.prepareDepth()
+                    let model = try NativeModels.model(NativeModels.depthURL, name: "depth-4472b736-int8.onnx")
+                    let result = try NativeModels.infer(model: model, input: input.data, shape: [1, 3, input.height, input.width])
+                    guard result.shape.count >= 2 else { throw NativeError.message("Invalid depth dimensions") }
+                    try graph.finishDepth(result.data, width: result.shape[result.shape.count - 1], height: result.shape[result.shape.count - 2])
+                    graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
+                }
                 if call.method == "develop" {
                     // The display texture has an sRGB encoding. Export retains
                     // the chosen output gamut in its separately tagged image.
@@ -211,7 +235,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                         switch outcome { case .success: finish(nil); case .failure(let error): fail(error) }
                     }
                 } else {
-                    let full = try autoreleasepool { try decode(url, longEdge: nil) }
+                    let dimensions = try sourceDimensions(url)
+                    let edge = try graph.renderSize(params, width: dimensions.width, height: dimensions.height,
+                        requested: (args["longEdge"] as? NSNumber)?.intValue, preview: false)
+                    let full = try autoreleasepool { try decode(url, longEdge: edge) }
                     graph.sourceRGBA = full.rgba; graph.sourceWidth = full.width; graph.sourceHeight = full.height
                     try graph.request(operation: "export", params: params, width: full.width, height: full.height) { [weak self, weak graph] outcome in
                         guard let self = self, let graph = graph else { fail(NativeError.message("Native renderer closed")); return }
@@ -219,7 +246,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                         do {
                             try outcome.get()
                             let colorSpace = params["outputColorSpace"] as? String ?? "sRGB"
-                            finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace).path)
+                            finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace, icc: graph.icc(colorSpace)).path)
                         } catch { fail(error) }
                     }
                 }
@@ -232,6 +259,15 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         let value = number.floatValue
         guard value.isFinite, (-5...5).contains(value) else { throw NativeError.message("Exposure must be between -5 and +5 EV") }
         return value
+    }
+
+    private func sourceDimensions(_ url: URL) throws -> (width: Int, height: Int) {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else { throw NativeError.message("Source dimensions are missing") }
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+        return orientation >= 5 ? (height, width) : (width, height)
     }
 
     private func decode(_ url: URL, longEdge: Int?) throws -> PhotoFrame {
@@ -284,7 +320,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         return .message(String(cString: message))
     }
 
-    private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB") throws -> URL {
+    private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB", icc: Data? = nil) throws -> URL {
+        var space = icc.flatMap { CGColorSpace(iccData: $0 as CFData) }
+        if space == nil {
         let name: CFString
         switch outputColorSpace {
         case "sRGB": name = CGColorSpace.sRGB
@@ -297,7 +335,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         case "ACEScg": name = CGColorSpace.acescgLinear
         default: throw NativeError.message("This native export color profile is not available yet")
         }
-        guard let space = CGColorSpace(name: name), let provider = CGDataProvider(data: rgba as CFData),
+        space = CGColorSpace(name: name)
+        }
+        guard let space = space, let provider = CGDataProvider(data: rgba as CFData),
               let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
                 bytesPerRow: width * 4, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {

@@ -36,12 +36,12 @@ export function nativeAssets(host: Pick<NativeRenderHost, 'readAsset' | 'readTex
 /** The native UI and canonical graph share one parameter/catalog definition. */
 export function nativeCatalog(bundle: AssetBundle): string {
   return JSON.stringify({
-    baseline: { ...BASELINE_RENDER_PARAMS, inputColorSpace: 'sRGB', inputCctfDecoding: true },
+    baseline: { ...BASELINE_RENDER_PARAMS, inputColorSpace: 'sRGB', inputCctfDecoding: true, autoExposure: false },
     groups: GROUPS, filmFormats: FILM_FORMATS, diffusionFamilies: DIFFUSION_FAMILIES,
     filmSections: FILM_SECTIONS, paperSections: PAPER_SECTIONS,
     printLuts: Object.entries(PRINT_LUTS).map(([id, lut]) => ({ id, ...lut })),
     inputColorSpaces: bundle.manifest.colorSpaces.labels,
-    outputColorSpaces: bundle.manifest.outputColorSpaces.labels,
+    outputColorSpaces: Object.keys(bundle.manifest.outputColorSpaces),
   });
 }
 
@@ -120,7 +120,7 @@ export class NativeRenderer {
         (rgb, tile) => this.host.outputTile(tile, rgb), {
           maxBufferBytes: Math.min(this.native.limits.maxStorageBufferBindingSize, 32 * 1024 * 1024),
           memoryBudget: 192 * 1024 * 1024, overlap: plan.overlap, exportOverlap: plan.exportOverlap,
-          frame: plan.frame, wholeFrame: plan.chain.lensBlur === true,
+          frame: plan.frame, wholeFrame: plan.chain.lensBlur === true || !!plan.chain.cameraDiffusion || !!plan.chain.printDiffusion,
           onProgress: (done, total) => this.host.progress(done, total),
         });
     } finally {

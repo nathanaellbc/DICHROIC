@@ -18,6 +18,7 @@ workflows:
           npm ci
           npm run typecheck
           node mobile/scripts/build_host.mjs
+          node mobile/scripts/build_icons.mjs
       - name: Install Rust
         script: |
           set -euo pipefail
@@ -53,10 +54,14 @@ workflows:
           set -euo pipefail
           cd mobile
           flutter build ios --release --no-codesign
+      - name: Exercise canonical editor on iPhone simulator
+        script: bash mobile/scripts/test_ios.sh
       - name: Package unsigned IPA for personal sideloading
         script: bash mobile/scripts/package_unsigned_ipa.sh
     artifacts:
       - mobile/build/ios/iphoneos/*.app
       - mobile/build/ios/iphoneos/*.app.dSYM
       - mobile/build/ios/ipa/*.ipa
+      - mobile/build/ios/proofs/*.png
+      - mobile/build/ios/proofs/*.log
       - mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/ExposureNative.xcframework/**
