@@ -2,10 +2,13 @@
  * Ikon dan layar pembuka PWA DICHROIC, dirasterisasi langsung (tanpa browser)
  * supaya bisa dibangkitkan ulang persis: `node tools/gen_icons.mjs`.
  *
- * Motif: tiga cakram warna sistem Apple (merah, hijau, biru) yang bertumpuk
- * dengan blend "screen" di atas hitam -- cahaya yang dipisah lalu disatukan
- * kembali, seperti cermin dikroik. Semua isi berada di dalam lingkaran 80%
- * (zona aman ikon maskable), jadi satu gambar melayani `any` dan `maskable`.
+ * Motif "Exposure": cakram cahaya (Signal Blue) jatuh di atas selembar kertas
+ * (putih, sudut kontinu seperti UI). Di bagian yang terkena cahaya, kertas
+ * tercetak hitam -- tumpang tindihnya dilubangi. Master vektor dan panduan
+ * pemakaian ada di docs/brand/. Geometri di bawah memakai grid 256 yang sama.
+ *
+ * Semua isi berada di dalam lingkaran 80% (zona aman ikon maskable), jadi satu
+ * gambar melayani `any` dan `maskable`.
  *
  * Keluaran: public/icons/*.png, public/favicon.svg, dan
  * tools/splash-screens.json (dibaca vite.config.ts untuk tag
@@ -16,73 +19,81 @@ import { join } from 'node:path';
 import { encode } from 'fast-png';
 
 const OUT = join('public', 'icons');
-const DISCS = [
-  { angle: -90, color: [255, 69, 58] },
-  { angle: 30, color: [48, 209, 88] },
-  { angle: 150, color: [10, 132, 255] },
-];
-/** Relatif terhadap sisi ikon. */
-const OFFSET = 0.118;
-const RADIUS = 0.2;
+const WHITE = [255, 255, 255];
+const BLUE = [0, 145, 255]; // Signal Blue #0091FF
+const BLACK = [0, 0, 0];
+
+// Geometri pada grid 256 (sama dengan docs/brand/*.svg).
+const DISC = { x: 101, y: 101, r: 70 };
+const SHEET = { x0: 89, y0: 89, x1: 225, y1: 225, r: 30 };
+const N = 3.26; // eksponen superelips sudut kontinu
+const A = 1.528 * SHEET.r; // panjang lengkung sudut di tiap sisi
+const BBOX = { x0: DISC.x - DISC.r, y0: DISC.y - DISC.r, x1: SHEET.x1, y1: SHEET.y1 };
+const BBOX_W = BBOX.x1 - BBOX.x0;
+const BBOX_CX = (BBOX.x0 + BBOX.x1) / 2;
+const BBOX_CY = (BBOX.y0 + BBOX.y1) / 2;
 const SAMPLES = 4;
 
+function inDisc(x, y) {
+  return (x - DISC.x) ** 2 + (y - DISC.y) ** 2 <= DISC.r * DISC.r;
+}
+
+function inSheet(x, y) {
+  if (x < SHEET.x0 || x > SHEET.x1 || y < SHEET.y0 || y > SHEET.y1) return false;
+  const dx = x < SHEET.x0 + A ? SHEET.x0 + A - x : x > SHEET.x1 - A ? x - (SHEET.x1 - A) : 0;
+  const dy = y < SHEET.y0 + A ? SHEET.y0 + A - y : y > SHEET.y1 - A ? y - (SHEET.y1 - A) : 0;
+  return (dx / A) ** N + (dy / A) ** N <= 1;
+}
+
+/** Warna satu titik pada grid 256: kertas putih, cahaya biru, tumpang tindih hitam. */
+function shade(x, y) {
+  const s = inSheet(x, y);
+  const d = inDisc(x, y);
+  if (s && !d) return WHITE;
+  if (d && !s) return BLUE;
+  return BLACK;
+}
+
 /**
- * Menggambar motif berukuran `size` berpusat di (cx, cy) ke kanvas RGB
- * `width` x `height` berlatar hitam. Supersampling 4x4 hanya di tepi cakram.
+ * Menggambar motif ke kanvas RGB `width` x `height` berlatar hitam; lebar
+ * kotak pembatas motif `markWidth` piksel, berpusat di (cx, cy).
  */
-function drawMark(pixels, width, height, cx, cy, size) {
-  const discs = DISCS.map((d) => ({
-    x: cx + Math.cos((d.angle * Math.PI) / 180) * OFFSET * size,
-    y: cy + Math.sin((d.angle * Math.PI) / 180) * OFFSET * size,
-    r: RADIUS * size,
-    c: d.color.map((v) => v / 255),
-  }));
-  const reach = (OFFSET + RADIUS) * size + 2;
-  const x0 = Math.max(0, Math.floor(cx - reach));
-  const x1 = Math.min(width, Math.ceil(cx + reach));
-  const y0 = Math.max(0, Math.floor(cy - reach));
-  const y1 = Math.min(height, Math.ceil(cy + reach));
-  const shade = (px, py) => {
-    const inv = [1, 1, 1];
-    for (const d of discs) {
-      if ((px - d.x) ** 2 + (py - d.y) ** 2 <= d.r * d.r) {
-        for (let k = 0; k < 3; k += 1) inv[k] *= 1 - d.c[k];
-      }
-    }
-    return inv.map((v) => 1 - v);
-  };
+function drawMark(pixels, width, height, cx, cy, markWidth) {
+  const k = BBOX_W / markWidth; // piksel -> grid 256
+  const half = markWidth / 2 + 2;
+  const x0 = Math.max(0, Math.floor(cx - half));
+  const x1 = Math.min(width, Math.ceil(cx + half));
+  const y0 = Math.max(0, Math.floor(cy - half));
+  const y1 = Math.min(height, Math.ceil(cy + half));
   for (let y = y0; y < y1; y += 1) {
     for (let x = x0; x < x1; x += 1) {
-      const nearEdge = discs.some((d) => Math.abs(Math.hypot(x + 0.5 - d.x, y + 0.5 - d.y) - d.r) < 1.5);
-      let rgb;
-      if (nearEdge) {
-        rgb = [0, 0, 0];
-        for (let sy = 0; sy < SAMPLES; sy += 1) {
-          for (let sx = 0; sx < SAMPLES; sx += 1) {
-            const s = shade(x + (sx + 0.5) / SAMPLES, y + (sy + 0.5) / SAMPLES);
-            for (let k = 0; k < 3; k += 1) rgb[k] += s[k] / (SAMPLES * SAMPLES);
-          }
+      const rgb = [0, 0, 0];
+      for (let sy = 0; sy < SAMPLES; sy += 1) {
+        for (let sx = 0; sx < SAMPLES; sx += 1) {
+          const gx = BBOX_CX + (x + (sx + 0.5) / SAMPLES - cx) * k;
+          const gy = BBOX_CY + (y + (sy + 0.5) / SAMPLES - cy) * k;
+          const c = shade(gx, gy);
+          for (let i = 0; i < 3; i += 1) rgb[i] += c[i] / (SAMPLES * SAMPLES);
         }
-      } else {
-        rgb = shade(x + 0.5, y + 0.5);
       }
       const p = (y * width + x) * 3;
-      for (let k = 0; k < 3; k += 1) pixels[p + k] = Math.round(rgb[k] * 255);
+      for (let i = 0; i < 3; i += 1) pixels[p + i] = Math.round(rgb[i]);
     }
   }
 }
 
-function png(width, height, markSize) {
+function png(width, height, markWidth) {
   const pixels = new Uint8Array(width * height * 3);
-  drawMark(pixels, width, height, width / 2, height / 2, markSize);
+  drawMark(pixels, width, height, width / 2, height / 2, markWidth);
   return encode({ width, height, data: pixels, channels: 3, depth: 8 });
 }
 
 mkdirSync(OUT, { recursive: true });
 
 // Ikon persegi penuh tanpa transparansi (iOS menolak alpha pada apple-touch-icon).
+// Lebar motif 62% sisi: titik terjauhnya tetap di dalam lingkaran aman 80%.
 for (const size of [180, 192, 512]) {
-  writeFileSync(join(OUT, `icon-${size}.png`), png(size, size, size));
+  writeFileSync(join(OUT, `icon-${size}.png`), png(size, size, size * 0.62));
 }
 
 /**
@@ -108,18 +119,35 @@ for (const [w, h, scale] of SCREENS) {
   const width = w * scale;
   const height = h * scale;
   const file = `splash-${width}x${height}.png`;
-  writeFileSync(join(OUT, file), png(width, height, Math.round(width * 0.42)));
+  writeFileSync(join(OUT, file), png(width, height, Math.round(width * 0.27)));
   splash.push({ file, media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait)` });
 }
 
-const svgDiscs = DISCS.map((d) => {
-  const x = 50 + Math.cos((d.angle * Math.PI) / 180) * OFFSET * 100;
-  const y = 50 + Math.sin((d.angle * Math.PI) / 180) * OFFSET * 100;
-  return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${RADIUS * 100}" fill="rgb(${d.color.join(',')})"/>`;
-}).join('');
+// favicon.svg: motif di atas petak hitam membulat. Sudut kertas memakai kubik
+// yang mendekati superelips yang sama.
+const fmt = (v) => String(Number(v.toFixed(2)));
+const q = ((8 * 2 ** (-1 / N) - 4) / 3) * A;
+const { x0: sx0, y0: sy0, x1: sx1, y1: sy1 } = SHEET;
+const pt = (x, y) => `${fmt(x)},${fmt(y)}`;
+const sheetD =
+  `M${pt(sx0 + A, sy0)}H${fmt(sx1 - A)}C${pt(sx1 - A + q, sy0)} ${pt(sx1, sy0 + A - q)} ${pt(sx1, sy0 + A)}` +
+  `V${fmt(sy1 - A)}C${pt(sx1, sy1 - A + q)} ${pt(sx1 - A + q, sy1)} ${pt(sx1 - A, sy1)}` +
+  `H${fmt(sx0 + A)}C${pt(sx0 + A - q, sy1)} ${pt(sx0, sy1 - A + q)} ${pt(sx0, sy1 - A)}` +
+  `V${fmt(sy0 + A)}C${pt(sx0, sy0 + A - q)} ${pt(sx0 + A - q, sy0)} ${pt(sx0 + A, sy0)}Z`;
+const { x: dcx, y: dcy, r: dr } = DISC;
+const discD = `M${pt(dcx - dr, dcy)}A${dr},${dr} 0 1 1 ${pt(dcx + dr, dcy)}A${dr},${dr} 0 1 1 ${pt(dcx - dr, dcy)}Z`;
+const xt = dcx + Math.sqrt(dr * dr - (sy0 - dcy) ** 2);
+const yl = dcy + Math.sqrt(dr * dr - (sx0 - dcx) ** 2);
+const overlapD =
+  `M${pt(xt, sy0)}H${fmt(sx0 + A)}C${pt(sx0 + A - q, sy0)} ${pt(sx0, sy0 + A - q)} ${pt(sx0, sy0 + A)}` +
+  `V${fmt(yl)}A${dr},${dr} 0 0 0 ${pt(xt, sy0)}Z`;
+const fs = (0.7 * 256) / BBOX_W;
 writeFileSync(
   join('public', 'favicon.svg'),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#000"/><g style="isolation:isolate">${svgDiscs.replaceAll('<circle', '<circle style="mix-blend-mode:screen"')}</g></svg>\n`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#000"/>` +
+    `<g transform="translate(${fmt(128 - BBOX_CX * fs)} ${fmt(128 - BBOX_CY * fs)}) scale(${fmt(fs)})">` +
+    `<path fill="#fff" fill-rule="evenodd" d="${sheetD}${overlapD}"/>` +
+    `<path fill="#0091ff" fill-rule="evenodd" d="${discD}${overlapD}"/></g></svg>\n`,
 );
 
 writeFileSync(join('tools', 'splash-screens.json'), `${JSON.stringify(splash, null, 2)}\n`);
