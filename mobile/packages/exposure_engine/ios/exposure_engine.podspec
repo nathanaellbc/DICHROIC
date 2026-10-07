@@ -1,0 +1,16 @@
+Pod::Spec.new do |s|
+  s.name = 'exposure_engine'
+  s.version = '0.1.0'
+  s.summary = 'Exposure native Metal rendering bridge.'
+  s.homepage = 'https://github.com/nathanaellbc/DICHROIC'
+  s.license = { :type => 'GPL-3.0-or-later', :file => '../../../../LICENSE' }
+  s.author = { 'Exposure' => 'https://github.com/nathanaellbc' }
+  s.source = { :path => '.' }
+  s.source_files = 'exposure_engine/Sources/exposure_engine/**/*.swift'
+  s.vendored_frameworks = 'exposure_engine/Frameworks/ExposureNative.xcframework'
+  s.dependency 'Flutter'
+  s.platform = :ios, '16.0'
+  s.swift_version = '5.9'
+  s.frameworks = 'Metal', 'QuartzCore', 'CoreGraphics', 'Foundation', 'Accelerate'
+  s.libraries = 'c++'
+end

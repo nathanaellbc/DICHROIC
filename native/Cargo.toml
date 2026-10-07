@@ -1,0 +1,21 @@
+[package]
+name = "exposure-native"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[lib]
+name = "exposure_native"
+crate-type = ["staticlib", "rlib"]
+
+[features]
+gpu-tests = []
+
+[dependencies]
+wgpu = { version = "=24.0.5", default-features = false, features = ["metal", "dx12", "wgsl"] }
+pollster = "=0.4.0"
+bytemuck = "1.21"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

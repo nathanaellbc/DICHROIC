@@ -1,0 +1,52 @@
+workflows:
+  exposure-ios-native:
+    name: Exposure native iOS prototype
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: 3.44.0
+      xcode: latest
+    cache:
+      cache_paths:
+        - $HOME/.cargo/registry
+        - $HOME/.cargo/git
+        - $HOME/.pub-cache
+    scripts:
+      - name: Install Rust
+        script: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          fi
+          source "$HOME/.cargo/env"
+          rustup toolchain install 1.85.0 --profile minimal
+          rustup default 1.85.0
+      - name: Verify native engine on Metal
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          cd native
+          cargo test --features gpu-tests --locked
+      - name: Build native device and simulator library
+        script: |
+          set -euo pipefail
+          source "$HOME/.cargo/env"
+          bash mobile/scripts/build_native.sh
+      - name: Prepare iOS host
+        script: bash mobile/scripts/prepare_ios.sh
+      - name: Check Flutter app
+        script: |
+          set -euo pipefail
+          cd mobile
+          dart format --output=none lib test packages/exposure_engine/lib
+          flutter analyze
+          flutter test
+      - name: Build unsigned iOS application
+        script: |
+          set -euo pipefail
+          cd mobile
+          flutter build ios --release --no-codesign
+    artifacts:
+      - mobile/build/ios/iphoneos/*.app
+      - mobile/build/ios/iphoneos/*.app.dSYM
+      - mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/ExposureNative.xcframework/**

@@ -13,3 +13,14 @@ __pycache__/
 
 # Pengaturan Claude Code lokal per-mesin.
 .claude/settings.local.json
+
+# Flutter/iOS and native engine build products.
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins-dependencies
+mobile/ios/
+mobile/packages/exposure_engine/.dart_tool/
+mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/
+native/target/
+native/.cargo-local/
+.tools/

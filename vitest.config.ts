@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
 export const GPU_TESTS = ['test/parity/**/*.test.ts', ...[
-  'arena', 'cameraDevelop', 'device', 'graph', 'lensBlur', 'session', 'tiling',
+  'arena', 'cameraDevelop', 'device', 'graph', 'lensBlur', 'nativeExposure', 'session', 'tiling',
 ].map((name) => `test/${name}.test.ts`)];
 const group = process.env.DICHROIC_TEST_GROUP;
 

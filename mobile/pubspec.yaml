@@ -1,0 +1,19 @@
+name: exposure_ios
+description: Exposure native iOS editor.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  exposure_engine:
+    path: packages/exposure_engine
+  image_picker: 1.2.0
+  share_plus: 11.1.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 5.0.0
+flutter:
+  uses-material-design: true
