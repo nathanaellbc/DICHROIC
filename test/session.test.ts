@@ -415,6 +415,26 @@ describe('Session: exportImage (rencana 2B Task 7)', () => {
     await expect(session.renderExport(0)).rejects.toBeInstanceOf(RangeError);
   });
 
+  it('sumber 8-bit diringkas (Uint8) memberi ekspor identik dengan sumber f32 yang sama', async () => {
+    const s = await sharedSession();
+    try {
+      const [w, h] = [160, 96];
+      const rgba = new Float32Array(w * h * 4);
+      for (let i = 0; i < w * h; i += 1) rgba.set([(i * 7) % 256 / 255, (i * 13) % 256 / 255, (i * 3) % 256 / 255, 1], i * 4);
+      const image8: DecodedImage = { width: w, height: h, rgba, suggestedColorSpace: 'sRGB', encoding: 'encoded', source: { format: 'fixture', bitDepth: 8 } };
+      s.open(image8);
+      const compact = await s.exportImage('png16', { longEdge: 120 });
+      const full = await s.exportImage('tiff16');
+      // Hapus objek mengubah sumber ke f32 (nilai sama); render ulang harus identik.
+      s.prepareRemoval({ width: 8, height: 8, data: new Uint8Array(64).fill(1) });
+      s.releaseExport();
+      expect(await s.exportImage('png16', { longEdge: 120 })).toEqual(compact);
+      expect(await s.exportImage('tiff16')).toEqual(full);
+    } finally {
+      s.dispose();
+    }
+  });
+
   it('GPU kehabisan memori di tengah ekspor: tile dikecilkan, diulang, hasil sama', async () => {
     const s = await sharedSession();
     const device = s['engine'].device as GPUDevice & { popErrorScope: GPUDevice['popErrorScope'] };
