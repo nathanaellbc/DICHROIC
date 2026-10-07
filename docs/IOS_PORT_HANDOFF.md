@@ -32,7 +32,9 @@ bukan jaminan aplikasi bebas crash pada iPhone.
 - Flutter test lokal: lima test lulus (latest-value scheduling, export ordering, comparison texture, elastic drag, pinch/reset).
 - Build Rust/Swift, XCFramework iPhone + arm64 simulator, Flutter analyze/test dan build iOS unsigned: lulus pada commit `bbe9f4f`, [run 37632022742](https://github.com/nathanaellbc/DICHROIC/actions/runs/37632022742).
 - CurveDevelop Metal tests: lulus pada langkah Rust run `37633653392`; mencakup profil Portra 400 terukur, interpolasi/gamma, alpha, dan batas tile pada toleransi 1e-5. Ini bukan parity final pipeline film/paper.
-- Build terbaru dengan comparison/gestures, simulator Intel + Apple Silicon, dan IPA packaging: lihat workflow Native iOS build; status akhir perlu dicatat setelah run terbaru selesai.
+- Commit `8c746a4`: semua langkah Rust/Metal, XCFramework tiga target, Flutter analyze/5 tests, build release iPhone, debug simulator dan packaging/upload IPA berhasil pada [run 37634116643](https://github.com/nathanaellbc/DICHROIC/actions/runs/37634116643). Status keseluruhan run menjadi cancelled karena push dokumentasi berikutnya, sesudah seluruh langkah selesai. Ketiga artifact tersedia; jangan menyebut status keseluruhan run ini green.
+- Pemeriksaan ulang commit dokumentasi `9abdf8a`, run `37635171685`, tidak memulai job: GitHub melaporkan masalah account payments/spending limit. Tidak ada kegagalan source atau test pada run tersebut. Jangan menaikkan batas billing otomatis; gunakan artifact terverifikasi di atas atau workflow Codemagic yang sudah terhubung pengguna.
+- IPA diunduh lokal ke `artifacts/ios-native-8c746a4/Exposure-unsigned.ipa` (diabaikan Git). Struktur Payload, executable arm64 dan framework diperiksa. Signing/install tetap belum diverifikasi.
 - Pengujian iPhone, sideload, peak memory dan latency nyata belum dilakukan.
 
 ## Urutan pekerjaan berikutnya
