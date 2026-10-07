@@ -148,6 +148,33 @@ pub extern "C" fn exposure_last_error() -> *const c_char {
     LAST_ERROR.with(|slot| slot.borrow().as_ptr())
 }
 
+/// # Safety
+/// `rgba` is uniquely owned writable storage. Serialize calls on the handle.
+#[no_mangle]
+pub unsafe extern "C" fn exposure_render_in_place(engine: *mut c_void, rgba: *mut u8,
+    length: usize, width: u32, height: u32, ev: f32) -> i32 {
+    let run = || -> Result<(), String> {
+        let expected = image_bytes(width, height, ev)?;
+        if engine.is_null() || rgba.is_null() || length != expected {
+            return Err("Invalid native in-place render buffer".into());
+        }
+        let engine = &*engine.cast::<Engine>();
+        let pixels = std::slice::from_raw_parts_mut(rgba, length);
+        let mut source = vec![0; (TILE_PIXELS * 4).min(length)];
+        for destination in pixels.chunks_mut(TILE_PIXELS * 4) {
+            let input = &mut source[..destination.len()];
+            input.copy_from_slice(destination);
+            engine.render(input, destination, ev)?;
+        }
+        Ok(())
+    };
+    match catch_unwind(AssertUnwindSafe(run)) {
+        Ok(Ok(())) => 0,
+        Ok(Err(message)) => { error(message); -1 },
+        Err(_) => { error("Native in-place GPU rendering failed"); -1 },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +186,7 @@ mod tests {
     }
     #[test] fn ffi_rejects_invalid_buffers_without_dereferencing() {
         assert_eq!(unsafe { exposure_render(std::ptr::null_mut(), std::ptr::null(), 4, 1, 1, 0.0, std::ptr::null_mut(), 4) }, -1);
+        assert_eq!(unsafe { exposure_render_in_place(std::ptr::null_mut(), std::ptr::null_mut(), 4, 1, 1, 0.0) }, -1);
         assert!(!exposure_last_error().is_null());
     }
     #[cfg(feature = "gpu-tests")]
@@ -169,5 +197,20 @@ mod tests {
         engine.render(&input, &mut output, 0.0).unwrap();
         assert!(input.iter().zip(&output).all(|(a, b)| a.abs_diff(*b) <= 1));
         assert!(input.chunks(4).zip(output.chunks(4)).all(|(a, b)| a[3] == b[3]));
+        let mut in_place = input.clone();
+        assert_eq!(unsafe { exposure_render_in_place(
+            (&engine as *const Engine).cast_mut().cast(), in_place.as_mut_ptr(), in_place.len(),
+            1025, 1025, 0.0) }, 0);
+        assert_eq!(in_place, output);
+        let small = vec![20, 80, 140, 255, 100, 120, 160, 12];
+        let mut adjusted = vec![0; small.len()];
+        engine.render(&small, &mut adjusted, 1.0).unwrap();
+        let mut adjusted_in_place = small.clone();
+        assert_eq!(unsafe { exposure_render_in_place(
+            (&engine as *const Engine).cast_mut().cast(), adjusted_in_place.as_mut_ptr(),
+            adjusted_in_place.len(), 2, 1, 1.0) }, 0);
+        assert_eq!(adjusted_in_place, adjusted);
+        assert!(adjusted[0] > small[0]);
+        assert_eq!(adjusted[7], 12);
     }
 }

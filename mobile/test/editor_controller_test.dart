@@ -30,6 +30,27 @@ class FakeEngine extends ExposureEngine {
 
 void main() {
   test(
+    'export drains the active preview and restores the latest slider preview',
+    () async {
+      final engine = FakeEngine();
+      final controller = EditorController(engine);
+      await controller.open('/tmp/input.heic');
+      controller.setExposure(1);
+      controller.setExposure(3);
+      final exporting = controller.export();
+      await Future<void>.delayed(Duration.zero);
+      expect(engine.exports, 0);
+      expect(controller.exporting, true);
+      engine.completions.first.complete();
+      expect(await exporting, '/tmp/photo.png');
+      expect(engine.exports, 1);
+      expect(engine.renders, [1, 3]);
+      engine.completions.last.complete();
+      await Future<void>.delayed(Duration.zero);
+      controller.dispose();
+    },
+  );
+  test(
     'slider replaces pending frames; opening a photo does not develop an export',
     () async {
       final engine = FakeEngine();

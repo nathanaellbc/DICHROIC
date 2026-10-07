@@ -11,6 +11,8 @@ class EditorController extends ChangeNotifier {
   bool exporting = false;
   String? error;
   bool _rendering = false;
+  Future<void>? _renderFuture;
+  int _renderedRevision = -1;
   bool _disposed = false;
   int _revision = 0;
   int _photoGeneration = 0;
@@ -26,6 +28,7 @@ class EditorController extends ChangeNotifier {
       photo = next;
       exposureEv = 0;
       _revision++;
+      _renderedRevision = _revision;
     } catch (e) {
       if (generation == _photoGeneration) error = e.toString();
     } finally {
@@ -42,7 +45,7 @@ class EditorController extends ChangeNotifier {
     _revision++;
     error = null;
     _notify();
-    if (!_rendering) _drain();
+    if (!_rendering) _renderFuture = _drain();
   }
 
   Future<void> _drain() async {
@@ -52,6 +55,7 @@ class EditorController extends ChangeNotifier {
         final revision = _revision;
         try {
           await engine.render(exposureEv);
+          _renderedRevision = revision;
         } catch (e) {
           error = e.toString();
           _notify();
@@ -70,6 +74,8 @@ class EditorController extends ChangeNotifier {
     error = null;
     _notify();
     try {
+      await _renderFuture;
+      if (_disposed) return null;
       return await engine.export(exposureEv);
     } catch (e) {
       error = e.toString();
@@ -77,6 +83,9 @@ class EditorController extends ChangeNotifier {
     } finally {
       exporting = false;
       _notify();
+      if (!_disposed && !loading && _renderedRevision != _revision) {
+        _renderFuture = _drain();
+      }
     }
   }
 

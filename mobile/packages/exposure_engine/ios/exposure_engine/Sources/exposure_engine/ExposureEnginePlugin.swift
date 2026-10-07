@@ -9,7 +9,7 @@ import Accelerate
 private struct PhotoFrame {
     let width: Int
     let height: Int
-    let rgba: Data
+    var rgba: Data
 }
 
 private enum NativeError: LocalizedError {
@@ -136,9 +136,17 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                     let ev = try exposure(args)
                     guard let url = photoURL else { throw NativeError.message("Open a photo first") }
                     value = try autoreleasepool {
-                        let full = try decode(url, longEdge: nil)
-                        let pixels = try render(full, exposureEv: ev)
-                        return try writePNG(pixels, width: full.width, height: full.height).path
+                        var full = try decode(url, longEdge: nil)
+                        if engine == nil { engine = exposure_create() }
+                        guard let handle = engine else { throw nativeError() }
+                        let count = full.rgba.count
+                        let width = UInt32(full.width), height = UInt32(full.height)
+                        let status = full.rgba.withUnsafeMutableBytes { pixels in
+                            exposure_render_in_place(handle, pixels.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                                count, width, height, ev)
+                        }
+                        guard status == 0 else { throw nativeError() }
+                        return try writePNG(full.rgba, width: full.width, height: full.height).path
                     }
                 default:
                     photoURL = nil; preview = nil; texture.clear()

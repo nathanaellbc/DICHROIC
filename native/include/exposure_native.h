@@ -11,6 +11,8 @@ void exposure_destroy(void *engine);
 int32_t exposure_render(void *engine, const uint8_t *rgba, size_t length,
     uint32_t width, uint32_t height, float exposure_ev,
     uint8_t *output, size_t output_length);
+int32_t exposure_render_in_place(void *engine, uint8_t *rgba, size_t length,
+    uint32_t width, uint32_t height, float exposure_ev);
 /* Thread-local; copy immediately, before the next native operation. */
 const char *exposure_last_error(void);
 #ifdef __cplusplus
