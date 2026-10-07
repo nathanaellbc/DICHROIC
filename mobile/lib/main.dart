@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 import 'editor_controller.dart';
+import 'photo_viewport.dart';
 
 void main() => runApp(const ExposureApp());
 
@@ -192,12 +193,7 @@ class _EditorScreenState extends State<EditorScreen> {
                   : SafeArea(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(0, 72, 0, 156),
-                        child: Center(
-                          child: AspectRatio(
-                            aspectRatio: photo.width / photo.height,
-                            child: Texture(textureId: photo.textureId),
-                          ),
-                        ),
+                        child: PhotoViewport(photo: photo),
                       ),
                     ),
             ),

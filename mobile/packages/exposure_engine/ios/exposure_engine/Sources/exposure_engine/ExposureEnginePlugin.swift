@@ -72,8 +72,10 @@ private final class PreviewTexture: NSObject, FlutterTexture {
 public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
     private let texture = PreviewTexture()
+    private let originalTexture = PreviewTexture()
     private let registry: FlutterTextureRegistry
     private var textureId: Int64 = -1
+    private var originalTextureId: Int64 = -1
     private var engine: UnsafeMutableRawPointer?
     private var photoURL: URL?
     private var preview: PhotoFrame?
@@ -83,6 +85,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         self.registry = registry
         super.init()
         textureId = registry.register(texture)
+        originalTextureId = registry.register(originalTexture)
         memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil, queue: .main) { [weak self] _ in
             self?.queue.async { [weak self] in
@@ -103,6 +106,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         if let observer = memoryObserver { NotificationCenter.default.removeObserver(observer) }
         if let engine = engine { exposure_destroy(engine) }
         registry.unregisterTexture(textureId)
+        registry.unregisterTexture(originalTextureId)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -118,11 +122,16 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                     guard let path = args["path"] as? String else { throw NativeError.message("Photo path is missing") }
                     let url = URL(fileURLWithPath: path)
                     let frame = try decode(url, longEdge: 1600)
-                    let pixels = try render(frame, exposureEv: 0)
-                    try texture.publish(pixels, width: frame.width, height: frame.height)
+                    // Keep the untouched import on a separate, bounded texture. Compare never renders.
+                    try originalTexture.publish(frame.rgba, width: frame.width, height: frame.height)
+                    try texture.publish(frame.rgba, width: frame.width, height: frame.height)
                     photoURL = url; preview = frame
-                    value = ["textureId": textureId, "width": frame.width, "height": frame.height]
-                    DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
+                    value = ["textureId": textureId, "originalTextureId": originalTextureId,
+                        "width": frame.width, "height": frame.height]
+                    DispatchQueue.main.async {
+                        self.registry.textureFrameAvailable(self.textureId)
+                        self.registry.textureFrameAvailable(self.originalTextureId)
+                    }
                 case "render":
                     let ev = try exposure(args)
                     guard let url = photoURL else { throw NativeError.message("Open a photo first") }
@@ -149,7 +158,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                         return try writePNG(full.rgba, width: full.width, height: full.height).path
                     }
                 default:
-                    photoURL = nil; preview = nil; texture.clear()
+                    photoURL = nil; preview = nil; texture.clear(); originalTexture.clear()
                     if let handle = engine { exposure_destroy(handle); engine = nil }
                     value = nil
                 }

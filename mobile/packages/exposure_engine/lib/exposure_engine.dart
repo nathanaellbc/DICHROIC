@@ -1,10 +1,16 @@
 import 'package:flutter/services.dart';
 
 class NativePhoto {
-  const NativePhoto(this.textureId, this.width, this.height);
+  const NativePhoto(
+    this.textureId,
+    this.width,
+    this.height, {
+    this.originalTextureId,
+  });
   final int textureId;
   final int width;
   final int height;
+  final int? originalTextureId;
 }
 
 class ExposureEngine {
@@ -19,6 +25,7 @@ class ExposureEngine {
       result['textureId'] as int,
       result['width'] as int,
       result['height'] as int,
+      originalTextureId: result['originalTextureId'] as int?,
     );
   }
 
