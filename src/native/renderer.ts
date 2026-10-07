@@ -15,6 +15,8 @@ import { Tap, type TapName } from '../engine/taps';
 import { GROUPS, DIFFUSION_FAMILIES, FILM_FORMATS } from '../ui/model/tools';
 import { FILM_SECTIONS, PAPER_SECTIONS } from '../ui/model/stocks';
 import { NativeGpuDevice, type NativeGpuHost } from './gpuDevice';
+import { formatCube, identityLattice } from '../io/cube';
+import { DICHROIC_VERSION } from '../version';
 
 export interface NativeRenderHost extends NativeGpuHost {
   readAsset(name: string): ArrayBuffer;
@@ -64,10 +66,10 @@ export class NativeRenderer {
 
   setDepth(depth: DepthMap | undefined): void { this.depth = depth; }
 
-  private prepare(params: RenderParams, width: number, height: number, measure: Float32Array, measureWidth: number, measureHeight: number): RenderPlan {
+  private prepare(params: RenderParams, width: number, height: number, measure: Float32Array, measureWidth: number, measureHeight: number, mode: 'image' | 'cube' = 'image'): RenderPlan {
     if (this.disposed) throw new Error('Native renderer is closed.');
     const plan = buildRenderPlan(params, this.bundle, { width, height,
-      rgba: measure, measure: { rgba: measure, width: measureWidth, height: measureHeight } }, 'image',
+      rgba: measure, measure: { rgba: measure, width: measureWidth, height: measureHeight } }, mode,
     this.depth ? { depth: this.depth } : {});
     if (this.arenaKey !== plan.arenaKey) {
       this.graph?.dispose(); this.graph = undefined; this.chainKey = undefined;
@@ -128,6 +130,16 @@ export class NativeRenderer {
       this.pool.release();
     }
   }
+  async exportCube(params: RenderParams, size: number): Promise<string> {
+    const lattice = identityLattice(size), plan = this.prepare(params, lattice.width, lattice.height, lattice.rgba, lattice.width, lattice.height, 'cube');
+    try {
+      const rgb = await this.graph!.run(lattice.rgba, plan.core, Tap.RGB_OUT, { output: 'rgb', frame: plan.frame, overlap: 0,
+        maxBufferBytes: 32 * 1024 * 1024 });
+      return formatCube(rgb, size, { title: `DICHROIC ${params.film} / ${params.paper}`, film: params.film,
+        paper: params.paper, inputColorSpace: params.inputColorSpace, outputColorSpace: params.outputColorSpace,
+        disabledEffects: plan.disabledEffects, version: DICHROIC_VERSION });
+    } finally { this.releaseFrame(); }
+  }
 
   dispose(): void {
     if (this.disposed) return;
@@ -137,5 +149,13 @@ export class NativeRenderer {
     this.native.releasePipelines();
     this.cubes.clear();
     this.disposed = true;
+  }
+
+  releaseFrame(): void { this.graph?.releaseFrameResources(); this.pool.release(); }
+  clearResources(): void {
+    this.graph?.dispose(); this.graph = undefined; this.chainKey = undefined;
+    if (this.arenas) for (const arena of Object.values(this.arenas)) arena.destroy();
+    this.arenas = undefined; this.arenaKey = undefined;
+    this.pool.release(); this.native.releasePipelines();
   }
 }

@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import * as ort from 'onnxruntime-web/wasm';
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url';
-import { PATCH_SIZE } from './patch';
+import { PATCH_SIZE, removalModelInput } from './patch';
 
 const MODEL = 'https://huggingface.co/g-ronimo/lama/resolve/418036c6b541e526cdbb0bead1ec3a87dabede53/lama_512_int8.onnx';
 ort.env.wasm.wasmPaths = { wasm: wasmUrl };
@@ -24,9 +24,8 @@ self.onmessage = async (event: MessageEvent<{ rgb: Float32Array; mask: Float32Ar
       session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
     }
     self.postMessage({ status: 'Removing object on this device…' });
-    const n = PATCH_SIZE ** 2, input = new Float32Array(n * 4);
     const { rgb, mask } = event.data;
-    for (let i = 0; i < n; i++) { for (let c = 0; c < 3; c++) input[c * n + i] = rgb[i * 3 + c]! * (1 - mask[i]!); input[3 * n + i] = mask[i]!; }
+    const input = removalModelInput({ rgb, mask });
     const tensor = new ort.Tensor('float32', input, [1, 4, PATCH_SIZE, PATCH_SIZE]);
     const result = await session.run({ [session.inputNames[0]!]: tensor });
     const output = result[session.outputNames[0]!]!;

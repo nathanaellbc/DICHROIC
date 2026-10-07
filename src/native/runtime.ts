@@ -8,18 +8,27 @@ import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB
 import { buildIccProfile } from '../io/icc';
 import { prepareFocusOverlay } from '../ui/engine/focusCheck';
 import { diffusionRenderLongEdge, previewRenderLongEdge } from '../session/renderSize';
+import { NativeSource, type NativeSourceHost } from './source';
+import { sourceToDisplay } from '../io/display';
 
-export interface NativeRuntimeHost extends NativeRenderHost {
+export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   previewInput(): Float32Array;
   publish(rgb: Float32Array, width: number, height: number): void;
   complete(id: number, json: string): void;
   publishMask?(rgba: Uint8ClampedArray, width: number, height: number): void;
+  publishCube?(text: string): void;
 }
 
 /** JavaScriptCore hosts canonical math only; all compute/photography is native. */
 export function createNativeRuntime(host: NativeRuntimeHost) {
   const bundle = nativeAssets(host);
-  const renderer = new NativeRenderer(host, bundle);
+  let source: NativeSource | undefined;
+  let sourcePreview: { width: number; height: number; rgba: Float32Array } | undefined;
+  let exportSize = { width: 0, height: 0 };
+  const renderer = new NativeRenderer({ ...host, sourceTile(tile, into) {
+    if (source) source.region(exportSize.width, exportSize.height, tile.tileOriginX, tile.tileOriginY, tile.tileWidth, tile.tileHeight, into);
+    else host.sourceTile(tile, into);
+  } }, bundle);
   const defaults: RenderParams = { ...BASELINE_RENDER_PARAMS, inputColorSpace: 'sRGB', inputCctfDecoding: true, autoExposure: false };
   const tasks = new Map<number, Promise<void>>();
   let active = false;
@@ -28,6 +37,30 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
   let focusOverlay: ReturnType<typeof prepareFocusOverlay> | undefined;
   return {
     catalog: () => nativeCatalog(bundle),
+    attachSource(json: string): void { source = new NativeSource(host, JSON.parse(json)); sourcePreview = undefined; },
+    clearSource(): void { source = undefined; sourcePreview = undefined; },
+    hibernate(): void { renderer.clearResources(); sourcePreview = undefined; guide = undefined; focusOverlay = undefined; },
+    removalInput(json: string, buffer: ArrayBuffer): Float32Array {
+      if (!source) throw new Error('Native removal source is missing.');
+      const { width, height } = JSON.parse(json) as { width: number; height: number };
+      renderer.releaseFrame();
+      return source.prepare({ width, height, data: new Uint8Array(buffer) });
+    },
+    removalResult(buffer: ArrayBuffer): void { if (!source) throw new Error('Native removal source is missing.'); source.finish(new Float32Array(buffer)); },
+    removalCommit(): number {
+      if (!source) throw new Error('Native removal source is missing.');
+      sourcePreview = undefined; return source.commit();
+    },
+    removalCancel(): void { source?.cancel(); },
+    removalRestore(cursor: number): void { source?.restore(cursor); sourcePreview = undefined; },
+    removalPreview(edge: number, candidate: boolean): void {
+      if (!source) throw new Error('Native removal source is missing.');
+      const image = source.preview(edge, candidate);
+      const frame = sourceToDisplay(image.rgba, 4, image.width * image.height, source.meta);
+      const rgb = new Float32Array(image.width * image.height * 3);
+      for (let p = 0; p < image.width * image.height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
+      host.publish(rgb, image.width, image.height);
+    },
     renderSize(json: string): string {
       const { width, height, requested, params, preview } = JSON.parse(json) as {
         width: number; height: number; requested?: number; params: RenderParams; preview: boolean };
@@ -57,8 +90,8 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       return buildIccProfile(spec, label);
     },
     depthInput(width: number, height: number) {
-      const source = host.previewInput();
-      const rgba = Uint8ClampedArray.from(source, v => v * 255);
+      const input = source ? source.preview(Math.max(width, height)).rgba : host.previewInput();
+      const rgba = source ? sourceToDisplay(input, 4, width * height, source.meta).pixels : Uint8ClampedArray.from(input, v => v * 255);
       const [mw, mh] = modelInputSize(width, height, 392);
       const rgb = resampleRGB(rgba, width, height, mw, mh);
       guide = { rgba, width, height, rgb, mw, mh };
@@ -105,9 +138,17 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       active = true;
       const task = Promise.resolve().then(async () => {
         try {
-          const request = JSON.parse(json) as { operation: 'preview' | 'export'; params: RenderParams;
+          const request = JSON.parse(json) as { operation: 'preview' | 'export' | 'cube'; size?: number; params: RenderParams;
             width: number; height: number; measureWidth?: number; measureHeight?: number };
-          const input = host.previewInput();
+          if (request.operation === 'cube') {
+            host.publishCube?.(await renderer.exportCube(request.params, request.size ?? 33));
+            host.complete(id, '{"result":null}'); return;
+          }
+          if (source && request.operation === 'preview' && (sourcePreview?.width !== request.width || sourcePreview.height !== request.height)) {
+            sourcePreview = { width: request.width, height: request.height,
+              rgba: source.region(request.width, request.height, 0, 0, request.width, request.height) };
+          }
+          const input = sourcePreview?.rgba ?? host.previewInput();
           if (request.operation === 'preview') {
             const rgb = await renderer.preview(request.params, input, request.width, request.height);
             host.publish(rgb, request.width, request.height);
@@ -120,8 +161,9 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
               focusOverlay = prepareFocusOverlay({ width: request.width, height: request.height, pixels, colorSpace: 'srgb' }, depth);
             }
           } else if (request.operation === 'export') {
+            exportSize = { width: request.width, height: request.height };
             await renderer.export(request.params, request.width, request.height, input,
-              request.measureWidth!, request.measureHeight!);
+              sourcePreview?.width ?? request.measureWidth!, sourcePreview?.height ?? request.measureHeight!);
           } else throw new Error('Unknown native operation');
           host.complete(id, '{"result":null}');
         } catch (error) {

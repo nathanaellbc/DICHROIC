@@ -7,13 +7,22 @@ typedef Json = Map<String, dynamic>;
 /// Canonical host owns all photographic parameter rules. This controller
 /// serializes edits, coalesces slider samples, and retains one render in flight.
 class NativeEditorController extends ChangeNotifier {
-  NativeEditorController(this.engine);
+  NativeEditorController(this.engine) {
+    _events = engine.events.listen((event) {
+      status = event['message'] as String?;
+      _notify();
+    }, onError: (Object _) {});
+  }
   final ExposureEngine engine;
   NativePhoto? photo;
   Json catalog = {}, params = {};
   List<Json> groups = [];
   bool loading = false, exporting = false, rendering = false;
   String? error;
+  String? status;
+  StreamSubscription<Json>? _events;
+  bool erasing = false, removing = false, removalReady = false;
+  int _removalCursor = 0;
   final _pending = <String, Json>{};
   final List<Json> _undo = [], _redo = [];
   Json? _gestureBefore;
@@ -24,7 +33,87 @@ class NativeEditorController extends ChangeNotifier {
   bool _focusWorking = false;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
-  bool get busy => loading || exporting;
+  bool get busy => loading || exporting || removing;
+  Json _snapshot() => {...params, '_retouchCursor': _removalCursor};
+
+  Future<void> beginRemoval() async {
+    if (busy || erasing || photo == null) return;
+    loading = true;
+    error = null;
+    _notify();
+    try {
+      await _editing;
+      await _render;
+      await engine.beginRemoval();
+      erasing = true;
+      removalReady = false;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      loading = false;
+      _notify();
+    }
+  }
+
+  Future<void> previewRemoval(Uint8List mask, int width, int height) async {
+    if (busy || !erasing) return;
+    removing = true;
+    error = null;
+    removalReady = false;
+    _notify();
+    try {
+      await engine.previewRemoval(mask, width, height);
+      removalReady = true;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      removing = false;
+      _notify();
+    }
+  }
+
+  Future<void> finishRemoval({required bool apply}) async {
+    if (busy || !erasing || (apply && !removalReady)) return;
+    removing = true;
+    _notify();
+    try {
+      if (apply) {
+        final before = _snapshot();
+        _removalCursor = await engine.applyRemoval();
+        _undo.add(before);
+        _redo.clear();
+        _trimHistory();
+        _revision++;
+      } else {
+        await engine.cancelRemoval();
+      }
+      erasing = false;
+      removalReady = false;
+      _rendered = -1;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      removing = false;
+      _notify();
+      _scheduleRender();
+    }
+  }
+
+  Future<void> restartRemoval() async {
+    if (busy || !erasing) return;
+    removing = true;
+    _notify();
+    try {
+      await engine.cancelRemoval();
+      await engine.beginRemoval();
+      removalReady = false;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      removing = false;
+      _notify();
+    }
+  }
 
   void _notify() {
     if (!_disposed) notifyListeners();
@@ -70,6 +159,9 @@ class NativeEditorController extends ChangeNotifier {
       _undo.clear();
       _redo.clear();
       _gestureBefore = null;
+      _removalCursor = 0;
+      erasing = false;
+      removalReady = false;
       _revision++;
       await _controls();
     } catch (e) {
@@ -82,14 +174,14 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   void beginGesture() {
-    _gestureBefore ??= Map.of(params);
+    _gestureBefore ??= _snapshot();
   }
 
   Future<void> endGesture() async {
     await _editing;
     final before = _gestureBefore;
     _gestureBefore = null;
-    if (before != null && !mapEquals(before, params)) {
+    if (before != null && !mapEquals(before, _snapshot())) {
       _undo.add(before);
       _redo.clear();
       _trimHistory();
@@ -102,7 +194,7 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   Future<void> edit(String action, String id, Object? value) {
-    if (photo == null || busy) return Future.value();
+    if (photo == null || busy || erasing) return Future.value();
     // Each tool retains its newest value; updates to other tools are preserved.
     final key = '$action:$id';
     _pending[key] = {
@@ -119,7 +211,7 @@ class NativeEditorController extends ChangeNotifier {
       while (_pending.isNotEmpty && !_disposed) {
         final key = _pending.keys.first;
         final edit = _pending.remove(key)!;
-        final before = Map<String, dynamic>.of(params);
+        final before = _snapshot();
         final next = await engine.patch(
           params,
           edit['action'] as String,
@@ -151,7 +243,7 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   void _scheduleRender() {
-    if (busy || _disposed || rendering) return;
+    if (busy || erasing || _disposed || rendering) return;
     _render = _drainRender();
   }
 
@@ -159,7 +251,11 @@ class NativeEditorController extends ChangeNotifier {
     rendering = true;
     _notify();
     try {
-      while (!_disposed && !busy && photo != null && _rendered != _revision) {
+      while (!_disposed &&
+          !busy &&
+          !erasing &&
+          photo != null &&
+          _rendered != _revision) {
         final revision = _revision;
         await engine.develop(Map.of(params));
         _rendered = revision;
@@ -173,11 +269,11 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   Future<void> undo() async {
-    if (busy) return;
+    if (busy || erasing) return;
     await _editing;
     if (_undo.isEmpty) return;
-    _redo.add(Map.of(params));
-    params = _undo.removeLast();
+    _redo.add(_snapshot());
+    await _restore(_undo.removeLast());
     _revision++;
     await _controls();
     _notify();
@@ -185,11 +281,11 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   Future<void> redo() async {
-    if (busy) return;
+    if (busy || erasing) return;
     await _editing;
     if (_redo.isEmpty) return;
-    _undo.add(Map.of(params));
-    params = _redo.removeLast();
+    _undo.add(_snapshot());
+    await _restore(_redo.removeLast());
     _revision++;
     await _controls();
     _notify();
@@ -197,15 +293,42 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   Future<void> resetAll() => edit('fields', 'all', catalog['baseline']);
-  Future<String?> export() async {
-    if (photo == null || busy) return null;
+  Future<void> _restore(Json snapshot) async {
+    final restored = Map<String, dynamic>.of(snapshot);
+    final cursor = restored.remove('_retouchCursor') as int? ?? 0;
+    if (_removalCursor != cursor) {
+      await _render;
+      await engine.restoreRemoval(cursor);
+      _removalCursor = cursor;
+    }
+    params = restored;
+  }
+
+  Future<String?> export({
+    String format = 'png8',
+    int? longEdge,
+    double quality = 1,
+    int? cubeSize,
+  }) async {
+    if (photo == null || busy || erasing) return null;
     exporting = true;
     error = null;
     _notify();
     try {
       await _editing;
       await _render;
-      return await engine.developExport(Map.of(params));
+      if (cubeSize != null) {
+        return await engine.exportCube(Map.of(params), cubeSize);
+      }
+      if (format == 'png8' && longEdge == null && quality == 1) {
+        return await engine.developExport(Map.of(params));
+      }
+      return await engine.exportImage(
+        Map.of(params),
+        format: format,
+        longEdge: longEdge,
+        quality: quality,
+      );
     } catch (e) {
       error = e.toString();
       return null;
@@ -220,6 +343,7 @@ class NativeEditorController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation++;
+    _events?.cancel();
     Future<void>(() async {
       await _editing;
       await _render;

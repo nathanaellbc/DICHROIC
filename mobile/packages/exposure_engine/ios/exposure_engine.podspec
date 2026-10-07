@@ -13,6 +13,7 @@ Pod::Spec.new do |s|
   s.dependency 'onnxruntime-objc', '1.30.0'
   s.platform = :ios, '16.0'
   s.swift_version = '5.9'
+  s.static_framework = true
   s.frameworks = 'Metal', 'QuartzCore', 'CoreGraphics', 'Foundation', 'Accelerate', 'JavaScriptCore'
   s.libraries = 'c++'
 end

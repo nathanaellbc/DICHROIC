@@ -69,7 +69,7 @@ private final class PreviewTexture: NSObject, FlutterTexture {
     }
 }
 
-public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
+public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
     private let texture = PreviewTexture()
     private let originalTexture = PreviewTexture()
@@ -83,6 +83,17 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     private var photoURL: URL?
     private var preview: PhotoFrame?
     private var memoryObserver: NSObjectProtocol?
+    private var eventSink: FlutterEventSink?
+
+    public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        eventSink = events; return nil
+    }
+    public func onCancel(withArguments arguments: Any?) -> FlutterError? { eventSink = nil; return nil }
+    private func status(_ text: String, done: Int? = nil, total: Int? = nil) {
+        var value: [String: Any] = ["message": text]
+        if let done = done, let total = total { value["done"] = done; value["total"] = total }
+        DispatchQueue.main.async { [weak self] in self?.eventSink?(value) }
+    }
 
     private init(registry: FlutterTextureRegistry) {
         self.registry = registry
@@ -96,7 +107,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                 guard let self = self else { return }
                 self.preview = nil
                 if let engine = self.engine { exposure_destroy(engine); self.engine = nil }
-                if self.graph?.isBusy != true { self.graph = nil }
+                self.graph?.hibernate()
             }
         }
     }
@@ -105,6 +116,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         let instance = ExposureEnginePlugin(registry: registrar.textures())
         let channel = FlutterMethodChannel(name: "exposure/native", binaryMessenger: registrar.messenger())
         registrar.addMethodCallDelegate(instance, channel: channel)
+        FlutterEventChannel(name: "exposure/status", binaryMessenger: registrar.messenger()).setStreamHandler(instance)
     }
 
     deinit {
@@ -116,7 +128,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        if ["catalog", "controls", "patch", "develop", "developExport", "focusPreview"].contains(call.method) {
+        if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -136,6 +149,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                     try texture.publish(frame.rgba, width: frame.width, height: frame.height)
                     photoURL = url; preview = frame
                     graph?.clearDepth()
+                    graph?.clearSource()
                     focusTexture.clear()
                     value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
                         "width": frame.width, "height": frame.height]
@@ -190,12 +204,63 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
         }
         self.graph = graph
+        graph.onProgress = { [weak self] done, total in self?.status("Developing…", done: done, total: total) }
         graph.onMask = { [weak self] rgba, width, height in
             guard let self = self else { return }
             try self.focusTexture.publish(rgba, width: width, height: height)
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.focusTextureId) }
         }
         return graph
+    }
+
+    private func handleRemoval(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args = call.arguments as? [String: Any] ?? [:]
+        queue.async { [self] in
+            do {
+                let graph = try graphRuntime()
+                guard !graph.isBusy, let url = photoURL else { throw NativeError.message("Finish development before removing an object") }
+                if graph.sourceStore == nil {
+                    status("Preparing photo…")
+                    try autoreleasepool {
+                        let full = try decode(url, longEdge: nil)
+                        try graph.attachSource(NativeSourceStore(rgba: full.rgba, width: full.width, height: full.height))
+                    }
+                }
+                var value: Any?
+                switch call.method {
+                case "eraseBegin":
+                    try graph.removalPreview(candidate: false)
+                case "erasePreview":
+                    guard let mask = args["mask"] as? FlutterStandardTypedData,
+                          let width = args["width"] as? Int, let height = args["height"] as? Int else {
+                        throw NativeError.message("Brush over an object first")
+                    }
+                    let input = try graph.prepareRemoval(mask.data, width: width, height: height)
+                    status("Downloading LaMa (62 MB, cached for next time)…")
+                    let model = try NativeModels.model(NativeModels.lamaURL, name: "lama-418036c6-int8.onnx")
+                    status("Removing object on this device…")
+                    let output = try NativeModels.infer(model: model, input: input, shape: [1, 4, 512, 512])
+                    guard output.shape == [1, 3, 512, 512] else { throw NativeError.message("Invalid LaMa dimensions") }
+                    try graph.finishRemoval(output.data)
+                    try graph.removalPreview(candidate: true)
+                case "eraseApply":
+                    value = try graph.removalAction("removalCommit")
+                    graph.clearDepth(); focusTexture.clear()
+                case "eraseCancel":
+                    _ = try graph.removalAction("removalCancel")
+                case "eraseRestore":
+                    guard let cursor = args["cursor"] as? Int else { throw NativeError.message("Removal history is missing") }
+                    _ = try graph.removalAction("removalRestore", cursor: cursor)
+                    graph.clearDepth(); focusTexture.clear()
+                default: throw NativeError.message("Unknown removal operation")
+                }
+                status("")
+                DispatchQueue.main.async { result(value) }
+            } catch {
+                status("")
+                DispatchQueue.main.async { result(FlutterError(code: "native_removal", message: error.localizedDescription, details: nil)) }
+            }
+        }
     }
 
     private func handleGraph(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -205,11 +270,33 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
             func fail(_ error: Error) { finish(FlutterError(code: "native_graph", message: error.localizedDescription, details: nil)) }
             do {
                 let graph = try graphRuntime()
-                if call.method == "catalog" { finish(graph.catalog); return }
+                if call.method == "catalog" {
+                    var catalog = try JSONSerialization.jsonObject(with: Data(graph.catalog.utf8)) as! [String: Any]
+                    let encoders = CGImageDestinationCopyTypeIdentifiers() as! [String]
+                    var formats = ["png8", "png16", "tiff16", "jpeg"]
+                    if encoders.contains(UTType.webP.identifier) { formats.append("webp") }
+                    if let type = UTType(mimeType: "image/avif"), encoders.contains(type.identifier) { formats.append("avif") }
+                    catalog["exportFormats"] = formats
+                    finish(String(decoding: try JSONSerialization.data(withJSONObject: catalog), as: UTF8.self)); return
+                }
                 if call.method == "patch" { finish(try graph.patch(args)); return }
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
                 if call.method == "focusPreview" { try graph.focusPreview(params); finish(nil); return }
+                if call.method == "cubeExport" {
+                    guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
+                    let size = (args["size"] as? Int) ?? 33
+                    try graph.request(operation: "cube", params: params, width: 0, height: 0, cubeSize: size) { outcome in
+                        defer { graph.releaseExport() }
+                        do {
+                            try outcome.get()
+                            let url = FileManager.default.temporaryDirectory.appendingPathComponent("DICHROIC-\(size)-\(UUID().uuidString).cube")
+                            try graph.outputCube.write(to: url, atomically: true, encoding: .utf8)
+                            finish(url.path)
+                        } catch { fail(error) }
+                    }
+                    return
+                }
                 guard let url = photoURL else { throw NativeError.message("Open a photo first") }
                 guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
                 let measured = try preview ?? decode(url, longEdge: 1600)
@@ -218,14 +305,17 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                 let frame = edge < max(measured.width, measured.height) ? try decode(url, longEdge: edge) : measured
                 graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
                 if params["lensBlurEnabled"] as? Bool == true && !graph.depthReady {
+                    status("Preparing depth…")
                     let guide = try decode(url, longEdge: 1024)
                     graph.previewRGBA = guide.rgba; graph.previewWidth = guide.width; graph.previewHeight = guide.height
                     let input = try graph.prepareDepth()
+                    status("Downloading depth model (27 MB, cached for next time)…")
                     let model = try NativeModels.model(NativeModels.depthURL, name: "depth-4472b736-int8.onnx")
                     let result = try NativeModels.infer(model: model, input: input.data, shape: [1, 3, input.height, input.width])
                     guard result.shape.count >= 2 else { throw NativeError.message("Invalid depth dimensions") }
                     try graph.finishDepth(result.data, width: result.shape[result.shape.count - 1], height: result.shape[result.shape.count - 2])
                     graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
+                    status("")
                 }
                 if call.method == "develop" {
                     // The display texture has an sRGB encoding. Export retains
@@ -240,13 +330,16 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
                         requested: (args["longEdge"] as? NSNumber)?.intValue, preview: false)
                     let full = try autoreleasepool { try decode(url, longEdge: edge) }
                     graph.sourceRGBA = full.rgba; graph.sourceWidth = full.width; graph.sourceHeight = full.height
-                    try graph.request(operation: "export", params: params, width: full.width, height: full.height) { [weak self, weak graph] outcome in
+                    let format = args["format"] as? String ?? "png8", bits = ["png16", "tiff16"].contains(format) ? 16 : 8
+                    try graph.request(operation: "export", params: params, width: full.width, height: full.height, bits: bits) { [weak self, weak graph] outcome in
                         guard let self = self, let graph = graph else { fail(NativeError.message("Native renderer closed")); return }
                         defer { graph.releaseExport() }
                         do {
                             try outcome.get()
                             let colorSpace = params["outputColorSpace"] as? String ?? "sRGB"
-                            finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace, icc: graph.icc(colorSpace)).path)
+                            finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace,
+                                icc: graph.icc(colorSpace), bits: bits, format: format, quality: (args["quality"] as? NSNumber)?.doubleValue ?? 1,
+                                sourceURL: url).path)
                         } catch { fail(error) }
                     }
                 }
@@ -320,7 +413,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         return .message(String(cString: message))
     }
 
-    private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB", icc: Data? = nil) throws -> URL {
+    private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB", icc: Data? = nil,
+                          bits: Int = 8, format: String = "png8", quality: Double = 1, sourceURL: URL? = nil) throws -> URL {
         var space = icc.flatMap { CGColorSpace(iccData: $0 as CFData) }
         if space == nil {
         let name: CFString
@@ -338,16 +432,42 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin {
         space = CGColorSpace(name: name)
         }
         guard let space = space, let provider = CGDataProvider(data: rgba as CFData),
-              let image = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
-                bytesPerRow: width * 4, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
+              let image = CGImage(width: width, height: height, bitsPerComponent: bits, bitsPerPixel: bits * 4,
+                bytesPerRow: width * 4 * (bits / 8), space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue |
+                    (bits == 16 ? CGBitmapInfo.byteOrder16Little.rawValue : CGBitmapInfo.byteOrder32Big.rawValue)),
                 provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
             throw NativeError.message("Could not prepare export pixels")
         }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Exposure-\(UUID().uuidString).png")
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+        let type: UTType
+        switch format {
+        case "png8", "png16": type = .png
+        case "tiff16": type = .tiff
+        case "jpeg": type = .jpeg
+        case "webp": type = .webP
+        case "avif": guard let avif = UTType(mimeType: "image/avif") else { throw NativeError.message("AVIF encoding is unavailable") }; type = avif
+        default: throw NativeError.message("Unknown export format")
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("DICHROIC-\(UUID().uuidString).\(type.preferredFilenameExtension ?? "png")")
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, type.identifier as CFString, 1, nil) else {
             throw NativeError.message("Could not create export file")
         }
-        CGImageDestinationAddImage(destination, image, nil)
+        var metadata: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: min(1, max(0.01, quality)),
+            kCGImagePropertyOrientation: 1, kCGImagePropertyPixelWidth: width, kCGImagePropertyPixelHeight: height]
+        if let sourceURL = sourceURL, let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
+           let original = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
+            for key in [kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary, kCGImagePropertyIPTCDictionary, kCGImagePropertyTIFFDictionary] {
+                metadata[key] = original[key]
+            }
+        }
+        var exif = metadata[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        exif[kCGImagePropertyExifPixelXDimension] = width; exif[kCGImagePropertyExifPixelYDimension] = height
+        metadata[kCGImagePropertyExifDictionary] = exif
+        if format == "tiff16" {
+            var tiff = metadata[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+            tiff[kCGImagePropertyTIFFCompression] = 1; tiff[kCGImagePropertyTIFFOrientation] = 1
+            metadata[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        CGImageDestinationAddImage(destination, image, metadata as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             try? FileManager.default.removeItem(at: url)
             throw NativeError.message("PNG export failed")

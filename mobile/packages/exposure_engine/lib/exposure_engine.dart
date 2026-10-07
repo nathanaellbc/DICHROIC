@@ -19,6 +19,21 @@ class NativePhoto {
 
 class ExposureEngine {
   static const _channel = MethodChannel('exposure/native');
+  Stream<Map<String, dynamic>> get events => const EventChannel(
+    'exposure/status',
+  ).receiveBroadcastStream().map((e) => Map<String, dynamic>.from(e as Map));
+  Future<void> beginRemoval() => _channel.invokeMethod<void>('eraseBegin');
+  Future<void> previewRemoval(Uint8List mask, int width, int height) =>
+      _channel.invokeMethod<void>('erasePreview', {
+        'mask': mask,
+        'width': width,
+        'height': height,
+      });
+  Future<int> applyRemoval() async =>
+      await _channel.invokeMethod<int>('eraseApply') ?? 0;
+  Future<void> cancelRemoval() => _channel.invokeMethod<void>('eraseCancel');
+  Future<void> restoreRemoval(int cursor) =>
+      _channel.invokeMethod<void>('eraseRestore', {'cursor': cursor});
 
   Future<Map<String, dynamic>> catalog() async {
     final json = await _channel.invokeMethod<String>('catalog');
@@ -58,6 +73,31 @@ class ExposureEngine {
       'params': params,
     });
     if (path == null) throw StateError('Native export returned no file.');
+    return path;
+  }
+
+  Future<String> exportImage(
+    Map<String, dynamic> params, {
+    required String format,
+    int? longEdge,
+    double quality = 1,
+  }) async {
+    final path = await _channel.invokeMethod<String>('developExport', {
+      'params': params,
+      'format': format,
+      'longEdge': longEdge,
+      'quality': quality,
+    });
+    if (path == null) throw StateError('Native export returned no file.');
+    return path;
+  }
+
+  Future<String> exportCube(Map<String, dynamic> params, int size) async {
+    final path = await _channel.invokeMethod<String>('cubeExport', {
+      'params': params,
+      'size': size,
+    });
+    if (path == null) throw StateError('Native LUT export returned no file.');
     return path;
   }
 

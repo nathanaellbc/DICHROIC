@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'editor_widgets.dart';
+import 'removal_brush.dart';
 
 /// Gestures transform the cached native texture; they never schedule a develop.
 class PhotoViewport extends StatefulWidget {
@@ -14,11 +15,15 @@ class PhotoViewport extends StatefulWidget {
     this.onFocusStart,
     this.onFocusPreview,
     this.onFocusEnd,
+    this.brush,
+    this.showBrush = true,
   });
   final NativePhoto photo;
   final Offset? focus;
   final VoidCallback? onFocusStart;
   final ValueChanged<Offset>? onFocusPreview, onFocusEnd;
+  final RemovalBrush? brush;
+  final bool showBrush;
 
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
@@ -38,6 +43,15 @@ class _PhotoViewportState extends State<PhotoViewport>
   bool _before = false;
   bool _picking = false;
   Offset? _focus;
+  bool _brushing = false;
+  int _pointerCount = 0;
+  Offset _photoPoint(Offset point) {
+    final local = (point - _viewport.center(Offset.zero) - _offset) / _scale;
+    return Offset(
+      (local.dx / _image.width + .5).clamp(0.0, 1.0),
+      (local.dy / _image.height + .5).clamp(0.0, 1.0),
+    );
+  }
 
   @override
   void initState() {
@@ -79,9 +93,33 @@ class _PhotoViewportState extends State<PhotoViewport>
     _startScale = _scale;
     _startOffset = _offset;
     _startFocal = details.localFocalPoint - _viewport.center(Offset.zero);
+    _pointerCount = details.pointerCount;
+    if (widget.brush?.painting == true &&
+        widget.showBrush &&
+        details.pointerCount == 1) {
+      _brushing = true;
+      widget.brush!.begin(
+        _photoPoint(details.localFocalPoint),
+        widget.brush!.diameter / (2 * _image.width * _scale),
+      );
+    }
   }
 
   void _update(ScaleUpdateDetails details) {
+    if (_brushing && details.pointerCount == 1) {
+      widget.brush!.add(_photoPoint(details.localFocalPoint));
+      return;
+    }
+    if (_brushing) {
+      widget.brush?.cancel();
+      _brushing = false;
+    }
+    if (_pointerCount != details.pointerCount) {
+      _startScale = _scale / details.scale;
+      _startOffset = _offset;
+      _startFocal = details.localFocalPoint - _viewport.center(Offset.zero);
+      _pointerCount = details.pointerCount;
+    }
     final rawScale = _startScale * details.scale;
     final scale = rawScale < 1
         ? 1 - (1 - rawScale) * 0.25
@@ -167,8 +205,14 @@ class _PhotoViewportState extends State<PhotoViewport>
                 behavior: HitTestBehavior.opaque,
                 onScaleStart: _start,
                 onScaleUpdate: _update,
-                onScaleEnd: (details) =>
-                    _settle(velocity: details.velocity.pixelsPerSecond),
+                onScaleEnd: (details) {
+                  if (_brushing) {
+                    widget.brush?.end();
+                    _brushing = false;
+                  } else {
+                    _settle(velocity: details.velocity.pixelsPerSecond);
+                  }
+                },
                 onDoubleTap: () {
                   _ticker.stop();
                   _settle(reset: true);
@@ -190,6 +234,14 @@ class _PhotoViewportState extends State<PhotoViewport>
                                   : widget.photo.textureId,
                               filterQuality: FilterQuality.medium,
                             ),
+                            if (widget.brush != null &&
+                                widget.showBrush &&
+                                !_before)
+                              IgnorePointer(
+                                child: CustomPaint(
+                                  painter: BrushPainter(widget.brush!),
+                                ),
+                              ),
                             if (_picking && widget.photo.focusTextureId != null)
                               IgnorePointer(
                                 child: Texture(

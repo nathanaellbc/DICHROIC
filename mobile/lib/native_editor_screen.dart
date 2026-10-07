@@ -1,11 +1,11 @@
-import 'dart:io';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
 import 'editor_widgets.dart';
 import 'native_editor_controller.dart';
 import 'photo_viewport.dart';
+import 'removal_brush.dart';
+import 'export_sheet.dart';
 
 class NativeEditorScreen extends StatefulWidget {
   const NativeEditorScreen({super.key, this.controller});
@@ -19,9 +19,12 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
       widget.controller ?? NativeEditorController(ExposureEngine());
   String groupId = 'camera';
   final selections = <String, String>{};
+  final brush = RemovalBrush();
+  final exportPreferences = ExportPreferences();
   @override
   void dispose() {
     controller.dispose();
+    brush.dispose();
     super.dispose();
   }
 
@@ -63,69 +66,159 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
 
   Future<void> stocks() =>
       editorSheet<void>(context, StockSheet(controller: controller));
-  Future<void> export() async {
-    await editorSheet<void>(
-      context,
-      ListenableBuilder(
-        listenable: controller,
-        builder: (context, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Export',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Original resolution · PNG 8-bit',
-              style: TextStyle(color: secondary),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              '${controller.params['outputColorSpace']}',
-              style: const TextStyle(color: secondary),
-            ),
-            const Spacer(),
-            if (controller.error != null)
-              Text(
-                controller.error!,
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-            Press(
-              label: 'Develop & Share',
-              selected: true,
-              onTap: controller.exporting
-                  ? null
-                  : () async {
-                      final path = await controller.export();
-                      if (path == null || !context.mounted) return;
-                      try {
-                        final box = context.findRenderObject() as RenderBox?;
-                        await SharePlus.instance.share(
-                          ShareParams(
-                            files: [XFile(path)],
-                            sharePositionOrigin: box == null
-                                ? null
-                                : box.localToGlobal(Offset.zero) & box.size,
-                          ),
-                        );
-                      } finally {
-                        if (await File(path).exists()) {
-                          await File(path).delete();
-                        }
-                      }
-                    },
-              child: Text(
-                controller.exporting ? 'Developing…' : 'Develop & Share',
-              ),
-            ),
-          ],
+  Future<void> menu() => editorSheet<void>(
+    context,
+    ListView(
+      children: [
+        ListTile(
+          leading: const Glyph('open'),
+          title: const Text('Open photo'),
+          onTap: () {
+            Navigator.pop(context);
+            pick();
+          },
         ),
+        ListTile(
+          leading: const Glyph('erase'),
+          title: const Text('Remove Object'),
+          enabled: controller.photo != null,
+          onTap: () {
+            Navigator.pop(context);
+            brush.clear();
+            controller.beginRemoval();
+          },
+        ),
+        ListTile(
+          leading: const Glyph('redo'),
+          title: const Text('Redo'),
+          enabled: controller.canRedo,
+          onTap: () {
+            Navigator.pop(context);
+            controller.redo();
+          },
+        ),
+        ListTile(
+          leading: const Glyph('reset'),
+          title: const Text('Reset all controls'),
+          enabled: controller.photo != null,
+          onTap: () {
+            Navigator.pop(context);
+            controller.resetAll();
+          },
+        ),
+      ],
+    ),
+    fraction: .4,
+  );
+
+  Widget removalControls() => ListenableBuilder(
+    listenable: brush,
+    builder: (context, _) => Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Row(
+            children: [
+              Glyph('erase', size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Remove Object',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              Spacer(),
+              Text(
+                'Original · grading paused',
+                style: TextStyle(color: secondary, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (!controller.removalReady)
+            DetailSlider(
+              value: brush.diameter,
+              min: 8,
+              max: 80,
+              step: 1,
+              label: 'Brush size',
+              onChanged: (v) => setState(() => brush.diameter = v),
+            ),
+          Row(
+            children: [
+              Press(
+                label: 'Brush',
+                selected: brush.painting && !brush.eraser,
+                onTap: () => setState(() {
+                  brush.painting = true;
+                  brush.eraser = false;
+                }),
+                child: const Glyph('erase', size: 20),
+              ),
+              const SizedBox(width: 6),
+              Press(
+                label: 'Move photo',
+                selected: !brush.painting,
+                onTap: () => setState(() => brush.painting = false),
+                child: const Glyph('move', size: 20),
+              ),
+              const SizedBox(width: 6),
+              Press(
+                label: 'Undo brush stroke',
+                onTap: brush.isEmpty || controller.removalReady
+                    ? null
+                    : brush.undo,
+                child: const Glyph('undo', size: 20),
+              ),
+              const Spacer(),
+              if (controller.removalReady)
+                Press(
+                  label: 'Try again',
+                  onTap: controller.busy
+                      ? null
+                      : () {
+                          brush.clear();
+                          controller.restartRemoval();
+                        },
+                  child: const Text('Try again'),
+                )
+              else
+                Press(
+                  label: 'Remove object',
+                  selected: true,
+                  filled: true,
+                  onTap: brush.isEmpty || controller.busy
+                      ? null
+                      : () async {
+                          final photo = controller.photo!,
+                              mask = await brush.mask(
+                                photo.width,
+                                photo.height,
+                              );
+                          await controller.previewRemoval(
+                            mask.pixels,
+                            mask.width,
+                            mask.height,
+                          );
+                        },
+                  child: Text(controller.removing ? 'Removing…' : 'Remove'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Brush over the object. Pinch or use two fingers to move.',
+            style: TextStyle(color: secondary, fontSize: 11),
+          ),
+        ],
       ),
-      fraction: .42,
-      blur: 3.2,
-    );
-  }
+    ),
+  );
+  Future<void> export() => editorSheet<void>(
+    context,
+    ExportSheet(controller: controller, preferences: exportPreferences),
+    fraction: .68,
+    blur: 3.2,
+  );
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -144,107 +237,115 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final wide = constraints.maxWidth > 720;
-              final controls = Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (selected != null)
-                    ToolPanel(
-                      key: ValueKey(selected['id']),
-                      tool: selected,
-                      controller: controller,
-                    ),
-                  SizedBox(
-                    height: 88,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      itemCount: tools.length,
-                      separatorBuilder: (_, _) => const SizedBox(width: 5),
-                      itemBuilder: (context, i) {
-                        final tool = tools[i];
-                        final active = tool['id'] == selected?['id'];
-                        return SizedBox(
-                          width: 65,
-                          child: Column(
-                            children: [
-                              Stack(
-                                children: [
-                                  Press(
-                                    label: tool['title'] as String,
-                                    selected: active,
-                                    onTap: () => setState(
-                                      () => selections[groupId] =
-                                          tool['id'] as String,
-                                    ),
-                                    child: Glyph(
-                                      tool['icon'] as String,
-                                      color: active ? signalBlue : secondary,
-                                    ),
-                                  ),
-                                  if (tool['modified'] == true)
-                                    const Positioned(
-                                      right: 7,
-                                      top: 6,
-                                      child: SizedBox(
-                                        width: 5,
-                                        height: 5,
-                                        child: DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            color: signalBlue,
-                                            shape: BoxShape.circle,
+              final controls = controller.erasing
+                  ? removalControls()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (selected != null)
+                          ToolPanel(
+                            key: ValueKey(selected['id']),
+                            tool: selected,
+                            controller: controller,
+                          ),
+                        SizedBox(
+                          height: 88,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                            itemCount: tools.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(width: 5),
+                            itemBuilder: (context, i) {
+                              final tool = tools[i];
+                              final active = tool['id'] == selected?['id'];
+                              return SizedBox(
+                                width: 65,
+                                child: Column(
+                                  children: [
+                                    Stack(
+                                      children: [
+                                        Press(
+                                          label: tool['title'] as String,
+                                          selected: active,
+                                          onTap: () => setState(
+                                            () => selections[groupId] =
+                                                tool['id'] as String,
+                                          ),
+                                          child: Glyph(
+                                            tool['icon'] as String,
+                                            color: active
+                                                ? signalBlue
+                                                : secondary,
                                           ),
                                         ),
+                                        if (tool['modified'] == true)
+                                          const Positioned(
+                                            right: 7,
+                                            top: 6,
+                                            child: SizedBox(
+                                              width: 5,
+                                              height: 5,
+                                              child: DecoratedBox(
+                                                decoration: BoxDecoration(
+                                                  color: signalBlue,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      tool['label'] as String,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: active
+                                            ? Colors.white
+                                            : secondary,
                                       ),
                                     ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                tool['label'] as String,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: active ? Colors.white : secondary,
+                                  ],
                                 ),
-                              ),
-                            ],
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  const Divider(height: 1, color: Color(0x33545458)),
-                  SizedBox(
-                    height: 62,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: controller.groups
-                          .map(
-                            (g) => Press(
-                              label: g['label'] as String,
-                              selected: g['id'] == groupId,
-                              onTap: () =>
-                                  setState(() => groupId = g['id'] as String),
-                              child: Glyph(
-                                g['icon'] as String,
-                                color: g['id'] == groupId
-                                    ? signalBlue
-                                    : secondary,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ],
-              );
+                        ),
+                        const Divider(height: 1, color: Color(0x33545458)),
+                        SizedBox(
+                          height: 62,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: controller.groups
+                                .map(
+                                  (g) => Press(
+                                    label: g['label'] as String,
+                                    selected: g['id'] == groupId,
+                                    onTap: () => setState(
+                                      () => groupId = g['id'] as String,
+                                    ),
+                                    child: Glyph(
+                                      g['icon'] as String,
+                                      color: g['id'] == groupId
+                                          ? signalBlue
+                                          : secondary,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    );
               final viewport = controller.photo == null
                   ? Center(
                       child: Column(
@@ -276,7 +377,12 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                     )
                   : PhotoViewport(
                       photo: controller.photo!,
-                      focus: controller.params['lensBlurEnabled'] == true
+                      brush: controller.erasing ? brush : null,
+                      showBrush:
+                          !controller.removalReady && !controller.removing,
+                      focus:
+                          !controller.erasing &&
+                              controller.params['lensBlurEnabled'] == true
                           ? Offset(
                               (controller.params['lensFocusX'] as num)
                                   .toDouble(),
@@ -305,13 +411,22 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                       child: Row(
                         children: [
                           Press(
-                            label: 'Open photo',
-                            onTap: controller.busy ? null : pick,
-                            child: const Glyph('more'),
+                            label: controller.erasing
+                                ? 'Cancel removal'
+                                : 'More options',
+                            onTap: controller.busy
+                                ? null
+                                : controller.erasing
+                                ? () => controller.finishRemoval(apply: false)
+                                : menu,
+                            child: Glyph(controller.erasing ? 'close' : 'more'),
                           ),
                           Expanded(
                             child: GestureDetector(
-                              onTap: controller.photo == null ? null : stocks,
+                              onTap:
+                                  controller.photo == null || controller.erasing
+                                  ? null
+                                  : stocks,
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -320,7 +435,9 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      controller.photo == null
+                                      controller.erasing
+                                          ? 'Remove Object'
+                                          : controller.photo == null
                                           ? 'DICHROIC'
                                           : stockName('film'),
                                       maxLines: 1,
@@ -345,21 +462,23 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                               ),
                             ),
                           ),
-                          Press(
-                            label: 'Film & Paper',
-                            plain: true,
-                            onTap: controller.photo == null ? null : stocks,
-                            child: const Glyph('upDown', size: 18),
-                          ),
-                          Press(
-                            label: 'Undo',
-                            plain: true,
-                            onTap: controller.canUndo && !controller.busy
-                                ? controller.undo
-                                : null,
-                            child: const Glyph('undo', size: 18),
-                          ),
-                          if (wide)
+                          if (!controller.erasing)
+                            Press(
+                              label: 'Film & Paper',
+                              plain: true,
+                              onTap: controller.photo == null ? null : stocks,
+                              child: const Glyph('upDown', size: 18),
+                            ),
+                          if (!controller.erasing)
+                            Press(
+                              label: 'Undo',
+                              plain: true,
+                              onTap: controller.canUndo && !controller.busy
+                                  ? controller.undo
+                                  : null,
+                              child: const Glyph('undo', size: 18),
+                            ),
+                          if (wide && !controller.erasing)
                             Press(
                               label: 'Redo',
                               plain: true,
@@ -369,12 +488,23 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                               child: const Glyph('redo', size: 18),
                             ),
                           Press(
-                            label: 'Export',
+                            label: controller.erasing
+                                ? 'Apply removal'
+                                : 'Export',
                             selected: true,
-                            onTap: controller.photo == null || controller.busy
+                            filled: true,
+                            onTap:
+                                controller.photo == null ||
+                                    controller.busy ||
+                                    (controller.erasing &&
+                                        !controller.removalReady)
                                 ? null
+                                : controller.erasing
+                                ? () => controller.finishRemoval(apply: true)
                                 : export,
-                            child: const Glyph('share'),
+                            child: Glyph(
+                              controller.erasing ? 'check' : 'share',
+                            ),
                           ),
                         ],
                       ),
@@ -397,6 +527,14 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                     const Padding(
                       padding: EdgeInsets.all(12),
                       child: Text('Opening photo…'),
+                    ),
+                  if (controller.status?.isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        controller.status!,
+                        style: const TextStyle(color: secondary, fontSize: 12),
+                      ),
                     ),
                   if (controller.error != null)
                     Padding(

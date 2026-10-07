@@ -26,15 +26,55 @@ final class NativeGraphRuntime {
     var sourceWidth = 0
     var sourceHeight = 0
     var outputRGBA = Data()
+    private var outputStore: NativeOutputStore?
+    private var outputBits = 8
+    var outputCube = ""
     var onPublish: ((Data, Int, Int) throws -> Void)?
     var onProgress: ((Int, Int) -> Void)?
     var onMask: ((Data, Int, Int) throws -> Void)?
     private(set) var depthReady = false
+    var sourceStore: NativeSourceStore?
+
+    func attachSource(_ source: NativeSourceStore) throws {
+        sourceStore = source
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: ["width": source.width, "height": source.height,
+            "encoding": "encoded", "suggestedColorSpace": "sRGB"]), as: UTF8.self)
+        runtime?.invokeMethod("attachSource", withArguments: [json]); try checkException()
+    }
+    func clearSource() { runtime?.invokeMethod("clearSource", withArguments: []); sourceStore = nil }
+    func hibernate() { if !isBusy { runtime?.invokeMethod("hibernate", withArguments: []) } }
+
+    func prepareRemoval(_ mask: Data, width: Int, height: Int) throws -> Data {
+        guard width > 0, height > 0, width <= 2048, height <= 2048, mask.count == width * height else {
+            throw GraphRuntimeError.message("Invalid brush mask")
+        }
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: ["width": width, "height": height]), as: UTF8.self)
+        let buffer = try arrayBuffer(count: mask.count) { mask.copyBytes(to: $0) }
+        guard let input = runtime?.invokeMethod("removalInput", withArguments: [json, buffer]) else {
+            throw GraphRuntimeError.message("Removal input is missing")
+        }
+        try checkException()
+        let bytes = try typedBytes(input)
+        return Data(bytes: bytes.baseAddress!, count: bytes.count)
+    }
+    func finishRemoval(_ result: Data) throws {
+        let buffer = try arrayBuffer(count: result.count) { result.copyBytes(to: $0) }
+        runtime?.invokeMethod("removalResult", withArguments: [buffer]); try checkException()
+    }
+    func removalPreview(candidate: Bool) throws {
+        runtime?.invokeMethod("removalPreview", withArguments: [1600, candidate]); try checkException()
+    }
+    func removalAction(_ name: String, cursor: Int? = nil) throws -> Int {
+        let result = runtime?.invokeMethod(name, withArguments: cursor.map { [$0] } ?? [])
+        try checkException(); return Int(result?.toInt32() ?? 0)
+    }
 
     init(queue: DispatchQueue) throws {
         guard let context = JSContext(), let handle = dichroic_gpu_create(384 * 1024 * 1024) else {
             throw GraphRuntimeError.message(Self.nativeMessage())
         }
+        var initialized = false
+        defer { if !initialized { dichroic_gpu_destroy(handle) } }
         self.context = context; self.handle = handle; self.queue = queue
         #if SWIFT_PACKAGE
         resources = Bundle.module.bundleURL.appendingPathComponent("Resources")
@@ -42,7 +82,6 @@ final class NativeGraphRuntime {
         let owner = Bundle(for: NativeGraphRuntime.self)
         guard let url = owner.url(forResource: "ExposureHost", withExtension: "bundle")
             ?? Bundle.main.url(forResource: "ExposureHost", withExtension: "bundle") else {
-            dichroic_gpu_destroy(handle)
             throw GraphRuntimeError.message("Native shader resources are missing")
         }
         resources = url
@@ -58,6 +97,7 @@ final class NativeGraphRuntime {
             throw GraphRuntimeError.message("Could not initialize the canonical render host")
         }
         self.catalog = catalog
+        initialized = true
     }
 
     deinit {
@@ -67,14 +107,18 @@ final class NativeGraphRuntime {
     }
 
     func request(operation: String, params: [String: Any], width: Int, height: Int,
+                 bits: Int = 8, cubeSize: Int = 33,
                  completion: @escaping (Result<Void, Error>) -> Void) throws {
         guard pending.isEmpty else { throw GraphRuntimeError.message("Native renderer is busy") }
         var request: [String: Any] = ["operation": operation, "params": params,
             "width": width, "height": height]
         if operation == "export" {
             request["measureWidth"] = previewWidth; request["measureHeight"] = previewHeight
-            outputRGBA = Data(count: width * height * 4)
+            outputBits = bits == 16 ? 16 : 8
+            outputStore = try NativeOutputStore(count: width * height * 4 * (outputBits / 8))
+            outputRGBA = outputStore!.data
         }
+        if operation == "cube" { request["size"] = cubeSize; outputCube = "" }
         let json = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
         serial += 1; let id = serial
         pending[id] = completion
@@ -85,7 +129,7 @@ final class NativeGraphRuntime {
         }
     }
 
-    func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); sourceWidth = 0; sourceHeight = 0 }
+    func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); outputStore = nil; outputCube = ""; sourceWidth = 0; sourceHeight = 0 }
 
     var isBusy: Bool { !pending.isEmpty }
 
@@ -236,6 +280,45 @@ final class NativeGraphRuntime {
                 }
             } } catch { self.fail(error); return nil }
         }
+        let region: @convention(block) (Int, Int, Int, Int) -> JSValue? = { [weak self] x, y, width, height in
+            guard let self = self else { return nil }
+            do {
+                guard let source = self.sourceStore, x >= 0, y >= 0, width > 0, height > 0,
+                      x + width <= source.width, y + height <= source.height, width * height * 16 <= 4 * 1024 * 1024 else {
+                    throw GraphRuntimeError.message("Invalid native source region")
+                }
+                return try self.arrayBuffer(count: width * height * 16) { output in
+                    let floats = output.bindMemory(to: Float.self)
+                    source.data.withUnsafeBytes { raw in
+                        let bytes = raw.bindMemory(to: UInt8.self)
+                        for row in 0..<height { for col in 0..<width { for c in 0..<4 {
+                            floats[(row * width + col) * 4 + c] = Float(bytes[((row + y) * source.width + col + x) * 4 + c]) / 255
+                        } } }
+                    }
+                }
+            } catch { self.fail(error); return nil }
+        }
+        let samples: @convention(block) (JSValue) -> JSValue? = { [weak self] bounds in
+            guard let self = self else { return nil }
+            do {
+                guard let source = self.sourceStore, let b = bounds.toDictionary() as? [String: Int],
+                      let x = b["x"], let y = b["y"], let width = b["width"], let height = b["height"],
+                      x >= 0, y >= 0, width > 0, height > 0, x + width <= source.width, y + height <= source.height else {
+                    throw GraphRuntimeError.message("Invalid removal sample region")
+                }
+                return try self.arrayBuffer(count: 512 * 512 * 16) { output in
+                    let floats = output.bindMemory(to: Float.self)
+                    source.data.withUnsafeBytes { raw in
+                        let bytes = raw.bindMemory(to: UInt8.self)
+                        for j in 0..<512 { for i in 0..<512 {
+                            let sx = min(source.width - 1, x + Int(floor((Double(i) + 0.5) * Double(width) / 512)))
+                            let sy = min(source.height - 1, y + Int(floor((Double(j) + 0.5) * Double(height) / 512)))
+                            for c in 0..<4 { floats[(j * 512 + i) * 4 + c] = Float(bytes[(sy * source.width + sx) * 4 + c]) / 255 }
+                        } }
+                    }
+                }
+            } catch { self.fail(error); return nil }
+        }
         let publish: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
             guard let self = self else { return }
             do {
@@ -278,22 +361,28 @@ final class NativeGraphRuntime {
             do {
                 let rect = try self.tile(tile, prefix: "active")
                 let raw = try self.typedBytes(value)
-                guard raw.count == rect.width * rect.height * 12, self.outputRGBA.count == self.sourceWidth * self.sourceHeight * 4,
+                guard raw.count == rect.width * rect.height * 12, let storage = self.outputStore,
+                      storage.count == self.sourceWidth * self.sourceHeight * 4 * (self.outputBits / 8),
                       rect.x >= 0, rect.y >= 0, rect.x + rect.width <= self.sourceWidth, rect.y + rect.height <= self.sourceHeight
                     else { throw GraphRuntimeError.message("Invalid export output tile") }
                 let floats = raw.bindMemory(to: Float.self)
-                self.outputRGBA.withUnsafeMutableBytes { bytes in
-                    let output = bytes.bindMemory(to: UInt8.self)
+                let bytes = UnsafeMutableRawBufferPointer(start: storage.pointer, count: storage.count)
+                    let output = bytes.bindMemory(to: UInt8.self), output16 = bytes.bindMemory(to: UInt16.self)
                     for row in 0..<rect.height { for x in 0..<rect.width {
                         let origin = (row * rect.width + x) * 3
                         let destination = ((row + rect.y) * self.sourceWidth + x + rect.x) * 4
-                        for c in 0..<3 { output[destination + c] = Self.quantize(floats[origin + c]) }
-                        output[destination + 3] = 255
+                        if self.outputBits == 16 {
+                            for c in 0..<3 { output16[destination + c] = Self.quantize16(floats[origin + c]) }
+                            output16[destination + 3] = 65535
+                        } else {
+                            for c in 0..<3 { output[destination + c] = Self.quantize(floats[origin + c]) }
+                            output[destination + 3] = 255
+                        }
                     } }
-                }
             } catch { self.fail(error) }
         }
         let progress: @convention(block) (Int, Int) -> Void = { [weak self] done, total in self?.onProgress?(done, total) }
+        let cube: @convention(block) (String) -> Void = { [weak self] text in self?.outputCube = text }
         let mask: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
             guard let self = self else { return }
             do {
@@ -320,12 +409,15 @@ final class NativeGraphRuntime {
             "nativeRead": read as Any, "nativeAsset": asset as Any, "nativeText": text as Any,
             "nativeInput": input as Any, "nativePublish": publish as Any, "nativeSource": source as Any,
             "nativeOutput": output as Any, "nativeProgress": progress as Any, "nativeComplete": complete as Any, "nativeMask": mask as Any,
+            "nativeRegion": region as Any, "nativeSamples": samples as Any,
+            "nativeCube": cube as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeHost = { command: nativeCommand, upload: nativeUpload, read: nativeRead,
                 readAsset: nativeAsset, readText: nativeText, previewInput: () => new Float32Array(nativeInput()),
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
-                progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask };
+                progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube,
+                sourceRegion: (x,y,w,h) => new Float32Array(nativeRegion(x,y,w,h)), sourceSamples: b => new Float32Array(nativeSamples(b)) };
             """)
     }
 
@@ -348,7 +440,11 @@ final class NativeGraphRuntime {
     }
 
     private static func quantize(_ value: Float) -> UInt8 {
-        guard value.isFinite else { return 0 }
+        guard !value.isNaN else { return 0 }
         return UInt8((min(1, max(0, value)) * 255).rounded())
+    }
+    private static func quantize16(_ value: Float) -> UInt16 {
+        guard !value.isNaN else { return 0 }
+        return UInt16((min(1, max(0, value)) * 65535).rounded())
     }
 }

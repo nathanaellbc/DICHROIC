@@ -1,9 +1,26 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class CanonicalFake extends ExposureEngine {
+  @override
+  Stream<Map<String, dynamic>> get events => const Stream.empty();
+  int cursor = 0;
+  @override
+  Future<void> beginRemoval() async {}
+  @override
+  Future<void> previewRemoval(Uint8List mask, int width, int height) async {}
+  @override
+  Future<int> applyRemoval() async => ++cursor;
+  @override
+  Future<void> cancelRemoval() async {}
+  @override
+  Future<void> restoreRemoval(int cursor) async {
+    this.cursor = cursor;
+  }
+
   final frames = <Map<String, dynamic>>[];
   Completer<void>? gate;
   final exports = <Map<String, dynamic>>[];
@@ -51,9 +68,7 @@ void main() {
   test(
     'coalesces renders while retaining updates to different controls',
     () async {
-      final engine = CanonicalFake(),
-          c = NativeEditorController(CanonicalFake());
-      c.dispose();
+      final engine = CanonicalFake();
       final editor = NativeEditorController(engine);
       await editor.open('photo');
       await flush();
@@ -82,9 +97,7 @@ void main() {
   test(
     'export awaits edits and active preview, then uses latest parameters',
     () async {
-      final engine = CanonicalFake(),
-          editor = NativeEditorController(CanonicalFake());
-      editor.dispose();
+      final engine = CanonicalFake();
       final c = NativeEditorController(engine);
       await c.open('photo');
       await flush();
@@ -98,6 +111,31 @@ void main() {
       engine.gate = null;
       expect(await export, 'photo.png');
       expect(engine.exports.single, {'a': 1, 'b': 2});
+      c.dispose();
+    },
+  );
+  test(
+    'applying removal regrades the changed source and undo restores its cursor',
+    () async {
+      final engine = CanonicalFake();
+      final c = NativeEditorController(engine);
+      await c.open('photo');
+      await flush();
+      final original = c.photo;
+      await c.beginRemoval();
+      expect(c.erasing, isTrue);
+      await c.previewRemoval(Uint8List(16), 4, 4);
+      await c.finishRemoval(apply: true);
+      await flush();
+      expect(engine.cursor, 1);
+      expect(c.erasing, isFalse);
+      expect(c.photo, same(original));
+      await c.undo();
+      await flush();
+      expect(engine.cursor, 0);
+      await c.redo();
+      await flush();
+      expect(engine.cursor, 1);
       c.dispose();
     },
   );

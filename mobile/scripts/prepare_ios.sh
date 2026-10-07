@@ -29,5 +29,11 @@ if bundle:
                     lambda match: 'PRODUCT_BUNDLE_IDENTIFIER = ' + bundle +
                     ('.RunnerTests' if 'RunnerTests' in match.group() else '') + ';', source)
 project.write_text(source)
+podfile = Path('ios/Podfile')
+if podfile.exists():
+    pods = podfile.read_text()
+    pods = re.sub(r'^\s*#?\s*platform :ios,.*$', "platform :ios, '16.0'", pods, flags=re.M)
+    pods = re.sub(r'use_frameworks!(?:\s*:linkage\s*=>\s*:\w+)?', 'use_frameworks! :linkage => :static', pods)
+    podfile.write_text(pods)
 PY
 flutter pub get

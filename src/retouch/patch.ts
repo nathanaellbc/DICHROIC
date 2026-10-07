@@ -26,6 +26,69 @@ export interface RemovalTransform {
 }
 export interface RemovalCrop { revision: number; x: number; y: number; width: number; height: number; rgb: Float32Array; mask: Float32Array; transform: RemovalTransform }
 export interface RemovalMask { width: number; height: number; data: Uint8Array }
+export interface RemovalBounds { x: number; y: number; width: number; height: number }
+
+/** Geometry shared by full-memory web and bounded native source readers. */
+export function removalBounds(image: { width: number; height: number }, selection: RemovalMask): RemovalBounds {
+  const { width: mw, height: mh, data } = selection;
+  if (mw < 1 || mh < 1 || !Number.isInteger(mw) || !Number.isInteger(mh) || data.length !== mw * mh) throw new Error('Invalid removal mask.');
+  let l = mw, r = -1, t = mh, b = -1;
+  for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) if (data[y * mw + x]! > 0) { l = Math.min(l, x); r = Math.max(r, x); t = Math.min(t, y); b = Math.max(b, y); }
+  if (r < 0) throw new Error('Brush over an object first.');
+  const cx = (l + r + 1) * image.width / mw / 2, cy = (t + b + 1) * image.height / mh / 2;
+  const edge = Math.ceil(Math.max((r - l + 1) * image.width / mw, (b - t + 1) * image.height / mh) * 1.6);
+  const width = Math.min(image.width, Math.max(32, edge)), height = Math.min(image.height, Math.max(32, edge));
+  return { x: Math.max(0, Math.min(image.width - width, Math.floor(cx - width / 2))),
+    y: Math.max(0, Math.min(image.height - height, Math.floor(cy - height / 2))), width, height };
+}
+
+/** Original-image coordinate of one model sample; no resampling substitute. */
+export function removalSource(bounds: RemovalBounds, width: number, height: number, i: number, j: number): [number, number] {
+  return [Math.min(width - 1, bounds.x + Math.floor((i + 0.5) * bounds.width / PATCH_SIZE)),
+    Math.min(height - 1, bounds.y + Math.floor((j + 0.5) * bounds.height / PATCH_SIZE))];
+}
+
+/** Sampled source retains exact encoded/linear color and robust HDR mapping. */
+export function prepareSampledRemoval(image: Pick<DecodedImage, 'width' | 'height' | 'suggestedColorSpace' | 'encoding'>,
+  selection: RemovalMask, revision: number, bounds: RemovalBounds, rgba: Float32Array): RemovalCrop {
+  const n = PATCH_SIZE ** 2;
+  if (rgba.length !== n * 4) throw new Error('Invalid removal samples.');
+  const mask = new Float32Array(n), sources = Uint32Array.from({ length: n }, (_, i) => i * 4);
+  for (let j = 0; j < PATCH_SIZE; j++) for (let i = 0; i < PATCH_SIZE; i++) {
+    const [sx, sy] = removalSource(bounds, image.width, image.height, i, j);
+    mask[j * PATCH_SIZE + i] = selection.data[Math.min(selection.height - 1, Math.floor(sy * selection.height / image.height)) * selection.width
+      + Math.min(selection.width - 1, Math.floor(sx * selection.width / image.width))]! > 0 ? 1 : 0;
+  }
+  const sampled = { ...image, rgba }, transform = removalTransform(sampled, sources, mask), rgb = new Float32Array(n * 3);
+  for (let at = 0; at < n; at++) {
+    const value = toModel(transform, rgba[at * 4]!, rgba[at * 4 + 1]!, rgba[at * 4 + 2]!);
+    rgb.set(value, at * 3);
+  }
+  return { revision, ...bounds, rgb, mask, transform };
+}
+
+export function removalModelInput(crop: Pick<RemovalCrop, 'rgb' | 'mask'>): Float32Array {
+  const n = PATCH_SIZE ** 2, input = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < 3; c++) input[c * n + i] = crop.rgb[i * 3 + c]! * (1 - crop.mask[i]!);
+    input[3 * n + i] = crop.mask[i]!;
+  }
+  return input;
+}
+
+/** One masked source pixel, shared with native tile/preview reads. */
+export function removalPixel(crop: RemovalCrop, output: Float32Array, x: number, y: number,
+  r: number, g: number, b: number): [number, number, number] | undefined {
+  x -= crop.x; y -= crop.y;
+  if (x < 0 || y < 0 || x >= crop.width || y >= crop.height) return;
+  const mx = Math.min(511, Math.floor(x * 512 / crop.width)), my = Math.min(511, Math.floor(y * 512 / crop.height));
+  if (!crop.mask[my * 512 + mx]) return;
+  let alpha = 1;
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (!crop.mask[Math.max(0, Math.min(511, my + dy!)) * 512 + Math.max(0, Math.min(511, mx + dx!))]) alpha = 0.5;
+  const u = (x + 0.5) * 512 / crop.width - 0.5, v = (y + 0.5) * 512 / crop.height - 0.5;
+  const value = fromModel(crop.transform, removalSample(output, 0, u, v), removalSample(output, 1, u, v), removalSample(output, 2, u, v));
+  return [r * (1 - alpha) + value[0] * alpha, g * (1 - alpha) + value[1] * alpha, b * (1 - alpha) + value[2] * alpha];
+}
 
 export function removalSample(output: Float32Array, channel: number, x: number, y: number): number {
   const fx = Math.max(0, Math.min(511, x)), fy = Math.max(0, Math.min(511, y));
@@ -65,32 +128,12 @@ function fromModel(t: RemovalTransform, r: number, g: number, b: number): [numbe
 
 export function prepareRemoval(image: DecodedImage, selection: RemovalMask, revision: number): RemovalCrop {
   if (image.rgba.length !== image.width * image.height * 4) throw new Error('Invalid removal source.');
-  const { width: mw, height: mh, data } = selection;
-  if (mw < 1 || mh < 1 || !Number.isInteger(mw) || !Number.isInteger(mh) || data.length !== mw * mh) throw new Error('Invalid removal mask.');
-  let l = mw, r = -1, t = mh, b = -1;
-  for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) if (data[y * mw + x]! > 0) { l = Math.min(l, x); r = Math.max(r, x); t = Math.min(t, y); b = Math.max(b, y); }
-  if (r < 0) throw new Error('Brush over an object first.');
-  const cx = (l + r + 1) * image.width / mw / 2, cy = (t + b + 1) * image.height / mh / 2;
-  const edge = Math.ceil(Math.max((r - l + 1) * image.width / mw, (b - t + 1) * image.height / mh) * 1.6);
-  const width = Math.min(image.width, Math.max(32, edge)), height = Math.min(image.height, Math.max(32, edge));
-  const x = Math.max(0, Math.min(image.width - width, Math.floor(cx - width / 2)));
-  const y = Math.max(0, Math.min(image.height - height, Math.floor(cy - height / 2)));
-  const n = PATCH_SIZE ** 2, rgb = new Float32Array(n * 3), mask = new Float32Array(n);
-  const sources = new Uint32Array(n);
+  const bounds = removalBounds(image, selection), samples = new Float32Array(PATCH_SIZE ** 2 * 4);
   for (let j = 0; j < PATCH_SIZE; j++) for (let i = 0; i < PATCH_SIZE; i++) {
-    const sx = Math.min(image.width - 1, x + Math.floor((i + 0.5) * width / PATCH_SIZE));
-    const sy = Math.min(image.height - 1, y + Math.floor((j + 0.5) * height / PATCH_SIZE));
-    const at = j * PATCH_SIZE + i;
-    sources[at] = (sy * image.width + sx) * 4;
-    mask[at] = data[Math.min(mh - 1, Math.floor(sy * mh / image.height)) * mw + Math.min(mw - 1, Math.floor(sx * mw / image.width))]! > 0 ? 1 : 0;
+    const [x, y] = removalSource(bounds, image.width, image.height, i, j);
+    samples.set(image.rgba.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 4), (j * PATCH_SIZE + i) * 4);
   }
-  const transform = removalTransform(image, sources, mask);
-  for (let at = 0; at < n; at++) {
-    const s = sources[at]!;
-    const v = toModel(transform, image.rgba[s]!, image.rgba[s + 1]!, image.rgba[s + 2]!);
-    rgb[at * 3] = v[0]; rgb[at * 3 + 1] = v[1]; rgb[at * 3 + 2] = v[2];
-  }
-  return { revision, x, y, width, height, rgb, mask, transform };
+  return prepareSampledRemoval(image, selection, revision, bounds, samples);
 }
 
 /**
@@ -98,7 +141,7 @@ export function prepareRemoval(image: DecodedImage, selection: RemovalMask, revi
  * (Rec.709 linear) di piksel konteks yang tidak disapu, minimal 1: gambar LDR
  * tidak berubah, sorotan HDR diskalakan masuk 0..1 dan dikembalikan sesudahnya.
  */
-function removalTransform(image: DecodedImage, sources: Uint32Array, mask: Float32Array): RemovalTransform {
+function removalTransform(image: Pick<DecodedImage, 'rgba' | 'encoding' | 'suggestedColorSpace'>, sources: Uint32Array, mask: Float32Array): RemovalTransform {
   if (image.encoding === 'encoded') return { space: image.suggestedColorSpace, encoding: 'encoded', gain: 1 };
   // Primer tak dikenal: identitas (diperlakukan seperti Rec.709); tetap bolak-balik persis.
   const toModelMatrix = [...(TO_REC709[image.suggestedColorSpace] ?? TO_REC709['Linear Rec.709']!)];
@@ -134,14 +177,11 @@ export function applyRemoval(image: DecodedImage, crop: RemovalCrop, output: Flo
     const source = ((crop.y + y) * image.width + crop.x + x) * 4;
     const mx = Math.min(511, Math.floor(x * 512 / crop.width)), my = Math.min(511, Math.floor(y * 512 / crop.height));
     if (!crop.mask[my * 512 + mx]) continue;
-    // Soften the inner edge without modifying any pixel outside the mask.
-    let alpha = 1;
-    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) if (!crop.mask[Math.max(0, Math.min(511, my + dy!)) * 512 + Math.max(0, Math.min(511, mx + dx!))]) alpha = 0.5;
-    const u = (x + 0.5) * 512 / crop.width - 0.5, v = (y + 0.5) * 512 / crop.height - 0.5;
-    const value = fromModel(crop.transform, removalSample(output, 0, u, v), removalSample(output, 1, u, v), removalSample(output, 2, u, v));
+    const value = removalPixel(crop, output, crop.x + x, crop.y + y,
+      image.rgba[source]!, image.rgba[source + 1]!, image.rgba[source + 2]!)!;
     for (let c = 0; c < 3; c++) {
       backup[backupAt++] = image.rgba[source + c]!;
-      image.rgba[source + c] = image.rgba[source + c]! * (1 - alpha) + value[c]! * alpha;
+      image.rgba[source + c] = value[c]!;
     }
   }
   return backup;

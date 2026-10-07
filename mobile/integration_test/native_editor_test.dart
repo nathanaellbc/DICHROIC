@@ -49,6 +49,7 @@ void main() {
           final error = (bytes[i] - expected[i]).abs();
           if (error > maximum) maximum = error;
         }
+
         // One byte is the final independent quantization boundary. The native
         // float replay retains its stricter 1e-5 gate for all intermediate taps.
         expect(
@@ -60,6 +61,22 @@ void main() {
         codec.dispose();
         await File(path).delete();
       }
+      for (final format in ['png16', 'tiff16', 'jpeg']) {
+        final path = await engine.exportImage(
+          baseline,
+          format: format,
+          longEdge: 24,
+        );
+        final bytes = await File(path).readAsBytes();
+        expect(bytes.length, greaterThan(32));
+        if (format == 'png16')
+          expect(bytes[24], 16, reason: 'PNG must retain 16-bit quantization');
+        if (format == 'jpeg') expect(bytes.sublist(0, 2), [255, 216]);
+        await File(path).delete();
+      }
+      final cube = await engine.exportCube(baseline, 17);
+      expect(await File(cube).readAsString(), contains('LUT_3D_SIZE 17'));
+      await File(cube).delete();
       final editor = NativeEditorController(engine);
       await editor.open(file.path);
       await tester.pumpWidget(
