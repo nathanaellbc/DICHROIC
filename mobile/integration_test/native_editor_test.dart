@@ -69,8 +69,9 @@ void main() {
         );
         final bytes = await File(path).readAsBytes();
         expect(bytes.length, greaterThan(32));
-        if (format == 'png16')
+        if (format == 'png16') {
           expect(bytes[24], 16, reason: 'PNG must retain 16-bit quantization');
+        }
         if (format == 'jpeg') expect(bytes.sublist(0, 2), [255, 216]);
         await File(path).delete();
       }

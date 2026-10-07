@@ -7,12 +7,24 @@ enum GraphRuntimeError: LocalizedError {
     var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
 }
 
+private final class NativeGPUHandle {
+    let pointer: UnsafeMutableRawPointer
+    init() throws {
+        guard let pointer = dichroic_gpu_create(384 * 1024 * 1024) else {
+            throw GraphRuntimeError.message(exposure_last_error().map { String(cString: $0) } ?? "Native GPU initialization failed")
+        }
+        self.pointer = pointer
+    }
+    deinit { dichroic_gpu_destroy(pointer) }
+}
+
 /// One runtime on the plugin's serial render queue. JavaScriptCore runs only
 /// canonical host mathematics; wgpu executes the unchanged WGSL on Metal.
 /// The bridge transfers typed-array storage directly, never JSON photo pixels.
 final class NativeGraphRuntime {
     private let context: JSContext
-    private let handle: UnsafeMutableRawPointer
+    private let gpu: NativeGPUHandle
+    private var handle: UnsafeMutableRawPointer { gpu.pointer }
     private let queue: DispatchQueue
     private let resources: URL
     private var runtime: JSValue?
@@ -70,12 +82,10 @@ final class NativeGraphRuntime {
     }
 
     init(queue: DispatchQueue) throws {
-        guard let context = JSContext(), let handle = dichroic_gpu_create(384 * 1024 * 1024) else {
+        guard let context = JSContext() else {
             throw GraphRuntimeError.message(Self.nativeMessage())
         }
-        var initialized = false
-        defer { if !initialized { dichroic_gpu_destroy(handle) } }
-        self.context = context; self.handle = handle; self.queue = queue
+        self.context = context; gpu = try NativeGPUHandle(); self.queue = queue
         #if SWIFT_PACKAGE
         resources = Bundle.module.bundleURL.appendingPathComponent("Resources")
         #else
@@ -97,14 +107,10 @@ final class NativeGraphRuntime {
             throw GraphRuntimeError.message("Could not initialize the canonical render host")
         }
         self.catalog = catalog
-        initialized = true
     }
 
-    deinit {
-        // JS closures capture self weakly; the runtime does not own this object.
-        // Metal handles are released even after a host exception during startup.
-        dichroic_gpu_destroy(handle)
-    }
+    // The handle owner also releases Metal on a throwing initializer. JS
+    // callbacks capture self weakly and cannot retain the runtime after close.
 
     func request(operation: String, params: [String: Any], width: Int, height: Int,
                  bits: Int = 8, cubeSize: Int = 33,
