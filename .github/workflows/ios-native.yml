@@ -1,0 +1,47 @@
+name: Native iOS build
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'mobile/**'
+      - 'native/**'
+      - '.github/workflows/ios-native.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ios-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Flutter
+        run: |
+          git clone --depth 1 --branch 3.44.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal
+          rustup default 1.85.0
+      - name: Rust tests on Metal
+        working-directory: native
+        run: cargo test --features gpu-tests --locked
+      - name: Build native XCFramework
+        run: bash mobile/scripts/build_native.sh
+      - name: Prepare Flutter iOS host
+        run: bash mobile/scripts/prepare_ios.sh
+      - name: Flutter analysis and tests
+        working-directory: mobile
+        run: |
+          flutter analyze
+          flutter test
+      - name: Build unsigned device application
+        working-directory: mobile
+        run: flutter build ios --release --no-codesign
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dichroic-ios-unsigned
+          path: mobile/build/ios/iphoneos/*.app
+          if-no-files-found: error

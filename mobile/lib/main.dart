@@ -49,12 +49,15 @@ class _EditorScreenState extends State<EditorScreen> {
         source: ImageSource.gallery,
         requestFullMetadata: false,
       );
-      if (file != null && mounted) await controller.open(file.path);
+      if (file != null && mounted) {
+        await controller.open(file.path);
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Could not open photo: $e')));
+      }
     }
   }
 
@@ -91,8 +94,9 @@ class _EditorScreenState extends State<EditorScreen> {
                             final path = await controller.export();
                             if (path == null) return;
                             if (!sheetContext.mounted || !context.mounted) {
-                              if (await File(path).exists())
+                              if (await File(path).exists()) {
                                 await File(path).delete();
+                              }
                               return;
                             }
                             final box =
@@ -108,15 +112,17 @@ class _EditorScreenState extends State<EditorScreen> {
                                 ),
                               );
                             } catch (e) {
-                              if (mounted)
+                              if (mounted) {
                                 ScaffoldMessenger.of(this.context).showSnackBar(
                                   SnackBar(
                                     content: Text('Could not share photo: $e'),
                                   ),
                                 );
+                              }
                             } finally {
-                              if (await File(path).exists())
+                              if (await File(path).exists()) {
                                 await File(path).delete();
+                              }
                             }
                           },
                     child: Padding(
