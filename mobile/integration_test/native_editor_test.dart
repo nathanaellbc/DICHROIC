@@ -11,6 +11,24 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+// ImageIO can rewrite compressed ICC metadata between otherwise identical
+// exports. Compare decoded pixels for removal history, rather than PNG bytes.
+Future<Uint8List> decodedRgba(Uint8List encoded) async {
+  final codec = await ui.instantiateImageCodec(encoded);
+  final frame = await codec.getNextFrame();
+  try {
+    final data = (await frame.image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    ))!;
+    return Uint8List.fromList(
+      data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+    );
+  } finally {
+    frame.image.dispose();
+    codec.dispose();
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
@@ -192,6 +210,7 @@ void main() {
       await engine.develop(params);
       final originalPath = await engine.developExport(params);
       final original = await File(originalPath).readAsBytes();
+      final originalPixels = await decodedRgba(original);
       final sourceBefore = await const MethodChannel(
         'exposure/native',
       ).invokeMethod<Uint8List>('debugSource');
@@ -206,9 +225,10 @@ void main() {
       expect(await engine.applyRemoval(), 1);
       final editedPath = await engine.developExport(params);
       final edited = await File(editedPath).readAsBytes();
+      final editedPixels = await decodedRgba(edited);
       expect(
-        edited,
-        isNot(orderedEquals(original)),
+        editedPixels,
+        isNot(orderedEquals(originalPixels)),
         reason: 'Apply must change the developed photo',
       );
       final sourceAfter = await const MethodChannel(
@@ -221,13 +241,19 @@ void main() {
       );
       await engine.restoreRemoval(0);
       final undoPath = await engine.developExport(params);
-      expect(await File(undoPath).readAsBytes(), orderedEquals(original));
+      expect(
+        await decodedRgba(await File(undoPath).readAsBytes()),
+        orderedEquals(originalPixels),
+      );
       await engine.restoreRemoval(1);
       await const MethodChannel(
         'exposure/native',
       ).invokeMethod<void>('debugMemoryWarning');
       final redoPath = await engine.developExport(params);
-      expect(await File(redoPath).readAsBytes(), orderedEquals(edited));
+      expect(
+        await decodedRgba(await File(redoPath).readAsBytes()),
+        orderedEquals(editedPixels),
+      );
       params['lensBlurEnabled'] = true;
       await engine.develop(params);
       await engine.focusPreview({
