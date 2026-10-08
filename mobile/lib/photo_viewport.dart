@@ -1,13 +1,22 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:exposure_engine/exposure_engine.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'editor_widgets.dart';
+import 'native_controls.dart';
+import 'photo_lightbox.dart';
 import 'removal_brush.dart';
 import 'native_preview.dart';
 
+/// Hold this long without moving to peek at the original (web 220 ms).
+const peekDelay = Duration(milliseconds: 220);
+
 /// Gestures transform the cached native texture; they never schedule a develop.
+/// Mirrors the web `PhotoView`: split compare, hold to peek, double-tap zoom,
+/// the zoom and "Developing" pills, and a tap for the full-screen viewer.
 class PhotoViewport extends StatefulWidget {
   const PhotoViewport({
     super.key,
@@ -21,6 +30,8 @@ class PhotoViewport extends StatefulWidget {
     this.detail,
     this.detailRevision = 0,
     this.onDetailRequest,
+    this.rendering = false,
+    this.compareInset = 12,
   });
   final NativePhoto photo;
   final Offset? focus;
@@ -31,6 +42,12 @@ class PhotoViewport extends StatefulWidget {
   final NativeDetail? detail;
   final int detailRevision;
   final void Function(Rect, int)? onDetailRequest;
+
+  /// A develop is running: after 350 ms the "Developing" pill appears.
+  final bool rendering;
+
+  /// Distance of the Compare button from the bottom edge.
+  final double compareInset;
 
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
@@ -47,11 +64,17 @@ class _PhotoViewportState extends State<PhotoViewport>
   Offset _startOffset = Offset.zero;
   Offset _startFocal = Offset.zero;
   SpringSimulation? _xSpring, _ySpring, _scaleSpring;
-  bool _before = false;
+  bool _compare = false, _peek = false;
+  double _split = .5;
+  bool _splitting = false;
   bool _picking = false;
   Offset? _focus;
   bool _brushing = false;
   int _pointerCount = 0;
+  Offset? _doubleTapAt;
+  bool _slow = false;
+  Timer? _slowTimer;
+
   Offset _photoPoint(Offset point) {
     final local = (point - _viewport.center(Offset.zero) - _offset) / _scale;
     return Offset(
@@ -60,10 +83,20 @@ class _PhotoViewportState extends State<PhotoViewport>
     );
   }
 
+  /// Screen position of a photo point (0..1).
+  Offset _screen(Offset photo) =>
+      _viewport.center(Offset.zero) +
+      _offset +
+      Offset(
+        (photo.dx - .5) * _image.width * _scale,
+        (photo.dy - .5) * _image.height * _scale,
+      );
+
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_tick);
+    _watchRendering();
   }
 
   @override
@@ -73,8 +106,11 @@ class _PhotoViewportState extends State<PhotoViewport>
       _ticker.stop();
       _scale = 1;
       _offset = Offset.zero;
-      _before = false;
+      _compare = false;
+      _peek = false;
+      _split = .5;
     }
+    if (oldWidget.rendering != widget.rendering) _watchRendering();
     if (oldWidget.detailRevision != widget.detailRevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _requestDetail();
@@ -82,8 +118,20 @@ class _PhotoViewportState extends State<PhotoViewport>
     }
   }
 
+  void _watchRendering() {
+    _slowTimer?.cancel();
+    if (!widget.rendering) {
+      if (_slow) setState(() => _slow = false);
+      return;
+    }
+    _slowTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted && widget.rendering) setState(() => _slow = true);
+    });
+  }
+
   @override
   void dispose() {
+    _slowTimer?.cancel();
     _ticker.dispose();
     super.dispose();
   }
@@ -100,6 +148,8 @@ class _PhotoViewportState extends State<PhotoViewport>
     math.max(0, (_image.height * scale - _viewport.height) / 2),
   );
 
+  bool get _comparing => _compare && !_picking && widget.brush == null;
+
   void _start(ScaleStartDetails details) {
     _ticker.stop();
     _startScale = _scale;
@@ -114,6 +164,10 @@ class _PhotoViewportState extends State<PhotoViewport>
         _photoPoint(details.localFocalPoint),
         widget.brush!.diameter / (2 * _image.width * _scale),
       );
+    } else if (_comparing && details.pointerCount == 1) {
+      // In compare, one finger moves the divider anywhere on the photo.
+      _splitting = true;
+      setState(() => _split = _photoPoint(details.localFocalPoint).dx);
     }
   }
 
@@ -126,6 +180,11 @@ class _PhotoViewportState extends State<PhotoViewport>
       widget.brush?.cancel();
       _brushing = false;
     }
+    if (_splitting && details.pointerCount == 1) {
+      setState(() => _split = _photoPoint(details.localFocalPoint).dx);
+      return;
+    }
+    _splitting = false;
     if (_pointerCount != details.pointerCount) {
       _startScale = _scale / details.scale;
       _startOffset = _offset;
@@ -164,6 +223,15 @@ class _PhotoViewportState extends State<PhotoViewport>
                 .clamp(-bounds.dy, bounds.dy)
                 .toDouble(),
           );
+    _animateTo(scale, target, velocity: velocity);
+  }
+
+  void _animateTo(
+    double scale,
+    Offset target, {
+    Offset velocity = Offset.zero,
+  }) {
+    _ticker.stop();
     if (MediaQuery.disableAnimationsOf(context)) {
       setState(() {
         _scale = scale;
@@ -188,6 +256,27 @@ class _PhotoViewportState extends State<PhotoViewport>
     );
     _scaleSpring = SpringSimulation(spring, _scale, scale, 0);
     _ticker.start();
+  }
+
+  /// Double-tap: fit ↔ 2.5× about the tapped point (web PhotoView).
+  void _doubleTap() {
+    if (_scale > 1.01) {
+      _animateTo(1, Offset.zero);
+      return;
+    }
+    const scale = 2.5;
+    final focal =
+        (_doubleTapAt ?? _viewport.center(Offset.zero)) -
+        _viewport.center(Offset.zero);
+    final raw = focal - (focal - _offset) * (scale / _scale);
+    final bounds = _bounds(scale);
+    _animateTo(
+      scale,
+      Offset(
+        raw.dx.clamp(-bounds.dx, bounds.dx).toDouble(),
+        raw.dy.clamp(-bounds.dy, bounds.dy).toDouble(),
+      ),
+    );
   }
 
   void _tick(Duration elapsed) {
@@ -245,6 +334,76 @@ class _PhotoViewportState extends State<PhotoViewport>
     widget.onDetailRequest!(rect, edge);
   }
 
+  /// A short tap opens the full-screen viewer (not while comparing, picking
+  /// focus or removing).
+  void _openLightbox() {
+    if (_comparing || _picking || widget.brush != null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final origin = box.localToGlobal(_screen(Offset.zero));
+    PhotoLightbox.open(
+      context,
+      photo: widget.photo,
+      from: origin & (_image * _scale),
+    );
+  }
+
+  /// One photo layer: the texture, its zoom detail, and (when comparing)
+  /// the original clipped to the left of the divider.
+  Widget _surface({required bool original}) => Stack(
+    fit: StackFit.expand,
+    children: [
+      NativePreview(
+        textureId: original
+            ? widget.photo.originalTextureId ?? widget.photo.textureId
+            : widget.photo.textureId,
+      ),
+      if (widget.detail != null && widget.brush == null)
+        Positioned(
+          left: widget.detail!.rect.left * _image.width,
+          top: widget.detail!.rect.top * _image.height,
+          width: widget.detail!.rect.width * _image.width,
+          height: widget.detail!.rect.height * _image.height,
+          child: IgnorePointer(
+            child: NativePreview(
+              textureId: original
+                  ? widget.detail!.originalTextureId
+                  : widget.detail!.textureId,
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Widget _pill(Widget child, {VoidCallback? onTap, String? label}) => Semantics(
+    button: onTap != null,
+    label: label,
+    child: GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: DecoratedBox(
+          decoration: const BoxDecoration(color: Color(0x61000000)),
+          child: SizedBox(
+            height: 28,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: DefaultTextStyle(
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+                child: Center(widthFactor: 1, child: child),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -260,25 +419,74 @@ class _PhotoViewportState extends State<PhotoViewport>
           if (mounted) _requestDetail();
         });
       }
+      final hasOriginal = widget.photo.originalTextureId != null;
+      final peeking = _peek && !_comparing && !_picking;
+      final splitX = _screen(Offset(_split, .5)).dx;
+      final top = _screen(Offset.zero).dy,
+          bottom = _screen(const Offset(1, 1)).dy;
+      final zoomed = _scale > 1.01;
       return Stack(
         children: [
           Positioned.fill(
             child: ClipRect(
-              child: GestureDetector(
+              child: RawGestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onScaleStart: _start,
-                onScaleUpdate: _update,
-                onScaleEnd: (details) {
-                  if (_brushing) {
-                    widget.brush?.end();
-                    _brushing = false;
-                  } else {
-                    _settle(velocity: details.velocity.pixelsPerSecond);
-                  }
-                },
-                onDoubleTap: () {
-                  _ticker.stop();
-                  _settle(reset: true);
+                gestures: {
+                  ScaleGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                        ScaleGestureRecognizer
+                      >(ScaleGestureRecognizer.new, (r) {
+                        r
+                          ..onStart = _start
+                          ..onUpdate = _update
+                          ..onEnd = (details) {
+                            if (_brushing) {
+                              widget.brush?.end();
+                              _brushing = false;
+                            } else if (_splitting) {
+                              _splitting = false;
+                            } else {
+                              _settle(
+                                velocity: details.velocity.pixelsPerSecond,
+                              );
+                            }
+                          };
+                      }),
+                  DoubleTapGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                        DoubleTapGestureRecognizer
+                      >(DoubleTapGestureRecognizer.new, (r) {
+                        r
+                          ..onDoubleTapDown = (d) {
+                            _doubleTapAt = d.localPosition;
+                          }
+                          ..onDoubleTap = _doubleTap;
+                      }),
+                  TapGestureRecognizer:
+                      GestureRecognizerFactoryWithHandlers<
+                        TapGestureRecognizer
+                      >(TapGestureRecognizer.new, (r) {
+                        r.onTap = _openLightbox;
+                      }),
+                  if (hasOriginal && widget.brush == null)
+                    LongPressGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                          LongPressGestureRecognizer
+                        >(
+                          () => LongPressGestureRecognizer(duration: peekDelay),
+                          (r) {
+                            r
+                              ..onLongPressStart = (_) {
+                                if (!_comparing) setState(() => _peek = true);
+                              }
+                              ..onLongPressEnd = (_) {
+                                setState(() => _peek = false);
+                              }
+                              ..onLongPressCancel = () {
+                                if (_peek) setState(() => _peek = false);
+                              };
+                          },
+                        ),
                 },
                 child: Center(
                   child: Transform.translate(
@@ -290,30 +498,13 @@ class _PhotoViewportState extends State<PhotoViewport>
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            NativePreview(
-                              textureId: _before
-                                  ? widget.photo.originalTextureId ??
-                                        widget.photo.textureId
-                                  : widget.photo.textureId,
-                            ),
-                            if (widget.detail != null && widget.brush == null)
-                              Positioned(
-                                left: widget.detail!.rect.left * _image.width,
-                                top: widget.detail!.rect.top * _image.height,
-                                width: widget.detail!.rect.width * _image.width,
-                                height:
-                                    widget.detail!.rect.height * _image.height,
-                                child: IgnorePointer(
-                                  child: NativePreview(
-                                    textureId: _before
-                                        ? widget.detail!.originalTextureId
-                                        : widget.detail!.textureId,
-                                  ),
-                                ),
+                            _surface(original: peeking),
+                            if (_comparing && hasOriginal)
+                              ClipRect(
+                                clipper: _SplitClipper(_split),
+                                child: _surface(original: true),
                               ),
-                            if (widget.brush != null &&
-                                widget.showBrush &&
-                                !_before)
+                            if (widget.brush != null && widget.showBrush)
                               IgnorePointer(
                                 child: CustomPaint(
                                   painter: BrushPainter(widget.brush!),
@@ -325,7 +516,7 @@ class _PhotoViewportState extends State<PhotoViewport>
                                   textureId: widget.photo.focusTextureId!,
                                 ),
                               ),
-                            if (!_before && widget.focus != null)
+                            if (!peeking && widget.focus != null)
                               Positioned(
                                 left:
                                     (_focus ?? widget.focus!).dx *
@@ -335,63 +526,7 @@ class _PhotoViewportState extends State<PhotoViewport>
                                     (_focus ?? widget.focus!).dy *
                                         _image.height -
                                     22,
-                                child: GestureDetector(
-                                  key: const ValueKey('focus-pin'),
-                                  behavior: HitTestBehavior.opaque,
-                                  onPanDown: (_) {
-                                    setState(() {
-                                      _picking = true;
-                                      _focus = widget.focus;
-                                    });
-                                    widget.onFocusStart?.call();
-                                    widget.onFocusPreview?.call(_focus!);
-                                  },
-                                  onPanUpdate: (d) {
-                                    final point =
-                                        (_focus ?? widget.focus!) +
-                                        Offset(
-                                          d.delta.dx / _image.width,
-                                          d.delta.dy / _image.height,
-                                        );
-                                    setState(
-                                      () => _focus = Offset(
-                                        point.dx.clamp(0, 1),
-                                        point.dy.clamp(0, 1),
-                                      ),
-                                    );
-                                    widget.onFocusPreview?.call(_focus!);
-                                  },
-                                  onPanEnd: (_) {
-                                    widget.onFocusEnd?.call(_focus!);
-                                    setState(() {
-                                      _picking = false;
-                                      _focus = null;
-                                    });
-                                  },
-                                  onPanCancel: () {
-                                    widget.onFocusEnd?.call(
-                                      _focus ?? widget.focus!,
-                                    );
-                                    setState(() {
-                                      _picking = false;
-                                      _focus = null;
-                                    });
-                                  },
-                                  child: Transform.scale(
-                                    scale: 1 / _scale,
-                                    child: const SizedBox(
-                                      width: 44,
-                                      height: 44,
-                                      child: Center(
-                                        child: Glyph(
-                                          'focus',
-                                          color: Colors.white,
-                                          size: 28,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                                child: _focusPin(),
                               ),
                           ],
                         ),
@@ -402,38 +537,265 @@ class _PhotoViewportState extends State<PhotoViewport>
               ),
             ),
           ),
-          if (widget.photo.originalTextureId != null)
+          if (_comparing && hasOriginal) ...[
             Positioned(
-              left: 16,
-              bottom: 8,
-              child: Semantics(
-                toggled: _before,
-                child: IconButton.filledTonal(
-                  tooltip: _before
-                      ? 'Show edited photo'
-                      : 'Show original photo',
-                  onPressed: () => setState(() => _before = !_before),
-                  icon: const Glyph('compare'),
-                ),
+              left: splitX - 1,
+              top: top.clamp(0, _viewport.height),
+              height:
+                  (bottom.clamp(0, _viewport.height) -
+                          top.clamp(0, _viewport.height))
+                      .toDouble(),
+              width: 2,
+              child: const IgnorePointer(
+                child: ColoredBox(color: Color(0xebffffff)),
               ),
             ),
-          if (_before)
-            const Positioned(
-              right: 16,
-              bottom: 20,
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: Color(0xb3000000)),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Text(
-                    'Original',
-                    style: TextStyle(color: Colors.white),
+            Positioned(
+              left: splitX - 18,
+              top:
+                  (_screen(
+                            const Offset(.5, .5),
+                          ).dy.clamp(18, _viewport.height - 18) -
+                          18)
+                      .toDouble(),
+              child: Semantics(
+                slider: true,
+                label: 'Before and after divider',
+                value: '${(_split * 100).round()}% original',
+                child: IgnorePointer(
+                  child: ClipOval(
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      color: const Color(0x61000000),
+                      alignment: Alignment.center,
+                      child: const Glyph(
+                        'compare',
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ),
+            ),
+            Positioned(
+              top: 10,
+              right: _viewport.width - splitX + 8,
+              child: AnimatedOpacity(
+                opacity: _split > .12 ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(child: _pill(const Text('Before'))),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              left: splitX + 8,
+              child: AnimatedOpacity(
+                opacity: _split < .88 ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(child: _pill(const Text('After'))),
+              ),
+            ),
+          ],
+          if (peeking)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: IgnorePointer(child: _pill(const Text('Original'))),
+            ),
+          if (_picking)
+            Positioned(
+              top: 10,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: Center(
+                  child: _pill(
+                    const Text('Hold & drag to focus · grey is outside focus'),
+                  ),
+                ),
+              ),
+            ),
+          // Status, top right: Developing beside the zoom level.
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Row(
+              children: [
+                if (_slow)
+                  _pill(
+                    const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 13,
+                          height: 13,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.6,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 6),
+                        Text('Developing'),
+                      ],
+                    ),
+                  ),
+                if (_slow && zoomed) const SizedBox(width: 6),
+                if (zoomed)
+                  _pill(
+                    label: 'Fit to view (double-tap)',
+                    onTap: () => _animateTo(1, Offset.zero),
+                    Text.rich(
+                      TextSpan(
+                        text: '${(_scale * 100).round()}% ',
+                        children: const [
+                          TextSpan(
+                            text: '· Fit',
+                            style: TextStyle(color: Color(0xffaaaab3)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (hasOriginal && widget.brush == null)
+            Positioned(
+              left: 12,
+              bottom: widget.compareInset,
+              child: _compareButton(),
             ),
         ],
       );
     },
   );
+
+  /// Floating glass "Compare with original" toggle (web compare button).
+  Widget _compareButton() {
+    void toggle() => setState(() {
+      _compare = !_compare;
+      _split = .5;
+    });
+    if (useNativeControls) {
+      return NativeButton(
+        label: 'Compare with original',
+        symbol: 'rectangle.split.2x1',
+        selected: _compare,
+        width: 44,
+        onTap: toggle,
+      );
+    }
+    return Semantics(
+      toggled: _compare,
+      child: Glass(
+        radius: 22,
+        child: Press(
+          label: 'Compare with original',
+          plain: !_compare,
+          selected: _compare,
+          radius: 22,
+          onTap: toggle,
+          child: Glyph('compare', color: _compare ? signalBlue : null),
+        ),
+      ),
+    );
+  }
+
+  /// White ring with a centre dot (web focus pin), counter-scaled so it
+  /// keeps its size while zoomed.
+  Widget _focusPin() => GestureDetector(
+    key: const ValueKey('focus-pin'),
+    behavior: HitTestBehavior.opaque,
+    onPanDown: (_) {
+      setState(() {
+        _picking = true;
+        _focus = widget.focus;
+      });
+      widget.onFocusStart?.call();
+      widget.onFocusPreview?.call(_focus!);
+    },
+    onPanUpdate: (d) {
+      final point =
+          (_focus ?? widget.focus!) +
+          Offset(d.delta.dx / _image.width, d.delta.dy / _image.height);
+      setState(
+        () => _focus = Offset(point.dx.clamp(0, 1), point.dy.clamp(0, 1)),
+      );
+      widget.onFocusPreview?.call(_focus!);
+    },
+    onPanEnd: (_) {
+      widget.onFocusEnd?.call(_focus!);
+      setState(() {
+        _picking = false;
+        _focus = null;
+      });
+    },
+    onPanCancel: () {
+      widget.onFocusEnd?.call(_focus ?? widget.focus!);
+      setState(() {
+        _picking = false;
+        _focus = null;
+      });
+    },
+    child: Transform.scale(
+      scale: 1 / _scale,
+      child: Semantics(
+        button: true,
+        label: 'Focus point. Drag to focus.',
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // 1.5 px white ring with a 1 px dark outline on both sides.
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0x8c000000)),
+                  ),
+                  alignment: Alignment.center,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(color: Color(0x73000000), spreadRadius: 1),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Keeps the part of the photo left of the divider (photo fraction).
+class _SplitClipper extends CustomClipper<Rect> {
+  _SplitClipper(this.split);
+  final double split;
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTWH(0, 0, size.width * split, size.height);
+  @override
+  bool shouldReclip(_SplitClipper old) => old.split != split;
 }

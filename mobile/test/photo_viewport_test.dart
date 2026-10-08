@@ -84,19 +84,67 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
-  testWidgets('compare switches cached textures and preserves zoom', (
+  List<int> textures(WidgetTester tester) => [
+    for (final t in tester.widgetList<Texture>(find.byType(Texture)))
+      t.textureId,
+  ];
+
+  testWidgets('compare splits the original over the edit; drag moves it', (
     tester,
   ) async {
     await mount(tester, photo);
-    expect(tester.widget<Texture>(find.byType(Texture)).textureId, 10);
-    await tester.tap(find.byTooltip('Show original photo'));
+    expect(textures(tester), [10]);
+    await tester.tap(find.byTooltip('Compare with original'));
     await tester.pump();
-    expect(tester.widget<Texture>(find.byType(Texture)).textureId, 11);
-    expect(find.text('Original'), findsOneWidget);
-    await tester.tap(find.byTooltip('Show edited photo'));
+    expect(textures(tester), [10, 11]);
+    expect(find.text('Before'), findsOneWidget);
+    expect(find.text('After'), findsOneWidget);
+    final viewport = find.byType(PhotoViewport);
+    final finger = await tester.startGesture(tester.getCenter(viewport));
+    await finger.moveBy(const Offset(60, 0));
     await tester.pump();
-    expect(tester.widget<Texture>(find.byType(Texture)).textureId, 10);
+    await finger.up();
+    await tester.pumpAndSettle();
+    final semantics = tester.getSemantics(
+      find.bySemanticsLabel('Before and after divider'),
+    );
+    expect(semantics.value, isNot('50% original'));
+    await tester.tap(find.byTooltip('Compare with original'));
+    await tester.pump();
+    expect(textures(tester), [10]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('holding the photo shows the original', (tester) async {
+    await mount(tester, photo);
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byType(PhotoViewport)),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(textures(tester), [11]);
+    expect(find.text('Original'), findsOneWidget);
+    await hold.up();
+    await tester.pump();
+    expect(textures(tester), [10]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('double-tap zooms to 2.5x and back to fit', (tester) async {
+    await mount(tester, photo);
+    final center = tester.getCenter(find.byType(PhotoViewport));
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('250% · Fit', findRichText: true),
+      findsOneWidget,
+    );
+    await tester.tapAt(center);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(center);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('250%', findRichText: true), findsNothing);
   });
 
   testWidgets('drag at fit size overscrolls then springs to the origin', (
@@ -154,12 +202,12 @@ void main() {
             matching: find.byType(Transform),
           ),
         )
-        .last
+        .elementAt(1)
         .transform
         .storage[0];
     expect(scale(), greaterThan(1.5));
     final zoom = scale();
-    await tester.tap(find.byTooltip('Show original photo'));
+    await tester.tap(find.byTooltip('Compare with original'));
     await tester.pump();
     expect(scale(), zoom);
     await mount(

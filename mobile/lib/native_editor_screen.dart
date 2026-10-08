@@ -295,6 +295,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
               child: erasing
                   ? brand('Original · grading paused')
                   : GestureDetector(
+                      key: const ValueKey('stock-capsule'),
                       onTap: stockSheet,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -784,6 +785,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
       detail: controller.detail,
       detailRevision: controller.revision,
       onDetailRequest: controller.requestDetail,
+      rendering: controller.rendering,
       brush: controller.erasing ? brush : null,
       showBrush: !controller.removalReady && !controller.removing,
       focus:

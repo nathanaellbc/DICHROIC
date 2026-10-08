@@ -37,7 +37,8 @@ Future<Uint8List> decodedRgba(Uint8List encoded) async {
 Future<void> activate(WidgetTester tester, String label) async {
   final native = find.byWidgetPredicate(
     (w) =>
-        (w is NativeButton && w.label == label) ||
+        (w is NativeButton &&
+            (w.label == label || w.label.startsWith('$label:'))) ||
         (w is Press && w.label == label),
   );
   if (useNativeControls && native.evaluate().isNotEmpty) {
@@ -47,6 +48,10 @@ Future<void> activate(WidgetTester tester, String label) async {
         : (widget as Press).onTap;
     onTap?.call();
     await tester.pump();
+    return;
+  }
+  if (label == 'Stocks') {
+    await tester.tap(find.byKey(const ValueKey('stock-capsule')));
     return;
   }
   await tester.tap(find.byTooltip(label));
@@ -235,7 +240,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
-      await activate(tester, 'Film & Paper');
+      await activate(tester, 'Stocks');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await const MethodChannel(
