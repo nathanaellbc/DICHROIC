@@ -3,6 +3,7 @@ import UIKit
 import ImageIO
 import CoreVideo
 import UniformTypeIdentifiers
+import PhotosUI
 import ExposureNative
 import Accelerate
 
@@ -69,7 +70,7 @@ private final class PreviewTexture: NSObject, FlutterTexture {
     }
 }
 
-public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UIDocumentPickerDelegate {
+public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UIDocumentPickerDelegate, PHPickerViewControllerDelegate {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
     private let cancellation = NativeCancellation()
     private let texture = PreviewTexture()
@@ -95,6 +96,36 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private var memoryObserver: NSObjectProtocol?
     private var eventSink: FlutterEventSink?
     private var pickerResult: FlutterResult?
+    private var importedPhotos: [URL] = []
+
+    public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard let provider = results.first?.itemProvider else { pickerResult?(nil); pickerResult = nil; return }
+        let type = provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .rawImage) == true }
+            ?? provider.registeredTypeIdentifiers.first { UTType($0)?.conforms(to: .image) == true }
+            ?? UTType.image.identifier
+        // File representation preserves HEIC, RAW and metadata. UIImage-based
+        // picking can silently turn the original into an 8-bit JPEG instead.
+        provider.loadFileRepresentation(forTypeIdentifier: type) { [weak self] url, error in
+            do {
+                if let error { throw error }
+                guard let url else { throw NativeError.message("Could not load the original photo") }
+                let suffix = url.pathExtension.isEmpty ? (UTType(type)?.preferredFilenameExtension ?? "jpg") : url.pathExtension
+                let copy = FileManager.default.temporaryDirectory.appendingPathComponent("Dichroic-import-\(UUID().uuidString).\(suffix)")
+                try FileManager.default.copyItem(at: url, to: copy)
+                DispatchQueue.main.async {
+                    guard let self else { try? FileManager.default.removeItem(at: copy); return }
+                    self.importedPhotos.append(copy)
+                    self.pickerResult?(copy.path); self.pickerResult = nil
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.pickerResult?(FlutterError(code: "photo_picker", message: error.localizedDescription, details: nil))
+                    self?.pickerResult = nil
+                }
+            }
+        }
+    }
 
     public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         pickerResult?(urls.first?.path); pickerResult = nil
@@ -140,6 +171,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     }
 
     deinit {
+        for url in importedPhotos { try? FileManager.default.removeItem(at: url) }
         if let observer = memoryObserver { NotificationCenter.default.removeObserver(observer) }
         if let engine = engine { exposure_destroy(engine) }
         registry.unregisterTexture(textureId)
@@ -182,16 +214,28 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             result(nil); return
         }
         #endif
-        if call.method == "chooseFile" {
+        if ["chooseFile", "choosePhoto"].contains(call.method) {
             guard pickerResult == nil else { result(FlutterError(code: "picker_busy", message: "File picker is already open", details: nil)); return }
-            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image, .rawImage, .data], asCopy: true)
-            picker.delegate = self
             guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
                   var presenter = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
                 result(FlutterError(code: "picker_window", message: "The editor window is not active", details: nil)); return
             }
             while let presented = presenter.presentedViewController { presenter = presented }
-            pickerResult = result; presenter.present(picker, animated: true); return
+            pickerResult = result
+            if call.method == "choosePhoto" {
+                var configuration = PHPickerConfiguration()
+                configuration.filter = .images
+                configuration.selectionLimit = 1
+                configuration.preferredAssetRepresentationMode = .current
+                let picker = PHPickerViewController(configuration: configuration)
+                picker.delegate = self
+                presenter.present(picker, animated: true)
+            } else {
+                let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image, .rawImage, .data], asCopy: true)
+                picker.delegate = self
+                presenter.present(picker, animated: true)
+            }
+            return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
         if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugStats", "detail", "exportSize"].contains(call.method) {
@@ -227,6 +271,11 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         detailTexture.clear(); originalDetailTexture.clear()
                         spareDetailTexture.clear(); spareOriginalDetailTexture.clear()
                         photoURL = url
+                        DispatchQueue.main.async { [weak self] in
+                            guard let self else { return }
+                            for old in self.importedPhotos where old != url { try? FileManager.default.removeItem(at: old) }
+                            self.importedPhotos.removeAll { $0 != url }
+                        }
                         value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
                             "width": size.width, "height": size.height, "sourceWidth": source.width, "sourceHeight": source.height,
                             "inputColorSpace": source.colorSpace, "encoding": source.encoding]

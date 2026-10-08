@@ -9,7 +9,6 @@ dependencies:
     sdk: flutter
   exposure_engine:
     path: packages/exposure_engine
-  image_picker: 1.2.0
   share_plus: 11.1.0
   flutter_svg: 2.3.0
 dev_dependencies:

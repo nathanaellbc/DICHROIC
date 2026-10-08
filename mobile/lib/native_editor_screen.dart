@@ -1,6 +1,5 @@
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'editor_widgets.dart';
 import 'native_editor_controller.dart';
 import 'photo_viewport.dart';
@@ -36,12 +35,9 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
 
   Future<void> pick() async {
     try {
-      final photo = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        requestFullMetadata: true,
-      );
-      if (photo != null) {
-        await controller.open(photo.path);
+      final path = await controller.engine.choosePhoto();
+      if (path != null) {
+        await controller.open(path);
       }
     } catch (e) {
       if (mounted) {

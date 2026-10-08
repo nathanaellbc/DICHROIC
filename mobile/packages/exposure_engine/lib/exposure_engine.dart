@@ -43,6 +43,7 @@ class NativeDetail {
 class ExposureEngine {
   static const _channel = MethodChannel('exposure/native');
   Future<String?> chooseFile() => _channel.invokeMethod<String>('chooseFile');
+  Future<String?> choosePhoto() => _channel.invokeMethod<String>('choosePhoto');
   Future<NativeDetail?> detail(
     Map<String, dynamic> params,
     Rect rect,
