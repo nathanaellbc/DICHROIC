@@ -13,7 +13,14 @@ xcrun simctl bootstatus "$device" -b
   root="$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Containers/Data/Application"
   while true; do
     if [ -d "$root" ]; then
-      find "$root" -maxdepth 3 -path '*/Documents/editor*.png' -exec cp {} build/ios/proofs/ \; 2>/dev/null || true
+      while IFS= read -r proof; do
+        name="$(basename "$proof")"
+        if [ ! -f "build/ios/proofs/$name" ]; then
+          # UIKit drawHierarchy omits Flutter's asynchronous Metal layers.
+          # Capture the simulator compositor while the test holds this screen.
+          xcrun simctl io "$device" screenshot "build/ios/proofs/$name" || cp "$proof" "build/ios/proofs/$name"
+        fi
+      done < <(find "$root" -maxdepth 3 -path '*/Documents/editor*.png' 2>/dev/null)
     fi
     sleep 3
   done
@@ -27,7 +34,10 @@ diagnostics() {
   bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist 2>/dev/null)" || true
   container="$(xcrun simctl get_app_container "$device" "$bundle" data 2>/dev/null)" || true
   if [ -n "$container" ] && [ -d "$container/Documents" ]; then
-    find "$container/Documents" -maxdepth 1 -name '*.png' -exec cp {} build/ios/proofs/ \;
+    while IFS= read -r proof; do
+      name="$(basename "$proof")"
+      [ -f "build/ios/proofs/$name" ] || cp "$proof" "build/ios/proofs/$name"
+    done < <(find "$container/Documents" -maxdepth 1 -name '*.png')
   fi
 }
 trap diagnostics EXIT

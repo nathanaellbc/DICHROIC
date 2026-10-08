@@ -202,7 +202,7 @@ void main() {
         ),
       );
       // Keep the rendered screen available to the simulator screenshot command.
-      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       final proof = await const MethodChannel(
         'exposure/native',
@@ -213,7 +213,7 @@ void main() {
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
       await tester.tap(find.byTooltip('Film & Paper'));
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await const MethodChannel(
         'exposure/native',
@@ -224,7 +224,7 @@ void main() {
       await tester.tap(find.byTooltip('Done'));
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.byTooltip('Export'));
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await const MethodChannel(
         'exposure/native',

@@ -80,6 +80,16 @@ void main() {
           );
         }
       }
+      await tester.tap(find.byTooltip('Film & Paper'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
+      await tester.tap(find.byTooltip('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Export'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
+      await tester.tap(find.byTooltip('Close export'));
+      await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });

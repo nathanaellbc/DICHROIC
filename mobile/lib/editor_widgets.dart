@@ -71,8 +71,11 @@ class Glass extends StatelessWidget {
     ),
     child: BackdropFilter(
       filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-      child: ColoredBox(
+      // Paint list backgrounds and ink above the glass tint, rather than on
+      // the route's Material underneath this surface.
+      child: Material(
         color: const Color(0x941c1c1e),
+        elevation: 0,
         child: Padding(padding: padding, child: child),
       ),
     ),
