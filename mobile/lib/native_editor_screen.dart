@@ -558,7 +558,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
   Future<void> export() => editorSheet<void>(
     context,
     ExportSheet(controller: controller, preferences: exportPreferences),
-    fraction: .68,
+    fraction: MediaQuery.sizeOf(context).height < 600 ? .92 : .76,
     blur: 3.2,
   );
 

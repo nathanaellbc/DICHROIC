@@ -91,7 +91,7 @@ void main() {
       button('Export').onTap!();
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
-      button('Close export').onTap!();
+      button('Cancel').onTap!();
       await tester.pumpAndSettle();
 
       for (final type in [

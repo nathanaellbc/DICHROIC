@@ -90,7 +90,7 @@ void main() {
       await tester.tap(find.byTooltip('Export'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
-      await tester.tap(find.byTooltip('Close export'));
+      await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();

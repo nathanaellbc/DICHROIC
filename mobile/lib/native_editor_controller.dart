@@ -11,6 +11,10 @@ class NativeEditorController extends ChangeNotifier {
   NativeEditorController(this.engine) {
     _events = engine.events.listen((event) {
       status = event['message'] as String?;
+      if (event['total'] is int) {
+        progressDone = event['done'] as int? ?? 0;
+        progressTotal = event['total'] as int;
+      }
       _depthStatus(status);
       _notify();
     }, onError: (Object _) {});
@@ -26,6 +30,9 @@ class NativeEditorController extends ChangeNotifier {
       toast.value = null;
     });
   }
+
+  /// Export tiles developed so far, from the native progress events.
+  int progressDone = 0, progressTotal = 0;
 
   /// Name of the opened file without its extension ("photo" when unknown).
   String sourceStem = 'photo';
@@ -638,7 +645,9 @@ class NativeEditorController extends ChangeNotifier {
     if (photo == null || busy || erasing) return null;
     exporting = true;
     _exportCancelled = false;
-    error = null;
+    exportError = null;
+    progressDone = 0;
+    progressTotal = 0;
     _notify();
     try {
       await _editing;
@@ -658,7 +667,12 @@ class NativeEditorController extends ChangeNotifier {
         quality: quality,
       );
     } catch (e) {
-      if (!_exportCancelled) error = e.toString();
+      // Shown inside the export sheet, as on the web; never an alert.
+      if (!_exportCancelled) {
+        exportError = e is PlatformException
+            ? e.message ?? e.code
+            : e.toString();
+      }
       return null;
     } finally {
       // Progress messages ("Developing…") end with the export.
@@ -668,6 +682,9 @@ class NativeEditorController extends ChangeNotifier {
       if (_rendered != _revision) _scheduleRender();
     }
   }
+
+  /// The last export's technical error, shown under the sheet's message.
+  String? exportError;
 
   Future<void> cancelExport() async {
     if (!exporting) return;

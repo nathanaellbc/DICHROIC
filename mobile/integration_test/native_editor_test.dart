@@ -260,7 +260,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
-      await activate(tester, 'Close export');
+      await activate(tester, 'Cancel');
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 100));
