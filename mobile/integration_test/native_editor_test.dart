@@ -125,6 +125,9 @@ void main() {
         'exposure/native',
       ).invokeMethod<String>('debugScreenshot');
       expect(proof, isNotNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 100));
+      await engine.close();
     },
     timeout: const Timeout(Duration(minutes: 10)),
   );
@@ -137,6 +140,7 @@ void main() {
               as List;
       for (final test in cases) {
         final name = test['file'] as String;
+        debugPrint('Native decode fixture: $name');
         final bytes = await rootBundle.load('assets/parity/$name');
         final file = File('${Directory.systemTemp.path}/$name');
         await file.writeAsBytes(

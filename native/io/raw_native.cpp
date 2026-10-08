@@ -11,7 +11,10 @@ extern "C" const char *dichroic_raw_error() { return error_message.c_str(); }
 extern "C" int32_t dichroic_raw_decode(const char *source, const char *output, DichroicRawInfo *info) {
     try {
         if (!source || !output || !info) throw std::runtime_error("RAW paths are missing");
-        LibRaw raw;
+        // Dispatch workers on iOS have a much smaller stack than desktop main
+        // threads. LibRaw's embedded decoder state belongs on the heap.
+        auto decoder = std::make_unique<LibRaw>();
+        auto &raw = *decoder;
         // Same options and LibRaw 0.22.1 as libraw-wasm 1.6.0. Retain dcraw's
         // encoded 16-bit codes; the shared TS inverse curve restores linear
         // ACES2065-1 without an alternate RAW color treatment.
