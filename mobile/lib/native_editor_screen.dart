@@ -22,6 +22,12 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
   final brush = RemovalBrush();
   final exportPreferences = ExportPreferences();
   @override
+  void initState() {
+    super.initState();
+    exportPreferences.load(controller.engine);
+  }
+
+  @override
   void dispose() {
     controller.dispose();
     brush.dispose();

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'editor_widgets.dart';
@@ -10,6 +12,49 @@ class ExportPreferences {
   double quality = 1;
   bool lut = false;
   int cubeSize = 33;
+  Future<void> load(ExposureEngine engine) async {
+    try {
+      final text = await engine.loadExportPreferences();
+      if (text == null) return;
+      final values = jsonDecode(text) as Map<String, dynamic>;
+      if ([
+        'png8',
+        'png16',
+        'tiff16',
+        'jpeg',
+        'webp',
+        'avif',
+      ].contains(values['format'])) {
+        format = values['format'] as String;
+      }
+      if ([null, 2048, 4096, 8192].contains(values['longEdge'])) {
+        longEdge = values['longEdge'] as int?;
+      }
+      quality = (values['quality'] as num? ?? 1).toDouble().clamp(.1, 1);
+      lut = values['lut'] == true;
+      if ([17, 33, 65].contains(values['cubeSize'])) {
+        cubeSize = values['cubeSize'] as int;
+      }
+    } catch (_) {
+      /* Retain defaults when preferences are unavailable. */
+    }
+  }
+
+  Future<void> save(ExposureEngine engine) async {
+    try {
+      await engine.saveExportPreferences(
+        jsonEncode({
+          'format': format,
+          'longEdge': longEdge,
+          'quality': quality,
+          'lut': lut,
+          'cubeSize': cubeSize,
+        }),
+      );
+    } catch (_) {
+      /* Export remains usable without preferences. */
+    }
+  }
 }
 
 class ExportSheet extends StatefulWidget {
@@ -44,6 +89,7 @@ class _ExportSheetState extends State<ExportSheet> {
     bytes = null;
     if (old != null) File(old).delete().catchError((Object _) => File(old));
     setState(action);
+    p.save(c.engine);
   }
 
   @override

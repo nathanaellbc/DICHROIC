@@ -144,6 +144,14 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         if call.method == "cancelExport" { cancellation.set(true); result(nil); return }
+        if call.method == "loadExportPreferences" { result(UserDefaults.standard.string(forKey: "DichroicExportPreferences")); return }
+        if call.method == "saveExportPreferences" {
+            guard let json = call.arguments as? String, json.utf8.count <= 4096,
+                  (try? JSONSerialization.jsonObject(with: Data(json.utf8))) is [String: Any] else {
+                result(FlutterError(code: "preferences", message: "Invalid export preferences", details: nil)); return
+            }
+            UserDefaults.standard.set(json, forKey: "DichroicExportPreferences"); result(nil); return
+        }
         if ["developExport", "cubeExport"].contains(call.method) { cancellation.set(false) }
         #if DEBUG
         if call.method == "debugScreenshot" {

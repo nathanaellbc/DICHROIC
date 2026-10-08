@@ -65,4 +65,4 @@ workflows:
       - mobile/build/ios/ipa/*.ipa
       - mobile/build/ios/proofs/*.png
       - mobile/build/ios/proofs/*.log
-      - mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/ExposureNative.xcframework/**
+      - mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/DichroicNative.xcframework/**

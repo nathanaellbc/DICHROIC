@@ -19,13 +19,23 @@ for target in device arm64-simulator x86_64-simulator; do
     -DCMAKE_BUILD_TYPE=Release -DRAW_SOURCE="$cache/libraw" -DLCMS_SOURCE="$cache/lcms" -DJPEG_SOURCE="$cache/jpeg"
   cmake --build "$build" --config Release --target raw_native -j 6
   libtool -static -o "$build/libRawNative.a" "$build/libraw_native.a" "$build/libdichroic_lcms.a" "$build/jpeg/libjpeg.a"
+  rust=aarch64-apple-ios-sim
+  if [ "$target" = device ]; then rust=aarch64-apple-ios; fi
+  if [ "$target" = x86_64-simulator ]; then rust=x86_64-apple-ios; fi
+  libtool -static -o "$build/libDichroicNative.a" "$root/native/target/$rust/release/libexposure_native.a" "$build/libRawNative.a"
 done
 mkdir -p "$root/native/target/raw-simulator"
-lipo -create "$root/native/target/raw-arm64-simulator/libRawNative.a" "$root/native/target/raw-x86_64-simulator/libRawNative.a" \
-  -output "$root/native/target/raw-simulator/libRawNative.a"
-framework="$root/mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/RawNative.xcframework"
-xcodebuild -create-xcframework -library "$root/native/target/raw-device/libRawNative.a" -headers "$root/native/io/include" \
-  -library "$root/native/target/raw-simulator/libRawNative.a" -headers "$root/native/io/include" -output "$framework"
+lipo -create "$root/native/target/raw-arm64-simulator/libDichroicNative.a" "$root/native/target/raw-x86_64-simulator/libDichroicNative.a" \
+  -output "$root/native/target/raw-simulator/libDichroicNative.a"
+# CocoaPods copies static XCFramework headers into one pod-wide directory.
+# One archive avoids one dependency's module.modulemap replacing the other.
+headers="$root/native/target/raw-headers"
+mkdir -p "$headers"
+cp "$root/native/include/exposure_native.h" "$root/native/io/include/raw_native.h" "$headers/"
+cat "$root/native/include/module.modulemap" "$root/native/io/include/module.modulemap" > "$headers/module.modulemap"
+framework="$root/mobile/packages/exposure_engine/ios/exposure_engine/Frameworks/DichroicNative.xcframework"
+xcodebuild -create-xcframework -library "$root/native/target/raw-device/libDichroicNative.a" -headers "$headers" \
+  -library "$root/native/target/raw-simulator/libDichroicNative.a" -headers "$headers" -output "$framework"
 licenses="$root/mobile/packages/exposure_engine/ios/exposure_engine/Resources/licenses"
 mkdir -p "$licenses"
 cp "$cache/libraw/LICENSE.LGPL" "$licenses/LibRaw-LGPL.txt"

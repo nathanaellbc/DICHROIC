@@ -177,4 +177,8 @@ class ExposureEngine {
 
   Future<void> close() => _channel.invokeMethod<void>('close');
   Future<void> cancelExport() => _channel.invokeMethod<void>('cancelExport');
+  Future<String?> loadExportPreferences() =>
+      _channel.invokeMethod<String>('loadExportPreferences');
+  Future<void> saveExportPreferences(String json) =>
+      _channel.invokeMethod<void>('saveExportPreferences', json);
 }
