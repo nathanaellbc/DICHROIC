@@ -76,6 +76,7 @@ class _ExportSheetState extends State<ExportSheet> {
   Future<Size>? dimensions;
   NativeEditorController get c => widget.controller;
   ExportPreferences get p => widget.preferences;
+  double get maximumQuality => p.format == 'avif' ? .99 : 1;
   static const names = {
     'png8': 'PNG 8-bit',
     'png16': 'PNG 16-bit',
@@ -91,6 +92,7 @@ class _ExportSheetState extends State<ExportSheet> {
         (c.catalog['exportFormats'] as List?) ??
         ['png8', 'png16', 'tiff16', 'jpeg'];
     if (!formats.contains(p.format)) p.format = 'png8';
+    p.quality = p.quality.clamp(.1, maximumQuality);
     dimensions = c.engine.exportSize(Map.of(c.params), longEdge: p.longEdge);
   }
 
@@ -275,7 +277,13 @@ class _ExportSheetState extends State<ExportSheet> {
                               selected: p.format == f,
                               onTap: c.exporting
                                   ? null
-                                  : () => change(() => p.format = f),
+                                  : () => change(() {
+                                      p.format = f;
+                                      p.quality = p.quality.clamp(
+                                        .1,
+                                        maximumQuality,
+                                      );
+                                    }),
                               child: Text(names[f]!),
                             ),
                           )
@@ -324,7 +332,7 @@ class _ExportSheetState extends State<ExportSheet> {
                   DetailSlider(
                     value: p.quality * 100,
                     min: 10,
-                    max: 100,
+                    max: maximumQuality * 100,
                     step: 1,
                     label: 'Export quality',
                     enabled: !c.exporting,

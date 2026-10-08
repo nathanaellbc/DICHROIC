@@ -44,7 +44,7 @@ private final class PreviewTexture: NSObject, FlutterTexture {
               let space = CGColorSpace(name: gamut == "display-p3" ? CGColorSpace.displayP3 : CGColorSpace.sRGB),
               let frame = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
                   bytesPerRow: width * 4, space: space,
-                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
                   provider: provider, decode: nil, shouldInterpolate: true, intent: .relativeColorimetric) else {
             throw NativeError.message("Could not create color-managed preview")
         }
@@ -470,6 +470,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         } }
                     } }
                     finish(["width": source.width, "height": source.height, "colorSpace": source.colorSpace,
+                        "orientation": (source.metadata[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1,
                         "rgba": FlutterStandardTypedData(bytes: pixels)]); return
                     #else
                     finish(FlutterMethodNotImplemented); return
@@ -492,12 +493,23 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         var candidates: [String] = []
                         if encoders.contains(UTType.webP.identifier) { candidates.append("webp") }
                         if let type = UTType(mimeType: "image/avif"), encoders.contains(type.identifier) { candidates.append("avif") }
-                        // Match web's real 4x4 encoder probe. A listed ImageIO
-                        // identifier does not prove that this device can encode it.
-                        let pixels = Data(repeating: 255, count: 4 * 4 * 4)
+                        // Test real chromatic, non-square pixels at both quality
+                        // endpoints. Advertised identifiers and a white 4x4
+                        // encode miss Apple's unsupported lossless AVIF quality.
+                        var pixels = Data(count: 24 * 18 * 4)
+                        for i in 0..<(24 * 18) {
+                            pixels[i * 4] = UInt8(i % 251); pixels[i * 4 + 1] = UInt8((i * 17) % 251)
+                            pixels[i * 4 + 2] = UInt8((i * 53) % 251); pixels[i * 4 + 3] = 255
+                        }
                         for format in candidates {
-                            if let probe = try? writePNG(pixels, width: 4, height: 4, icc: graph.icc("sRGB"), format: format, quality: 0.5) {
-                                try? FileManager.default.removeItem(at: probe); formats.append(format)
+                            do {
+                                for quality in [0.1, 1.0] {
+                                    let probe = try writePNG(pixels, width: 24, height: 18, icc: graph.icc("sRGB"), format: format, quality: quality)
+                                    try? FileManager.default.removeItem(at: probe)
+                                }
+                                formats.append(format)
+                            } catch {
+                                // Offer only formats that work across the editor's quality range.
                             }
                         }
                         cachedExportFormats = formats
@@ -752,7 +764,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, type.identifier as CFString, 1, nil) else {
             throw NativeError.message("Could not create export file")
         }
-        var metadata: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: min(1, max(0.01, quality)),
+        // ImageIO AV1 rejects 1.0 with kCMPhotoError_UnsupportedQuality:
+        // lossless AVIF is unavailable. Expose the supported 99% lossy maximum.
+        let maximumQuality = format == "avif" ? 0.99 : 1.0
+        var metadata: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: min(maximumQuality, max(0.01, quality)),
             kCGImagePropertyOrientation: 1, kCGImagePropertyPixelWidth: width, kCGImagePropertyPixelHeight: height]
         metadata.merge(sourceMetadata) { current, _ in current }
         if let sourceURL = sourceURL, let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
@@ -768,11 +783,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         var exif = metadata[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
         exif[kCGImagePropertyExifPixelXDimension] = width; exif[kCGImagePropertyExifPixelYDimension] = height
         metadata[kCGImagePropertyExifDictionary] = exif
-        if format == "tiff16" {
-            var tiff = metadata[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
-            tiff[kCGImagePropertyTIFFCompression] = 1; tiff[kCGImagePropertyTIFFOrientation] = 1
-            metadata[kCGImagePropertyTIFFDictionary] = tiff
-        }
+        var tiff = metadata[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+        tiff[kCGImagePropertyTIFFOrientation] = 1
+        if format == "tiff16" { tiff[kCGImagePropertyTIFFCompression] = 1 }
+        metadata[kCGImagePropertyTIFFDictionary] = tiff
         CGImageDestinationAddImage(destination, image, metadata as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             try? FileManager.default.removeItem(at: url)

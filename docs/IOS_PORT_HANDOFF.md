@@ -74,6 +74,20 @@ an active GPU dispatch or ImageIO encoder cannot be interrupted.
 
 ## Remaining acceptance
 
+Build `6ac7536dde4f6899ca0d2058`, commit `b3b6087`, passed seven profiled
+preview/encoded PNG comparisons, native RAW/P3, HEIC/EXR/orientation, memory
+recovery, actual LaMa undo/redo and depth tests. Three integration cases passed;
+the first stopped at AVIF quality 1.0. Apple's log reports
+`kCMPhotoError_UnsupportedQuality` for AV1 (also present in the older 510 build).
+The follow-up exposes/uses the native 99% lossy maximum and probes both quality
+endpoints with non-square chromatic pixels. JPEG open was 9.39 seconds:
+8.23 seconds decoding and 1.16 seconds preview, versus c630's 16.69-second preview.
+First grading added 1.50 seconds; cancel/recovery/export completed at 19.18
+seconds from opening, versus 89.84 in c630. Debug simulator timings vary and
+are not iPhone release latency. The follow-up also retains high-water zoom
+quality when panning after zoom-out and normalizes copied TIFF orientation in
+all export formats. Native editor screenshots are still pending the first test.
+
 Current follow-up also adds a bounded Rust CPU source reader using the exact web
 f64 box sum order and f32 channel normalization. Twenty independently generated
 web fixtures match exactly, covering 8-bit RGBA, 16-bit RGB/lookup/endian and

@@ -21,8 +21,9 @@ editing invalidates it, without developing the photo for every gesture.
 
 Exports use bounded tiles and a file-backed grading cache reused across
 compatible formats. PNG 8/16, TIFF 16, JPEG, ten output ICC profiles and
-17/33/65-point Cube LUTs are implemented. WebP/AVIF are offered only after an actual 4x4 native encode succeeds,
-matching the web editor's capability probing.
+17/33/65-point Cube LUTs are implemented. WebP/AVIF are offered only after real
+chromatic, non-square native encodes succeed at both quality endpoints. AVIF's
+native lossy quality maximum is 99%; Apple rejects its lossless 100% setting.
 The export sheet shows actual adaptive output dimensions and retains settings.
 Cancellation stops between tiles; it cannot interrupt an active GPU dispatch
 or system image encoder. Whole-frame FFT/lens effects retain the canonical

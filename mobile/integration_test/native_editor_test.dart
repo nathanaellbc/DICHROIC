@@ -316,6 +316,18 @@ void main() {
             photo.sourceWidth,
             photo.sourceHeight,
           ], orientation < 5 ? [64, 48] : [48, 64]);
+          if (orientation == 6) {
+            final exported = await engine.exportImage(params, format: 'png8');
+            final probe = await const MethodChannel('exposure/native')
+                .invokeMapMethod<String, dynamic>('debugEncodedPixels', {
+                  'path': exported,
+                });
+            expect(
+              [probe!['width'], probe['height'], probe['orientation']],
+              [48, 64, 1],
+            );
+            await File(exported).delete();
+          }
         }
         for (final name in ['small-native.heic', 'float-native.exr']) {
           final file = await fixture(name);
