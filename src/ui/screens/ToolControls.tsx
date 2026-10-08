@@ -4,8 +4,6 @@
  */
 import { motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
-import { lensReadout, lensSettings } from '../../host/lens';
-import { FILM_FORMAT_LONG_EDGE_MM } from '../../params/filmFormat';
 import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
 import { useElasticScroll } from '../components/useElasticScroll';
@@ -18,16 +16,17 @@ import {
   DIFFUSION_STRENGTH,
   choicePatch,
   decodeAllowed,
-  formatPushPull,
   formatStops,
+  lensReadoutText,
   isModified,
   positionPatch,
   resetPatch,
   sliderPosition,
   sliderRange,
   stepperAtEnd,
+  stepperDisplay,
   stepperPatch,
-  stepperText,
+  toolEnabled,
   valueText,
   visibleTools,
 } from '../model/tools';
@@ -55,14 +54,6 @@ export interface ToolContext {
 /** Pilihan > 10 tidak muat sebagai kapsul; tampil sebagai tombol yang membuka daftar. */
 export function isLongChoice(tool: ChoiceTool): boolean {
   return tool.options.length > 10;
-}
-
-function toolEnabled(tool: Tool, params: RenderParams): boolean {
-  if (tool.requires && !params[tool.requires]) return false;
-  if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
-  if (tool.kind === 'diffusion') return params[tool.enabledBy];
-  if (tool.kind === 'toggle' && tool.field === 'inputCctfDecoding') return decodeAllowed(params.inputColorSpace);
-  return tool.kind !== 'locked';
 }
 
 /** Sakelar di readout: alat bertoggle (auto exposure, decode) dan slider ber-`enabledBy`. */
@@ -102,11 +93,12 @@ export function ResetButton({ tool, ctx, compact }: { tool: Tool; ctx: ToolConte
 
 /** Nilai, petunjuk, dan aksi satu stepper (panel HP dan baris inspector). */
 function stepperModel(tool: StepperTool, params: RenderParams, onPatch: ToolContext['onPatch']) {
+  const { text, hint } = stepperDisplay(tool, params);
   if (tool.values) {
     const enabled = toolEnabled(tool, params);
     return {
-      text: stepperText(tool, params),
-      hint: tool.field === 'lensFNumber' ? 'Wider apertures blur more' : 'Shape of out-of-focus highlights',
+      text,
+      hint,
       atMin: !enabled || stepperAtEnd(tool, params, -1),
       atMax: !enabled || stepperAtEnd(tool, params, 1),
       dec: () => onPatch(stepperPatch(tool, params, -1)),
@@ -117,8 +109,8 @@ function stepperModel(tool: StepperTool, params: RenderParams, onPatch: ToolCont
   const v = params[tool.field];
   const seed = tool.field === 'grainSeed';
   return {
-    text: seed ? `Seed ${v}` : formatPushPull(v),
-    hint: seed ? 'Grain pattern' : v === 0 ? 'Normal development' : v > 0 ? 'Longer development' : 'Shorter development',
+    text,
+    hint,
     atMin: v <= tool.min,
     atMax: v >= tool.max,
     dec: () => onPatch({ [tool.field]: Math.max(tool.min, v - tool.step) }),
@@ -244,13 +236,6 @@ function megabytes(bytes: number): string {
   return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
-function meters(m: number): string {
-  if (!Number.isFinite(m)) return '∞';
-  if (m < 1) return `${m.toFixed(2)} m`;
-  if (m < 10) return `${m.toFixed(1)} m`;
-  return `${Math.round(m)} m`;
-}
-
 const DEPTH_PHASE: Record<string, string> = {
   runtime: 'Downloading the depth engine',
   model: 'Downloading the depth model',
@@ -265,12 +250,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
   const note = <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>;
   if (!params.lensBlurEnabled || !lens) return note;
 
-  const r = lensReadout(lensSettings(params), params.filmFormat, FILM_FORMAT_LONG_EDGE_MM[params.filmFormat], lens.aspect);
-  const readout = (
-    <p className="t-footnote secondary tabular" style={{ margin: 0 }}>
-      Sharp from {meters(r.nearLimitM)} to {meters(r.farLimitM)} · {Math.round(r.focalLengthMm)} mm f/{params.lensFNumber} · hyperfocal {meters(r.hyperfocalM)}
-    </p>
-  );
+  const readout = <p className="t-footnote secondary tabular" style={{ margin: 0 }}>{lensReadoutText(params, lens.aspect)}</p>;
   const { depth } = lens;
   let status: React.ReactNode;
   switch (depth.status) {

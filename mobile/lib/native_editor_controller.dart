@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 typedef Json = Map<String, dynamic>;
 
@@ -11,15 +11,117 @@ class NativeEditorController extends ChangeNotifier {
   NativeEditorController(this.engine) {
     _events = engine.events.listen((event) {
       status = event['message'] as String?;
+      _depthStatus(status);
       _notify();
     }, onError: (Object _) {});
   }
+
+  /// Toast pill, as on the web: shown for 2.2 s at the top of the editor.
+  final toast = ValueNotifier<String?>(null);
+  Timer? _toastTimer;
+  void showToast(String text) {
+    _toastTimer?.cancel();
+    toast.value = text;
+    _toastTimer = Timer(const Duration(milliseconds: 2200), () {
+      toast.value = null;
+    });
+  }
+
+  /// Name of the opened file without its extension ("photo" when unknown).
+  String sourceStem = 'photo';
+
+  /// Lens blur depth map: 'idle', 'needs-download', 'working', 'ready' or
+  /// 'error'. The model is downloaded only after the user taps Download.
+  String depthState = 'idle';
+  String depthPhase = 'Measuring depth';
+  String? depthError;
+  int depthBytes = 27258801;
+  double depthSeconds = 0;
+  bool _depthAllowed = false;
+  DateTime? _depthStarted;
+
+  void _depthStatus(String? message) {
+    if (message == null || depthState == 'ready') return;
+    if (message.startsWith('Preparing depth')) {
+      depthState = 'working';
+      depthPhase = 'Measuring depth';
+      _depthStarted ??= DateTime.now();
+    } else if (message.startsWith('Downloading depth')) {
+      depthState = 'working';
+      depthPhase = 'Downloading the depth model';
+    }
+  }
+
+  void _resetDepth() {
+    depthState = 'idle';
+    depthError = null;
+    _depthStarted = null;
+  }
+
+  /// Checks the model before lens blur renders; without it, asks first.
+  Future<void> _checkDepth() async {
+    if (params['lensBlurEnabled'] != true || depthState == 'ready') return;
+    if (_depthAllowed) return;
+    try {
+      final model = await engine.depthModel();
+      depthBytes = model.bytes;
+      if (model.stored) {
+        _depthAllowed = true;
+      } else {
+        depthState = 'needs-download';
+      }
+    } on Object {
+      // Hosts without the native plugin (tests) treat the model as present.
+      _depthAllowed = true;
+    }
+  }
+
+  /// "Download" in the lens card: allows the one-time depth model download.
+  void downloadDepth() {
+    _depthAllowed = true;
+    depthState = 'working';
+    depthError = null;
+    _rendered = -1;
+    _notify();
+    _scheduleRender();
+  }
+
+  /// Parameters sent to the renderer: lens blur waits for the depth model.
+  Json get _renderParams => params['lensBlurEnabled'] == true && !_depthAllowed
+      ? {...params, 'lensBlurEnabled': false}
+      : Map.of(params);
+
+  /// This file's defaults: the baseline with the decoder's input settings.
+  Json get defaults => {
+    ...Map<String, dynamic>.from(catalog['baseline'] as Map? ?? {}),
+    if (photo != null && params.containsKey('inputColorSpace')) ...{
+      'inputColorSpace': photo!.inputColorSpace,
+      'inputCctfDecoding': photo!.encoding == 'encoded',
+      'autoExposure': photo!.encoding == 'linear',
+    },
+  };
+
+  /// Any setting differs from this file's defaults (web `isEdited`).
+  bool get edited {
+    if (photo == null) return false;
+    final base = defaults;
+    return params.entries.any(
+      (e) => base.containsKey(e.key) && base[e.key] != e.value,
+    );
+  }
+
   final ExposureEngine engine;
   NativePhoto? photo;
   Json catalog = {}, params = {};
   List<Json> groups = [];
   bool loading = false, exporting = false, rendering = false;
   String? error;
+
+  /// Alert title for [error] (web alert dialog), e.g. "Can’t Open “IMG_0001”".
+  String errorTitle = 'Something Went Wrong';
+
+  /// File being opened, for the "Opening …" card.
+  String? openingName;
   String? status;
   StreamSubscription<Json>? _events;
   bool erasing = false, removing = false, removalReady = false;
@@ -175,6 +277,7 @@ class NativeEditorController extends ChangeNotifier {
       if (apply) {
         final before = _snapshot();
         _removalCursor = await engine.applyRemoval();
+        _resetDepth();
         _undo.add(before);
         _redo.clear();
         _trimHistory();
@@ -211,6 +314,13 @@ class NativeEditorController extends ChangeNotifier {
     }
   }
 
+  /// The alert was dismissed.
+  void clearError() {
+    error = null;
+    errorTitle = 'Something Went Wrong';
+    _notify();
+  }
+
   void _notify() {
     if (!_disposed) notifyListeners();
   }
@@ -234,12 +344,19 @@ class NativeEditorController extends ChangeNotifier {
   }
 
   Future<void> _controls() async {
-    groups = (await engine.controls(params)).cast<Json>();
+    final aspect = photo == null || photo!.height == 0
+        ? 1.5
+        : photo!.width / photo!.height;
+    groups = (await engine.controls({
+      ...params,
+      'viewAspect': aspect,
+    })).cast<Json>();
   }
 
   Future<void> open(String path) async {
     if (busy) return;
     loading = true;
+    openingName = stemOf(path);
     error = null;
     _notify();
     final generation = ++_generation;
@@ -252,12 +369,23 @@ class NativeEditorController extends ChangeNotifier {
       final next = await engine.open(path);
       if (_disposed || generation != _generation) return;
       photo = next;
-      params = Map<String, dynamic>.from(catalog['baseline'] as Map);
+      sourceStem = stemOf(path);
+      // As on the web: film, paper, adjustments and lens settings carry over
+      // to the next photo; input color space, auto exposure and the focus
+      // point belong to the file.
+      params = params.isEmpty
+          ? Map<String, dynamic>.from(catalog['baseline'] as Map)
+          : Map.of(params);
       if (params.containsKey('inputColorSpace')) {
         params['inputColorSpace'] = next.inputColorSpace;
         params['inputCctfDecoding'] = next.encoding == 'encoded';
         params['autoExposure'] = next.encoding == 'linear';
       }
+      if (params.containsKey('lensFocusX')) {
+        params['lensFocusX'] = .5;
+        params['lensFocusY'] = .5;
+      }
+      _resetDepth();
       _undo.clear();
       _redo.clear();
       _gestureBefore = null;
@@ -272,12 +400,66 @@ class NativeEditorController extends ChangeNotifier {
       _revision++;
       await _controls();
     } catch (e) {
+      errorTitle = 'Can’t Open “${stemOf(path)}”';
+      error = e is PlatformException ? e.message ?? e.code : e.toString();
+    } finally {
+      loading = false;
+      openingName = null;
+      _notify();
+    }
+    if (photo != null && error == null) {
+      await _checkDepth();
+      _notify();
+      _scheduleRender();
+    }
+  }
+
+  /// Closes the photo and releases the renderer (web "Close Photo"). The
+  /// look stays for the next photo.
+  Future<void> closePhoto() async {
+    if (busy || photo == null) return;
+    loading = true;
+    _notify();
+    try {
+      await _editing;
+      await _render;
+      await _detailTask;
+      await engine.close();
+    } catch (e) {
       error = e.toString();
     } finally {
+      photo = null;
+      groups = [];
+      _undo.clear();
+      _redo.clear();
+      _gestureBefore = null;
+      _removalCursor = 0;
+      erasing = false;
+      removalReady = false;
+      detail = null;
+      _detailQueued = null;
+      _detailWish = null;
+      _detailAttempt = null;
+      _detailHighWater = 0;
+      status = null;
+      _resetDepth();
+      _revision++;
+      _rendered = -1;
       loading = false;
       _notify();
     }
-    if (photo != null && error == null) _scheduleRender();
+  }
+
+  /// File stem for export names; picker copies carry the original after "--".
+  static String stemOf(String path) {
+    var name = path.split('/').last.split(r'\').last;
+    final dot = name.lastIndexOf('.');
+    if (dot > 0) name = name.substring(0, dot);
+    if (name.startsWith('Dichroic-import-')) {
+      final mark = name.indexOf('--');
+      name = mark < 0 ? '' : name.substring(mark + 2);
+    }
+    return name.trim().isEmpty ? 'photo' : name.trim();
   }
 
   void beginGesture() {
@@ -332,10 +514,14 @@ class NativeEditorController extends ChangeNotifier {
             _redo.clear();
             _trimHistory();
           }
+          final lensOn =
+              next['lensBlurEnabled'] == true &&
+              params['lensBlurEnabled'] != true;
           params = next;
           _revision++;
           _invalidateDetail();
           error = null;
+          if (lensOn) await _checkDepth();
           await _controls();
           _notify();
           _scheduleRender();
@@ -366,7 +552,22 @@ class NativeEditorController extends ChangeNotifier {
           photo != null &&
           _rendered != _revision) {
         final revision = _revision;
-        await engine.develop(Map.of(params));
+        final depth = params['lensBlurEnabled'] == true && _depthAllowed;
+        try {
+          await engine.develop(_renderParams);
+        } catch (e) {
+          if (depth && depthState != 'ready') {
+            depthState = 'error';
+            depthError = e is PlatformException ? e.message : e.toString();
+          }
+          rethrow;
+        }
+        if (depth && depthState != 'ready') {
+          depthState = 'ready';
+          depthSeconds = _depthStarted == null
+              ? 0
+              : DateTime.now().difference(_depthStarted!).inMilliseconds / 1000;
+        }
         _rendered = revision;
       }
     } catch (e) {
@@ -422,6 +623,7 @@ class NativeEditorController extends ChangeNotifier {
       await _render;
       await engine.restoreRemoval(cursor);
       _removalCursor = cursor;
+      _resetDepth();
     }
     params = restored;
     _invalidateDetail();
@@ -444,13 +646,13 @@ class NativeEditorController extends ChangeNotifier {
       await _detailTask;
       if (_exportCancelled) return null;
       if (cubeSize != null) {
-        return await engine.exportCube(Map.of(params), cubeSize);
+        return await engine.exportCube(_renderParams, cubeSize);
       }
       if (format == 'png8' && longEdge == null && quality == 1) {
-        return await engine.developExport(Map.of(params));
+        return await engine.developExport(_renderParams);
       }
       return await engine.exportImage(
-        Map.of(params),
+        _renderParams,
         format: format,
         longEdge: longEdge,
         quality: quality,
@@ -459,6 +661,8 @@ class NativeEditorController extends ChangeNotifier {
       if (!_exportCancelled) error = e.toString();
       return null;
     } finally {
+      // Progress messages ("Developing…") end with the export.
+      status = null;
       exporting = false;
       _notify();
       if (_rendered != _revision) _scheduleRender();
@@ -478,6 +682,8 @@ class NativeEditorController extends ChangeNotifier {
     _disposed = true;
     _generation++;
     _events?.cancel();
+    _toastTimer?.cancel();
+    toast.dispose();
     Future<void>(() async {
       await _editing;
       await _render;

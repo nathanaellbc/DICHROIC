@@ -4,7 +4,8 @@
  * parity Fase 2C (`tools/param_cases.py`, spec Fase 2 §6.1), misalnya unsharp
  * berhenti di 2,5 karena di atasnya derau f32 melewati ambang.
  */
-import { F_STOPS, LENS_LIMITS, NORMAL_FOCAL_MM } from '../../host/lens';
+import { F_STOPS, LENS_LIMITS, NORMAL_FOCAL_MM, lensReadout, lensSettings } from '../../host/lens';
+import { FILM_FORMAT_LONG_EDGE_MM } from '../../params/filmFormat';
 import type { DiffusionFilterFamily, FilmFormat, RenderParams } from '../../params/renderParams';
 import { isSlideFilm } from './stocks';
 import { isPrintLut } from '../../profiles/printLuts';
@@ -458,6 +459,38 @@ export function resetPatch(tool: Tool, defaults: RenderParams): Partial<RenderPa
 
 export function decodeAllowed(inputColorSpace: string): boolean {
   return !DECODE_WITHOUT_ORACLE.includes(inputColorSpace);
+}
+
+/** Alat bisa dipakai: syarat `requires`, sakelarnya sendiri, dan decode yang didukung. */
+export function toolEnabled(tool: Tool, params: RenderParams): boolean {
+  if (tool.requires && !params[tool.requires]) return false;
+  if (tool.kind === 'slider' && tool.enabledBy) return params[tool.enabledBy];
+  if (tool.kind === 'diffusion') return params[tool.enabledBy];
+  if (tool.kind === 'toggle' && tool.field === 'inputCctfDecoding') return decodeAllowed(params.inputColorSpace);
+  return tool.kind !== 'locked';
+}
+
+function meters(m: number): string {
+  if (!Number.isFinite(m)) return '∞';
+  if (m < 1) return `${m.toFixed(2)} m`;
+  if (m < 10) return `${m.toFixed(1)} m`;
+  return `${Math.round(m)} m`;
+}
+
+/** Kedalaman ruang di kartu Lens Blur: "Sharp from 1.8 m to 2.4 m · 50 mm f/2 · hyperfocal 42 m". */
+export function lensReadoutText(params: RenderParams, aspect: number): string {
+  const r = lensReadout(lensSettings(params), params.filmFormat, FILM_FORMAT_LONG_EDGE_MM[params.filmFormat], aspect);
+  return `Sharp from ${meters(r.nearLimitM)} to ${meters(r.farLimitM)} · ${Math.round(r.focalLengthMm)} mm f/${params.lensFNumber} · hyperfocal ${meters(r.hyperfocalM)}`;
+}
+
+/** Teks dan petunjuk stepper di panel (web dan iOS). */
+export function stepperDisplay(tool: StepperTool, params: RenderParams): { text: string; hint: string } {
+  if (tool.values) {
+    return { text: stepperText(tool, params), hint: tool.field === 'lensFNumber' ? 'Wider apertures blur more' : 'Shape of out-of-focus highlights' };
+  }
+  const v = params[tool.field];
+  if (tool.field === 'grainSeed') return { text: `Seed ${v}`, hint: 'Grain pattern' };
+  return { text: formatPushPull(v), hint: v === 0 ? 'Normal development' : v > 0 ? 'Longer development' : 'Shorter development' };
 }
 
 /** Film negatif bawaan saat kembali ke mode print dari slide film. */

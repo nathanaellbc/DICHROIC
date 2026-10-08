@@ -225,12 +225,16 @@ class NativeSlider extends StatelessWidget {
     required this.onChanged,
     this.onStart,
     this.onEnd,
+    this.onReset,
     this.enabled = true,
   });
   final double value, min, max;
   final String label;
   final ValueChanged<double> onChanged;
   final VoidCallback? onStart, onEnd;
+
+  /// Double-tap on the slider: restore the default (web double-click).
+  final VoidCallback? onReset;
   final bool enabled;
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -253,6 +257,8 @@ class NativeSlider extends StatelessWidget {
             onChanged((v as num).toDouble());
           case 'end':
             onEnd?.call();
+          case 'reset':
+            onReset?.call();
         }
       },
     ),
@@ -366,8 +372,16 @@ class NativeSegmented extends StatelessWidget {
     required this.onChanged,
     this.enabled = true,
     this.height = 36,
+    this.symbols = const [],
+    this.marked = const [],
   });
   final List<String> items;
+
+  /// SF Symbols per segment (icon tabs); [items] become their labels.
+  final List<String> symbols;
+
+  /// Segments with the blue "edited" dot.
+  final List<int> marked;
   final int selected;
   final ValueChanged<int> onChanged;
   final bool enabled;
@@ -378,7 +392,13 @@ class NativeSegmented extends StatelessWidget {
     child: _PlatformControl(
       viewType: 'dichroic/segmented',
       eager: true,
-      params: {'items': items, 'selected': selected, 'enabled': enabled},
+      params: {
+        'items': items,
+        'symbols': symbols,
+        'marked': marked,
+        'selected': selected,
+        'enabled': enabled,
+      },
       onEvent: (method, v) {
         if (method == 'change') onChanged(v as int);
       },
@@ -427,15 +447,19 @@ class NativeTool {
     required this.label,
     required this.glyph,
     this.modified = false,
+    this.dimmed = false,
+    this.locked = false,
   });
   final String id, title, label, glyph;
-  final bool modified;
+  final bool modified, dimmed, locked;
   Map<String, Object?> toMap() => {
     'id': id,
     'title': title,
     'label': label,
     'symbol': sfSymbol(glyph),
     'modified': modified,
+    'dimmed': dimmed,
+    'locked': locked,
   };
 }
 

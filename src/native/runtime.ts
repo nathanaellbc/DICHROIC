@@ -1,8 +1,9 @@
 import { nativeAssets, nativeCatalog, NativeRenderer, type NativeRenderHost } from './renderer';
 import type { RenderParams } from '../params/renderParams';
 import type { DepthMap } from '../host/lens';
-import { GROUPS, choicePatch, findTool, isModified, normalizePatch, positionPatch,
-  resetPatch, sliderPosition, sliderRange, stepperPatch, stockPatch, valueText, visibleTools } from '../ui/model/tools';
+import { DIFFUSION_STRENGTH, GROUPS, choicePatch, decodeAllowed, findTool, formatStops, isModified, lensReadoutText, normalizePatch, positionPatch,
+  resetPatch, sliderPosition, sliderRange, stepperAtEnd, stepperDisplay, stepperPatch, stockPatch, toolEnabled, valueText, visibleTools } from '../ui/model/tools';
+import type { Tool } from '../ui/model/tools';
 import { BASELINE_RENDER_PARAMS } from '../params/renderParams';
 import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB, rgbaFrom, toModelTensor } from '../depth/refine';
 import { buildIccProfile } from '../io/icc';
@@ -137,11 +138,41 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     },
     dispose: () => renderer.dispose(),
     controls(json: string): string {
-      const params = JSON.parse(json) as RenderParams;
-      return JSON.stringify(GROUPS.map(group => ({ ...group, tools: visibleTools(group, params).map(tool => ({
-        ...tool, valueText: valueText(tool, params), modified: isModified(tool, params, defaults),
-        ...(tool.kind === 'slider' ? { range: sliderRange(tool, params), position: sliderPosition(tool, params) } : {}),
-      })) })));
+      // `viewAspect` (lebar/tinggi foto) hanya untuk readout kedalaman ruang.
+      const { viewAspect, ...rest } = JSON.parse(json) as RenderParams & { viewAspect?: number };
+      const params = rest as RenderParams;
+      // Tampilan panel web (ToolControls.tsx): nilai, sakelar, reset, petunjuk.
+      const display = (tool: Tool) => {
+        switch (tool.kind) {
+          case 'slider':
+            return { range: sliderRange(tool, params), position: sliderPosition(tool, params),
+              defaultPosition: sliderPosition(tool, { ...params, [tool.field]: defaults[tool.field] }) };
+          case 'stepper': {
+            const { text, hint } = stepperDisplay(tool, params);
+            return { valueText: text, hint, atMin: stepperAtEnd(tool, params, -1), atMax: stepperAtEnd(tool, params, 1) };
+          }
+          case 'diffusion':
+            return { strength: params[tool.strengthField], strengthRange: DIFFUSION_STRENGTH,
+              strengthText: params[tool.enabledBy] ? `${formatStops(params[tool.strengthField])} stop` : 'Off',
+              defaultStrength: defaults[tool.strengthField] };
+          case 'toggle':
+            return tool.field === 'inputCctfDecoding' && !decodeAllowed(params.inputColorSpace)
+              ? { note: `Not available for ${params.inputColorSpace}.` } : {};
+          case 'lens':
+            return params.lensBlurEnabled ? { readout: lensReadoutText(params, viewAspect ?? 1.5) } : {};
+          default:
+            return {};
+        }
+      };
+      return JSON.stringify(GROUPS.map(group => {
+        const tools = visibleTools(group, params).map(tool => ({
+          ...tool, valueText: valueText(tool, params), modified: isModified(tool, params, defaults),
+          enabled: toolEnabled(tool, params),
+          resettable: (tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && isModified(tool, params, defaults),
+          ...display(tool),
+        }));
+        return { ...group, tools, modified: tools.some(tool => tool.modified) };
+      }));
     },
     patch(json: string): string {
       const { params, action, id, value } = JSON.parse(json) as {

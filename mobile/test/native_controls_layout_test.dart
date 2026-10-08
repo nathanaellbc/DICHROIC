@@ -77,7 +77,13 @@ void main() {
       NativeButton button(String label) => tester.widget<NativeButton>(
         find.byWidgetPredicate((w) => w is NativeButton && w.label == label),
       );
-      button('Film & Paper').onTap!();
+      tester
+          .widget<NativeButton>(
+            find.byWidgetPredicate(
+              (w) => w is NativeButton && w.label.startsWith('Stocks:'),
+            ),
+          )
+          .onTap!();
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
       button('Done').onTap!();

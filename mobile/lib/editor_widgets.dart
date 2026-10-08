@@ -113,12 +113,16 @@ class Press extends StatefulWidget {
     this.selected = false,
     this.plain = false,
     this.filled = false,
+    this.edited = false,
     this.radius = 14,
   });
   final Widget child;
   final String label;
   final VoidCallback? onTap;
   final bool selected, plain, filled;
+
+  /// Web tool chip: a 2 px inset blue ring when the tool is edited.
+  final bool edited;
   final double radius;
   @override
   State<Press> createState() => _PressState();
@@ -209,6 +213,8 @@ class _PressState extends State<Press> {
                       borderRadius: BorderRadius.circular(widget.radius),
                       side: widget.selected && !widget.filled
                           ? const BorderSide(color: signalBlue, width: 1.5)
+                          : widget.edited
+                          ? const BorderSide(color: signalBlue, width: 2)
                           : BorderSide.none,
                     ),
                     color: widget.selected
@@ -311,10 +317,14 @@ class DetailSlider extends StatefulWidget {
     this.onEnd,
     required this.label,
     this.enabled = true,
+    this.onReset,
   });
   final double value, min, max, step;
   final ValueChanged<double> onChanged;
   final VoidCallback? onStart, onEnd;
+
+  /// Double-tap restores the default, like double-click on the web slider.
+  final VoidCallback? onReset;
   final String label;
   final bool enabled;
   @override
@@ -337,6 +347,7 @@ class _DetailSliderState extends State<DetailSlider> {
         max: widget.max,
         label: widget.label,
         enabled: widget.enabled,
+        onReset: widget.enabled ? widget.onReset : null,
         onStart: widget.onStart,
         onEnd: () {
           dragging = null;
@@ -351,7 +362,10 @@ class _DetailSliderState extends State<DetailSlider> {
         },
       );
     }
-    return _flutterSlider();
+    return GestureDetector(
+      onDoubleTap: widget.enabled ? widget.onReset : null,
+      child: _flutterSlider(),
+    );
   }
 
   Widget _flutterSlider() => SliderTheme(
@@ -425,3 +439,118 @@ Future<T?> editorSheet<T>(
     ),
   ),
 );
+
+/// A row of option capsules (web `OptionRow`); the chosen one is centred.
+class OptionRow extends StatefulWidget {
+  const OptionRow({
+    super.key,
+    required this.label,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
+  final String label, value;
+  final List<Map<String, dynamic>> options;
+  final ValueChanged<String>? onChanged;
+  @override
+  State<OptionRow> createState() => _OptionRowState();
+}
+
+class _OptionRowState extends State<OptionRow> {
+  final keys = <String, GlobalKey>{};
+
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    final target = keys[widget.value]?.currentContext;
+    if (target != null && mounted) {
+      Scrollable.ensureVisible(
+        target,
+        alignment: .5,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _reveal();
+  }
+
+  @override
+  void didUpdateWidget(OptionRow old) {
+    super.didUpdateWidget(old);
+    if (old.value != widget.value) _reveal();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: widget.label,
+    container: true,
+    child: SizedBox(
+      height: 48,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        itemCount: widget.options.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
+        itemBuilder: (context, i) {
+          final o = widget.options[i];
+          final value = o['value'] as String;
+          return Center(
+            key: keys.putIfAbsent(value, GlobalKey.new),
+            child: Press(
+              label: o['label'] as String,
+              selected: value == widget.value,
+              radius: 22,
+              onTap: widget.onChanged == null
+                  ? null
+                  : () => widget.onChanged!(value),
+              child: Text(o['label'] as String),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+}
+
+/// Full-width capsule button with arbitrary content (web `.capsule`).
+class ListPress extends StatelessWidget {
+  const ListPress({
+    super.key,
+    required this.label,
+    required this.child,
+    this.onTap,
+  });
+  final String label;
+  final Widget child;
+  final VoidCallback? onTap;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    enabled: onTap != null,
+    child: Opacity(
+      opacity: onTap == null ? .35 : 1,
+      child: Material(
+        color: const Color(0x24787880),
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.centerLeft,
+            child: child,
+          ),
+        ),
+      ),
+    ),
+  );
+}

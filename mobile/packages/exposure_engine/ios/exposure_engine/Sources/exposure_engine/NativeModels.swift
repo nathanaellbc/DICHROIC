@@ -20,6 +20,16 @@ enum NativeModels {
     static let depthURL = URL(string: "https://huggingface.co/onnx-community/depth-anything-v2-small/resolve/4472b7362082ad9968fee890ca0f1e5aca36b93d/onnx/model_quantized.onnx")!
     static let lamaURL = URL(string: "https://huggingface.co/g-ronimo/lama/resolve/418036c6b541e526cdbb0bead1ec3a87dabede53/lama_512_int8.onnx")!
 
+    static let depthName = "depth-4472b736-int8.onnx", depthBytes = 27258801
+
+    /// Whether the model is already on this device (size check only; the hash
+    /// is verified when it is loaded). Lens blur asks before downloading.
+    static func isStored(name: String, bytes: Int) -> Bool {
+        let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DichroicModels", isDirectory: true).appendingPathComponent(name)
+        return (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) == bytes
+    }
+
     static func model(_ remote: URL, name: String) throws -> URL {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DichroicModels", isDirectory: true)

@@ -191,6 +191,15 @@ class ExposureEngine {
   }
 
   Future<void> close() => _channel.invokeMethod<void>('close');
+
+  /// Whether the lens-blur depth model is on this device, and its size.
+  Future<({bool stored, int bytes})> depthModel() async {
+    final value = await _channel.invokeMapMethod<String, dynamic>('depthModel');
+    return (
+      stored: value?['stored'] == true,
+      bytes: value?['bytes'] as int? ?? 27258801,
+    );
+  }
   Future<void> cancelExport() => _channel.invokeMethod<void>('cancelExport');
   Future<String?> loadExportPreferences() =>
       _channel.invokeMethod<String>('loadExportPreferences');

@@ -123,7 +123,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 if let error { throw error }
                 guard let url else { throw NativeError.message("Could not load the original photo") }
                 let suffix = url.pathExtension.isEmpty ? (UTType(type)?.preferredFilenameExtension ?? "jpg") : url.pathExtension
-                let copy = FileManager.default.temporaryDirectory.appendingPathComponent("Dichroic-import-\(UUID().uuidString).\(suffix)")
+                // The original name follows "--" so export can name the file after it, as on the web.
+                let original = (provider.suggestedName ?? "").replacingOccurrences(of: "/", with: "-")
+                let copy = FileManager.default.temporaryDirectory.appendingPathComponent("Dichroic-import-\(UUID().uuidString)--\(original).\(suffix)")
                 try FileManager.default.copyItem(at: url, to: copy)
                 DispatchQueue.main.async {
                     guard let self else { try? FileManager.default.removeItem(at: copy); return }
@@ -239,6 +241,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 result(FlutterError(code: "preferences", message: "Invalid export preferences", details: nil)); return
             }
             UserDefaults.standard.set(json, forKey: "DichroicExportPreferences"); result(nil); return
+        }
+        if call.method == "depthModel" {
+            result(["stored": NativeModels.isStored(name: NativeModels.depthName, bytes: NativeModels.depthBytes),
+                "bytes": NativeModels.depthBytes]); return
         }
         if ["developExport", "cubeExport"].contains(call.method) { cancellation.set(false) }
         #if DEBUG
@@ -641,7 +647,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     graph.previewRGBA = guide.rgba; graph.previewWidth = guide.width; graph.previewHeight = guide.height
                     let input = try graph.prepareDepth()
                     status("Downloading depth model (27 MB, cached for next time)…")
-                    let model = try NativeModels.model(NativeModels.depthURL, name: "depth-4472b736-int8.onnx")
+                    let model = try NativeModels.model(NativeModels.depthURL, name: NativeModels.depthName)
                     let result = try NativeModels.infer(model: model, input: input.data, shape: [1, 3, input.height, input.width])
                     guard result.shape.count >= 2 else { throw NativeError.message("Invalid depth dimensions") }
                     try graph.finishDepth(result.data, width: result.shape[result.shape.count - 1], height: result.shape[result.shape.count - 2])

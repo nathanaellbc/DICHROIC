@@ -155,6 +155,17 @@ private final class SliderControl: ControlView {
         slider.addTarget(self, action: #selector(began), for: .touchDown)
         slider.addTarget(self, action: #selector(changed), for: .valueChanged)
         slider.addTarget(self, action: #selector(ended), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        // Double-tap restores the default, like double-click on the web slider.
+        let reset = UITapGestureRecognizer(target: self, action: #selector(resetTapped))
+        reset.numberOfTapsRequired = 2
+        reset.cancelsTouchesInView = false
+        slider.addGestureRecognizer(reset)
+    }
+
+    @objc private func resetTapped() {
+        guard slider.isEnabled else { return }
+        tracking = false
+        send("reset")
     }
 
     override func apply(_ p: [String: Any]) {
@@ -302,10 +313,22 @@ private final class SegmentedControl: ControlView {
 
     override func apply(_ p: [String: Any]) {
         let next = p["items"] as? [String] ?? []
-        if next != titles {
-            titles = next
+        let symbols = p["symbols"] as? [String] ?? []
+        let marked = Set(p["marked"] as? [Int] ?? [])
+        // Icon tabs (web GroupTabs): SF Symbol per segment, with the blue
+        // "edited" dot drawn into the image.
+        let key = next + symbols + marked.sorted().map(String.init)
+        if key != titles {
+            titles = key
             segmented.removeAllSegments()
-            for (i, title) in next.enumerated() { segmented.insertSegment(withTitle: title, at: i, animated: false) }
+            for (i, title) in next.enumerated() {
+                if i < symbols.count, let image = Self.tabImage(symbols[i], dot: marked.contains(i)) {
+                    image.accessibilityLabel = title
+                    segmented.insertSegment(with: image, at: i, animated: false)
+                } else {
+                    segmented.insertSegment(withTitle: title, at: i, animated: false)
+                }
+            }
         }
         segmented.isEnabled = p.bool("enabled") ?? true
         let selected = p.int("selected") ?? 0
@@ -313,6 +336,19 @@ private final class SegmentedControl: ControlView {
     }
 
     @objc private func changed() { send("change", segmented.selectedSegmentIndex) }
+
+    private static func tabImage(_ name: String, dot: Bool) -> UIImage? {
+        let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+        guard let symbol = UIImage(systemName: name, withConfiguration: config) else { return nil }
+        guard dot else { return symbol }
+        let size = CGSize(width: symbol.size.width + 8, height: symbol.size.height + 4)
+        let image = UIGraphicsImageRenderer(size: size).image { _ in
+            symbol.withTintColor(.label).draw(at: CGPoint(x: 0, y: 4))
+            signalBlue.setFill()
+            UIBezierPath(ovalIn: CGRect(x: size.width - 5, y: 0, width: 5, height: 5)).fill()
+        }
+        return image.withRenderingMode(.alwaysOriginal)
+    }
 }
 
 // MARK: - Stepper (reports -1 / +1 steps; Dart owns the value)
@@ -439,7 +475,9 @@ private final class ToolStripControl: ControlView {
         attributes.font = UIFont.systemFont(ofSize: 11, weight: selected ? .semibold : .regular)
         config.attributedTitle = AttributedString(item.string("label") ?? "", attributes: attributes)
         config.titleLineBreakMode = .byTruncatingTail
-        config.baseForegroundColor = selected ? signalBlue : .secondaryLabel
+        // Web chips: blue when selected, dimmed when the tool is off or unusable.
+        config.baseForegroundColor = selected ? signalBlue : item.bool("dimmed") == true ? .tertiaryLabel : .secondaryLabel
+        if item.bool("locked") == true { config.image = symbolImage("lock.fill", size: 19, weight: .regular) }
         config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 2, bottom: 6, trailing: 2)
         config.cornerStyle = .large
         button.configuration = config

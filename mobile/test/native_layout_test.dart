@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:exposure_engine/exposure_engine.dart';
+import 'package:exposure_ios/editor_text.dart';
 import 'package:exposure_ios/main.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
 import 'package:exposure_ios/native_editor_screen.dart';
@@ -61,10 +62,9 @@ void main() {
           isNull,
           reason: '${group['label']} at $size',
         );
-        final horizontal = find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              widget.axisDirection == AxisDirection.right,
+        final horizontal = find.descendant(
+          of: find.byKey(const ValueKey('tool-strip')),
+          matching: find.byType(Scrollable),
         );
         tester.state<ScrollableState>(horizontal).position.jumpTo(0);
         await tester.pumpAndSettle();
@@ -80,7 +80,9 @@ void main() {
           );
         }
       }
-      await tester.tap(find.byTooltip('Film & Paper'));
+      await tester.tap(
+        find.text(Stocks(editor.catalog, editor.params).filmLine),
+      );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
       await tester.tap(find.byTooltip('Done'));
