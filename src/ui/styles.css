@@ -37,6 +37,22 @@
   --knob-fill: #fff;
   --scrollbar-thumb: rgba(255, 255, 255, 0.2);
   --blue-text: #5cb8ff;
+  /*
+   * Mode terang (prefers-color-scheme: light) membalik "tinta": garis rambut,
+   * isian translucent, dan sorotan memakai rgba(var(--ink), a) -- putih di
+   * gelap, hitam di terang. Putih yang memang putih (teks di atas biru, knob,
+   * kilau kaca) tetap literal.
+   */
+  --ink: 255, 255, 255;
+  --ink-contrast: #000;
+  --label-muted: #bdbdc5;
+  --grabber: rgba(235, 235, 245, 0.3);
+  --menu-bg: rgba(30, 30, 33, 0.62);
+  --toast-bg: rgba(36, 36, 38, 0.64);
+  --shimmer-a: #aaaab3;
+  --shimmer-b: #fff;
+  --start-title: #f5f5f7;
+  --start-sub: #a1a1a6;
   --blue-wash: rgba(0, 145, 255, 0.16);
   --green: #30d158;
   --red: #ff4245;
@@ -281,7 +297,7 @@ html[data-size="regular"] .t-caption2 { font-size: 11px; line-height: 13px; }
 .icon-btn.small { --icon-btn: 30px; }
 .icon-btn.glass { background: var(--glass-bg); border: 1px solid var(--glass-border); }
 .icon-btn[aria-pressed="true"] { background: var(--blue-wash); color: var(--blue-text); }
-.icon-btn.glass[aria-pressed="true"] { background: rgba(255, 255, 255, 0.66); color: #000; }
+.icon-btn.glass[aria-pressed="true"] { background: rgba(var(--ink), 0.66); color: var(--ink-contrast); }
 .icon-btn:disabled { color: var(--label-3); cursor: default; }
 .capsule {
   height: var(--h-control); padding: 0 16px; box-sizing: border-box; flex-shrink: 0;
@@ -298,7 +314,7 @@ html[data-size="regular"] .capsule { font-size: 13px; font-weight: 500; padding:
 .capsule.prominent, .icon-btn.prominent { background: var(--blue-fill); color: #fff; }
 .capsule.large { height: var(--h-control-lg); width: 100%; }
 /* Border asli, bukan box-shadow: fallback SVG Safari melukis ulang border di kontur squircle. */
-.capsule.bordered { background: transparent; border: 1px solid rgba(255, 255, 255, 0.16); }
+.capsule.bordered { background: transparent; border: 1px solid rgba(var(--ink), 0.16); }
 .capsule:disabled { color: var(--label-3); background: var(--fill-soft); cursor: default; }
 .text-btn {
   min-height: var(--h-control); padding: 0 8px; border: 0; background: transparent; cursor: pointer;
@@ -321,20 +337,20 @@ html[data-size="regular"] .capsule { font-size: 13px; font-weight: 500; padding:
 html[data-size="regular"] .segmented.small { --h-seg: 22px; }
 .segment {
   position: relative; border: 0; background: transparent; border-radius: var(--r-segment); cursor: pointer;
-  font-size: 0.882rem; font-weight: 600; color: #bdbdc5;
+  font-size: 0.882rem; font-weight: 600; color: var(--label-muted);
   transition: color 0.15s;
 }
 html[data-size="regular"] .segment { font-size: 12px; font-weight: 500; }
-.segment[aria-pressed="true"] { color: #fff; }
+.segment[aria-pressed="true"] { color: var(--label); }
 .segmented.dense .segment { font-size: 0.8rem; letter-spacing: -0.01em; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .segment-pill {
   /* Satu pil di wadah, tepinya digerakkan Motion (rubberPill.ts). */
   position: absolute; left: 0; top: var(--inset-segment); bottom: var(--inset-segment); border-radius: var(--r-segment);
-  background: rgba(255, 255, 255, 0.2); pointer-events: none; will-change: transform, width;
+  background: rgba(var(--ink), 0.2); pointer-events: none; will-change: transform, width;
 }
 .segmented, .tabs { touch-action: pan-y; }
-.segmented[data-held] .segment-pill, .tabs[data-held] .tab-pill { background: rgba(255, 255, 255, 0.26); }
+.segmented[data-held] .segment-pill, .tabs[data-held] .tab-pill { background: rgba(var(--ink), 0.26); }
 .segmented[data-held], .tabs[data-held] { cursor: grabbing; }
 .segment-label { position: relative; }
 
@@ -346,13 +362,13 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .tab {
   position: relative; min-height: 50px; border: 0; background: transparent; border-radius: var(--r-tab); cursor: pointer; padding: 5px 0 4px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  color: #bdbdc5; transition: color 0.15s;
+  color: var(--label-muted); transition: color 0.15s;
 }
-.tab:hover { color: #fff; }
-.tab[aria-selected="true"] { color: #fff; }
+.tab:hover { color: var(--label); }
+.tab[aria-selected="true"] { color: var(--label); }
 .tab-pill {
   position: absolute; left: 0; top: var(--inset-tabs); bottom: var(--inset-tabs); border-radius: var(--r-tab);
-  background: rgba(255, 255, 255, 0.18); pointer-events: none; will-change: transform, width;
+  background: rgba(var(--ink), 0.18); pointer-events: none; will-change: transform, width;
 }
 .tab-icon, .tab > :not(.tab-pill) { position: relative; }
 .tab-icon { position: relative; display: inline-flex; }
@@ -467,7 +483,7 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
    adalah cahaya biru samar yang bernapas pelan (gagasan Aurora React Bits,
    sangat diredam) dan judul yang muncul dari blur (Blur Text). Hilang begitu
    foto terbuka, jadi tidak ada cahaya yang menyentuh foto. */
-.start-stage { position: absolute; inset: 0; display: flex; overflow: hidden; isolation: isolate; background: #000; }
+.start-stage { position: absolute; inset: 0; display: flex; overflow: hidden; isolation: isolate; background: var(--bg); }
 .start-glow {
   position: absolute; left: 50%; top: 58%; width: min(900px, 140vw); aspect-ratio: 1.6; z-index: -1; pointer-events: none;
   transform: translate(-50%, -50%);
@@ -498,14 +514,14 @@ html[data-size="compact"] .start-content {
 }
 
 .start-title {
-  margin: 0; max-width: 12em; text-wrap: balance; color: #f5f5f7;
+  margin: 0; max-width: 12em; text-wrap: balance; color: var(--start-title);
   font-size: clamp(34px, 9.6vw, 56px); line-height: 1.07; letter-spacing: -0.028em; font-weight: 600;
 }
 html[data-size="regular"] .start-title { font-size: 48px; }
 .start-title-tail { display: block; color: #86868b; }
 .start-word { display: inline-block; will-change: transform, filter, opacity; }
 .start-description {
-  margin: 18px 0 0; max-width: 30em; text-wrap: balance; color: #a1a1a6;
+  margin: 18px 0 0; max-width: 30em; text-wrap: balance; color: var(--start-sub);
   font-size: 17px; line-height: 1.47; letter-spacing: -0.01em;
 }
 html[data-size="regular"] .start-description { font-size: 15px; }
@@ -589,7 +605,7 @@ html[data-size="regular"] .switch { --switch-width: 24px; --switch-height: 14px;
 .slider-fill { position: absolute; top: 0; bottom: 0; border-radius: 9999px; background: var(--accent-fill); }
 .slider-zero {
   position: absolute; top: -8px; width: 2px; height: 20px; margin-left: -1px; border-radius: 1px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--ink), 0.35);
 }
 /*
  * Knob: putih padat saat diam; saat disentuh menjadi lensa Liquid Glass
@@ -687,7 +703,7 @@ html[data-size="regular"] .stepper-value { min-width: 0; flex-grow: 1; }
   background: var(--fill-soft); font-size: 0.882rem; font-weight: 500; white-space: nowrap;
   transition: background-color 0.15s, color 0.15s;
 }
-.option:hover { background: rgba(255, 255, 255, 0.12); }
+.option:hover { background: rgba(var(--ink), 0.12); }
 /* Tekan: sedikit mengecil (jelly saat dipilih ditangani Motion, OptionRow). */
 .option { transition: background-color 0.15s, transform 0.12s ease-out; }
 .option:active { transform: scale(0.96); }
@@ -714,7 +730,7 @@ html[data-size="regular"] .list-footer { padding: 0 8px; }
   transition: background-color 0.12s;
 }
 .row:hover:not(:disabled) { background: var(--hover); }
-.row:active { background: rgba(255, 255, 255, 0.08); }
+.row:active { background: rgba(var(--ink), 0.08); }
 .row:disabled { cursor: default; }
 .row:disabled:active { background: transparent; }
 .row-body {
@@ -760,14 +776,14 @@ html[data-size="regular"] .search-field input { font-size: 12px; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 41;
   margin: 0 auto; max-width: 640px;
-  background: var(--bg-elevated); border: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 0;
+  background: var(--bg-elevated); border: 1px solid rgba(var(--ink), 0.08); border-bottom: 0;
   border-radius: var(--r-sheet) var(--r-sheet) 0 0;
   display: flex; flex-direction: column; box-sizing: border-box;
   touch-action: none;
 }
 .sheet.centered {
   top: 50%; bottom: auto; left: 50%; right: auto; width: min(520px, calc(100vw - 48px));
-  border-radius: var(--r-dialog); border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--r-dialog); border: 1px solid rgba(var(--ink), 0.1);
   box-shadow: var(--shadow-dialog);
   padding-bottom: 0; touch-action: auto;
 }
@@ -775,7 +791,7 @@ html[data-size="regular"] .search-field input { font-size: 12px; }
   align-self: center; width: 80px; height: 16px; border: 0; background: transparent; padding: 5px 0 0;
   cursor: grab; display: flex; justify-content: center;
 }
-.sheet-grabber { width: 36px; height: 5px; border-radius: 9999px; background: rgba(235, 235, 245, 0.3); }
+.sheet-grabber { width: 36px; height: 5px; border-radius: 9999px; background: var(--grabber); }
 .sheet-bar {
   height: 52px; padding: 0 12px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center; flex-shrink: 0;
@@ -833,7 +849,7 @@ html:not([data-size="regular"]) .dialog-only { display: none; }
 .popover-glide {
   position: absolute; left: var(--inset-menu); right: var(--inset-menu); top: 0;
   border-radius: max(0px, calc(var(--r-menu) - var(--inset-menu) - 1px));
-  background: rgba(255, 255, 255, 0.12); pointer-events: none; will-change: transform, height;
+  background: rgba(var(--ink), 0.12); pointer-events: none; will-change: transform, height;
 }
 .popover-list .popover-action { position: relative; z-index: 1; border-radius: max(0px, calc(var(--r-menu) - var(--inset-menu) - 1px)); border-top-color: transparent; background: transparent; }
 /* Pemisah lurus; disembunyikan di sekitar baris yang tersorot (seperti menu iOS). */
@@ -849,7 +865,7 @@ html:not([data-size="regular"]) .dialog-only { display: none; }
   display: flex; align-items: center; gap: 12px; padding: 0 14px; text-align: left; color: var(--label);
 }
 .popover-action[data-menu].destructive { color: var(--red); font-weight: 400; }
-.popover-action:active { background: rgba(255, 255, 255, 0.1); }
+.popover-action:active { background: rgba(var(--ink), 0.1); }
 html[data-size="regular"] .popover-action { min-height: 30px; font-size: 13px; }
 .scrim { position: fixed; inset: 0; z-index: 50; }
 .alert {
@@ -873,7 +889,7 @@ html[data-size="regular"] .popover-action { min-height: 30px; font-size: 13px; }
 }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .sheet, .alert, .popover {
-    background: rgba(30, 30, 33, 0.62);
+    background: var(--menu-bg);
     -webkit-backdrop-filter: blur(28px) saturate(115%);
     backdrop-filter: blur(28px) saturate(115%);
   }
@@ -884,13 +900,13 @@ html[data-size="regular"] .popover-action { min-height: 30px; font-size: 13px; }
 }
 @media (prefers-contrast: more) {
   .backdrop, .alert-scrim, .scrim { background: rgba(0, 0, 0, 0.4); }
-  .sheet, .sheet.centered, .alert, .popover { background: var(--bg-elevated); border-color: rgba(255, 255, 255, 0.3); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .sheet, .sheet.centered, .alert, .popover { background: var(--bg-elevated); border-color: rgba(var(--ink), 0.3); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 /* Toast */
 .toast {
   position: fixed; z-index: 70; left: 50%; top: calc(max(var(--safe-top), 12px) + 60px);
-  background: rgba(36, 36, 38, 0.64) !important;
+  background: var(--toast-bg) !important;
   height: 40px; padding: 0 14px; border-radius: var(--r-menu); display: flex; align-items: center; gap: 8px;
   box-shadow: var(--shadow-menu);
   white-space: nowrap; max-width: calc(100vw - 32px); box-sizing: border-box; overflow: hidden; text-overflow: ellipsis;
@@ -963,7 +979,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .thought-line-done[data-active] { opacity: 1; color: var(--label-2); }
 .thought-line-breath { display: inline-block; }
 .thought-line[data-shimmer] .thought-line-breath {
-  background: linear-gradient(100deg, #aaaab3 30%, #fff 50%, #aaaab3 70%);
+  background: linear-gradient(100deg, var(--shimmer-a) 30%, var(--shimmer-b) 50%, var(--shimmer-a) 70%);
   background-size: 250% 100%; background-position: 125% 0;
   -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
   animation: thought-line-shimmer 1.8s linear infinite;
@@ -1012,7 +1028,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 .btn-sweep {
   display: inline-block;
-  background: linear-gradient(100deg, #bdbdc5 20%, #ffffff 50%, #bdbdc5 80%);
+  background: linear-gradient(100deg, var(--shimmer-a) 20%, var(--shimmer-b) 50%, var(--shimmer-a) 80%);
   background-size: 200% 100%;
   background-position: 100% 0;
   -webkit-background-clip: text;
@@ -1101,7 +1117,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
     --blue-fill: #0070e0;
     --accent-fill: #0091ff;
     --knob-fill: #fff;
-  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb: rgba(var(--ink), 0.2);
   }
   .toast { background: #242426 !important; }
   .icon-btn.glass[aria-pressed="true"] { background: #fff; }
@@ -1135,3 +1151,67 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 .scope-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .scope-options:empty { display: none; }
 .scope-tabs button[aria-checked='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }
+
+/*
+ * Mode terang, mengikuti pengaturan sistem: nilai light-mode iOS/macOS.
+ * Aksen biru tetap Signal Blue; teks biru di atas putih memakai biru yang
+ * lebih gelap supaya kontrasnya lolos AA.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f2f2f7;
+    --bg-elevated: rgba(255, 255, 255, 0.72);
+    --bg-elevated-2: rgba(255, 255, 255, 0.86);
+    --bg-elevated-3: rgba(229, 229, 234, 0.8);
+    --fill: rgba(120, 120, 128, 0.16);
+    --fill-strong: rgba(120, 120, 128, 0.24);
+    --fill-soft: rgba(0, 0, 0, 0.05);
+    --hover: rgba(0, 0, 0, 0.04);
+    --label: #000;
+    --label-2: #6e6e73;
+    --label-3: #8e8e93;
+    --separator: rgba(60, 60, 67, 0.29);
+    --hairline: rgba(0, 0, 0, 0.1);
+    --blue-fill: rgba(0, 112, 224, 0.92);
+    --accent-fill: rgba(0, 145, 255, 0.85);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.25);
+    --blue-text: #0071e3;
+    --blue-wash: rgba(0, 145, 255, 0.12);
+    --red-text: #d70015;
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --clear-bg: rgba(255, 255, 255, 0.5);
+    --clear-border: rgba(0, 0, 0, 0.1);
+    --shadow-menu: 0 8px 40px rgba(0, 0, 0, 0.12);
+    --shadow-dialog: 0 16px 72px rgba(0, 0, 0, 0.16);
+    --ink: 0, 0, 0;
+    --ink-contrast: #fff;
+    --label-muted: rgba(60, 60, 67, 0.75);
+    --grabber: rgba(60, 60, 67, 0.3);
+    --menu-bg: rgba(255, 255, 255, 0.72);
+    --toast-bg: rgba(255, 255, 255, 0.86);
+    --shimmer-a: #8e8e93;
+    --shimmer-b: #000;
+    --start-title: #1d1d1f;
+    --start-sub: #6e6e73;
+  }
+}
+/* Pil segmen terpilih di mode terang: putih dengan bayangan lembut (iOS). */
+@media (prefers-color-scheme: light) {
+  .segment-pill { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+  .segmented[data-held] .segment-pill { background: #f2f2f7; }
+}
+@media (prefers-color-scheme: light) and (prefers-reduced-transparency: reduce) {
+  :root {
+    --bg-elevated: #fff;
+    --bg-elevated-2: #fff;
+    --bg-elevated-3: #e5e5ea;
+    --glass-bg: #fff;
+    --clear-bg: #fff;
+    --blue-fill: #0070e0;
+    --accent-fill: #0091ff;
+  }
+  .toast { background: #fff !important; }
+  .icon-btn.glass[aria-pressed="true"] { background: #000; }
+}

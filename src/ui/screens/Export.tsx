@@ -425,7 +425,7 @@ export function ExportContent({
             </div>
             <div className="callout warn">
               <span style={{ flexShrink: 0, color: 'var(--orange)' }}><Icon name="info" size={20} /></span>
-              <span className="t-subhead" style={{ color: 'rgba(255,236,220,0.94)' }}>
+              <span className="t-subhead" style={{ color: 'var(--label)' }}>
                 A LUT carries color only. Grain, halation, glare, diffusion, lens blur and sharpening are left out, and film and print exposure are ignored.
               </span>
             </div>

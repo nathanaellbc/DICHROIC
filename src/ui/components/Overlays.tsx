@@ -204,7 +204,7 @@ function AlertBody({ title, message, onDismiss, actionLabel = 'OK' }: AlertProps
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <h2 id="alert-title" className="t-headline" style={{ margin: 0 }}>{title}</h2>
-              <p id="alert-message" className="t-footnote" style={{ margin: 0, color: 'rgba(235,235,245,0.75)' }}>{message}</p>
+              <p id="alert-message" className="t-footnote" style={{ margin: 0, color: 'var(--label-2)' }}>{message}</p>
             </div>
             <button type="button" className="capsule" onClick={onDismiss}>{actionLabel}</button>
           </motion.div>

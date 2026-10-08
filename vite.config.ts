@@ -64,7 +64,8 @@ export default defineConfig({
         scope: base,
         display: 'standalone',
         orientation: 'any',
-        background_color: '#000000',
+        // Latar layar pembuka Android = latar putih ikon app.
+        background_color: '#ffffff',
         theme_color: '#000000',
         categories: ['photo'],
         icons: [

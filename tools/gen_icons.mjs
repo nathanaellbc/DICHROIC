@@ -21,7 +21,6 @@ import { encode } from 'fast-png';
 const OUT = join('public', 'icons');
 const WHITE = [255, 255, 255];
 const BLUE = [0, 145, 255]; // Signal Blue #0091FF
-const BLACK = [0, 0, 0];
 
 // Geometri pada grid 256 (sama dengan docs/brand/*.svg).
 const DISC = { x: 101, y: 101, r: 70 };
@@ -45,17 +44,16 @@ function inSheet(x, y) {
   return (dx / A) ** N + (dy / A) ** N <= 1;
 }
 
-/** Warna satu titik pada grid 256: kertas putih, cahaya biru, tumpang tindih hitam. */
+/**
+ * Warna satu titik pada grid 256, versi signature untuk ikon app: cakram dan
+ * kertas Signal Blue, tumpang tindihnya dilubangi ke latar putih.
+ */
 function shade(x, y) {
-  const s = inSheet(x, y);
-  const d = inDisc(x, y);
-  if (s && !d) return WHITE;
-  if (d && !s) return BLUE;
-  return BLACK;
+  return inSheet(x, y) !== inDisc(x, y) ? BLUE : WHITE;
 }
 
 /**
- * Menggambar motif ke kanvas RGB `width` x `height` berlatar hitam; lebar
+ * Menggambar motif ke kanvas RGB `width` x `height` berlatar putih; lebar
  * kotak pembatas motif `markWidth` piksel, berpusat di (cx, cy).
  */
 function drawMark(pixels, width, height, cx, cy, markWidth) {
@@ -83,7 +81,7 @@ function drawMark(pixels, width, height, cx, cy, markWidth) {
 }
 
 function png(width, height, markWidth) {
-  const pixels = new Uint8Array(width * height * 3);
+  const pixels = new Uint8Array(width * height * 3).fill(255);
   drawMark(pixels, width, height, width / 2, height / 2, markWidth);
   return encode({ width, height, data: pixels, channels: 3, depth: 8 });
 }
@@ -123,7 +121,7 @@ for (const [w, h, scale] of SCREENS) {
   splash.push({ file, media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait)` });
 }
 
-// favicon.svg: motif di atas petak hitam membulat. Sudut kertas memakai kubik
+// favicon.svg: motif biru di atas petak putih membulat. Sudut kertas memakai kubik
 // yang mendekati superelips yang sama.
 const fmt = (v) => String(Number(v.toFixed(2)));
 const q = ((8 * 2 ** (-1 / N) - 4) / 3) * A;
@@ -136,18 +134,13 @@ const sheetD =
   `V${fmt(sy0 + A)}C${pt(sx0, sy0 + A - q)} ${pt(sx0 + A - q, sy0)} ${pt(sx0 + A, sy0)}Z`;
 const { x: dcx, y: dcy, r: dr } = DISC;
 const discD = `M${pt(dcx - dr, dcy)}A${dr},${dr} 0 1 1 ${pt(dcx + dr, dcy)}A${dr},${dr} 0 1 1 ${pt(dcx - dr, dcy)}Z`;
-const xt = dcx + Math.sqrt(dr * dr - (sy0 - dcy) ** 2);
-const yl = dcy + Math.sqrt(dr * dr - (sx0 - dcx) ** 2);
-const overlapD =
-  `M${pt(xt, sy0)}H${fmt(sx0 + A)}C${pt(sx0 + A - q, sy0)} ${pt(sx0, sy0 + A - q)} ${pt(sx0, sy0 + A)}` +
-  `V${fmt(yl)}A${dr},${dr} 0 0 0 ${pt(xt, sy0)}Z`;
 const fs = (0.7 * 256) / BBOX_W;
 writeFileSync(
   join('public', 'favicon.svg'),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#000"/>` +
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#fff"/>` +
     `<g transform="translate(${fmt(128 - BBOX_CX * fs)} ${fmt(128 - BBOX_CY * fs)}) scale(${fmt(fs)})">` +
-    `<path fill="#fff" fill-rule="evenodd" d="${sheetD}${overlapD}"/>` +
-    `<path fill="#0091ff" fill-rule="evenodd" d="${discD}${overlapD}"/></g></svg>\n`,
+    // Satu path evenodd: kertas + cakram biru, tumpang tindihnya berlubang.
+    `<path fill="#0091ff" fill-rule="evenodd" d="${sheetD}${discD}"/></g></svg>\n`,
 );
 
 writeFileSync(join('tools', 'splash-screens.json'), `${JSON.stringify(splash, null, 2)}\n`);
