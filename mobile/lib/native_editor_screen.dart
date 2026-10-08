@@ -14,6 +14,8 @@ import 'editor_text.dart';
 import 'scopes.dart';
 import 'start_screen.dart';
 
+part 'wide_layout.dart';
+
 class NativeEditorScreen extends StatefulWidget {
   const NativeEditorScreen({super.key, this.controller});
   final NativeEditorController? controller;
@@ -44,21 +46,36 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
   bool beforeRemoval = false;
   final exportPreferences = ExportPreferences();
 
-  /// Phone scope settings (web keeps them per device class).
-  final scopes = ScopePrefs('compact');
+  /// Scope settings, kept per device class like the web.
+  final compactScopes = ScopePrefs('compact'), wideScopes = ScopePrefs('wide');
+
+  /// The regular (desktop) layout is showing.
+  bool regular = false;
+  ScopePrefs get scopes => regular ? wideScopes : compactScopes;
+
+  /// Split compare (toolbar Before/After, the \\ key, the Compare button).
+  bool compare = false;
+
+  /// Sidebar list (Film or Paper) and the recipe path's reveal.
+  final sidebarTab = ValueNotifier('film');
+  int sidebarReveal = 0;
+
+  void update(VoidCallback change) => setState(change);
   String? _alerted;
 
   @override
   void initState() {
     super.initState();
     exportPreferences.load(controller.engine);
-    scopes.load(controller.engine);
+    compactScopes.load(controller.engine);
+    wideScopes.load(controller.engine);
     controller.addListener(_alert);
   }
 
   @override
   void dispose() {
     controller.removeListener(_alert);
+    sidebarTab.dispose();
     controller.dispose();
     brush.dispose();
     super.dispose();
@@ -970,8 +987,11 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     );
   }
 
-  Widget photoView() {
+  Widget photoView({bool compareButton = true}) {
     return PhotoViewport(
+      compare: compare,
+      onCompareChanged: (on) => setState(() => compare = on),
+      compareButton: compareButton,
       photo: controller.photo!,
       detail: controller.detail,
       detailRevision: controller.revision,
@@ -1090,56 +1110,112 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     listenable: controller,
     builder: (context, _) {
       final photo = controller.photo != null;
-      return Scaffold(
-        body: Stack(
-          children: [
-            SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth > 720;
-                  final controls = controller.erasing
-                      ? removalControls()
-                      : adjustments();
-                  return Column(
-                    children: [
-                      topBar(wide),
-                      Expanded(
-                        child: wide && photo
-                            ? Row(
-                                children: [
-                                  Expanded(child: viewport()),
-                                  SizedBox(
-                                    width: 320,
-                                    child: Glass(
-                                      child: SingleChildScrollView(
-                                        physics: const BouncingScrollPhysics(),
-                                        child: controls,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : viewport(),
-                      ),
-                      if (!wide && photo) Glass(radius: 24, child: controls),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (controller.openingName != null)
-              Positioned.fill(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: .28),
-                  child: openingCard(),
+      return CallbackShortcuts(
+        bindings: shortcuts(),
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            body: Stack(
+              children: [
+                SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Size classes of the web (hooks.ts): regular from
+                      // 1080 x 560, and a phone held sideways; otherwise compact.
+                      final window = MediaQuery.sizeOf(context);
+                      final phone =
+                          window.width > window.height && window.height < 560;
+                      regular =
+                          (window.width >= 1080 && window.height >= 560) ||
+                          phone;
+                      if (regular) return wideLayout(constraints, phone: phone);
+                      final landscape =
+                          window.width > window.height && window.height < 520;
+                      final controls = controller.erasing
+                          ? removalControls()
+                          : adjustments();
+                      return Column(
+                        children: [
+                          topBar(false),
+                          Expanded(child: viewport(landscape: landscape)),
+                          if (photo)
+                            Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 560,
+                                ),
+                                child: Glass(radius: 24, child: controls),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-            Positioned.fill(child: SafeArea(child: toast())),
-          ],
+                if (controller.openingName != null)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: .28),
+                      child: openingCard(),
+                    ),
+                  ),
+                Positioned.fill(child: SafeArea(child: toast())),
+              ],
+            ),
+          ),
         ),
       );
     },
   );
+
+  /// Keyboard shortcuts of the web editor (iPad keyboards): ⌘Z, ⇧⌘Z or
+  /// Ctrl+Y, O, \, E and V. Ignored in sheets, text fields and Remove Object.
+  Map<ShortcutActivator, VoidCallback> shortcuts() {
+    bool free() {
+      final route = ModalRoute.of(context);
+      final focus = FocusManager.instance.primaryFocus?.context?.widget;
+      return (route?.isCurrent ?? true) &&
+          focus is! EditableText &&
+          !controller.erasing;
+    }
+
+    VoidCallback when(bool Function() ok, VoidCallback action) => () {
+      if (free() && ok()) action();
+    };
+    final photo = controller.photo != null;
+    return {
+      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): when(
+        () => controller.canUndo && !controller.busy,
+        controller.undo,
+      ),
+      const SingleActivator(LogicalKeyboardKey.keyZ, control: true): when(
+        () => controller.canUndo && !controller.busy,
+        controller.undo,
+      ),
+      const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+          when(() => controller.canRedo && !controller.busy, controller.redo),
+      const SingleActivator(LogicalKeyboardKey.keyY, control: true): when(
+        () => controller.canRedo && !controller.busy,
+        controller.redo,
+      ),
+      const SingleActivator(LogicalKeyboardKey.keyO): when(
+        () => !controller.busy,
+        openPhoto,
+      ),
+      const SingleActivator(LogicalKeyboardKey.backslash): when(
+        () => photo,
+        () => setState(() => compare = !compare),
+      ),
+      const SingleActivator(LogicalKeyboardKey.keyE): when(
+        () => photo && !controller.busy,
+        export,
+      ),
+      const SingleActivator(LogicalKeyboardKey.keyV): when(
+        () => photo,
+        toggleScopes,
+      ),
+    };
+  }
 }
 
 /// One tool, laid out like the web phone panel (Editor.tsx, ToolControls.tsx):
@@ -1579,14 +1655,132 @@ class OptionSheet extends StatelessWidget {
 /// once, Cancel restores the stocks from when it opened, Swap compares with
 /// the previous choice.
 class StockSheet extends StatefulWidget {
-  const StockSheet({super.key, required this.controller});
+  const StockSheet({
+    super.key,
+    required this.controller,
+    this.dense = false,
+    this.tab,
+    this.reveal = 0,
+  });
   final NativeEditorController controller;
+
+  /// Sidebar source list (wide layout): dense rows, chosen row filled blue,
+  /// no Cancel/Done or Previous.
+  final bool dense;
+
+  /// Film or Paper, when the toolbar's recipe path chooses it.
+  final ValueNotifier<String>? tab;
+
+  /// Bumped to clear the search and scroll to the chosen stock.
+  final int reveal;
   @override
   State<StockSheet> createState() => _StockSheetState();
 }
 
 class _StockSheetState extends State<StockSheet> {
-  String tab = 'film', query = '';
+  String _tab = 'film', query = '';
+  final _search = TextEditingController();
+  final _chosen = GlobalKey();
+  String get tab => widget.tab?.value ?? _tab;
+  set tab(String value) {
+    if (widget.tab != null) {
+      widget.tab!.value = value;
+    } else {
+      _tab = value;
+    }
+  }
+
+  @override
+  void didUpdateWidget(StockSheet old) {
+    super.didUpdateWidget(old);
+    if (old.reveal != widget.reveal) {
+      _search.clear();
+      query = '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final row = _chosen.currentContext;
+        if (row != null && mounted) {
+          Scrollable.ensureVisible(
+            row,
+            alignment: .5,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  /// Dense sidebar row: name, the last part of the detail, blue when chosen.
+  Widget denseRow({
+    Key? key,
+    required String name,
+    required String meta,
+    required bool selected,
+    required bool disabled,
+    bool locked = false,
+    required String tooltip,
+    VoidCallback? onTap,
+  }) => Tooltip(
+    key: key,
+    message: tooltip,
+    child: Semantics(
+      checked: selected,
+      inMutuallyExclusiveGroup: true,
+      child: Material(
+        color: selected ? const Color(0xff0a84ff) : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: disabled ? null : onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 16 / 13,
+                      color: selected
+                          ? Colors.white
+                          : disabled
+                          ? secondary.withValues(alpha: .6)
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                if (locked)
+                  const Glyph('lock', size: 11, color: secondary)
+                else
+                  Flexible(
+                    child: Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: selected ? const Color(0xffd9e5ff) : secondary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
   late final Json before = pick(widget.controller.params);
   late Json swap = before;
 
@@ -1630,7 +1824,7 @@ class _StockSheetState extends State<StockSheet> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: widget.controller,
+    listenable: Listenable.merge([widget.controller, ?widget.tab]),
     builder: (context, _) {
       final c = widget.controller, p = c.params;
       final s = Stocks(c.catalog, p);
@@ -1663,7 +1857,17 @@ class _StockSheetState extends State<StockSheet> {
               style: sub,
             ),
           ),
-        if (tab == 'film' && q.isEmpty)
+        if (tab == 'film' && q.isEmpty && widget.dense)
+          denseRow(
+            key: !s.filmEnabled ? _chosen : null,
+            name: 'Off',
+            meta: 'Neutral negative',
+            selected: !s.filmEnabled,
+            disabled: false,
+            tooltip: 'Off · Neutral negative · controls active',
+            onTap: () => c.edit('film', 'film', 'off'),
+          )
+        else if (tab == 'film' && q.isEmpty)
           ListTile(
             minTileHeight: 56,
             title: const Text('Off'),
@@ -1686,13 +1890,25 @@ class _StockSheetState extends State<StockSheet> {
         final title = section['title'] as String;
         final locked = section['locked'] == true;
         items.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
-            child: Text(
-              title.toUpperCase(),
-              style: const TextStyle(fontSize: 13, color: secondary),
-            ),
-          ),
+          widget.dense
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 10, 8, 2),
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: secondary,
+                    ),
+                  ),
+                )
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+                  child: Text(
+                    title.toUpperCase(),
+                    style: const TextStyle(fontSize: 13, color: secondary),
+                  ),
+                ),
         );
         for (final stock in stocks) {
           final id = stock['id'] as String;
@@ -1712,6 +1928,21 @@ class _StockSheetState extends State<StockSheet> {
                   !(title == 'Kodak' || title == 'Fujifilm')
               ? stock['name'] as String
               : stock['short'] as String;
+          if (widget.dense) {
+            items.add(
+              denseRow(
+                key: selected ? _chosen : null,
+                name: name,
+                meta: (stock['detail'] as String).split(' · ').last,
+                selected: selected,
+                disabled: disabled,
+                locked: locked,
+                tooltip: '${stock['name']} · ${stock['detail']}',
+                onTap: () => c.edit(tab, tab, id),
+              ),
+            );
+            continue;
+          }
           items.add(
             Opacity(
               opacity: disabled ? .45 : 1,
@@ -1745,33 +1976,35 @@ class _StockSheetState extends State<StockSheet> {
 
       return Column(
         children: [
-          Row(
-            children: [
-              Press(
-                label: 'Cancel',
-                onTap: () {
-                  c.edit('fields', 'stocks', before);
-                  Navigator.pop(context);
-                },
-                child: const Glyph('close', size: 16),
-              ),
-              const Expanded(
-                child: Text(
-                  'Film & Paper',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+          if (!widget.dense) ...[
+            Row(
+              children: [
+                Press(
+                  label: 'Cancel',
+                  onTap: () {
+                    c.edit('fields', 'stocks', before);
+                    Navigator.pop(context);
+                  },
+                  child: const Glyph('close', size: 16),
                 ),
-              ),
-              Press(
-                label: 'Done',
-                selected: true,
-                filled: true,
-                onTap: () => Navigator.pop(context),
-                child: const Glyph('check', size: 18),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+                const Expanded(
+                  child: Text(
+                    'Film & Paper',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Press(
+                  label: 'Done',
+                  selected: true,
+                  filled: true,
+                  onTap: () => Navigator.pop(context),
+                  child: const Glyph('check', size: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
           segmented(
             const ['Film', 'Paper'],
             tab == 'film' ? 0 : 1,
@@ -1804,7 +2037,7 @@ class _StockSheetState extends State<StockSheet> {
                   ),
                 ),
                 SizedBox(
-                  width: 150,
+                  width: widget.dense ? 112 : 150,
                   child: segmented(
                     const ['Print', 'Scan'],
                     p['process'] == 'scanNegative' ? 1 : 0,
@@ -1819,7 +2052,7 @@ class _StockSheetState extends State<StockSheet> {
               ],
             ),
           ),
-          if (!same(swap, current))
+          if (!widget.dense && !same(swap, current))
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 12, 4, 0),
               child: Row(
@@ -1865,6 +2098,7 @@ class _StockSheetState extends State<StockSheet> {
               ),
             ),
             child: TextField(
+              controller: _search,
               onChanged: (v) => setState(() => query = v),
               textInputAction: TextInputAction.search,
               decoration: const InputDecoration(

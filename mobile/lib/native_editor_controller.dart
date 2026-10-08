@@ -37,6 +37,9 @@ class NativeEditorController extends ChangeNotifier {
   /// Name of the opened file without its extension ("photo" when unknown).
   String sourceStem = 'photo';
 
+  /// The opened file's name, for the window toolbar.
+  String? fileName;
+
   /// Lens blur depth map: 'idle', 'needs-download', 'working', 'ready' or
   /// 'error'. The model is downloaded only after the user taps Download.
   String depthState = 'idle';
@@ -433,6 +436,10 @@ class NativeEditorController extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       photo = next;
       sourceStem = stemOf(path);
+      final dot = path.lastIndexOf('.');
+      fileName = dot > path.lastIndexOf('/')
+          ? '$sourceStem${path.substring(dot)}'
+          : sourceStem;
       // As on the web: film, paper, adjustments and lens settings carry over
       // to the next photo; input color space, auto exposure and the focus
       // point belong to the file.
@@ -493,6 +500,7 @@ class NativeEditorController extends ChangeNotifier {
     } finally {
       photo = null;
       groups = [];
+      fileName = null;
       _undo.clear();
       _redo.clear();
       _gestureBefore = null;

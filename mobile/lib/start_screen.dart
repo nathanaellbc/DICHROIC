@@ -8,8 +8,12 @@ class StartScreen extends StatefulWidget {
     super.key,
     required this.onChoose,
     this.compactLandscape = false,
+    this.regular = false,
   });
   final VoidCallback? onChoose;
+
+  /// Desktop sizes (web `data-size="regular"`): 48 px title, 40 px button.
+  final bool regular;
 
   /// Short landscape window: description and footnote hidden, top aligned.
   final bool compactLandscape;
@@ -118,7 +122,8 @@ class _StartScreenState extends State<StartScreen>
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final width = MediaQuery.sizeOf(context).width;
-    final size = (width * .096).clamp(34.0, 56.0);
+    final regular = widget.regular;
+    final size = regular ? 48.0 : (width * .096).clamp(34.0, 56.0);
     final title = TextStyle(
       fontSize: size,
       height: 1.07,
@@ -165,7 +170,9 @@ class _StartScreenState extends State<StartScreen>
           },
         ),
         SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(28, short ? 56 : 72, 28, 28),
+          padding: regular
+              ? const EdgeInsets.symmetric(horizontal: 24, vertical: 32)
+              : EdgeInsets.fromLTRB(28, short ? 56 : 72, 28, 28),
           child: ConstrainedBox(
             constraints: BoxConstraints(
               minHeight: short ? 0 : MediaQuery.sizeOf(context).height - 260,
@@ -199,7 +206,7 @@ class _StartScreenState extends State<StartScreen>
                           'Spectral simulation of real film and print stocks, right on this device.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 17,
+                            fontSize: regular ? 15 : 17,
                             height: 1.47,
                             letterSpacing: -.17,
                             color: dark
@@ -228,20 +235,20 @@ class _StartScreenState extends State<StartScreen>
                           child: Opacity(
                             opacity: widget.onChoose == null ? .5 : 1,
                             child: Container(
-                              height: 48,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 26,
+                              height: regular ? 40 : 48,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: regular ? 22 : 26,
                               ),
                               alignment: Alignment.center,
                               decoration: const ShapeDecoration(
                                 color: Color(0xff0071e3),
                                 shape: StadiumBorder(),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'Choose Photo',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 17,
+                                  fontSize: regular ? 15 : 17,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: -.17,
                                 ),

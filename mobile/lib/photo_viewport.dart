@@ -34,6 +34,9 @@ class PhotoViewport extends StatefulWidget {
     this.compareInset = 12,
     this.showOriginal = false,
     this.reveal = 0,
+    this.compare,
+    this.onCompareChanged,
+    this.compareButton = true,
   });
   final NativePhoto photo;
   final Offset? focus;
@@ -57,6 +60,14 @@ class PhotoViewport extends StatefulWidget {
   /// Bumped when Remove Object closes: a blue line sweeps down, developing
   /// the film result over the original (web develop sweep).
   final int reveal;
+
+  /// Split compare, when the editor controls it (toolbar Before/After, the
+  /// \ key); otherwise the viewport keeps its own.
+  final bool? compare;
+  final ValueChanged<bool>? onCompareChanged;
+
+  /// The floating Compare button (phone layout).
+  final bool compareButton;
 
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
@@ -124,6 +135,7 @@ class _PhotoViewportState extends State<PhotoViewport>
       _split = .5;
     }
     if (oldWidget.rendering != widget.rendering) _watchRendering();
+    if (oldWidget.compare != widget.compare) _split = .5;
     if (oldWidget.reveal != widget.reveal && widget.reveal > 0) {
       _sweep.forward(from: 0);
     }
@@ -165,7 +177,8 @@ class _PhotoViewportState extends State<PhotoViewport>
     math.max(0, (_image.height * scale - _viewport.height) / 2),
   );
 
-  bool get _comparing => _compare && !_picking && widget.brush == null;
+  bool get _compareOn => widget.compare ?? _compare;
+  bool get _comparing => _compareOn && !_picking && widget.brush == null;
 
   void _start(ScaleStartDetails details) {
     _ticker.stop();
@@ -688,7 +701,7 @@ class _PhotoViewportState extends State<PhotoViewport>
               ],
             ),
           ),
-          if (hasOriginal && widget.brush == null)
+          if (hasOriginal && widget.brush == null && widget.compareButton)
             Positioned(
               left: 12,
               bottom: widget.compareInset,
@@ -701,30 +714,37 @@ class _PhotoViewportState extends State<PhotoViewport>
 
   /// Floating glass "Compare with original" toggle (web compare button).
   Widget _compareButton() {
-    void toggle() => setState(() {
-      _compare = !_compare;
-      _split = .5;
-    });
+    void toggle() {
+      if (widget.onCompareChanged != null) {
+        widget.onCompareChanged!(!_compareOn);
+        return;
+      }
+      setState(() {
+        _compare = !_compare;
+        _split = .5;
+      });
+    }
+
     if (useNativeControls) {
       return NativeButton(
         label: 'Compare with original',
         symbol: 'rectangle.split.2x1',
-        selected: _compare,
+        selected: _compareOn,
         width: 44,
         onTap: toggle,
       );
     }
     return Semantics(
-      toggled: _compare,
+      toggled: _compareOn,
       child: Glass(
         radius: 22,
         child: Press(
           label: 'Compare with original',
-          plain: !_compare,
-          selected: _compare,
+          plain: !_compareOn,
+          selected: _compareOn,
           radius: 22,
           onTap: toggle,
-          child: Glyph('compare', color: _compare ? signalBlue : null),
+          child: Glyph('compare', color: _compareOn ? signalBlue : null),
         ),
       ),
     );

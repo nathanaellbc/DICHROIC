@@ -584,3 +584,259 @@ class ScopeOverlay extends StatelessWidget {
     );
   }
 }
+
+/// Inspector scope panel (web `ScopePanel`): kind tabs, the options of each
+/// kind as chips, and the scope at the inspector's width.
+class ScopePanel extends StatelessWidget {
+  const ScopePanel({
+    super.key,
+    required this.engine,
+    required this.prefs,
+    required this.frame,
+    required this.window,
+  });
+  final ExposureEngine engine;
+  final ScopePrefs prefs;
+  final int frame;
+  final Size window;
+
+  Widget _chip(String label, bool pressed, VoidCallback onTap, [String? tip]) =>
+      Tooltip(
+        message: tip ?? label,
+        child: Semantics(
+          button: true,
+          toggled: pressed,
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: pressed
+                    ? const Color(0x8c0091ff)
+                    : const Color(0x12ffffff),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: pressed ? Colors.white : const Color(0xffaaaab3),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _choice(
+    List<(String, String)> items,
+    String value,
+    ValueChanged<String> onPick,
+  ) => Container(
+    padding: const EdgeInsets.all(2),
+    decoration: BoxDecoration(
+      color: const Color(0x0fffffff),
+      borderRadius: BorderRadius.circular(7),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (v, label) in items)
+          GestureDetector(
+            onTap: () => onPick(v),
+            child: Container(
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: v == value
+                    ? const Color(0x29ffffff)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: v == value ? Colors.white : const Color(0xffaaaab3),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    void set(Map<String, dynamic> patch) => prefs.update(engine, patch);
+    final p = prefs.values, kind = prefs.kind;
+    final options = <Widget>[];
+    final second = <Widget>[];
+    if (kind == 'waveform') {
+      options.add(
+        _choice(
+          const [('y', 'Y'), ('rgb', 'RGB'), ('cbcr', 'CbCr')],
+          p['waveMode'] as String,
+          (v) => set({'waveMode': v}),
+        ),
+      );
+      if (p['waveMode'] == 'rgb') {
+        final channels = List<bool>.from(p['waveChannels'] as List);
+        const names = ['R', 'G', 'B'];
+        for (var i = 0; i < 3; i++) {
+          options.add(
+            _chip(names[i], channels[i], () {
+              final next = List<bool>.of(channels)..[i] = !channels[i];
+              if (next.any((c) => c)) set({'waveChannels': next});
+            }),
+          );
+        }
+      }
+    } else if (kind == 'parade') {
+      options.add(
+        _choice(
+          const [('rgb', 'RGB'), ('yrgb', 'YRGB'), ('ycbcr', 'YCbCr')],
+          p['paradeMode'] as String,
+          (v) => set({'paradeMode': v}),
+        ),
+      );
+    } else {
+      options.add(
+        _choice(
+          const [
+            ('all', 'All'),
+            ('low', 'Low'),
+            ('mid', 'Mid'),
+            ('high', 'High'),
+          ],
+          p['range'] as String,
+          (v) => set({'range': v}),
+        ),
+      );
+    }
+    if (kind == 'vectorscope') {
+      const styles = [
+        ('standard', 'Standard'),
+        ('simplified', 'Simplified'),
+        ('hueVectors', 'Hue Vectors'),
+        ('off', 'Off'),
+      ];
+      final at = styles.indexWhere((s) => s.$1 == p['style']);
+      second.addAll([
+        _chip(
+          styles[at < 0 ? 0 : at].$2,
+          true,
+          () => set({'style': styles[(at + 1) % styles.length].$1}),
+          'Graticule style',
+        ),
+        _chip(
+          '${p['targets']}%',
+          true,
+          () => set({'targets': p['targets'] == 75 ? 100 : 75}),
+          'Color targets at 75% or 100%',
+        ),
+        _chip(
+          '2×',
+          p['zoom'] == 2,
+          () => set({'zoom': p['zoom'] == 2 ? 1 : 2}),
+          'Zoom 2×',
+        ),
+        _chip(
+          'Skin',
+          p['skinTone'] == true,
+          () => set({'skinTone': p['skinTone'] != true}),
+          'Skin tone line',
+        ),
+        _chip(
+          'Colorize',
+          p['colorize'] == true,
+          () => set({'colorize': p['colorize'] != true}),
+          'Colorize: the trace in the colors it shows',
+        ),
+      ]);
+    } else {
+      second.addAll([
+        _chip(
+          'Colorize',
+          p['waveColorize'] == true,
+          () => set({'waveColorize': p['waveColorize'] != true}),
+          'Colorize: R, G, B traces in their colors (off: white)',
+        ),
+        _chip(
+          'Low Pass',
+          p['lowPass'] == true,
+          () => set({'lowPass': p['lowPass'] != true}),
+          'Low pass filter: reduces noise in the trace',
+        ),
+        _chip(
+          'Extents',
+          p['extents'] == true,
+          () => set({'extents': p['extents'] != true}),
+          'Extents: outline the highest and lowest values',
+        ),
+      ]);
+    }
+    return LayoutBuilder(
+      builder: (context, box) {
+        final width = box.maxWidth - 24;
+        final vector = kind == 'vectorscope';
+        final height = vector
+            ? math.max(140.0, math.min(width, window.height * .38))
+            : math.min(width * .62, window.height * .3);
+        return Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          decoration: const BoxDecoration(
+            color: Color(0xff0b0b0c),
+            border: Border(top: BorderSide(color: Color(0x1f8e8e93))),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: _choice(
+                        [for (final k in ScopePrefs.kinds) (k.$1, k.$2)],
+                        kind,
+                        (v) => set({'kind': v}),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Rec.709',
+                    style: TextStyle(fontSize: 10.5, color: Color(0xffaaaab3)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Wrap(spacing: 4, runSpacing: 4, children: options),
+              const SizedBox(height: 6),
+              Wrap(spacing: 4, runSpacing: 4, children: second),
+              const SizedBox(height: 6),
+              Center(
+                child: ScopeView(
+                  engine: engine,
+                  prefs: p,
+                  frame: frame,
+                  width: vector ? height : width,
+                  height: height,
+                  onToggleZoom: () => set({'zoom': p['zoom'] == 2 ? 1 : 2}),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

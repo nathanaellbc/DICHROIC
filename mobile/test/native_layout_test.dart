@@ -52,7 +52,10 @@ void main() {
     const Size(390, 844),
     const Size(844, 390),
     const Size(768, 1024),
+    const Size(1180, 820),
   ]) {
+    // The web size classes: regular from 1080 x 560 and phones sideways.
+    final regular = size.width >= 1080 || size.height < 560;
     testWidgets('all control groups fit $size without layout overflow', (
       tester,
     ) async {
@@ -71,13 +74,24 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (final group in engine.fixture['groups'] as List) {
-        await tester.tap(find.byTooltip(group['label'] as String));
+        await tester.tap(find.byTooltip(group['label'] as String).last);
         await tester.pumpAndSettle();
         expect(
           tester.takeException(),
           isNull,
           reason: '${group['label']} at $size',
         );
+        // Regular layout: every tool of the group is an inspector row.
+        if (regular) {
+          for (final tool in group['tools'] as List) {
+            expect(
+              find.byKey(ValueKey(tool['id']), skipOffstage: false),
+              findsOneWidget,
+              reason: '${tool['title']} row at $size',
+            );
+          }
+          continue;
+        }
         final horizontal = find.descendant(
           of: find.byKey(const ValueKey('tool-strip')),
           matching: find.byType(Scrollable),
@@ -96,13 +110,24 @@ void main() {
           );
         }
       }
-      await tester.tap(
-        find.text(Stocks(editor.catalog, editor.params).filmLine),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
-      await tester.tap(find.byTooltip('Done'));
-      await tester.pumpAndSettle();
+      if (regular) {
+        // The sidebar is the stock browser; the recipe path reveals Paper.
+        expect(find.text('Process'), findsOneWidget);
+        await tester.tap(
+          find.byWidgetPredicate(
+            (w) => w is Tooltip && (w.message ?? '').endsWith('Paper list'),
+          ),
+        );
+        await tester.pumpAndSettle();
+      } else {
+        await tester.tap(
+          find.text(Stocks(editor.catalog, editor.params).filmLine),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
+        await tester.tap(find.byTooltip('Done'));
+        await tester.pumpAndSettle();
+      }
       await tester.tap(find.byTooltip('Export'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
@@ -110,10 +135,17 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Scopes'));
       await tester.pumpAndSettle();
-      expect(find.text('Vector'), findsOneWidget);
-      await tester.tap(find.text('Vector'));
-      await tester.pumpAndSettle();
-      expect(find.text('Wave'), findsOneWidget);
+      if (regular) {
+        expect(find.text('Rec.709'), findsOneWidget);
+        await tester.tap(find.text('Waveform'));
+        await tester.pumpAndSettle();
+        expect(find.text('Low Pass'), findsOneWidget);
+      } else {
+        expect(find.text('Vector'), findsOneWidget);
+        await tester.tap(find.text('Vector'));
+        await tester.pumpAndSettle();
+        expect(find.text('Wave'), findsOneWidget);
+      }
       expect(tester.takeException(), isNull, reason: 'Scopes at $size');
       await tester.tap(find.byTooltip('Scopes'));
       await tester.pumpAndSettle();

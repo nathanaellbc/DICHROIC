@@ -15,7 +15,13 @@ void main() {
   setUp(() => debugNativeControlsOverride = true);
   tearDown(() => debugNativeControlsOverride = null);
 
-  for (final size in [const Size(390, 844), const Size(844, 390)]) {
+  for (final size in [
+    const Size(390, 844),
+    const Size(844, 390),
+    const Size(1180, 820),
+  ]) {
+    // The web size classes: regular from 1080 x 560 and phones sideways.
+    final regular = size.width >= 1080 || size.height < 560;
     testWidgets('native controls lay out every group and tool at $size', (
       tester,
     ) async {
@@ -55,11 +61,17 @@ void main() {
 
       final groups = engine.fixture['groups'] as List;
       for (var i = 0; i < groups.length; i += 1) {
+        // Group tabs: the segmented control with SF Symbols.
         tester
-            .widget<NativeSegmented>(find.byType(NativeSegmented))
+            .widget<NativeSegmented>(
+              find.byWidgetPredicate(
+                (w) => w is NativeSegmented && w.symbols.isNotEmpty,
+              ),
+            )
             .onChanged(i);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: '${groups[i]['label']}');
+        if (regular) continue;
         for (final tool in groups[i]['tools'] as List) {
           tester
               .widget<NativeToolStrip>(find.byType(NativeToolStrip))
@@ -77,17 +89,19 @@ void main() {
       NativeButton button(String label) => tester.widget<NativeButton>(
         find.byWidgetPredicate((w) => w is NativeButton && w.label == label),
       );
-      tester
-          .widget<NativeButton>(
-            find.byWidgetPredicate(
-              (w) => w is NativeButton && w.label.startsWith('Stocks:'),
-            ),
-          )
-          .onTap!();
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
-      button('Done').onTap!();
-      await tester.pumpAndSettle();
+      if (!regular) {
+        tester
+            .widget<NativeButton>(
+              find.byWidgetPredicate(
+                (w) => w is NativeButton && w.label.startsWith('Stocks:'),
+              ),
+            )
+            .onTap!();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'Stock sheet at $size');
+        button('Done').onTap!();
+        await tester.pumpAndSettle();
+      }
       button('Export').onTap!();
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
@@ -97,7 +111,7 @@ void main() {
       for (final type in [
         'dichroic/button',
         'dichroic/segmented',
-        'dichroic/toolstrip',
+        if (!regular) 'dichroic/toolstrip',
         'dichroic/glass',
         'dichroic/slider',
         'dichroic/switch',
