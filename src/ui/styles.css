@@ -38,7 +38,8 @@
   --scrollbar-thumb: rgba(255, 255, 255, 0.2);
   --blue-text: #5cb8ff;
   /*
-   * Mode terang (prefers-color-scheme: light) membalik "tinta": garis rambut,
+   * Mode terang (sistem terang, atau html[data-theme="light"] dari pilihan
+   * pengguna di theme.ts) membalik "tinta": garis rambut,
    * isian translucent, dan sorotan memakai rgba(var(--ink), a) -- putih di
    * gelap, hitam di terang. Putih yang memang putih (teks di atas biru, knob,
    * kilau kaca) tetap literal.
@@ -1158,7 +1159,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
  * lebih gelap supaya kontrasnya lolos AA.
  */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     color-scheme: light;
     --bg: #f2f2f7;
     --bg-elevated: rgba(255, 255, 255, 0.72);
@@ -1197,13 +1198,53 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
     --start-sub: #6e6e73;
   }
 }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f2f7;
+  --bg-elevated: rgba(255, 255, 255, 0.72);
+  --bg-elevated-2: rgba(255, 255, 255, 0.86);
+  --bg-elevated-3: rgba(229, 229, 234, 0.8);
+  --fill: rgba(120, 120, 128, 0.16);
+  --fill-strong: rgba(120, 120, 128, 0.24);
+  --fill-soft: rgba(0, 0, 0, 0.05);
+  --hover: rgba(0, 0, 0, 0.04);
+  --label: #000;
+  --label-2: #6e6e73;
+  --label-3: #8e8e93;
+  --separator: rgba(60, 60, 67, 0.29);
+  --hairline: rgba(0, 0, 0, 0.1);
+  --blue-fill: rgba(0, 112, 224, 0.92);
+  --accent-fill: rgba(0, 145, 255, 0.85);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.25);
+  --blue-text: #0071e3;
+  --blue-wash: rgba(0, 145, 255, 0.12);
+  --red-text: #d70015;
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --clear-bg: rgba(255, 255, 255, 0.5);
+  --clear-border: rgba(0, 0, 0, 0.1);
+  --shadow-menu: 0 8px 40px rgba(0, 0, 0, 0.12);
+  --shadow-dialog: 0 16px 72px rgba(0, 0, 0, 0.16);
+  --ink: 0, 0, 0;
+  --ink-contrast: #fff;
+  --label-muted: rgba(60, 60, 67, 0.75);
+  --grabber: rgba(60, 60, 67, 0.3);
+  --menu-bg: rgba(255, 255, 255, 0.72);
+  --toast-bg: rgba(255, 255, 255, 0.86);
+  --shimmer-a: #8e8e93;
+  --shimmer-b: #000;
+  --start-title: #1d1d1f;
+  --start-sub: #6e6e73;
+}
 /* Pil segmen terpilih di mode terang: putih dengan bayangan lembut (iOS). */
 @media (prefers-color-scheme: light) {
-  .segment-pill { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
-  .segmented[data-held] .segment-pill { background: #f2f2f7; }
+  :root:not([data-theme="dark"]) .segment-pill { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+  :root:not([data-theme="dark"]) .segmented[data-held] .segment-pill { background: #f2f2f7; }
 }
+:root[data-theme="light"] .segment-pill { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+:root[data-theme="light"] .segmented[data-held] .segment-pill { background: #f2f2f7; }
 @media (prefers-color-scheme: light) and (prefers-reduced-transparency: reduce) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg-elevated: #fff;
     --bg-elevated-2: #fff;
     --bg-elevated-3: #e5e5ea;
@@ -1212,6 +1253,19 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
     --blue-fill: #0070e0;
     --accent-fill: #0091ff;
   }
-  .toast { background: #fff !important; }
-  .icon-btn.glass[aria-pressed="true"] { background: #000; }
+  :root:not([data-theme="dark"]) .toast { background: #fff !important; }
+  :root:not([data-theme="dark"]) .icon-btn.glass[aria-pressed="true"] { background: #000; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-theme="light"] {
+    --bg-elevated: #fff;
+    --bg-elevated-2: #fff;
+    --bg-elevated-3: #e5e5ea;
+    --glass-bg: #fff;
+    --clear-bg: #fff;
+    --blue-fill: #0070e0;
+    --accent-fill: #0091ff;
+  }
+  :root[data-theme="light"] .toast { background: #fff !important; }
+  :root[data-theme="light"] .icon-btn.glass[aria-pressed="true"] { background: #000; }
 }

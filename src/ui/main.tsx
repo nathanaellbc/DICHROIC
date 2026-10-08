@@ -5,12 +5,15 @@ import { App } from './App';
 import { engine } from './engine/engine';
 import { preventPageZoom } from './noZoom';
 import { startPwa } from './pwa';
+import { applyTheme, loadTheme } from './theme';
 // Cadangan SF di luar perangkat Apple (Windows, Android): Inter, self-host dan ikut precache PWA.
 import '@fontsource-variable/inter/wght.css';
 // SF Pro (berkas di public/fonts/sf-pro/) untuk platform tanpa SF bawaan.
 import './fonts.css';
 import './styles.css';
 
+// Tampilan pilihan pengguna dipasang sebelum render pertama (tanpa kedip).
+applyTheme(loadTheme());
 startPwa();
 preventPageZoom();
 // Hanya mode dev: probe Playwright membaca state engine yang sama dengan UI.

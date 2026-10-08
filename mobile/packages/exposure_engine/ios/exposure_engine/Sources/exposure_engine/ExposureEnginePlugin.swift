@@ -204,8 +204,34 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         registry.unregisterTexture(spareOriginalDetailTextureId)
     }
 
+    /// The chosen appearance also drives UIKit (native controls, menus, the
+    /// status bar) through the windows' interface style.
+    private static func applyAppearance(_ mode: String?) {
+        let style: UIUserInterfaceStyle = mode == "light" ? .light : mode == "dark" ? .dark : .unspecified
+        DispatchQueue.main.async {
+            for scene in UIApplication.shared.connectedScenes {
+                guard let windowScene = scene as? UIWindowScene else { continue }
+                for window in windowScene.windows { window.overrideUserInterfaceStyle = style }
+            }
+        }
+    }
+
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         if call.method == "cancelExport" { cancellation.set(true); result(nil); return }
+        if call.method == "loadAppearance" {
+            let stored = UserDefaults.standard.string(forKey: "DichroicAppearance")
+            Self.applyAppearance(stored)
+            result(stored); return
+        }
+        if call.method == "saveAppearance" {
+            let mode = call.arguments as? String
+            guard ["system", "light", "dark"].contains(mode ?? "") else {
+                result(FlutterError(code: "appearance", message: "Unknown appearance", details: nil)); return
+            }
+            UserDefaults.standard.set(mode, forKey: "DichroicAppearance")
+            Self.applyAppearance(mode)
+            result(nil); return
+        }
         if call.method == "loadExportPreferences" { result(UserDefaults.standard.string(forKey: "DichroicExportPreferences")); return }
         if call.method == "saveExportPreferences" {
             guard let json = call.arguments as? String, json.utf8.count <= 4096,

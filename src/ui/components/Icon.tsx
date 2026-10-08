@@ -7,7 +7,7 @@ import {
   BringToFront, Hexagon, Spline, Eye, X, Check, ChevronDown, ChevronsUpDown,
   Columns2, RotateCcw, Minus, Plus, Search, Lock, Image, Mountain, Camera,
   FolderOpen, Upload, TriangleAlert, Info, Shuffle, Undo2, Redo2, Ellipsis,
-  ChevronRight, LoaderCircle, Eraser, Move, Crosshair,
+  ChevronRight, LoaderCircle, Eraser, Move, Crosshair, SunMoon, Moon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { IconName } from '../model/tools';
@@ -15,7 +15,8 @@ import type { IconName } from '../model/tools';
 export type UiIconName =
   | IconName | 'erase' | 'move'
   | 'close' | 'check' | 'chevronDown' | 'upDown' | 'compare' | 'reset' | 'minus' | 'plus'
-  | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'loader' | 'scope';
+  | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'loader' | 'scope'
+  | 'themeSystem' | 'themeLight' | 'themeDark';
 
 const ICONS: Record<UiIconName, LucideIcon> = {
   exposure: Sun, auto: CircleDashed, print: Printer, negative: Contrast,
@@ -34,6 +35,7 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   photo: Image, hdr: Mountain, camera: Camera, open: FolderOpen, share: Upload,
   warning: TriangleAlert, info: Info, undo: Undo2, redo: Redo2,
   more: Ellipsis, shuffle: Shuffle, loader: LoaderCircle, erase: Eraser, move: Move, scope: Crosshair,
+  themeSystem: SunMoon, themeLight: Sun, themeDark: Moon,
 };
 
 export function Icon({ name, size = 22, strokeWidth = 2, color = 'currentColor', className }: {

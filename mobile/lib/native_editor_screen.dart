@@ -6,6 +6,7 @@ import 'photo_viewport.dart';
 import 'removal_brush.dart';
 import 'export_sheet.dart';
 import 'native_controls.dart';
+import 'appearance.dart';
 
 class NativeEditorScreen extends StatefulWidget {
   const NativeEditorScreen({super.key, this.controller});
@@ -124,6 +125,17 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
           },
         ),
         ListTile(
+          leading: const Glyph('contrast'),
+          title: Text('Appearance: ${appearanceLabels[appearance.value]}'),
+          onTap: () {
+            Navigator.pop(context);
+            final modes = ThemeMode.values;
+            setAppearance(
+              modes[(modes.indexOf(appearance.value) + 1) % modes.length],
+            );
+          },
+        ),
+        ListTile(
           leading: const Glyph('reset'),
           title: const Text('Reset all controls'),
           enabled: controller.photo != null,
@@ -171,9 +183,27 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
       destructive: true,
       enabled: controller.photo != null,
     ),
+    for (final mode in ThemeMode.values)
+      NativeMenuItem(
+        id: 'appearance:${mode.name}',
+        title: appearanceLabels[mode]!,
+        symbol: const {
+          ThemeMode.system: 'circle.lefthalf.filled',
+          ThemeMode.light: 'sun.max',
+          ThemeMode.dark: 'moon',
+        }[mode],
+        section: 'Appearance',
+        checked: appearance.value == mode,
+      ),
   ];
 
   void menuAction(String id) {
+    if (id.startsWith('appearance:')) {
+      setAppearance(
+        ThemeMode.values.byName(id.substring('appearance:'.length)),
+      );
+      return;
+    }
     switch (id) {
       case 'photos':
         pick();
@@ -207,12 +237,16 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                   : () => controller.finishRemoval(apply: false),
             )
           else
-            NativeButton(
-              label: 'More options',
-              symbol: 'ellipsis',
-              width: 44,
-              menu: menuItems(),
-              onMenu: controller.busy ? null : menuAction,
+            // Rebuilt on appearance changes too, for the menu's checkmark.
+            ValueListenableBuilder<ThemeMode>(
+              valueListenable: appearance,
+              builder: (context, _, _) => NativeButton(
+                label: 'More options',
+                symbol: 'ellipsis',
+                width: 44,
+                menu: menuItems(),
+                onMenu: controller.busy ? null : menuAction,
+              ),
             ),
           const SizedBox(width: 8),
           Expanded(

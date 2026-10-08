@@ -1,19 +1,27 @@
 import 'package:flutter/material.dart';
+import 'appearance.dart';
 import 'editor_widgets.dart';
 import 'native_editor_screen.dart';
 
-void main() => runApp(const ExposureApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  loadAppearance();
+  runApp(const ExposureApp());
+}
 
 class ExposureApp extends StatelessWidget {
   const ExposureApp({super.key});
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'DICHROIC',
-    debugShowCheckedModeBanner: false,
-    theme: dichroicTheme(Brightness.light),
-    darkTheme: dichroicTheme(),
-    themeMode: ThemeMode.system,
-    home: const NativeEditorScreen(),
+  Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
+    valueListenable: appearance,
+    builder: (context, mode, _) => MaterialApp(
+      title: 'DICHROIC',
+      debugShowCheckedModeBanner: false,
+      theme: dichroicTheme(Brightness.light),
+      darkTheme: dichroicTheme(),
+      themeMode: mode,
+      home: const NativeEditorScreen(),
+    ),
   );
 }
 

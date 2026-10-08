@@ -17,6 +17,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import type { RenderParams } from '../../params/renderParams';
 import { isPrintLut } from '../../profiles/printLuts';
 import { Icon } from '../components/Icon';
+import type { UiIconName } from '../components/Icon';
 import { GroupTabs, PressButton } from '../components/controls';
 import type { TabItem } from '../components/controls';
 import { ActionSheet } from '../components/Overlays';
@@ -33,6 +34,8 @@ import type { EngineState } from '../engine/engine';
 import { isDisplayReferred } from '../engine/display';
 import { prepareFocusOverlay } from '../engine/focusCheck';
 import { dialogOpen } from '../hooks';
+import { THEME_LABEL, nextTheme, useTheme } from '../theme';
+import type { ThemePref } from '../theme';
 import { stockInfo } from '../model/stocks';
 import { GROUPS, choicePatch, findTool, isModified, isScanMode, normalizePatch, stockPatch, valueText, visibleTools } from '../model/tools';
 import type { ChoiceTool, GroupId } from '../model/tools';
@@ -53,6 +56,8 @@ type SheetState =
   | { kind: 'remove' }
   | { kind: 'list'; toolId: string }
   | null;
+
+const THEME_ICON: Record<ThemePref, UiIconName> = { system: 'themeSystem', light: 'themeLight', dark: 'themeDark' };
 
 const APPLE = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD = APPLE ? '⌘' : 'Ctrl+';
@@ -122,6 +127,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const [theme, setTheme] = useTheme();
   const [pickingFocus, setPickingFocus] = useState(false);
   const [focusPreview, setFocusPreview] = useState<{ x: number; y: number } | null>(null);
   // Mode pilih fokus hanya selama grup Lens terbuka dan lens blur menyala.
@@ -263,13 +269,15 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     edited: hasPhoto && visibleTools(g, state.params).some((t) => isModified(t, state.params, state.defaults)),
   }));
 
-  const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, removing, removalControlsRef: setRemovalControls };
+  const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, theme, setTheme, removing, removalControlsRef: setRemovalControls };
 
   const menuActions: SheetAction[] = [
     { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
     { label: 'Open Photo…', icon: 'open', shortcut: HAS_KEYBOARD ? 'O' : undefined, onSelect: () => { setMenuAnchor(null); onOpenFile(); } },
     ...(state.history.canRedo ? [{ label: 'Redo', icon: 'redo' as const, shortcut: HAS_KEYBOARD ? (APPLE ? '⇧⌘Z' : 'Ctrl+Y') : undefined, onSelect: () => { setMenuAnchor(null); engine.redo(); } }] : []),
     ...(engine.isEdited() ? [{ label: 'Reset All Adjustments', icon: 'reset' as const, onSelect: () => { setMenuAnchor(null); engine.resetAll(); } }] : []),
+    // Satu ketukan berpindah Sistem -> Terang -> Gelap; label menyebut pilihan sekarang.
+    { label: `Appearance: ${THEME_LABEL[theme]}`, icon: THEME_ICON[theme], onSelect: () => setTheme(nextTheme(theme)) },
     { label: 'Close Photo', icon: 'close', onSelect: () => { const anchor = menuAnchor; setMenuAnchor(null); if (anchor) onClose(anchor); } },
   ];
 
@@ -417,6 +425,9 @@ interface LayoutProps {
   setSidebarKind: (k: StockKind) => void;
   onProcess: (process: string) => void;
   onMenu: (anchor: DOMRect) => void;
+  /** Tampilan: sistem, terang, gelap (theme.ts). */
+  theme: ThemePref;
+  setTheme: (theme: ThemePref) => void;
 }
 
 /** Tanpa foto, panel tetap terlihat sebagai pratinjau fungsinya, tapi jelas belum aktif. */
@@ -777,7 +788,7 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
   );
 }
 
-function WideLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
+function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   const edited = engine.isEdited();
   const [reveal, setReveal] = useState(0);
@@ -828,6 +839,9 @@ function WideLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup, gr
           <Icon name="scope" size={17} />
         </PressButton>
                 <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
+        <PressButton className="icon-btn plain" aria-label={`Appearance: ${THEME_LABEL[theme]}`} title={`Appearance: ${THEME_LABEL[theme]} (click to switch)`} onClick={() => setTheme(nextTheme(theme))}>
+          <Icon name={THEME_ICON[theme]} size={17} />
+        </PressButton>
         <PressButton className="capsule prominent" style={{ marginLeft: 6 }} aria-keyshortcuts="E" title="Export (E)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'export' })}>
           <Icon name="share" size={14} strokeWidth={2.2} /> Export
         </PressButton>
