@@ -3,10 +3,24 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/ios/proofs
 xcrun swift scripts/build_import_fixtures.swift assets/parity
+node scripts/build_import_expectations.mjs assets/parity
 device="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,a in d["devices"].items() if "iOS" in k for v in a if "iPhone" in v["name"]))')"
 xcrun simctl boot "$device" || true
 xcrun simctl bootstatus "$device" -b
+# Flutter's test runner may uninstall the app before the EXIT diagnostics run.
+# Preserve proof as soon as the app writes it, while its container still exists.
+(
+  root="$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Containers/Data/Application"
+  while true; do
+    if [ -d "$root" ]; then
+      find "$root" -maxdepth 3 -path '*/Documents/editor.png' -exec cp {} build/ios/proofs/editor.png \; 2>/dev/null || true
+    fi
+    sleep 3
+  done
+) &
+proof_watcher=$!
 diagnostics() {
+  kill "$proof_watcher" 2>/dev/null || true
   xcrun simctl spawn "$device" log show --last 5m --style compact --predicate 'process == "Runner"' > build/ios/proofs/runner.log 2>&1 || true
   find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'Runner*.ips' -exec cp {} build/ios/proofs/ \; || true
   # Read the generated identifier instead of assuming Flutter's casing.

@@ -49,8 +49,8 @@ export function nativeCatalog(bundle: AssetBundle): string {
 }
 
 export class NativeRenderer {
-  private readonly native: NativeGpuDevice;
-  private readonly pool: ScratchPool;
+  private native: NativeGpuDevice;
+  private pool: ScratchPool;
   private arenas?: Arenas;
   private arenaKey?: string;
   private graph?: RenderGraph;
@@ -187,5 +187,10 @@ export class NativeRenderer {
     if (this.arenas) for (const arena of Object.values(this.arenas)) arena.destroy();
     this.arenas = undefined; this.arenaKey = undefined;
     this.pool.release(); this.native.releasePipelines();
+    // Canonical stages cache pipelines in WeakMaps keyed by GPUDevice. Native
+    // pipeline destruction must retire that JS identity too, otherwise the next
+    // frame reuses a cached object whose Rust handle was already destroyed.
+    this.native = new NativeGpuDevice(this.host);
+    this.pool = new ScratchPool(this.native.asGpuDevice());
   }
 }

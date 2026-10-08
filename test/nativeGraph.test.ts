@@ -50,6 +50,9 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
       lastArenaKey = plan.arenaKey;
     }
   }
+  const recoveryPlan = buildRenderPlan(baseline, bundle, { width, height, rgba }, 'image');
+  prepared.get(recoveryPlan.arenaKey)!.push(precomputeArenaData(bundle,
+    recoveryPlan.arenaInputs.stockId, recoveryPlan.arenaInputs.printScan));
   const { device } = await acquireDevice();
   const gpuErrors: string[] = [];
   device.addEventListener('uncapturederror', event => gpuErrors.push(event.error.message));
@@ -154,10 +157,12 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
   };
   const renderer = new NativeRenderer(host, bundle, plan => prepared.get(plan.arenaKey)!.shift()!);
   const fixtures: { params: unknown; rgba: number[] }[] = [];
+  let baselineRgb: Float32Array | undefined;
   try {
     for (const [index, params] of cases.entries()) {
       captureLabel = `case:${index}:rgb_out`;
       const rgb = await renderer.preview(params, rgba, width, height);
+      if (index === 0) baselineRgb = rgb.slice();
       expect(rgb.length).toBe(width * height * 3);
       expect(rgb.every(Number.isFinite)).toBe(true);
       if (index === 0 || index === 3) {
@@ -180,6 +185,15 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
         }
       }
     }
+    renderer.clearResources();
+    captureLabel = 'recovery:rgb_out';
+    const recovered = await renderer.preview(baseline, rgba, width, height);
+    expect(recovered.length).toBe(baselineRgb!.length);
+    let maximum = 0;
+    for (let i = 0; i < recovered.length; i++) {
+      maximum = Math.max(maximum, Math.abs(recovered[i]! - baselineRgb![i]!));
+    }
+    expect(maximum).toBeLessThanOrEqual(1e-5);
   } finally { renderer.dispose(); await Promise.all(snapshots); device.destroy(); }
   expect(resources.size).toBe(0);
   expect(gpuErrors).toEqual([]);

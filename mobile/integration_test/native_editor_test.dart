@@ -80,7 +80,7 @@ void main() {
         codec.dispose();
         await File(path).delete();
       }
-      for (final format in ['png16', 'tiff16', 'jpeg']) {
+      for (final format in (catalog['exportFormats'] as List).cast<String>()) {
         expect(
           await engine.exportSize(baseline, longEdge: 24),
           const Size(24, 18),
@@ -96,6 +96,16 @@ void main() {
           expect(bytes[24], 16, reason: 'PNG must retain 16-bit quantization');
         }
         if (format == 'jpeg') expect(bytes.sublist(0, 2), [255, 216]);
+        await File(path).delete();
+      }
+      for (final profile
+          in (catalog['outputColorSpaces'] as List).cast<String>()) {
+        final path = await engine.exportImage(
+          {...baseline, 'outputColorSpace': profile},
+          format: 'png16',
+          longEdge: 24,
+        );
+        expect(await File(path).length(), greaterThan(32), reason: profile);
         await File(path).delete();
       }
       final cube = await engine.exportCube(baseline, 17);
@@ -147,6 +157,10 @@ void main() {
         'exposure/native',
       ).invokeMethod<String>('debugScreenshot');
       expect(proof, isNotNull);
+      debugPrint('Native editor screenshot: $proof');
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 4)),
+      );
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 100));
       await engine.close();
@@ -243,10 +257,19 @@ void main() {
               'exposure/native',
             ).invokeMethod<Uint8List>('debugSource'))!;
             final floats = ByteData.sublistView(bytes);
-            const expected = [-.25, .5, 1.5, 1.0, .125, .25, .75, 1.0];
-            for (var i = 0; i < expected.length; i++) {
-              expect(floats.getFloat32(i * 4, Endian.little), expected[i]);
+            final expected = await rootBundle.load('assets/parity/$name.f32');
+            expect(bytes.length, expected.lengthInBytes);
+            for (var i = 0; i < expected.lengthInBytes; i += 4) {
+              expect(
+                (floats.getFloat32(i, Endian.little) -
+                        expected.getFloat32(i, Endian.little))
+                    .abs(),
+                lessThanOrEqualTo(1e-7),
+                reason: 'EXR source differs from independent web decoder',
+              );
             }
+            expect(floats.getFloat32(0, Endian.little), lessThan(0));
+            expect(floats.getFloat32(8, Endian.little), greaterThan(1));
           }
         }
         final file = await fixture('large-native.jpg');

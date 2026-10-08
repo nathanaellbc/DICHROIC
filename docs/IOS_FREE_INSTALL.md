@@ -1,60 +1,54 @@
-# Coba native iOS dari Windows tanpa membership berbayar
+# Install DICHROIC on iPhone from Windows
 
-Keputusan saat ini: pengguna memakai Windows dan tidak ingin membeli Apple
-Developer Program. Build source dan pengujian Metal tetap berjalan di runner
-macOS GitHub/Codemagic. Tidak ada workflow TestFlight yang diaktifkan.
+Use the current validated Codemagic build's `Exposure-unsigned.ipa`. Download
+its artifact from the build overview; a simulator app cannot run on an iPhone.
+The app is unsigned, so personal signing is required before installation.
 
-## Build yang dapat diambil
+## Sideloadly
 
-Di GitHub Actions, buka workflow **Native iOS build**, pilih run hijau terbaru,
-dan download artifact **dichroic-ios-unsigned-ipa**. Ekstrak ZIP artifact untuk
-mendapatkan `Exposure-unsigned.ipa`. Codemagic juga menghasilkan file ini dari
-workflow `exposure-ios-native`.
+The user chose the free Windows route. [Sideloadly's official instructions](https://sideloadly.io/)
+confirm free Apple Accounts, IPA installation and seven-day signing with
+optional automatic refresh. Its Windows installer requires the web versions
+of iTunes and iCloud, rather than the Microsoft Store editions.
 
-IPA ini belum ditandatangani. File tersebut tidak dapat langsung dibuka untuk
-menginstal aplikasi di iPhone; alat sideload perlu menandatanganinya dahulu.
-Artifact simulator hanya untuk simulator di Mac, bukan iPhone.
+1. Install the required Apple components and Sideloadly from the official site.
+2. Connect and unlock the iPhone, select Trust if prompted, and select the
+   device in Sideloadly.
+3. Drop `Exposure-unsigned.ipa` into Sideloadly. Enter your Apple Account
+   credentials yourself in that application and start personal signing.
+4. Follow the Trust and Developer Mode prompts shown on the phone.
+5. Open DICHROIC. Free signatures expire after seven days; configure refresh
+   in Sideloadly if desired and confirm the device remains discoverable.
 
-## Instalasi pribadi lewat AltStore Classic
+Cloud compilation does not require your Apple Account credentials, a paid
+membership, App Store Connect, or TestFlight. Installation on the user's
+physical iPhone has not been verified from this Windows workspace.
 
-1. Ikuti [panduan Windows resmi AltStore](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows)
-   untuk memasang AltServer, iTunes/iCloud yang kompatibel, dan AltStore Classic.
-2. Hubungkan iPhone ke Windows, pilih Trust jika diminta, lalu pasang AltStore
-   lewat menu AltServer. Lakukan login Apple Account sendiri di aplikasi alat
-   sideload tersebut. Source dan pipeline cloud tidak memerlukan kredensial akun.
-3. Pindahkan `Exposure-unsigned.ipa` ke Files di iPhone. Buka AltStore Classic,
-   masuk ke My Apps, tekan `+`, lalu pilih IPA itu.
-4. Ikuti instruksi Trust/Developer Mode yang ditampilkan iPhone dan AltStore.
-   AltServer harus tersedia ketika proses signing/install memerlukannya.
-5. Dengan akun gratis, refresh aplikasi sebelum masa 7 harinya habis. Periksa
-   tanggal kedaluwarsa di My Apps. AltStore menjelaskan batas aplikasi aktif
-   pada [Activating Apps](https://faq.altstore.io/altstore-classic/activating-apps).
+## Physical-device acceptance
 
-Panduan ini mengikuti kemampuan alat yang didokumentasikan; instalasi Exposure
-lewat AltStore pada perangkat pengguna belum diverifikasi. Bila gagal, catat
-pesan error dan versi iOS/AltServer agar penyebabnya dapat diperiksa.
+Use the actual 8144 × 5424 JPEG and 5120 × 7168 ARW. Check Files and Photos
+imports, slider updates, changing film format, lens depth/focus dragging,
+full-resolution zoom, repeated large exports and app background/resume. Remove
+an object, Apply, compare Before, then Undo/Redo. Before must retain the object
+from the original import. Confirm exported resolution, profile and metadata.
 
-## Alternatif jika nanti tersedia Mac
+A simulator run proves the native path executes, not iPhone peak memory,
+latency or display gamut equivalence. The compositor presently uses sRGB
+preview textures; selected wide-gamut profiles are retained for image export.
+See [the build evidence and remaining parity checks](IOS_PORT_HANDOFF.md).
 
-Apple mendukung pengujian pribadi dengan Apple Account gratis dan **Personal
-Team** di Xcode. [Perbandingan membership Apple](https://developer.apple.com/support/compare-memberships/)
-menjelaskan masa 7 hari provisioning gratis. Dari checkout bersih pada Mac:
+## If a Mac becomes available
+
+Apple permits a [Personal Team in Xcode](https://developer.apple.com/support/compare-memberships/)
+with a free account. Build native libraries and the host before opening Xcode:
 
 ```sh
 rustup default 1.85.0
 bash mobile/scripts/build_native.sh
+bash mobile/scripts/build_raw.sh
 bash mobile/scripts/prepare_ios.sh
 open mobile/ios/Runner.xcworkspace
 ```
 
-Toolchain Flutter 3.44.0, Rust dan Xcode diperlukan. Pilih Personal Team pada
-Signing & Capabilities, hubungkan iPhone, lalu Run. Untuk bundle ID pribadi,
-jalankan prepare dengan `IOS_BUNDLE_ID=com.nama.exposure` sebelum membuka Xcode.
-
-## Cakupan aplikasi saat ini
-
-Aplikasi masih berupa port bertahap: pilih foto, exposure, preview texture,
-pinch/drag elastis, before/after asli, dan export PNG. Shader kurva densitas asli
-sedang divalidasi secara terpisah; film/paper lengkap, efek spasial, RAW, erase,
-dan seluruh UI belum tersedia. Jangan gunakan keberhasilan build atau signing
-sebagai bukti bahwa port atau pengujian crash di iPhone sudah selesai.
+Flutter 3.44.0, Rust, CMake and Xcode are required. Select the Personal Team,
+connect the iPhone, and Run. `IOS_BUNDLE_ID` can override the generated ID.
