@@ -53,7 +53,18 @@ class NativeEditorController extends ChangeNotifier {
         : photo!.sourceHeight ?? photo!.height;
     final edge = longEdge.clamp(1, sourceEdge);
     if (edge <= 1600) return;
-    if (edge < _detailHighWater && detail != null) return;
+    final cachedArea = _detailAttempt?.rect;
+    if (edge < _detailHighWater &&
+        detail != null &&
+        cachedArea != null &&
+        rect.left <= cachedArea.left + 1e-6 &&
+        rect.top <= cachedArea.top + 1e-6 &&
+        rect.right >= cachedArea.right - 1e-6 &&
+        rect.bottom >= cachedArea.bottom - 1e-6) {
+      // Pure zoom-out retains the current high-resolution overlay. Panning to
+      // another area still requests new detail at the retained resolution.
+      return;
+    }
     if (edge > _detailHighWater) _detailHighWater = edge;
     final attempt = _detailAttempt;
     if (attempt != null &&

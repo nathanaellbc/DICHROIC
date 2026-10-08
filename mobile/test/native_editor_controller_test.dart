@@ -106,6 +106,14 @@ void main() {
       await flush();
       expect(c.detail, same(cached));
       expect(engine.details.length, 1);
+      const panned = Rect.fromLTWH(.02, .25, .5, .5);
+      c.requestDetail(panned, 2048);
+      await flush();
+      expect(engine.details.length, 2);
+      expect(engine.details.last, (rect: panned, edge: 4096));
+      c.requestDetail(panned, 2048);
+      await flush();
+      expect(engine.details.length, 2);
       engine.detailGate = Completer();
       c.requestDetail(area, 6144);
       await flush();

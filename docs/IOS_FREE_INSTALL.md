@@ -33,8 +33,8 @@ an object, Apply, compare Before, then Undo/Redo. Before must retain the object
 from the original import. Confirm exported resolution, profile and metadata.
 
 A simulator run proves the native path executes, not iPhone peak memory,
-latency or display gamut equivalence. The compositor presently uses sRGB
-preview textures; selected wide-gamut profiles are retained for image export.
+latency or display gamut equivalence. The native UIKit compositor retains
+profiled sRGB/Display P3 previews; exports retain the selected output ICC profile.
 See [the build evidence and remaining parity checks](IOS_PORT_HANDOFF.md).
 
 ## If a Mac becomes available
