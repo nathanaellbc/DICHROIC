@@ -821,8 +821,9 @@ class OptionSheet extends StatelessWidget {
       ),
       const SizedBox(height: 12),
       Expanded(
-        child: Scrollbar(
-          child: ListView.builder(
+        child: EditorScrollView(
+          builder: (scroll) => ListView.builder(
+            controller: scroll,
             physics: const BouncingScrollPhysics(),
             itemCount: options.length,
             itemBuilder: (context, i) => ListTile(
@@ -1005,8 +1006,9 @@ class _StockSheetState extends State<StockSheet> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: Scrollbar(
-              child: ListView(
+            child: EditorScrollView(
+              builder: (scroll) => ListView(
+                controller: scroll,
                 physics: const BouncingScrollPhysics(),
                 children: items,
               ),

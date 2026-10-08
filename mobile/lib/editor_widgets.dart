@@ -5,6 +5,33 @@ import 'package:flutter_svg/flutter_svg.dart';
 const signalBlue = Color(0xff0091ff);
 const secondary = Color(0xffaaaab3);
 
+/// Keep the requested thin 20% white thumb on iOS too. Material's Scrollbar
+/// otherwise substitutes a Cupertino thumb and ignores ScrollbarTheme colors.
+class EditorScrollView extends StatefulWidget {
+  const EditorScrollView({super.key, required this.builder});
+  final Widget Function(ScrollController) builder;
+  @override
+  State<EditorScrollView> createState() => _EditorScrollViewState();
+}
+
+class _EditorScrollViewState extends State<EditorScrollView> {
+  final controller = ScrollController();
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RawScrollbar(
+    controller: controller,
+    thumbColor: const Color(0x33ffffff),
+    thickness: 2,
+    radius: const Radius.circular(2),
+    child: widget.builder(controller),
+  );
+}
+
 class Glyph extends StatelessWidget {
   const Glyph(
     this.name, {
