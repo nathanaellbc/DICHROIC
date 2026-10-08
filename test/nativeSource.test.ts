@@ -9,13 +9,14 @@ it.each([false, true])('bounded native reads match web edits with disk history=%
   const rgba = Float32Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 1 : ((i * 13) % 257) / 256);
   const image: DecodedImage = { width, height, rgba, encoding: 'encoded', suggestedColorSpace: 'sRGB', source: { format: 'png', bitDepth: 8 } };
   const stored = new Map<number, Float32Array>();
+  const strip = new Float32Array(width * height * 4);
   const native = new NativeSource({
     ...(disk ? {
       saveRemoval(pixels: Float32Array) { const id = stored.size; stored.set(id, pixels.slice()); return id; },
       loadRemoval(id: number) { return stored.get(id)!.slice(); },
     } : {}),
     sourceRegion(x, y, w, h) {
-      const out = new Float32Array(w * h * 4);
+      const out = strip.subarray(0, w * h * 4);
       for (let row = 0; row < h; row++) out.set(rgba.subarray(((y + row) * width + x) * 4, ((y + row) * width + x + w) * 4), row * w * 4);
       return out;
     },

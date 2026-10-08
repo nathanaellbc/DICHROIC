@@ -342,22 +342,22 @@ final class NativeGraphRuntime {
                 }
             } } catch { self.fail(error); return nil }
         }
-        let region: @convention(block) (Int, Int, Int, Int) -> JSValue? = { [weak self] x, y, width, height in
-            guard let self = self else { return nil }
+        let region: @convention(block) (Int, Int, Int, Int, JSValue) -> Void = { [weak self] x, y, width, height, destination in
+            guard let self = self else { return }
             do {
                 guard let source = self.sourceStore, x >= 0, y >= 0, width > 0, height > 0,
                       x + width <= source.width, y + height <= source.height, width * height * 16 <= 4 * 1024 * 1024 else {
                     throw GraphRuntimeError.message("Invalid native source region")
                 }
-                return try self.arrayBuffer(count: width * height * 16) { output in
+                let output = try self.typedBytes(destination)
+                guard output.count >= width * height * 16 else { throw GraphRuntimeError.message("Source strip storage is too small") }
                     let floats = output.bindMemory(to: Float.self)
                     source.data.withUnsafeBytes { raw in
                         for row in 0..<height { for col in 0..<width { for c in 0..<4 {
                             floats[(row * width + col) * 4 + c] = source.value(raw, pixel: (row + y) * source.width + col + x, channel: c)
                         } } }
                     }
-                }
-            } catch { self.fail(error); return nil }
+            } catch { self.fail(error) }
         }
         let samples: @convention(block) (JSValue) -> JSValue? = { [weak self] bounds in
             guard let self = self else { return nil }
@@ -546,11 +546,13 @@ final class NativeGraphRuntime {
             "nativeDetail": detail as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
+            var nativeReadStrip = new Float32Array(1024 * 1024);
             var nativeHost = { command: nativeCommand, upload: nativeUpload, read: nativeRead,
                 readAsset: nativeAsset, readText: nativeText, previewInput: () => new Float32Array(nativeInput()),
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
                 progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube, publishOriginal: nativeOriginal, publishDetail: nativeDetail,
-                sourceRegion: (x,y,w,h) => new Float32Array(nativeRegion(x,y,w,h)), sourceSamples: b => new Float32Array(nativeSamples(b)),
+                sourceRegion: (x,y,w,h) => { nativeRegion(x,y,w,h,nativeReadStrip); return nativeReadStrip.subarray(0,w*h*4); },
+                sourceSamples: b => new Float32Array(nativeSamples(b)),
                 saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
                 loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled };
             """)

@@ -4,6 +4,7 @@ import type { RemovalCrop, RemovalMask } from '../retouch/patch';
 import type { DecodedImage } from '../io/decoded';
 
 export interface NativeSourceHost {
+  /** Borrowed strip storage, consumed before the next read. Native reuses 4 MiB. */
   sourceRegion(x: number, y: number, width: number, height: number): Float32Array;
   sourceSamples(bounds: { x: number; y: number; width: number; height: number }): Float32Array;
   saveRemoval?(pixels: Float32Array): number;
