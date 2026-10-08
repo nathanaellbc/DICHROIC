@@ -396,7 +396,6 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
           tools.where((t) => t['id'] == selections[groupId]).firstOrNull ??
           tools.firstOrNull;
       return Scaffold(
-        backgroundColor: Colors.black,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -496,7 +495,9 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: active
-                                              ? Colors.white
+                                              ? Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface
                                               : secondary,
                                         ),
                                       ),

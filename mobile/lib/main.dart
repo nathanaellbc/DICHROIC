@@ -10,21 +10,32 @@ class ExposureApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'DICHROIC',
     debugShowCheckedModeBanner: false,
-    theme: dichroicTheme(),
+    theme: dichroicTheme(Brightness.light),
+    darkTheme: dichroicTheme(),
+    themeMode: ThemeMode.system,
     home: const NativeEditorScreen(),
   );
 }
 
-ThemeData dichroicTheme() => ThemeData(
-  brightness: Brightness.dark,
+/// Dark by default (tests and existing callers); the app follows the system.
+ThemeData dichroicTheme([Brightness brightness = Brightness.dark]) => ThemeData(
+  brightness: brightness,
   useMaterial3: true,
-  scaffoldBackgroundColor: Colors.black,
+  scaffoldBackgroundColor: brightness == Brightness.dark
+      ? Colors.black
+      : const Color(0xfff2f2f7),
   colorScheme: ColorScheme.fromSeed(
     seedColor: signalBlue,
-    brightness: Brightness.dark,
+    brightness: brightness,
+    surface: brightness == Brightness.dark ? Colors.black : Colors.white,
+    onSurface: brightness == Brightness.dark ? Colors.white : Colors.black,
   ),
   scrollbarTheme: ScrollbarThemeData(
-    thumbColor: WidgetStateProperty.all(Colors.white.withValues(alpha: .2)),
+    thumbColor: WidgetStateProperty.all(
+      (brightness == Brightness.dark ? Colors.white : Colors.black).withValues(
+        alpha: .2,
+      ),
+    ),
     thickness: WidgetStateProperty.all(2),
     radius: const Radius.circular(2),
   ),

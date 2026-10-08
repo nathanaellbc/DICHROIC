@@ -4,7 +4,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'native_controls.dart';
 
 const signalBlue = Color(0xff0091ff);
-const secondary = Color(0xffaaaab3);
+
+/// iOS systemGray: the secondary label Apple uses in both light and dark mode.
+const secondary = Color(0xff8e8e93);
 
 /// Keep the requested thin 20% white thumb on iOS too. Material's Scrollbar
 /// otherwise substitutes a Cupertino thumb and ignores ScrollbarTheme colors.
@@ -26,7 +28,7 @@ class _EditorScrollViewState extends State<EditorScrollView> {
   @override
   Widget build(BuildContext context) => RawScrollbar(
     controller: controller,
-    thumbColor: const Color(0x33ffffff),
+    thumbColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: .2),
     thickness: 2,
     radius: const Radius.circular(2),
     child: widget.builder(controller),
@@ -34,21 +36,21 @@ class _EditorScrollViewState extends State<EditorScrollView> {
 }
 
 class Glyph extends StatelessWidget {
-  const Glyph(
-    this.name, {
-    super.key,
-    this.size = 22,
-    this.color = Colors.white,
-  });
+  const Glyph(this.name, {super.key, this.size = 22, this.color});
   final String name;
   final double size;
-  final Color color;
+
+  /// Defaults to the theme's foreground (white in dark mode, black in light).
+  final Color? color;
   @override
   Widget build(BuildContext context) => SvgPicture.asset(
     'assets/icons/$name.svg',
     width: size,
     height: size,
-    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+    colorFilter: ColorFilter.mode(
+      color ?? Theme.of(context).colorScheme.onSurface,
+      BlendMode.srcIn,
+    ),
   );
 }
 
@@ -78,10 +80,10 @@ class Glass extends StatelessWidget {
         ],
       );
     }
-    return _flutterGlass();
+    return _flutterGlass(context);
   }
 
-  Widget _flutterGlass() => ClipPath(
+  Widget _flutterGlass(BuildContext context) => ClipPath(
     clipper: ShapeBorderClipper(
       shape: RoundedSuperellipseBorder(
         borderRadius: BorderRadius.circular(radius),
@@ -92,7 +94,9 @@ class Glass extends StatelessWidget {
       // Paint list backgrounds and ink above the glass tint, rather than on
       // the route's Material underneath this surface.
       child: Material(
-        color: const Color(0x941c1c1e),
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0x941c1c1e)
+            : const Color(0xb8f9f9fb),
         elevation: 0,
         child: Padding(padding: padding, child: child),
       ),

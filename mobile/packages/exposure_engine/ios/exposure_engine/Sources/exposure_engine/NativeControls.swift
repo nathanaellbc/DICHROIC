@@ -242,7 +242,8 @@ private final class ButtonControl: ControlView {
         }
         config.titleLineBreakMode = .byTruncatingTail
         config.cornerStyle = .capsule
-        if style != "prominent" && !selected { config.baseForegroundColor = .white }
+        // Follows light/dark mode: white in dark, black in light.
+        if style != "prominent" && !selected { config.baseForegroundColor = .label }
         if p.bool("leadingAligned") == true {
             button.contentHorizontalAlignment = .leading
             config.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 14, bottom: 4, trailing: 12)
@@ -438,7 +439,7 @@ private final class ToolStripControl: ControlView {
         attributes.font = UIFont.systemFont(ofSize: 11, weight: selected ? .semibold : .regular)
         config.attributedTitle = AttributedString(item.string("label") ?? "", attributes: attributes)
         config.titleLineBreakMode = .byTruncatingTail
-        config.baseForegroundColor = selected ? signalBlue : UIColor(white: 0.68, alpha: 1)
+        config.baseForegroundColor = selected ? signalBlue : .secondaryLabel
         config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 2, bottom: 6, trailing: 2)
         config.cornerStyle = .large
         button.configuration = config
