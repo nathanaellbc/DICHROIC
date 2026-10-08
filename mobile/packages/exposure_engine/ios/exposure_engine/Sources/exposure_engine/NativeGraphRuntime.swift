@@ -351,12 +351,7 @@ final class NativeGraphRuntime {
                 }
                 let output = try self.typedBytes(destination)
                 guard output.count >= width * height * 16 else { throw GraphRuntimeError.message("Source strip storage is too small") }
-                    let floats = output.bindMemory(to: Float.self)
-                    source.data.withUnsafeBytes { raw in
-                        for row in 0..<height { for col in 0..<width { for c in 0..<4 {
-                            floats[(row * width + col) * 4 + c] = source.value(raw, pixel: (row + y) * source.width + col + x, channel: c)
-                        } } }
-                    }
+                source.copyRegion(x: x, y: y, width: width, height: height, into: output.bindMemory(to: Float.self))
             } catch { self.fail(error) }
         }
         let samples: @convention(block) (JSValue) -> JSValue? = { [weak self] bounds in

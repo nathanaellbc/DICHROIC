@@ -1,4 +1,5 @@
 import Foundation
+import Accelerate
 
 /// Immutable, file-backed source bytes. Sparse floating-point removal patches
 /// live in the canonical host; decoding/export never duplicates a full float
@@ -64,6 +65,26 @@ final class NativeSourceStore {
             return lookup?[Int(code)] ?? Float(code) / 65535
         }
         return raw.loadUnaligned(fromByteOffset: byteOffset + index * 4, as: Float.self)
+    }
+    func copyRegion(x: Int, y: Int, width: Int, height: Int, into output: UnsafeMutableBufferPointer<Float>) {
+        data.withUnsafeBytes { raw in
+            for row in 0..<height {
+                let origin = ((row + y) * self.width + x) * channels
+                let destination = output.baseAddress! + row * width * 4
+                if channels == 4 && bits == 32 && !bigEndian {
+                    memcpy(destination, raw.baseAddress! + byteOffset + origin * 4, width * 16)
+                } else if channels == 4 && bits == 8 {
+                    let source = raw.baseAddress!.assumingMemoryBound(to: UInt8.self) + byteOffset + origin
+                    vDSP_vfltu8(source, 1, destination, 1, vDSP_Length(width * 4))
+                    // Retain correctly rounded Float division, as in value().
+                    for i in 0..<(width * 4) { destination[i] /= 255 }
+                } else {
+                    for col in 0..<width { for c in 0..<4 {
+                        destination[col * 4 + c] = value(raw, pixel: (row + y) * self.width + col + x, channel: c)
+                    } }
+                }
+            }
+        }
     }
     deinit {
         for file in patches.values { try? FileManager.default.removeItem(at: file) }
