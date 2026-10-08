@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -10,7 +11,7 @@ class NativePreview extends StatelessWidget {
   final int textureId;
   @override
   Widget build(BuildContext context) {
-    if (defaultTargetPlatform != TargetPlatform.iOS || kIsWeb) {
+    if (kIsWeb || !Platform.isIOS) {
       return Texture(textureId: textureId, filterQuality: FilterQuality.medium);
     }
     return UiKitView(

@@ -7,6 +7,8 @@ export interface NativeSourceHost {
   /** Borrowed strip storage, consumed before the next read. Native reuses 4 MiB. */
   sourceRegion(x: number, y: number, width: number, height: number): Float32Array;
   sourceSamples(bounds: { x: number; y: number; width: number; height: number }): Float32Array;
+  /** Exact native box sum for unedited file-backed source regions. */
+  sourceDownscaleRegion?(outW: number, outH: number, x: number, y: number, w: number, h: number, into: Float32Array): void;
   saveRemoval?(pixels: Float32Array): number;
   loadRemoval?(id: number): Float32Array;
 }
@@ -58,10 +60,33 @@ export class NativeSource {
     }
   }
 
-  region(outW: number, outH: number, x: number, y: number, w: number, h: number, into?: Float32Array, candidate = false, untouched = false): Float32Array {
+  region(outW: number, outH: number, x: number, y: number, w: number, h: number, into?: Float32Array, candidate = false, untouched = false, accelerated = true): Float32Array {
     const out = into?.subarray(0, w * h * 4) ?? new Float32Array(w * h * 4);
     const { width, height } = this.meta;
     const same = width === outW && height === outH;
+    if (accelerated && this.host.sourceDownscaleRegion && out.byteLength <= 32 * 1024 * 1024) {
+      const left = Math.floor(x * width / outW), top = Math.floor(y * height / outH);
+      const right = Math.max(Math.floor((x + w - 1) * width / outW) + 1, Math.floor((x + w) * width / outW));
+      const bottom = Math.max(Math.floor((y + h - 1) * height / outH) + 1, Math.floor((y + h) * height / outH));
+      const pending = candidate && this.pending?.output ? this.pending.crop : undefined;
+      const edits = untouched ? [] : this.intersecting(left, top, right - left, bottom - top).map(edit => edit.crop);
+      if (!untouched && pending && pending.x < right && pending.y < bottom && pending.x + pending.width > left && pending.y + pending.height > top) edits.push(pending);
+      this.host.sourceDownscaleRegion(outW, outH, x, y, w, h, out);
+      if (edits.length) {
+        // Only re-sum boxes touching sparse edits in JS. Replacing exact sums
+        // avoids a subtract/add rounding difference or a full-photo float copy.
+        let dx = x + w, dy = y + h, ex = x, ey = y;
+        for (const crop of edits) {
+          dx = Math.min(dx, Math.max(x, Math.floor(crop.x * outW / width)));
+          dy = Math.min(dy, Math.max(y, Math.floor(crop.y * outH / height)));
+          ex = Math.max(ex, Math.min(x + w, Math.ceil((crop.x + crop.width) * outW / width)));
+          ey = Math.max(ey, Math.min(y + h, Math.ceil((crop.y + crop.height) * outH / height)));
+        }
+        const dirty = this.region(outW, outH, dx, dy, ex - dx, ey - dy, undefined, candidate, false, false);
+        for (let row = 0; row < ey - dy; row++) out.set(dirty.subarray(row * (ex - dx) * 4, (row + 1) * (ex - dx) * 4), ((row + dy - y) * w + dx - x) * 4);
+      }
+      return out;
+    }
     if (same) {
       const stripRows = Math.max(1, Math.floor(4 * 1024 * 1024 / (w * 16)));
       for (let row = 0; row < h; row += stripRows) {
@@ -76,7 +101,7 @@ export class NativeSource {
     // bounds and double-precision summation order match boxDownscaleRegion.
     for (let row = 0; row < h; row++) {
       const oy = y + row, y0 = Math.floor(oy * height / outH), y1 = Math.max(y0 + 1, Math.floor((oy + 1) * height / outH));
-      const x0 = Math.floor(x * width / outW), x1 = Math.max(x0 + 1, Math.floor((x + w) * width / outW));
+      const x0 = Math.floor(x * width / outW), x1 = Math.max(Math.floor((x + w - 1) * width / outW) + 1, Math.floor((x + w) * width / outW));
       const sw = x1 - x0, sh = y1 - y0, stripRows = Math.max(1, Math.floor(4 * 1024 * 1024 / (sw * 16)));
       const sums = new Float64Array(w * 4);
       for (let top = y0; top < y1; top += stripRows) {

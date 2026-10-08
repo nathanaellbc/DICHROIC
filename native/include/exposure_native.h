@@ -11,6 +11,8 @@ const char *dichroic_gpu_execute(void *handle, const char *descriptor);
 int32_t dichroic_gpu_upload(void *handle, uint64_t buffer_id, uint64_t offset, const uint8_t *bytes, size_t length);
 int32_t dichroic_gpu_read(void *handle, uint64_t buffer_id, uint64_t offset, uint8_t *output, size_t length);
 void dichroic_gpu_destroy(void *handle);
+int32_t dichroic_source_box(const uint8_t *bytes, size_t length, const float *lookup, size_t lookup_length,
+    const char *descriptor, float *output, size_t output_length);
 /* All operations are serialized by the caller. Errors never cross the ABI. */
 void *exposure_create(void);
 void exposure_destroy(void *engine);

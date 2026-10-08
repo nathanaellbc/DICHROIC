@@ -13,7 +13,7 @@ xcrun simctl bootstatus "$device" -b
   root="$HOME/Library/Developer/CoreSimulator/Devices/$device/data/Containers/Data/Application"
   while true; do
     if [ -d "$root" ]; then
-      find "$root" -maxdepth 3 -path '*/Documents/editor.png' -exec cp {} build/ios/proofs/editor.png \; 2>/dev/null || true
+      find "$root" -maxdepth 3 -path '*/Documents/editor*.png' -exec cp {} build/ios/proofs/ \; 2>/dev/null || true
     fi
     sleep 3
   done

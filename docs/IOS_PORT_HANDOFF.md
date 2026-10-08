@@ -74,6 +74,21 @@ an active GPU dispatch or ImageIO encoder cannot be interrupted.
 
 ## Remaining acceptance
 
+Current follow-up also adds a bounded Rust CPU source reader using the exact web
+f64 box sum order and f32 channel normalization. Twenty independently generated
+web fixtures match exactly, covering 8-bit RGBA, 16-bit RGB/lookup/endian and
+32-bit mono/RGBA HDR, crops and upscale boundaries. Sparse removal recomputes
+only edited output boxes, preserving the original source and exact sums.
+This needs fresh Mac performance/integration evidence before claiming a speedup.
+Build `6ac74c85de4f6899ca0d1e68`, commit `c630334`, compiled the profiled UIKit
+preview and passed all seven preview ICC/pixel checks. Its P3 PNG assertion
+incorrectly compared Flutter color-converted pixels against P3 encoded codes;
+the follow-up probes original encoded ImageIO codes instead, retaining the
+one-byte independent Dawn gate. A global platform override also violated Flutter
+test invariants; actual OS selection now enables UIKit without that override.
+The other three integration test bodies passed. JPEG open was 22.24 seconds:
+5.55 seconds decoding and 16.69 seconds constructing its original preview.
+
 1. Finish the current Mac build and fix any strict integration failures; inspect
    actual simulator editor PNG. Preserve proof during the test because Flutter
    may uninstall the app before exit diagnostics can copy its container.

@@ -4,13 +4,20 @@ import { boxDownscaleRegion, measurementImage } from '../src/session/downscale';
 import { applyRemoval, prepareRemoval, removalSource, removalModelInput } from '../src/retouch/patch';
 import type { DecodedImage } from '../src/io/decoded';
 
-it.each([false, true])('bounded native reads match web edits with disk history=%s', disk => {
+it.each([[false, false], [true, false], [true, true]])('bounded native reads match web edits with disk history=%s and box acceleration=%s', (disk, accelerated) => {
   const width = 64, height = 48;
   const rgba = Float32Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 1 : ((i * 13) % 257) / 256);
   const image: DecodedImage = { width, height, rgba, encoding: 'encoded', suggestedColorSpace: 'sRGB', source: { format: 'png', bitDepth: 8 } };
   const stored = new Map<number, Float32Array>();
   const strip = new Float32Array(width * height * 4);
+  let nativeBoxes = 0;
   const native = new NativeSource({
+    ...(accelerated ? {
+      sourceDownscaleRegion(ow: number, oh: number, x: number, y: number, w: number, h: number, into: Float32Array) {
+        nativeBoxes++;
+        boxDownscaleRegion(rgba, width, height, ow, oh, x, y, w, h, into);
+      },
+    } : {}),
     ...(disk ? {
       saveRemoval(pixels: Float32Array) { const id = stored.size; stored.set(id, pixels.slice()); return id; },
       loadRemoval(id: number) { return stored.get(id)!.slice(); },
@@ -29,18 +36,26 @@ it.each([false, true])('bounded native reads match web edits with disk history=%
       return out;
     },
   }, image);
+  expect(native.preview(32).rgba).toEqual(boxDownscaleRegion(rgba, width, height, 32, 24, 0, 0, 32, 24));
+  expect(nativeBoxes).toBe(accelerated ? 1 : 0);
   const mask = { width: 16, height: 12, data: Uint8Array.from({ length: 192 }, (_, i) => i % 16 > 4 && i % 16 < 10 && Math.floor(i / 16) > 2 && Math.floor(i / 16) < 8 ? 255 : 0) };
   const crop = prepareRemoval(image, mask, 0), input = native.prepare(mask);
   expect(input).toEqual(removalModelInput(crop));
   const result = Float32Array.from({ length: 512 ** 2 * 3 }, (_, i) => (i % 511) / 511);
   const expected = { ...image, rgba: rgba.slice() };
   applyRemoval(expected, crop, result); native.finish(result);
+  const boxesBeforeEdit = nativeBoxes;
   expect(native.preview(32, true).rgba).toEqual(boxDownscaleRegion(expected.rgba, width, height, 32, 24, 0, 0, 32, 24));
+  expect(nativeBoxes).toBe(boxesBeforeEdit + (accelerated ? 1 : 0));
   expect(native.commit()).toBe(1);
   native.purgeCache();
   expect(native.region(width, height, 0, 0, width, height)).toEqual(expected.rgba);
   expect(native.region(width, height, 0, 0, width, height, undefined, false, true)).toEqual(rgba);
+  expect(nativeBoxes).toBe(boxesBeforeEdit + (accelerated ? 3 : 0));
   expect(native.measurement(31, 23)).toEqual(measurementImage(expected.rgba, width, height, 31, 23));
+  for (const [ow, oh, x, y, w, h] of [[97,73,30,20,32,27], [29,21,3,4,19,13]]) {
+    expect(native.region(ow!, oh!, x!, y!, w!, h!)).toEqual(boxDownscaleRegion(expected.rgba, width, height, ow!, oh!, x!, y!, w!, h!));
+  }
   native.restore(0);
   expect(native.region(width, height, 0, 0, width, height)).toEqual(rgba);
   native.restore(1);

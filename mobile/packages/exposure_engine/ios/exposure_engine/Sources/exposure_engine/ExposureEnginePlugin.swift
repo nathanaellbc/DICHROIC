@@ -229,7 +229,11 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             }
             do {
                 let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                let file = directory.appendingPathComponent("editor.png")
+                let requested = (call.arguments as? [String: Any])?["name"] as? String ?? "editor"
+                guard ["editor", "editor-stocks", "editor-export"].contains(requested) else {
+                    throw NativeError.message("Invalid screenshot name")
+                }
+                let file = directory.appendingPathComponent(requested + ".png")
                 guard let bytes = image.pngData() else { result(nil); return }
                 try bytes.write(to: file); result(file.path)
             } catch { result(FlutterError(code: "screenshot", message: error.localizedDescription, details: nil)) }
@@ -264,7 +268,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugStats", "detail", "exportSize"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugEncodedPixels", "debugStats", "detail", "exportSize"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -453,6 +457,24 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             func fail(_ error: Error) { finish(FlutterError(code: "native_graph", message: error.localizedDescription, details: nil)) }
             do {
                 let graph = try graphRuntime()
+                if call.method == "debugEncodedPixels" {
+                    #if DEBUG
+                    guard let path = args["path"] as? String else { throw NativeError.message("Encoded probe path is missing") }
+                    let source = try NativeRasterSource.decode(URL(fileURLWithPath: path), profileSpace: graph.profileSpace)
+                    guard source.width * source.height <= 65536 else { throw NativeError.message("Encoded probe only accepts small fixtures") }
+                    var pixels = Data(count: source.width * source.height * 4)
+                    source.data.withUnsafeBytes { input in pixels.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+                        for p in 0..<(source.width * source.height) { for c in 0..<4 {
+                            let value = source.value(input, pixel: p, channel: c)
+                            output[p * 4 + c] = UInt8((min(1, max(0, value)) * 255).rounded())
+                        } }
+                    } }
+                    finish(["width": source.width, "height": source.height, "colorSpace": source.colorSpace,
+                        "rgba": FlutterStandardTypedData(bytes: pixels)]); return
+                    #else
+                    finish(FlutterMethodNotImplemented); return
+                    #endif
+                }
                 if call.method == "debugStats" {
                     #if DEBUG
                     finish(["exportRenderCount": graph.exportRenderCount,

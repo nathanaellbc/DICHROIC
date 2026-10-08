@@ -354,6 +354,17 @@ final class NativeGraphRuntime {
                 source.copyRegion(x: x, y: y, width: width, height: height, into: output.bindMemory(to: Float.self))
             } catch { self.fail(error) }
         }
+        let box: @convention(block) (String, JSValue) -> Void = { [weak self] json, destination in
+            guard let self else { return }
+            do {
+                guard let source = self.sourceStore,
+                      let descriptor = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Int] else {
+                    throw GraphRuntimeError.message("Invalid native box region")
+                }
+                let output = try self.typedBytes(destination)
+                try source.copyBox(descriptor, into: output.bindMemory(to: Float.self))
+            } catch { self.fail(error) }
+        }
         let samples: @convention(block) (JSValue) -> JSValue? = { [weak self] bounds in
             guard let self = self else { return nil }
             do {
@@ -511,7 +522,7 @@ final class NativeGraphRuntime {
             "nativeRead": read as Any, "nativeAsset": asset as Any, "nativeText": text as Any,
             "nativeInput": input as Any, "nativePublish": publish as Any, "nativeSource": source as Any,
             "nativeOutput": output as Any, "nativeProgress": progress as Any, "nativeComplete": complete as Any, "nativeMask": mask as Any,
-            "nativeRegion": region as Any, "nativeSamples": samples as Any,
+            "nativeRegion": region as Any, "nativeBox": box as Any, "nativeSamples": samples as Any,
             "nativeSavePatch": savePatch as Any, "nativeLoadPatch": loadPatch as Any,
             "nativeCube": cube as Any,
             "nativeOriginal": original as Any,
@@ -524,6 +535,7 @@ final class NativeGraphRuntime {
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
                 progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube, publishOriginal: nativeOriginal, publishDetail: nativeDetail,
                 sourceRegion: (x,y,w,h) => { nativeRegion(x,y,w,h,nativeReadStrip); return nativeReadStrip.subarray(0,w*h*4); },
+                sourceDownscaleRegion: (outWidth,outHeight,x,y,width,height,into) => nativeBox(JSON.stringify({outWidth,outHeight,x,y,width,height}),into),
                 sourceSamples: b => new Float32Array(nativeSamples(b)),
                 saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
                 loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled };

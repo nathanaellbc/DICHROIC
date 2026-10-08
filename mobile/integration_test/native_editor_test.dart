@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/main.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
 import 'package:exposure_ios/native_editor_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -30,7 +30,6 @@ Future<Uint8List> decodedRgba(Uint8List encoded) async {
 }
 
 void main() {
-  debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
     'ImageIO, canonical host and Metal match independent Dawn images',
@@ -77,6 +76,32 @@ void main() {
               'Profiled native preview differs from independent P3 reference',
         );
         final path = await engine.developExport(params);
+        if (wideGamut) {
+          // Flutter's codec converts embedded P3 to its display space. Inspect
+          // ImageIO's original encoded channel codes for the P3 oracle.
+          final encoded = await const MethodChannel('exposure/native')
+              .invokeMapMethod<String, dynamic>('debugEncodedPixels', {
+                'path': path,
+              });
+          expect(encoded!['colorSpace'], 'Display P3');
+          expect(encoded['width'], reference['width']);
+          expect(encoded['height'], reference['height']);
+          final bytes = encoded['rgba'] as Uint8List;
+          final expected = (test['rgba'] as List).cast<int>();
+          expect(bytes.length, expected.length);
+          var maximum = 0;
+          for (var i = 0; i < bytes.length; i++) {
+            final error = (bytes[i] - expected[i]).abs();
+            if (error > maximum) maximum = error;
+          }
+          expect(
+            maximum,
+            lessThanOrEqualTo(1),
+            reason: 'Encoded P3 PNG differs from Dawn',
+          );
+          await File(path).delete();
+          continue;
+        }
         final codec = await ui.instantiateImageCodec(
           await File(path).readAsBytes(),
         );
@@ -187,6 +212,28 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
+      await tester.tap(find.byTooltip('Film & Paper'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<String>('debugScreenshot', {'name': 'editor-stocks'});
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 4)),
+      );
+      await tester.tap(find.byTooltip('Done'));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byTooltip('Export'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.takeException(), isNull);
+      await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<String>('debugScreenshot', {'name': 'editor-export'});
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(seconds: 4)),
+      );
+      await tester.tap(find.byTooltip('Close export'));
+      await tester.pump(const Duration(seconds: 1));
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 100));
       await engine.close();

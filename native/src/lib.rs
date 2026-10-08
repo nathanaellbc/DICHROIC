@@ -5,6 +5,7 @@ use std::{cell::RefCell, ffi::{c_char, c_void, CStr, CString}, panic::{catch_unw
 #[allow(dead_code)]
 mod curve_develop;
 pub mod gpu_graph;
+mod source_box;
 
 const TILE_PIXELS: usize = 1024 * 1024;
 const TILE_BYTES: u64 = (TILE_PIXELS * 4) as u64;
@@ -72,6 +73,25 @@ fn graph_status(operation: impl FnOnce() -> Result<(), String>) -> i32 {
         Ok(Err(message)) => { error(message); -1 },
         Err(_) => { error("Native graph buffer operation failed"); -1 },
     }
+}
+
+/// # Safety
+/// Borrow immutable source/lookup and unique output storage for the serialized
+/// call. The descriptor is terminated UTF-8; errors never cross the ABI.
+#[no_mangle]
+pub unsafe extern "C" fn dichroic_source_box(bytes: *const u8, length: usize, lookup: *const f32, lookup_length: usize,
+    descriptor: *const c_char, output: *mut f32, output_length: usize) -> i32 {
+    graph_status(|| {
+        if bytes.is_null() || output.is_null() || descriptor.is_null() || (lookup_length != 0 && lookup.is_null()) {
+            return Err("Invalid source storage".into());
+        }
+        let json = CStr::from_ptr(descriptor).to_str().map_err(|e| e.to_string())?;
+        if json.len() > 4096 { return Err("Source descriptor is too large".into()); }
+        let spec = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        source_box::read(std::slice::from_raw_parts(bytes, length),
+            if lookup_length == 0 { &[] } else { std::slice::from_raw_parts(lookup, lookup_length) },
+            &spec, std::slice::from_raw_parts_mut(output, output_length))
+    })
 }
 
 /// # Safety

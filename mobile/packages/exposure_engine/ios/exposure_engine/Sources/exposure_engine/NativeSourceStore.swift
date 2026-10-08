@@ -1,5 +1,6 @@
 import Foundation
 import Accelerate
+import ExposureNative
 
 /// Immutable, file-backed source bytes. Sparse floating-point removal patches
 /// live in the canonical host; decoding/export never duplicates a full float
@@ -87,6 +88,28 @@ final class NativeSourceStore {
                     } }
                 }
             }
+        }
+    }
+    func copyBox(_ region: [String: Int], into output: UnsafeMutableBufferPointer<Float>) throws {
+        var descriptor: [String: Any] = region
+        descriptor["sourceWidth"] = width; descriptor["sourceHeight"] = height
+        descriptor["bits"] = bits; descriptor["channels"] = channels
+        descriptor["byteOffset"] = byteOffset; descriptor["bigEndian"] = bigEndian
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: descriptor), as: UTF8.self)
+        let status = data.withUnsafeBytes { bytes in
+            json.withCString { request in
+                if let lookup {
+                    return lookup.withUnsafeBufferPointer { table in
+                        dichroic_source_box(bytes.baseAddress!.assumingMemoryBound(to: UInt8.self), bytes.count,
+                            table.baseAddress, table.count, request, output.baseAddress, output.count)
+                    }
+                }
+                return dichroic_source_box(bytes.baseAddress!.assumingMemoryBound(to: UInt8.self), bytes.count,
+                    nil, 0, request, output.baseAddress, output.count)
+            }
+        }
+        guard status == 0 else {
+            throw GraphRuntimeError.message(exposure_last_error().map { String(cString: $0) } ?? "Source box read failed")
         }
     }
     deinit {
