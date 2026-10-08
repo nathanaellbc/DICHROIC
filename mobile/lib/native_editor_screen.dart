@@ -11,6 +11,7 @@ import 'export_sheet.dart';
 import 'native_controls.dart';
 import 'appearance.dart';
 import 'editor_text.dart';
+import 'scopes.dart';
 import 'start_screen.dart';
 
 class NativeEditorScreen extends StatefulWidget {
@@ -42,12 +43,16 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
   /// Before/After of the removal preview.
   bool beforeRemoval = false;
   final exportPreferences = ExportPreferences();
+
+  /// Phone scope settings (web keeps them per device class).
+  final scopes = ScopePrefs('compact');
   String? _alerted;
 
   @override
   void initState() {
     super.initState();
     exportPreferences.load(controller.engine);
+    scopes.load(controller.engine);
     controller.addListener(_alert);
   }
 
@@ -909,10 +914,63 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     );
   }
 
-  Widget viewport() {
+  /// The photo with the phone's floating Scopes button and scope overlay.
+  Widget viewport({bool landscape = false}) {
     if (controller.photo == null) {
       return StartScreen(onChoose: controller.loading ? null : openPhoto);
     }
+    final photo = photoView();
+    if (controller.erasing) return photo;
+    return ListenableBuilder(
+      listenable: scopes,
+      builder: (context, _) => Stack(
+        children: [
+          Positioned.fill(child: photo),
+          Positioned(right: 12, bottom: 12, child: scopeButton()),
+          if (scopes.open)
+            Positioned(
+              top: 46,
+              right: 10,
+              child: ScopeOverlay(
+                engine: controller.engine,
+                prefs: scopes,
+                frame: controller.frames,
+                landscape: landscape,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void toggleScopes() =>
+      scopes.update(controller.engine, {'open': !scopes.open});
+
+  /// Glass Scopes toggle, mirroring Compare (web phone layout).
+  Widget scopeButton() {
+    if (useNativeControls) {
+      return NativeButton(
+        label: 'Scopes',
+        symbol: sfSymbol('scope'),
+        selected: scopes.open,
+        width: 44,
+        onTap: toggleScopes,
+      );
+    }
+    return Glass(
+      radius: 22,
+      child: Press(
+        label: 'Scopes',
+        plain: !scopes.open,
+        selected: scopes.open,
+        radius: 22,
+        onTap: toggleScopes,
+        child: Glyph('scope', color: scopes.open ? signalBlue : null),
+      ),
+    );
+  }
+
+  Widget photoView() {
     return PhotoViewport(
       photo: controller.photo!,
       detail: controller.detail,

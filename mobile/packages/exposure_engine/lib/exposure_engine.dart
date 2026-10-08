@@ -192,6 +192,37 @@ class ExposureEngine {
 
   Future<void> close() => _channel.invokeMethod<void>('close');
 
+  /// Scope trace of the last displayed preview, traced by the web scope
+  /// code in the canonical host: RGBA of `width` x `height`, or null before
+  /// the first frame.
+  Future<({int width, int height, Uint8List rgba})?> scope(
+    Map<String, dynamic> prefs,
+    int width,
+    int height,
+  ) async {
+    final json = await _channel.invokeMethod<String>('scope', {
+      'prefs': prefs,
+      'width': width,
+      'height': height,
+    });
+    final value = jsonDecode(json ?? '{}') as Map<String, dynamic>;
+    if (value['rgba'] == null) return null;
+    return (
+      width: value['width'] as int,
+      height: value['height'] as int,
+      rgba: base64Decode(value['rgba'] as String),
+    );
+  }
+
+  /// Scope settings, kept per device class like the web (`compact`/`wide`).
+  Future<String?> loadScopePreferences(String layout) =>
+      _channel.invokeMethod<String>('loadScopePreferences', layout);
+  Future<void> saveScopePreferences(String layout, String json) =>
+      _channel.invokeMethod<void>('saveScopePreferences', {
+        'layout': layout,
+        'json': json,
+      });
+
   /// Whether the lens-blur depth model is on this device, and its size.
   Future<({bool stored, int bytes})> depthModel() async {
     final value = await _channel.invokeMapMethod<String, dynamic>('depthModel');
@@ -200,6 +231,7 @@ class ExposureEngine {
       bytes: value?['bytes'] as int? ?? 27258801,
     );
   }
+
   Future<void> cancelExport() => _channel.invokeMethod<void>('cancelExport');
   Future<String?> loadExportPreferences() =>
       _channel.invokeMethod<String>('loadExportPreferences');

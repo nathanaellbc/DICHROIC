@@ -244,6 +244,10 @@ final class NativeGraphRuntime {
         try hostCall("patch", request)
     }
 
+    func scope(_ request: [String: Any]) throws -> String {
+        try hostCall("scope", request)
+    }
+
     private func hostCall(_ method: String, _ object: [String: Any]) throws -> String {
         let json = String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
         let value = runtime?.invokeMethod(method, withArguments: [json])

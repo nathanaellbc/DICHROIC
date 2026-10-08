@@ -242,6 +242,19 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             }
             UserDefaults.standard.set(json, forKey: "DichroicExportPreferences"); result(nil); return
         }
+        if call.method == "loadScopePreferences" {
+            let layout = call.arguments as? String == "wide" ? "wide" : "compact"
+            result(UserDefaults.standard.string(forKey: "DichroicScope.\(layout)")); return
+        }
+        if call.method == "saveScopePreferences" {
+            let args = call.arguments as? [String: Any] ?? [:]
+            guard let json = args["json"] as? String, json.utf8.count <= 4096,
+                  (try? JSONSerialization.jsonObject(with: Data(json.utf8))) is [String: Any] else {
+                result(FlutterError(code: "preferences", message: "Invalid scope preferences", details: nil)); return
+            }
+            let layout = args["layout"] as? String == "wide" ? "wide" : "compact"
+            UserDefaults.standard.set(json, forKey: "DichroicScope.\(layout)"); result(nil); return
+        }
         if call.method == "depthModel" {
             result(["stored": NativeModels.isStored(name: NativeModels.depthName, bytes: NativeModels.depthBytes),
                 "bytes": NativeModels.depthBytes]); return
@@ -301,7 +314,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugEncodedPixels", "debugStats", "detail", "exportSize"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugEncodedPixels", "debugStats", "detail", "exportSize", "scope"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -567,6 +580,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     #endif
                 }
                 if call.method == "patch" { finish(try graph.patch(args)); return }
+                // Scopes trace the last displayed preview with the web scope math.
+                if call.method == "scope" { finish(try graph.scope(args)); return }
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
                 if call.method == "exportSize" {

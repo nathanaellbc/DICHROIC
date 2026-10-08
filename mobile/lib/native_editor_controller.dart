@@ -148,6 +148,9 @@ class NativeEditorController extends ChangeNotifier {
   ({Rect rect, int edge})? _detailQueued, _detailWish, _detailAttempt;
   int _detailHighWater = 0;
   int get revision => _revision;
+
+  /// Previews displayed so far; scopes trace each new one.
+  int frames = 0;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
   bool get busy => loading || exporting || removing;
@@ -629,6 +632,7 @@ class NativeEditorController extends ChangeNotifier {
               : DateTime.now().difference(_depthStarted!).inMilliseconds / 1000;
         }
         _rendered = revision;
+        frames++;
       }
     } catch (e) {
       error = e.toString();

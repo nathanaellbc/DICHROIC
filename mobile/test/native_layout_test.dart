@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/editor_text.dart';
 import 'package:exposure_ios/main.dart';
@@ -29,6 +30,17 @@ class LayoutEngine extends ExposureEngine {
   Future<void> close() async {}
   @override
   Future<String?> loadExportPreferences() async => null;
+  @override
+  Future<({int width, int height, Uint8List rgba})?> scope(
+    Json prefs,
+    int width,
+    int height,
+  ) async =>
+      (width: width, height: height, rgba: Uint8List(width * height * 4));
+  @override
+  Future<String?> loadScopePreferences(String layout) async => null;
+  @override
+  Future<void> saveScopePreferences(String layout, String json) async {}
   @override
   Future<void> beginRemoval() async {}
   @override
@@ -95,6 +107,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
       await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Scopes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Vector'), findsOneWidget);
+      await tester.tap(find.text('Vector'));
+      await tester.pumpAndSettle();
+      expect(find.text('Wave'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'Scopes at $size');
+      await tester.tap(find.byTooltip('Scopes'));
       await tester.pumpAndSettle();
       await editor.beginRemoval();
       await tester.pumpAndSettle();

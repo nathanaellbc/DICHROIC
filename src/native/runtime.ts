@@ -13,6 +13,9 @@ import { NativeSource, type NativeSourceHost } from './source';
 import { sourceToDisplay, rgbToCanvas, canvasColorSpaceFor } from '../io/display';
 import { dcrawGammaCurve, invertDcrawCurve } from '../io/dcrawGamma';
 import { iccDescription, colorSpaceForIcc } from '../io/metadata';
+import { accumulateScope, shadeScope } from '../ui/model/vectorscope';
+import type { ScopePrefs } from '../ui/model/vectorscope';
+import { accumulateWaveform, paradeLayout, shadeWaveform, waveformLayout } from '../ui/model/waveform';
 
 export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   previewInput(): Float32Array;
@@ -23,6 +26,20 @@ export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   publishOriginal?(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
   publishDetail?(rgba: Uint8ClampedArray, original: Uint8ClampedArray, json: string,
     gamut: PredefinedColorSpace, originalGamut: PredefinedColorSpace): void;
+}
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** JavaScriptCore has no `btoa` for bytes; scope traces cross as base64. */
+function base64(bytes: Uint8ClampedArray): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!, b = bytes[i + 1] ?? 0, c = bytes[i + 2] ?? 0;
+    out += BASE64[a >> 2]! + BASE64[((a & 3) << 4) | (b >> 4)]!
+      + (i + 1 < bytes.length ? BASE64[((b & 15) << 2) | (c >> 6)]! : '=')
+      + (i + 2 < bytes.length ? BASE64[c & 63]! : '=');
+  }
+  return out;
 }
 
 function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]) {
@@ -46,6 +63,8 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
   let guide: { rgba: Uint8ClampedArray; width: number; height: number; rgb: Float32Array; mw: number; mh: number } | undefined;
   let depth: DepthMap | undefined;
   let focusOverlay: ReturnType<typeof prepareFocusOverlay> | undefined;
+  // The last displayed preview: what the web scopes trace.
+  let display: { pixels: Uint8ClampedArray; width: number; height: number } | undefined;
   return {
     catalog: () => nativeCatalog(bundle),
     profileSpace(buffer: ArrayBuffer): string {
@@ -69,7 +88,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     rollbackSource(): void {
       if (sourceBackup) { source = sourceBackup.source; sourcePreview = sourceBackup.preview; sourceBackup = undefined; }
     },
-    clearSource(): void { source = undefined; sourcePreview = undefined; },
+    clearSource(): void { source = undefined; sourcePreview = undefined; display = undefined; },
     hibernate(): void { renderer.clearResources(); source?.purgeCache(); sourcePreview = undefined; guide = undefined; focusOverlay = undefined; },
     removalInput(json: string, buffer: ArrayBuffer): Float32Array {
       if (!source) throw new Error('Native removal source is missing.');
@@ -137,6 +156,22 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       guide = undefined;
     },
     dispose: () => renderer.dispose(),
+    /** Waveform, parade or vectorscope trace (web Waveform/Vectorscope), RGBA in base64. */
+    scope(json: string): string {
+      if (!display) return '{}';
+      const { prefs, width, height } = JSON.parse(json) as { prefs: ScopePrefs; width: number; height: number };
+      const { pixels } = display;
+      if (prefs.kind === 'vectorscope') {
+        const px = Math.max(64, Math.round(width));
+        const radiusPx = (px / 2) * 0.8;
+        const trace = accumulateScope(pixels, display.width, display.height, px, radiusPx, prefs.zoom, undefined, prefs.range);
+        return JSON.stringify({ width: px, height: px, rgba: base64(shadeScope(trace, prefs.colorize, 1, (radiusPx * prefs.zoom) / 0.5)) });
+      }
+      const w = Math.max(32, Math.round(width)), h = Math.max(32, Math.round(height));
+      const layout = prefs.kind === 'parade' ? paradeLayout(prefs.paradeMode) : waveformLayout(prefs.waveMode, prefs.waveChannels);
+      const trace = accumulateWaveform(pixels, display.width, display.height, w, h, layout, { lowPass: prefs.lowPass });
+      return JSON.stringify({ width: w, height: h, rgba: base64(shadeWaveform(trace, prefs.waveColorize, prefs.extents)) });
+    },
     controls(json: string): string {
       // `viewAspect` (lebar/tinggi foto) hanya untuk readout kedalaman ruang.
       const { viewAspect, ...rest } = JSON.parse(json) as RenderParams & { viewAspect?: number };
@@ -231,6 +266,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
             const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
             const pixels = rgbToCanvas(rgb, request.width, request.height, request.params.outputColorSpace, gamut);
             host.publish(pixels, request.width, request.height, gamut);
+            display = { pixels, width: request.width, height: request.height };
             if (depth) {
               focusOverlay = prepareFocusOverlay({ width: request.width, height: request.height, pixels, colorSpace: gamut }, depth);
             }
