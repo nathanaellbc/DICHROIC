@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'native_controls.dart';
 
 const signalBlue = Color(0xff0091ff);
 const secondary = Color(0xffaaaab3);
@@ -63,7 +64,24 @@ class Glass extends StatelessWidget {
   final double radius, blur;
   final EdgeInsetsGeometry padding;
   @override
-  Widget build(BuildContext context) => ClipPath(
+  Widget build(BuildContext context) {
+    if (useNativeControls) {
+      // Native Liquid Glass behind the Flutter content: it also refracts the
+      // native photo view, which BackdropFilter cannot sample.
+      return Stack(
+        children: [
+          Positioned.fill(child: NativeGlassBackground(radius: radius)),
+          Material(
+            type: MaterialType.transparency,
+            child: Padding(padding: padding, child: child),
+          ),
+        ],
+      );
+    }
+    return _flutterGlass();
+  }
+
+  Widget _flutterGlass() => ClipPath(
     clipper: ShapeBorderClipper(
       shape: RoundedSuperellipseBorder(
         borderRadius: BorderRadius.circular(radius),
@@ -104,52 +122,107 @@ class Press extends StatefulWidget {
 
 class _PressState extends State<Press> {
   bool down = false;
+
+  /// Native `UIButton` for a glyph or a plain text label; other content
+  /// (rows of text and icons) stays a Flutter press.
+  Widget? _native(BuildContext context) {
+    if (!useNativeControls) return null;
+    final child = widget.child;
+    String? symbol, title;
+    if (child is Glyph) {
+      symbol = sfSymbol(child.name);
+    } else if (child is Text && child.data != null) {
+      title = child.data;
+    } else {
+      return null;
+    }
+    final style = widget.selected && widget.filled
+        ? 'prominent'
+        : widget.plain
+        ? 'plain'
+        : 'glass';
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double width;
+        if (constraints.hasTightWidth) {
+          width = constraints.maxWidth;
+        } else if (title == null) {
+          width = 44;
+        } else {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            textDirection: TextDirection.ltr,
+          )..layout();
+          width = (painter.width + 36).clamp(44, constraints.maxWidth);
+        }
+        return NativeButton(
+          label: widget.label,
+          symbol: symbol,
+          title: title,
+          style: style,
+          selected: widget.selected && !widget.filled,
+          onTap: widget.onTap,
+          symbolSize: child is Glyph ? (child.size * .8) : 17,
+          width: width,
+        );
+      },
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: widget.label,
-    selected: widget.selected,
-    enabled: widget.onTap != null,
-    child: Tooltip(
-      message: widget.label,
-      child: GestureDetector(
-        onTapDown: widget.onTap == null
-            ? null
-            : (_) => setState(() => down = true),
-        onTapCancel: () => setState(() => down = false),
-        onTapUp: (_) => setState(() => down = false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: down ? .94 : 1,
-          duration: const Duration(milliseconds: 120),
-          child: Opacity(
-            opacity: widget.onTap == null ? .35 : 1,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: ShapeDecoration(
-                shape: RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.circular(widget.radius),
-                  side: widget.selected && !widget.filled
-                      ? const BorderSide(color: signalBlue, width: 1.5)
-                      : BorderSide.none,
+  Widget build(BuildContext context) =>
+      _native(context) ??
+      Semantics(
+        button: true,
+        label: widget.label,
+        selected: widget.selected,
+        enabled: widget.onTap != null,
+        child: Tooltip(
+          message: widget.label,
+          child: GestureDetector(
+            onTapDown: widget.onTap == null
+                ? null
+                : (_) => setState(() => down = true),
+            onTapCancel: () => setState(() => down = false),
+            onTapUp: (_) => setState(() => down = false),
+            onTap: widget.onTap,
+            child: AnimatedScale(
+              scale: down ? .94 : 1,
+              duration: const Duration(milliseconds: 120),
+              child: Opacity(
+                opacity: widget.onTap == null ? .35 : 1,
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 44,
+                    minHeight: 44,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: ShapeDecoration(
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(widget.radius),
+                      side: widget.selected && !widget.filled
+                          ? const BorderSide(color: signalBlue, width: 1.5)
+                          : BorderSide.none,
+                    ),
+                    color: widget.selected
+                        ? widget.filled
+                              ? const Color(0xb30070e0)
+                              : const Color(0x200091ff)
+                        : widget.plain
+                        ? Colors.transparent
+                        : const Color(0x14787880),
+                  ),
+                  alignment: Alignment.center,
+                  child: widget.child,
                 ),
-                color: widget.selected
-                    ? widget.filled
-                          ? const Color(0xb30070e0)
-                          : const Color(0x200091ff)
-                    : widget.plain
-                    ? Colors.transparent
-                    : const Color(0x14787880),
               ),
-              alignment: Alignment.center,
-              child: widget.child,
             ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 class LightSwitch extends StatelessWidget {
@@ -163,59 +236,63 @@ class LightSwitch extends StatelessWidget {
   final ValueChanged<bool>? onChanged;
   final String label;
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: label,
-    toggled: value,
-    enabled: onChanged != null,
-    onTap: onChanged == null ? null : () => onChanged!(!value),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onChanged == null ? null : () => onChanged!(!value),
-      onHorizontalDragEnd: onChanged == null
-          ? null
-          : (details) {
-              final velocity = details.primaryVelocity ?? 0;
-              if (velocity.abs() > 40) onChanged!(velocity > 0);
-            },
-      child: SizedBox(
-        width: 44,
-        height: 44,
-        child: Center(
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 160),
-            width: 28,
-            height: 16,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: value
-                  ? signalBlue.withValues(alpha: .7)
-                  : const Color(0x47787880),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: AnimatedAlign(
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
-              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-              child: const SizedBox(
-                width: 12,
-                height: 12,
-                child: DecoratedBox(
+  Widget build(BuildContext context) => useNativeControls
+      ? NativeSwitch(value: value, onChanged: onChanged, label: label)
+      : Semantics(
+          label: label,
+          toggled: value,
+          enabled: onChanged != null,
+          onTap: onChanged == null ? null : () => onChanged!(!value),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onChanged == null ? null : () => onChanged!(!value),
+            onHorizontalDragEnd: onChanged == null
+                ? null
+                : (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    if (velocity.abs() > 40) onChanged!(velocity > 0);
+                  },
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 160),
+                  width: 28,
+                  height: 16,
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
+                    color: value
+                        ? signalBlue.withValues(alpha: .7)
+                        : const Color(0x47787880),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: AnimatedAlign(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 160),
+                    curve: Curves.easeOutCubic,
+                    alignment: value
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
+                    child: const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
-    ),
-  );
+        );
 }
 
 class DetailSlider extends StatefulWidget {
@@ -242,8 +319,38 @@ class DetailSlider extends StatefulWidget {
 
 class _DetailSliderState extends State<DetailSlider> {
   double? dragging;
+
+  double snap(double v) =>
+      (widget.min + ((v - widget.min) / widget.step).round() * widget.step)
+          .clamp(widget.min, widget.max);
+
   @override
-  Widget build(BuildContext context) => SliderTheme(
+  Widget build(BuildContext context) {
+    if (useNativeControls) {
+      return NativeSlider(
+        value: widget.value.clamp(widget.min, widget.max),
+        min: widget.min,
+        max: widget.max,
+        label: widget.label,
+        enabled: widget.enabled,
+        onStart: widget.onStart,
+        onEnd: () {
+          dragging = null;
+          widget.onEnd?.call();
+        },
+        onChanged: (v) {
+          final snapped = snap(v);
+          if (snapped != dragging) {
+            dragging = snapped;
+            widget.onChanged(snapped);
+          }
+        },
+      );
+    }
+    return _flutterSlider();
+  }
+
+  Widget _flutterSlider() => SliderTheme(
     data: SliderTheme.of(context).copyWith(
       trackHeight: 3,
       activeTrackColor: signalBlue.withValues(alpha: .7),

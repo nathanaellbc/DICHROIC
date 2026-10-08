@@ -5,6 +5,7 @@ import 'native_editor_controller.dart';
 import 'photo_viewport.dart';
 import 'removal_brush.dart';
 import 'export_sheet.dart';
+import 'native_controls.dart';
 
 class NativeEditorScreen extends StatefulWidget {
   const NativeEditorScreen({super.key, this.controller});
@@ -135,6 +136,144 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     ),
     fraction: .4,
   );
+
+  /// The "⋯" menu as a native pull-down: same actions as [menu].
+  List<NativeMenuItem> menuItems() => [
+    const NativeMenuItem(
+      id: 'photos',
+      title: 'Open from Photos',
+      symbol: 'photo.on.rectangle',
+    ),
+    const NativeMenuItem(
+      id: 'files',
+      title: 'Open from Files',
+      symbol: 'folder',
+    ),
+    NativeMenuItem(
+      id: 'remove',
+      title: 'Remove Object',
+      symbol: 'eraser',
+      section: 'edit',
+      enabled: controller.photo != null,
+    ),
+    NativeMenuItem(
+      id: 'redo',
+      title: 'Redo',
+      symbol: 'arrow.uturn.forward',
+      section: 'edit',
+      enabled: controller.canRedo,
+    ),
+    NativeMenuItem(
+      id: 'reset',
+      title: 'Reset all controls',
+      symbol: 'arrow.counterclockwise',
+      section: 'edit',
+      destructive: true,
+      enabled: controller.photo != null,
+    ),
+  ];
+
+  void menuAction(String id) {
+    switch (id) {
+      case 'photos':
+        pick();
+      case 'files':
+        pickFile();
+      case 'remove':
+        brush.clear();
+        controller.beginRemoval();
+      case 'redo':
+        controller.redo();
+      case 'reset':
+        controller.resetAll();
+    }
+  }
+
+  /// iOS top bar: separate floating Liquid Glass controls, as in iOS 26
+  /// toolbars, instead of one blurred Flutter strip.
+  Widget nativeTopBar(bool wide) {
+    final erasing = controller.erasing;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      child: Row(
+        children: [
+          if (erasing)
+            NativeButton(
+              label: 'Cancel removal',
+              symbol: 'xmark',
+              width: 44,
+              onTap: controller.busy
+                  ? null
+                  : () => controller.finishRemoval(apply: false),
+            )
+          else
+            NativeButton(
+              label: 'More options',
+              symbol: 'ellipsis',
+              width: 44,
+              menu: menuItems(),
+              onMenu: controller.busy ? null : menuAction,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: NativeButton(
+              label: 'Film & Paper',
+              title: erasing
+                  ? 'Remove Object'
+                  : controller.photo == null
+                  ? 'DICHROIC'
+                  : stockName('film'),
+              subtitle: controller.photo == null || erasing
+                  ? null
+                  : 'on ${stockName('paper')}',
+              symbol: erasing ? null : 'chevron.up.chevron.down',
+              symbolSize: 12,
+              imageTrailing: true,
+              leadingAligned: true,
+              onTap: controller.photo == null || erasing ? null : stocks,
+            ),
+          ),
+          if (!erasing) ...[
+            const SizedBox(width: 8),
+            NativeButton(
+              label: 'Undo',
+              symbol: 'arrow.uturn.backward',
+              width: 44,
+              onTap: controller.canUndo && !controller.busy
+                  ? controller.undo
+                  : null,
+            ),
+          ],
+          if (wide && !erasing) ...[
+            const SizedBox(width: 8),
+            NativeButton(
+              label: 'Redo',
+              symbol: 'arrow.uturn.forward',
+              width: 44,
+              onTap: controller.canRedo && !controller.busy
+                  ? controller.redo
+                  : null,
+            ),
+          ],
+          const SizedBox(width: 8),
+          NativeButton(
+            label: erasing ? 'Apply removal' : 'Export',
+            symbol: erasing ? 'checkmark' : 'square.and.arrow.up',
+            style: 'prominent',
+            width: 52,
+            onTap:
+                controller.photo == null ||
+                    controller.busy ||
+                    (erasing && !controller.removalReady)
+                ? null
+                : erasing
+                ? () => controller.finishRemoval(apply: true)
+                : export,
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget removalControls() => ListenableBuilder(
     listenable: brush,
@@ -273,104 +412,143 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                             tool: selected,
                             controller: controller,
                           ),
-                        SizedBox(
-                          height: 88,
-                          child: ListView.separated(
-                            key: PageStorageKey('tools-$groupId'),
-                            scrollDirection: Axis.horizontal,
-                            physics: const BouncingScrollPhysics(
-                              parent: AlwaysScrollableScrollPhysics(),
+                        if (useNativeControls)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: NativeToolStrip(
+                              tools: [
+                                for (final tool in tools)
+                                  NativeTool(
+                                    id: tool['id'] as String,
+                                    title: tool['title'] as String,
+                                    label: tool['label'] as String,
+                                    glyph: tool['icon'] as String,
+                                    modified: tool['modified'] == true,
+                                  ),
+                              ],
+                              selected: selected?['id'] as String?,
+                              onSelect: (id) =>
+                                  setState(() => selections[groupId] = id),
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                            itemCount: tools.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(width: 5),
-                            itemBuilder: (context, i) {
-                              final tool = tools[i];
-                              final active = tool['id'] == selected?['id'];
-                              return SizedBox(
-                                width: 65,
-                                child: Column(
-                                  children: [
-                                    Stack(
-                                      children: [
-                                        Press(
-                                          key: ValueKey('tool-${tool['id']}'),
-                                          label: tool['title'] as String,
-                                          selected: active,
-                                          onTap: () => setState(
-                                            () => selections[groupId] =
-                                                tool['id'] as String,
+                          )
+                        else
+                          SizedBox(
+                            height: 88,
+                            child: ListView.separated(
+                              key: PageStorageKey('tools-$groupId'),
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(
+                                parent: AlwaysScrollableScrollPhysics(),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
+                              itemCount: tools.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 5),
+                              itemBuilder: (context, i) {
+                                final tool = tools[i];
+                                final active = tool['id'] == selected?['id'];
+                                return SizedBox(
+                                  width: 65,
+                                  child: Column(
+                                    children: [
+                                      Stack(
+                                        children: [
+                                          Press(
+                                            key: ValueKey('tool-${tool['id']}'),
+                                            label: tool['title'] as String,
+                                            selected: active,
+                                            onTap: () => setState(
+                                              () => selections[groupId] =
+                                                  tool['id'] as String,
+                                            ),
+                                            child: Glyph(
+                                              tool['icon'] as String,
+                                              color: active
+                                                  ? signalBlue
+                                                  : secondary,
+                                            ),
                                           ),
-                                          child: Glyph(
-                                            tool['icon'] as String,
-                                            color: active
-                                                ? signalBlue
-                                                : secondary,
-                                          ),
-                                        ),
-                                        if (tool['modified'] == true)
-                                          const Positioned(
-                                            right: 7,
-                                            top: 6,
-                                            child: SizedBox(
-                                              width: 5,
-                                              height: 5,
-                                              child: DecoratedBox(
-                                                decoration: BoxDecoration(
-                                                  color: signalBlue,
-                                                  shape: BoxShape.circle,
+                                          if (tool['modified'] == true)
+                                            const Positioned(
+                                              right: 7,
+                                              top: 6,
+                                              child: SizedBox(
+                                                width: 5,
+                                                height: 5,
+                                                child: DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    color: signalBlue,
+                                                    shape: BoxShape.circle,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      tool['label'] as String,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: active
-                                            ? Colors.white
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        tool['label'] as String,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: active
+                                              ? Colors.white
+                                              : secondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        if (useNativeControls)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                            child: NativeSegmented(
+                              items: [
+                                for (final g in controller.groups)
+                                  g['label'] as String,
+                              ],
+                              selected: controller.groups
+                                  .indexWhere((g) => g['id'] == groupId)
+                                  .clamp(0, controller.groups.length),
+                              onChanged: (i) => setState(
+                                () => groupId =
+                                    controller.groups[i]['id'] as String,
+                              ),
+                            ),
+                          )
+                        else ...[
+                          const Divider(height: 1, color: Color(0x33545458)),
+                          SizedBox(
+                            height: 62,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: controller.groups
+                                  .map(
+                                    (g) => Press(
+                                      label: g['label'] as String,
+                                      selected: g['id'] == groupId,
+                                      onTap: () => setState(
+                                        () => groupId = g['id'] as String,
+                                      ),
+                                      child: Glyph(
+                                        g['icon'] as String,
+                                        color: g['id'] == groupId
+                                            ? signalBlue
                                             : secondary,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              );
-                            },
+                                  )
+                                  .toList(),
+                            ),
                           ),
-                        ),
-                        const Divider(height: 1, color: Color(0x33545458)),
-                        SizedBox(
-                          height: 62,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: controller.groups
-                                .map(
-                                  (g) => Press(
-                                    label: g['label'] as String,
-                                    selected: g['id'] == groupId,
-                                    onTap: () => setState(
-                                      () => groupId = g['id'] as String,
-                                    ),
-                                    child: Glyph(
-                                      g['icon'] as String,
-                                      color: g['id'] == groupId
-                                          ? signalBlue
-                                          : secondary,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
+                        ],
                       ],
                     );
               final viewport = controller.photo == null
@@ -434,115 +612,122 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                     );
               return Column(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Glass(
-                      radius: 20,
+                  if (useNativeControls)
+                    nativeTopBar(wide)
+                  else
+                    Padding(
                       padding: const EdgeInsets.all(4),
-                      child: Row(
-                        children: [
-                          Press(
-                            label: controller.erasing
-                                ? 'Cancel removal'
-                                : 'More options',
-                            radius: 16,
-                            onTap: controller.busy
-                                ? null
-                                : controller.erasing
-                                ? () => controller.finishRemoval(apply: false)
-                                : menu,
-                            child: Glyph(controller.erasing ? 'close' : 'more'),
-                          ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap:
-                                  controller.photo == null || controller.erasing
+                      child: Glass(
+                        radius: 20,
+                        padding: const EdgeInsets.all(4),
+                        child: Row(
+                          children: [
+                            Press(
+                              label: controller.erasing
+                                  ? 'Cancel removal'
+                                  : 'More options',
+                              radius: 16,
+                              onTap: controller.busy
                                   ? null
-                                  : stocks,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      controller.erasing
-                                          ? 'Remove Object'
-                                          : controller.photo == null
-                                          ? 'DICHROIC'
-                                          : stockName('film'),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    if (controller.photo != null)
+                                  : controller.erasing
+                                  ? () => controller.finishRemoval(apply: false)
+                                  : menu,
+                              child: Glyph(
+                                controller.erasing ? 'close' : 'more',
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap:
+                                    controller.photo == null ||
+                                        controller.erasing
+                                    ? null
+                                    : stocks,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        'on ${stockName('paper')}',
+                                        controller.erasing
+                                            ? 'Remove Object'
+                                            : controller.photo == null
+                                            ? 'DICHROIC'
+                                            : stockName('film'),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontSize: 11,
-                                          color: secondary,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
-                                  ],
+                                      if (controller.photo != null)
+                                        Text(
+                                          'on ${stockName('paper')}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: secondary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          if (!controller.erasing)
+                            if (!controller.erasing)
+                              Press(
+                                label: 'Film & Paper',
+                                plain: true,
+                                onTap: controller.photo == null ? null : stocks,
+                                child: const Glyph('upDown', size: 18),
+                              ),
+                            if (!controller.erasing)
+                              Press(
+                                label: 'Undo',
+                                plain: true,
+                                onTap: controller.canUndo && !controller.busy
+                                    ? controller.undo
+                                    : null,
+                                child: const Glyph('undo', size: 18),
+                              ),
+                            if (wide && !controller.erasing)
+                              Press(
+                                label: 'Redo',
+                                plain: true,
+                                onTap: controller.canRedo && !controller.busy
+                                    ? controller.redo
+                                    : null,
+                                child: const Glyph('redo', size: 18),
+                              ),
                             Press(
-                              label: 'Film & Paper',
-                              plain: true,
-                              onTap: controller.photo == null ? null : stocks,
-                              child: const Glyph('upDown', size: 18),
+                              label: controller.erasing
+                                  ? 'Apply removal'
+                                  : 'Export',
+                              radius: 16,
+                              selected: true,
+                              filled: true,
+                              onTap:
+                                  controller.photo == null ||
+                                      controller.busy ||
+                                      (controller.erasing &&
+                                          !controller.removalReady)
+                                  ? null
+                                  : controller.erasing
+                                  ? () => controller.finishRemoval(apply: true)
+                                  : export,
+                              child: Glyph(
+                                controller.erasing ? 'check' : 'share',
+                              ),
                             ),
-                          if (!controller.erasing)
-                            Press(
-                              label: 'Undo',
-                              plain: true,
-                              onTap: controller.canUndo && !controller.busy
-                                  ? controller.undo
-                                  : null,
-                              child: const Glyph('undo', size: 18),
-                            ),
-                          if (wide && !controller.erasing)
-                            Press(
-                              label: 'Redo',
-                              plain: true,
-                              onTap: controller.canRedo && !controller.busy
-                                  ? controller.redo
-                                  : null,
-                              child: const Glyph('redo', size: 18),
-                            ),
-                          Press(
-                            label: controller.erasing
-                                ? 'Apply removal'
-                                : 'Export',
-                            radius: 16,
-                            selected: true,
-                            filled: true,
-                            onTap:
-                                controller.photo == null ||
-                                    controller.busy ||
-                                    (controller.erasing &&
-                                        !controller.removalReady)
-                                ? null
-                                : controller.erasing
-                                ? () => controller.finishRemoval(apply: true)
-                                : export,
-                            child: Glyph(
-                              controller.erasing ? 'check' : 'share',
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
                   Expanded(
                     child: wide
                         ? Row(
@@ -632,6 +817,30 @@ class ToolPanel extends StatelessWidget {
         onEnd: controller.endGesture,
         onChanged: (v) => controller.edit('position', id, v),
       );
+    } else if (kind == 'choice' && useNativeControls) {
+      // Native pull-down menu, grouped like the option sheet.
+      final options = (tool['options'] as List).cast<Json>();
+      body = Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: NativeButton(
+          label: tool['title'] as String,
+          title: tool['valueText'] as String,
+          symbol: 'chevron.up.chevron.down',
+          symbolSize: 12,
+          imageTrailing: true,
+          leadingAligned: true,
+          menu: [
+            for (final o in options)
+              NativeMenuItem(
+                id: o['value'] as String,
+                title: o['label'] as String,
+                section: o['group'] as String?,
+                checked: o['value'] == p[tool['field']],
+              ),
+          ],
+          onMenu: enabled ? (v) => controller.edit('choice', id, v) : null,
+        ),
+      );
     } else if (kind == 'choice') {
       body = Press(
         label: tool['title'] as String,
@@ -659,6 +868,19 @@ class ToolPanel extends StatelessWidget {
           ],
         ),
       );
+    } else if (kind == 'stepper' && useNativeControls) {
+      final value = (p[tool['field']] as num).toDouble();
+      final list = tool['values'] as List?;
+      body = Align(
+        alignment: Alignment.centerRight,
+        child: NativeStepper(
+          label: tool['title'] as String,
+          enabled: enabled,
+          canDecrement: value > (list?.first as num? ?? tool['min'] as num),
+          canIncrement: value < (list?.last as num? ?? tool['max'] as num),
+          onStep: (dir) => controller.edit('step', id, dir),
+        ),
+      );
     } else if (kind == 'stepper') {
       final value = (p[tool['field']] as num).toDouble();
       final list = tool['values'] as List?;
@@ -684,29 +906,60 @@ class ToolPanel extends StatelessWidget {
         ],
       );
     } else if (kind == 'diffusion') {
+      final families = (controller.catalog['diffusionFamilies'] as List)
+          .cast<Json>();
+      void family(String v) => fields({
+        tool['familyField'] as String: v,
+        tool['enabledBy'] as String: true,
+        if ((p[tool['strengthField']] as num) <= 0)
+          tool['strengthField'] as String: .5,
+      });
       body = Column(
         children: [
-          Press(
-            label: '${tool['title']} type',
-            onTap: controller.busy
-                ? null
-                : () => editorSheet<void>(
-                    context,
-                    OptionSheet(
-                      title: 'Filter',
-                      options: (controller.catalog['diffusionFamilies'] as List)
-                          .cast<Json>(),
-                      value: p[tool['familyField']] as String,
-                      onSelect: (v) => fields({
-                        tool['familyField'] as String: v,
-                        tool['enabledBy'] as String: true,
-                        if ((p[tool['strengthField']] as num) <= 0)
-                          tool['strengthField'] as String: .5,
-                      }),
+          if (useNativeControls)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: NativeButton(
+                label: '${tool['title']} type',
+                title: '${p[tool['familyField']]}',
+                symbol: 'chevron.up.chevron.down',
+                symbolSize: 12,
+                imageTrailing: true,
+                leadingAligned: true,
+                menu: [
+                  for (final f in families)
+                    NativeMenuItem(
+                      id: f['value'] as String,
+                      title: f['label'] as String,
+                      checked: f['value'] == p[tool['familyField']],
                     ),
-                  ),
-            child: Text('${p[tool['familyField']]}'),
-          ),
+                ],
+                onMenu: controller.busy ? null : family,
+              ),
+            )
+          else
+            Press(
+              label: '${tool['title']} type',
+              onTap: controller.busy
+                  ? null
+                  : () => editorSheet<void>(
+                      context,
+                      OptionSheet(
+                        title: 'Filter',
+                        options:
+                            (controller.catalog['diffusionFamilies'] as List)
+                                .cast<Json>(),
+                        value: p[tool['familyField']] as String,
+                        onSelect: (v) => fields({
+                          tool['familyField'] as String: v,
+                          tool['enabledBy'] as String: true,
+                          if ((p[tool['strengthField']] as num) <= 0)
+                            tool['strengthField'] as String: .5,
+                        }),
+                      ),
+                    ),
+              child: Text('${p[tool['familyField']]}'),
+            ),
           DetailSlider(
             value: (p[tool['strengthField']] as num).toDouble(),
             min: 0,

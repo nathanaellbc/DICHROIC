@@ -185,6 +185,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 instance.spareDetailTextureId: instance.spareDetailTexture, instance.spareOriginalDetailTextureId: instance.spareOriginalDetailTexture]
             return surfaces[id]
         }, withId: "dichroic/preview")
+        NativeControls.register(with: registrar)
         let channel = FlutterMethodChannel(name: "exposure/native", binaryMessenger: registrar.messenger())
         registrar.addMethodCallDelegate(instance, channel: channel)
         FlutterEventChannel(name: "exposure/status", binaryMessenger: registrar.messenger()).setStreamHandler(instance)

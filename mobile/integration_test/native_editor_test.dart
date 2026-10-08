@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/main.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
+import 'package:exposure_ios/editor_widgets.dart';
+import 'package:exposure_ios/native_controls.dart';
 import 'package:exposure_ios/native_editor_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +29,27 @@ Future<Uint8List> decodedRgba(Uint8List encoded) async {
     frame.image.dispose();
     codec.dispose();
   }
+}
+
+/// Native UIKit buttons receive real touches only; synthetic test taps go to
+/// Flutter. Invoke the labelled control's action directly, and tap Flutter
+/// controls as before.
+Future<void> activate(WidgetTester tester, String label) async {
+  final native = find.byWidgetPredicate(
+    (w) =>
+        (w is NativeButton && w.label == label) ||
+        (w is Press && w.label == label),
+  );
+  if (useNativeControls && native.evaluate().isNotEmpty) {
+    final widget = tester.widget(native.first);
+    final onTap = widget is NativeButton
+        ? widget.onTap
+        : (widget as Press).onTap;
+    onTap?.call();
+    await tester.pump();
+    return;
+  }
+  await tester.tap(find.byTooltip(label));
 }
 
 void main() {
@@ -212,7 +235,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
-      await tester.tap(find.byTooltip('Film & Paper'));
+      await activate(tester, 'Film & Paper');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await const MethodChannel(
@@ -221,9 +244,9 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
-      await tester.tap(find.byTooltip('Done'));
+      await activate(tester, 'Done');
       await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byTooltip('Export'));
+      await activate(tester, 'Export');
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await const MethodChannel(
@@ -232,7 +255,7 @@ void main() {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(seconds: 4)),
       );
-      await tester.tap(find.byTooltip('Close export'));
+      await activate(tester, 'Close export');
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 100));
