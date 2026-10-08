@@ -8,8 +8,12 @@ xcrun simctl bootstatus "$device" -b
 diagnostics() {
   xcrun simctl spawn "$device" log show --last 5m --style compact --predicate 'process == "Runner"' > build/ios/proofs/runner.log 2>&1 || true
   find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'Runner*.ips' -exec cp {} build/ios/proofs/ \; || true
-  container="$(xcrun simctl get_app_container "$device" "${IOS_BUNDLE_ID:-com.nathanaellbc.exposureIos}" data 2>/dev/null)" || true
-  if [ -n "$container" ] && [ -f "$container/Documents/editor.png" ]; then cp "$container/Documents/editor.png" build/ios/proofs/editor.png; fi
+  # Read the generated identifier instead of assuming Flutter's casing.
+  bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist 2>/dev/null)" || true
+  container="$(xcrun simctl get_app_container "$device" "$bundle" data 2>/dev/null)" || true
+  if [ -n "$container" ] && [ -d "$container/Documents" ]; then
+    find "$container/Documents" -maxdepth 1 -name '*.png' -exec cp {} build/ios/proofs/ \;
+  fi
 }
 trap diagnostics EXIT
 flutter test integration_test/native_editor_test.dart -d "$device" --timeout 15m 2>&1 | tee build/ios/proofs/integration.log
