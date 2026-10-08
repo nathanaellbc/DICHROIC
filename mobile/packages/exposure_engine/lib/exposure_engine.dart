@@ -134,6 +134,20 @@ class ExposureEngine {
     return path;
   }
 
+  Future<Size> exportSize(Map<String, dynamic> params, {int? longEdge}) async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(
+      'exportSize',
+      {'params': params, 'longEdge': longEdge},
+    );
+    if (result == null) {
+      throw StateError('Native export dimensions are missing.');
+    }
+    return Size(
+      (result['width'] as num).toDouble(),
+      (result['height'] as num).toDouble(),
+    );
+  }
+
   Future<String> exportCube(Map<String, dynamic> params, int size) async {
     final path = await _channel.invokeMethod<String>('cubeExport', {
       'params': params,

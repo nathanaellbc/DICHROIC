@@ -25,3 +25,5 @@ mobile/packages/exposure_engine/ios/exposure_engine/Resources/
 native/target/
 native/.cargo-local/
 .tools/
+mobile/assets/parity/*-native.*
+mobile/assets/parity/oriented-native-*.jpg

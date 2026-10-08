@@ -81,6 +81,10 @@ void main() {
         await File(path).delete();
       }
       for (final format in ['png16', 'tiff16', 'jpeg']) {
+        expect(
+          await engine.exportSize(baseline, longEdge: 24),
+          const Size(24, 18),
+        );
         final path = await engine.exportImage(
           baseline,
           format: format,
@@ -194,6 +198,103 @@ void main() {
       }
       await engine.close();
     },
+  );
+  testWidgets(
+    'large JPEG, HEIC, orientations, float EXR and export cancellation',
+    (tester) async {
+      final engine = ExposureEngine();
+      final catalog = await engine.catalog();
+      final params = Map<String, dynamic>.from(catalog['baseline'] as Map)
+        ..addAll({
+          'grainEnabled': false,
+          'glareEnabled': false,
+          'autoExposure': false,
+        });
+      Future<File> fixture(String name) async {
+        final bytes = await rootBundle.load('assets/parity/$name');
+        final file = File('${Directory.systemTemp.path}/$name');
+        await file.writeAsBytes(
+          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+        );
+        return file;
+      }
+
+      final files = <File>[];
+      try {
+        for (var orientation = 1; orientation <= 8; orientation++) {
+          final file = await fixture('oriented-native-$orientation.jpg');
+          files.add(file);
+          final photo = await engine.open(file.path);
+          expect([
+            photo.sourceWidth,
+            photo.sourceHeight,
+          ], orientation < 5 ? [64, 48] : [48, 64]);
+        }
+        for (final name in ['small-native.heic', 'float-native.exr']) {
+          final file = await fixture(name);
+          files.add(file);
+          final photo = await engine.open(file.path);
+          if (name.endsWith('.heic')) {
+            expect([photo.sourceWidth, photo.sourceHeight], [64, 48]);
+          } else {
+            expect(photo.encoding, 'linear');
+            expect(photo.inputColorSpace, 'Linear Rec.709');
+            final bytes = (await const MethodChannel(
+              'exposure/native',
+            ).invokeMethod<Uint8List>('debugSource'))!;
+            final floats = ByteData.sublistView(bytes);
+            const expected = [-.25, .5, 1.5, 1.0, .125, .25, .75, 1.0];
+            for (var i = 0; i < expected.length; i++) {
+              expect(floats.getFloat32(i * 4, Endian.little), expected[i]);
+            }
+          }
+        }
+        final file = await fixture('large-native.jpg');
+        files.add(file);
+        final watch = Stopwatch()..start();
+        final photo = await engine.open(file.path);
+        expect([photo.sourceWidth, photo.sourceHeight], [8144, 5424]);
+        debugPrint('44 MP native JPEG open: ${watch.elapsedMilliseconds} ms');
+        await engine.develop(params);
+        debugPrint('44 MP native first grade: ${watch.elapsedMilliseconds} ms');
+        final pending = engine.developExport({
+          ...params,
+          'cameraExposureEv': .25,
+        });
+        final cancelled = expectLater(
+          pending,
+          throwsA(
+            isA<PlatformException>().having(
+              (e) => e.message,
+              'message',
+              contains('cancel'),
+            ),
+          ),
+        );
+        await engine.cancelExport();
+        await cancelled;
+        await const MethodChannel(
+          'exposure/native',
+        ).invokeMethod<void>('debugMemoryWarning');
+        final output = await engine.exportImage(
+          params,
+          format: 'jpeg',
+          longEdge: 2048,
+        );
+        expect(await File(output).length(), greaterThan(32));
+        await File(output).delete();
+        await engine.develop(params);
+        debugPrint(
+          '44 MP native cancel/recovery/export: ${watch.elapsedMilliseconds} ms',
+        );
+      } finally {
+        await engine.close();
+        for (final file in files) {
+          await file.delete();
+        }
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 10)),
   );
   testWidgets(
     'native LaMa apply/undo and depth survive memory pressure',

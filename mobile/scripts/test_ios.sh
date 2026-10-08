@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build/ios/proofs
+xcrun swift scripts/build_import_fixtures.swift assets/parity
 device="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for k,a in d["devices"].items() if "iOS" in k for v in a if "iPhone" in v["name"]))')"
 xcrun simctl boot "$device" || true
 xcrun simctl bootstatus "$device" -b

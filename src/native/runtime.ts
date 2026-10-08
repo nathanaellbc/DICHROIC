@@ -195,7 +195,10 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
             sourcePreview = { width: request.width, height: request.height,
               rgba: source.region(request.width, request.height, 0, 0, request.width, request.height) };
           }
-          const input = sourcePreview?.rgba ?? host.previewInput();
+          // Memory pressure deliberately drops the preview. File-backed exports
+          // obtain their measurement and tiles from source, so they must never
+          // request the now-empty legacy preview buffer while recovering.
+          const input = sourcePreview?.rgba ?? (source ? new Float32Array() : host.previewInput());
           if (request.operation === 'preview') {
             const rgb = await renderer.preview(request.params, input, request.width, request.height);
             host.publish(rgb, request.width, request.height);

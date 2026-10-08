@@ -194,7 +194,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             pickerResult = result; presenter.present(picker, animated: true); return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugStats", "detail"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugStats", "detail", "exportSize"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -409,6 +409,14 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 if call.method == "patch" { finish(try graph.patch(args)); return }
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
+                if call.method == "exportSize" {
+                    guard let url = photoURL else { throw NativeError.message("Open a photo first") }
+                    let dimensions = try graph.sourceStore.map { (width: $0.width, height: $0.height) } ?? sourceDimensions(url)
+                    let edge = try graph.renderSize(params, width: dimensions.width, height: dimensions.height,
+                        requested: (args["longEdge"] as? NSNumber)?.intValue, preview: false)
+                    let size = scaledSize(dimensions.width, dimensions.height, edge: edge)
+                    finish(["width": size.width, "height": size.height]); return
+                }
                 if call.method == "focusPreview" { try graph.focusPreview(params); finish(nil); return }
                 if call.method == "detail" {
                     if ["lensBlurEnabled", "cameraDiffusionEnabled", "printDiffusionEnabled"].contains(where: { params[$0] as? Bool == true }) {

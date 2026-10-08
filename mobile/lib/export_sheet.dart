@@ -73,6 +73,7 @@ class _ExportSheetState extends State<ExportSheet> {
   String? path;
   int? bytes;
   bool sharing = false;
+  Future<Size>? dimensions;
   NativeEditorController get c => widget.controller;
   ExportPreferences get p => widget.preferences;
   static const names = {
@@ -83,12 +84,59 @@ class _ExportSheetState extends State<ExportSheet> {
     'webp': 'WebP',
     'avif': 'AVIF',
   };
+  @override
+  void initState() {
+    super.initState();
+    final formats =
+        (c.catalog['exportFormats'] as List?) ??
+        ['png8', 'png16', 'tiff16', 'jpeg'];
+    if (!formats.contains(p.format)) p.format = 'png8';
+    dimensions = c.engine.exportSize(Map.of(c.params), longEdge: p.longEdge);
+  }
+
+  Future<void> chooseProfile() async {
+    final options =
+        c.groups
+                .expand((g) => (g['tools'] as List).cast<Map>())
+                .firstWhere((t) => t['id'] == 'outputColorSpace')['options']
+            as List;
+    final value = await editorSheet<String>(
+      context,
+      ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              'Output Color Space',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+          ),
+          for (final option in options)
+            ListTile(
+              title: Text(option['label'] as String),
+              trailing: c.params['outputColorSpace'] == option['value']
+                  ? const Glyph('check')
+                  : null,
+              onTap: () => Navigator.pop(context, option['value'] as String),
+            ),
+        ],
+      ),
+    );
+    if (value != null && mounted) {
+      await c.edit('choice', 'outputColorSpace', value);
+      if (mounted) change(() {});
+    }
+  }
+
   void change(VoidCallback action) {
     final old = path;
     path = null;
     bytes = null;
     if (old != null) File(old).delete().catchError((Object _) => File(old));
-    setState(action);
+    setState(() {
+      action();
+      dimensions = c.engine.exportSize(Map.of(c.params), longEdge: p.longEdge);
+    });
     p.save(c.engine);
   }
 
@@ -234,6 +282,19 @@ class _ExportSheetState extends State<ExportSheet> {
                           .toList(),
                 ),
                 const SizedBox(height: 16),
+                FutureBuilder<Size>(
+                  future: dimensions,
+                  builder: (context, result) {
+                    final size = result.data;
+                    return Text(
+                      size == null
+                          ? 'Calculating output size…'
+                          : '${size.width.round()} × ${size.height.round()} pixels',
+                      style: const TextStyle(color: secondary, fontSize: 12),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
                 const Text('Long edge', style: TextStyle(color: secondary)),
                 const SizedBox(height: 8),
                 Wrap(
@@ -272,9 +333,19 @@ class _ExportSheetState extends State<ExportSheet> {
                 ],
               ],
               const SizedBox(height: 16),
-              Text(
-                '${c.params['outputColorSpace']} · embedded color profile',
-                style: const TextStyle(color: secondary, fontSize: 12),
+              Press(
+                label: 'Output color profile',
+                onTap: c.exporting ? null : chooseProfile,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${c.params['outputColorSpace']} · embedded profile',
+                      ),
+                    ),
+                    const Glyph('chevronRight', size: 16),
+                  ],
+                ),
               ),
               if (!p.lut &&
                   (c.params['lensBlurEnabled'] == true ||
