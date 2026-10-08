@@ -96,6 +96,14 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
           },
         ),
         ListTile(
+          leading: const Glyph('open'),
+          title: const Text('Open from Files'),
+          onTap: () {
+            Navigator.pop(context);
+            pickFile();
+          },
+        ),
+        ListTile(
           leading: const Glyph('erase'),
           title: const Text('Remove Object'),
           enabled: controller.photo != null,
@@ -160,14 +168,6 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
               label: 'Brush size',
               onChanged: (v) => setState(() => brush.diameter = v),
             ),
-          ListTile(
-            leading: const Glyph('open'),
-            title: const Text('Open from Files'),
-            onTap: () {
-              Navigator.pop(context);
-              pickFile();
-            },
-          ),
           Row(
             children: [
               Press(

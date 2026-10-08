@@ -18,56 +18,65 @@ private enum NativeError: LocalizedError {
     var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
 }
 
-/// Flutter samples this texture directly; slider frames do not encode PNGs or cross Dart as pixels.
+/// Stable surface IDs retain one profiled image each. UIKit performs native
+/// wide-gamut composition instead of Flutter's untagged 8-bit texture path.
 private final class PreviewTexture: NSObject, FlutterTexture {
     private let lock = NSLock()
-    private var current: CVPixelBuffer?
-    private var pool: CVPixelBufferPool?
-    private var size = CGSize.zero
-
-    func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
-        lock.lock(); defer { lock.unlock() }
-        return current.map { Unmanaged.passRetained($0) }
+    private var image: UIImage?
+    // Observers are added, removed and invoked only on the main thread.
+    private var observers: [UUID: (UIImage?) -> Void] = [:]
+    func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? { nil }
+    func snapshot() -> UIImage? { lock.lock(); defer { lock.unlock() }; return image }
+    func observe(_ callback: @escaping (UIImage?) -> Void) -> UUID {
+        let token = UUID(); observers[token] = callback; callback(snapshot()); return token
     }
-
-    func publish(_ rgba: Data, width: Int, height: Int) throws {
-        let nextSize = CGSize(width: width, height: height)
-        if size != nextSize || pool == nil {
-            let attributes: [CFString: Any] = [
-                kCVPixelBufferWidthKey: width, kCVPixelBufferHeightKey: height,
-                kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferMetalCompatibilityKey: true,
-                kCVPixelBufferIOSurfacePropertiesKey: [:]
-            ]
-            guard CVPixelBufferPoolCreate(nil, nil, attributes as CFDictionary, &pool) == kCVReturnSuccess else {
-                throw NativeError.message("Could not allocate preview texture")
-            }
-            size = nextSize
+    func removeObserver(_ token: UUID) { observers.removeValue(forKey: token) }
+    private func notify() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let image = self.snapshot()
+            for observer in self.observers.values { observer(image) }
         }
-        var pixelBuffer: CVPixelBuffer?
-        guard let pool = pool, CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBuffer) == kCVReturnSuccess,
-              let buffer = pixelBuffer else { throw NativeError.message("Could not allocate preview frame") }
-        CVPixelBufferLockBaseAddress(buffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-        guard let base = CVPixelBufferGetBaseAddress(buffer) else { throw NativeError.message("Preview texture has no storage") }
-        let stride = CVPixelBufferGetBytesPerRow(buffer)
-        let status = rgba.withUnsafeBytes { raw -> vImage_Error in
-            var input = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: raw.baseAddress!),
-                height: vImagePixelCount(height), width: vImagePixelCount(width), rowBytes: width * 4)
-            var output = vImage_Buffer(data: base, height: vImagePixelCount(height),
-                width: vImagePixelCount(width), rowBytes: stride)
-            return [UInt8(2), 1, 0, 3].withUnsafeBufferPointer { permutation in
-                vImagePermuteChannels_ARGB8888(&input, &output, permutation.baseAddress!, vImage_Flags(kvImageNoFlags))
-            }
+    }
+    func publish(_ rgba: Data, width: Int, height: Int, gamut: String = "srgb") throws {
+        guard width > 0, height > 0, rgba.count == width * height * 4,
+              let provider = CGDataProvider(data: rgba as CFData),
+              let space = CGColorSpace(name: gamut == "display-p3" ? CGColorSpace.displayP3 : CGColorSpace.sRGB),
+              let frame = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+                  bytesPerRow: width * 4, space: space,
+                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  provider: provider, decode: nil, shouldInterpolate: true, intent: .relativeColorimetric) else {
+            throw NativeError.message("Could not create color-managed preview")
         }
-        guard status == kvImageNoError else { throw NativeError.message("Preview pixel conversion failed") }
-        lock.lock(); current = buffer; lock.unlock()
+        let next = UIImage(cgImage: frame)
+        lock.lock(); image = next; lock.unlock(); notify()
     }
+    func clear() { lock.lock(); image = nil; lock.unlock(); notify() }
+}
 
-    func clear() {
-        lock.lock(); current = nil; lock.unlock()
-        pool = nil; size = .zero
+private final class PreviewSurface: NSObject, FlutterPlatformView {
+    private let imageView: UIImageView
+    private let texture: PreviewTexture?
+    private var observer: UUID?
+    init(frame: CGRect, texture: PreviewTexture?) {
+        self.texture = texture; imageView = UIImageView(frame: frame)
+        imageView.contentMode = .scaleToFill; imageView.clipsToBounds = true
+        imageView.isUserInteractionEnabled = false
+        super.init()
+        observer = texture?.observe { [weak self] image in self?.imageView.image = image }
     }
+    deinit { if let observer { texture?.removeObserver(observer) } }
+    func view() -> UIView { imageView }
+}
+
+private final class PreviewSurfaceFactory: NSObject, FlutterPlatformViewFactory {
+    private let lookup: (Int64) -> PreviewTexture?
+    init(lookup: @escaping (Int64) -> PreviewTexture?) { self.lookup = lookup; super.init() }
+    func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+        let id = ((args as? [String: Any])?["textureId"] as? NSNumber)?.int64Value ?? -1
+        return PreviewSurface(frame: frame, texture: lookup(id))
+    }
+    func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol { FlutterStandardMessageCodec.sharedInstance() }
 }
 
 public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UIDocumentPickerDelegate, PHPickerViewControllerDelegate {
@@ -97,6 +106,9 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private var eventSink: FlutterEventSink?
     private var pickerResult: FlutterResult?
     private var importedPhotos: [URL] = []
+    private var cachedExportFormats: [String]?
+    private var lastDecodeMilliseconds = 0.0
+    private var lastPreviewMilliseconds = 0.0
 
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
@@ -165,6 +177,14 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance = ExposureEnginePlugin(registry: registrar.textures())
+        registrar.register(PreviewSurfaceFactory { [weak instance] id in
+            guard let instance else { return nil }
+            let surfaces: [Int64: PreviewTexture] = [instance.textureId: instance.texture,
+                instance.originalTextureId: instance.originalTexture, instance.focusTextureId: instance.focusTexture,
+                instance.detailTextureId: instance.detailTexture, instance.originalDetailTextureId: instance.originalDetailTexture,
+                instance.spareDetailTextureId: instance.spareDetailTexture, instance.spareOriginalDetailTextureId: instance.spareOriginalDetailTexture]
+            return surfaces[id]
+        }, withId: "dichroic/preview")
         let channel = FlutterMethodChannel(name: "exposure/native", binaryMessenger: registrar.messenger())
         registrar.addMethodCallDelegate(instance, channel: channel)
         FlutterEventChannel(name: "exposure/status", binaryMessenger: registrar.messenger()).setStreamHandler(instance)
@@ -195,6 +215,12 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         }
         if ["developExport", "cubeExport"].contains(call.method) { cancellation.set(false) }
         #if DEBUG
+        if call.method == "debugPreview" {
+            guard let image = texture.snapshot()?.cgImage, image.width * image.height <= 65536,
+                  let bytes = image.dataProvider?.data else { result(nil); return }
+            result(["colorSpace": image.colorSpace?.name.map { $0 as String } ?? "",
+                "rgba": FlutterStandardTypedData(bytes: bytes as Data)]); return
+        }
         if call.method == "debugScreenshot" {
             guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
                 .flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) else { result(nil); return }
@@ -256,6 +282,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     guard !graph.isBusy else { throw NativeError.message("Finish development before opening another photo") }
                     graph.hibernate()
                     status("Opening photo…")
+                    let decodeStart = Date()
                     let source: NativeSourceStore
                     if NativeRawSource.extensions.contains(url.pathExtension.lowercased()) {
                         status("Developing RAW with LibRaw…")
@@ -263,9 +290,12 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     } else {
                         source = try NativeRasterSource.decode(url, profileSpace: graph.profileSpace)
                     }
+                    lastDecodeMilliseconds = Date().timeIntervalSince(decodeStart) * 1000
                     do {
                         try graph.attachSource(source)
+                        let previewStart = Date()
                         let size = try graph.originalPreview(edge: 1280)
+                        lastPreviewMilliseconds = Date().timeIntervalSince(previewStart) * 1000
                         graph.commitSource()
                         graph.clearDepth(); focusTexture.clear()
                         detailTexture.clear(); originalDetailTexture.clear()
@@ -325,19 +355,19 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private func graphRuntime() throws -> NativeGraphRuntime {
         if let graph = graph { return graph }
         let graph = try NativeGraphRuntime(queue: queue, cancellation: cancellation)
-        graph.onPublish = { [weak self] pixels, width, height in
+        graph.onPublish = { [weak self] pixels, width, height, gamut in
             guard let self = self else { return }
-            try self.texture.publish(pixels, width: width, height: height)
+            try self.texture.publish(pixels, width: width, height: height, gamut: gamut)
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
         }
         self.graph = graph
-        graph.onDetail = { [weak self] rgba, original, width, height in
+        graph.onDetail = { [weak self] rgba, original, width, height, gamut, originalGamut in
             guard let self = self else { return }
             let spare = !self.detailUsesSpare
             let graded = spare ? self.spareDetailTexture : self.detailTexture
             let untouched = spare ? self.spareOriginalDetailTexture : self.originalDetailTexture
-            try graded.publish(rgba, width: width, height: height)
-            try untouched.publish(original, width: width, height: height)
+            try graded.publish(rgba, width: width, height: height, gamut: gamut)
+            try untouched.publish(original, width: width, height: height, gamut: originalGamut)
             self.detailUsesSpare = spare
             let gradedId = spare ? self.spareDetailTextureId : self.detailTextureId
             let originalId = spare ? self.spareOriginalDetailTextureId : self.originalDetailTextureId
@@ -346,10 +376,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 self.registry.textureFrameAvailable(originalId)
             }
         }
-        graph.onOriginal = { [weak self] rgba, width, height in
+        graph.onOriginal = { [weak self] rgba, width, height, gamut in
             guard let self = self else { return }
-            try self.originalTexture.publish(rgba, width: width, height: height)
-            try self.texture.publish(rgba, width: width, height: height)
+            try self.originalTexture.publish(rgba, width: width, height: height, gamut: gamut)
+            try self.texture.publish(rgba, width: width, height: height, gamut: gamut)
             self.preview = PhotoFrame(width: width, height: height, rgba: rgba)
             DispatchQueue.main.async {
                 self.registry.textureFrameAvailable(self.originalTextureId)
@@ -425,18 +455,32 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 let graph = try graphRuntime()
                 if call.method == "debugStats" {
                     #if DEBUG
-                    finish(["exportRenderCount": graph.exportRenderCount]); return
+                    finish(["exportRenderCount": graph.exportRenderCount,
+                        "decodeMilliseconds": lastDecodeMilliseconds,
+                        "originalPreviewMilliseconds": lastPreviewMilliseconds]); return
                     #else
                     finish(FlutterMethodNotImplemented); return
                     #endif
                 }
                 if call.method == "catalog" {
                     var catalog = try JSONSerialization.jsonObject(with: Data(graph.catalog.utf8)) as! [String: Any]
-                    let encoders = CGImageDestinationCopyTypeIdentifiers() as! [String]
-                    var formats = ["png8", "png16", "tiff16", "jpeg"]
-                    if encoders.contains(UTType.webP.identifier) { formats.append("webp") }
-                    if let type = UTType(mimeType: "image/avif"), encoders.contains(type.identifier) { formats.append("avif") }
-                    catalog["exportFormats"] = formats
+                    if cachedExportFormats == nil {
+                        let encoders = CGImageDestinationCopyTypeIdentifiers() as! [String]
+                        var formats = ["png8", "png16", "tiff16", "jpeg"]
+                        var candidates: [String] = []
+                        if encoders.contains(UTType.webP.identifier) { candidates.append("webp") }
+                        if let type = UTType(mimeType: "image/avif"), encoders.contains(type.identifier) { candidates.append("avif") }
+                        // Match web's real 4x4 encoder probe. A listed ImageIO
+                        // identifier does not prove that this device can encode it.
+                        let pixels = Data(repeating: 255, count: 4 * 4 * 4)
+                        for format in candidates {
+                            if let probe = try? writePNG(pixels, width: 4, height: 4, icc: graph.icc("sRGB"), format: format, quality: 0.5) {
+                                try? FileManager.default.removeItem(at: probe); formats.append(format)
+                            }
+                        }
+                        cachedExportFormats = formats
+                    }
+                    catalog["exportFormats"] = cachedExportFormats!
                     finish(String(decoding: try JSONSerialization.data(withJSONObject: catalog), as: UTF8.self)); return
                 }
                 if call.method == "debugSource" {
@@ -484,7 +528,6 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     let width = max(1, Int((Double(source.width) * scale).rounded())), height = max(1, Int((Double(source.height) * scale).rounded()))
                     let x = min(width - 1, Int(floor(left * Double(width)))), y = min(height - 1, Int(floor(top * Double(height))))
                     let right = min(width, Int(ceil((left + rw) * Double(width)))), bottom = min(height, Int(ceil((top + rh) * Double(height))))
-                    params["outputColorSpace"] = "sRGB"
                     try graph.request(operation: "detail", params: params, width: width, height: height,
                         region: ["x": x, "y": y, "width": max(1, right - x), "height": max(1, bottom - y)]) { outcome in
                         do {
@@ -545,9 +588,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     status("")
                 }
                 if call.method == "develop" {
-                    // The display texture has an sRGB encoding. Export retains
-                    // the chosen output gamut in its separately tagged image.
-                    params["outputColorSpace"] = "sRGB"
+                    // UIKit composites the separately tagged sRGB/P3 image;
+                    // preserve the selected output profile through the graph.
                     try graph.request(operation: "preview", params: params, width: frame.width, height: frame.height) { outcome in
                         switch outcome { case .success: finish(nil); case .failure(let error): fail(error) }
                     }
@@ -712,7 +754,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         CGImageDestinationAddImage(destination, image, metadata as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             try? FileManager.default.removeItem(at: url)
-            throw NativeError.message("PNG export failed")
+            throw NativeError.message("\(format.uppercased()) export failed")
         }
         return url
     }

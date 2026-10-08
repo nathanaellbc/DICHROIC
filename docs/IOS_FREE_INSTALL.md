@@ -1,6 +1,6 @@
 # Install DICHROIC on iPhone from Windows
 
-Use the current validated Codemagic build's `Exposure-unsigned.ipa`. Download
+Use the current validated Codemagic build's `DICHROIC-unsigned.ipa`. Download
 its artifact from the build overview; a simulator app cannot run on an iPhone.
 The app is unsigned, so personal signing is required before installation.
 
@@ -14,7 +14,7 @@ of iTunes and iCloud, rather than the Microsoft Store editions.
 1. Install the required Apple components and Sideloadly from the official site.
 2. Connect and unlock the iPhone, select Trust if prompted, and select the
    device in Sideloadly.
-3. Drop `Exposure-unsigned.ipa` into Sideloadly. Enter your Apple Account
+3. Drop `DICHROIC-unsigned.ipa` into Sideloadly. Enter your Apple Account
    credentials yourself in that application and start personal signing.
 4. Follow the Trust and Developer Mode prompts shown on the phone.
 5. Open DICHROIC. Free signatures expire after seven days; configure refresh

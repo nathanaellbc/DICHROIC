@@ -11,6 +11,7 @@ import { gpuBufferUsage, gpuMapMode } from '../src/engine/webgpuGlobals';
 import { Tap } from '../src/engine/taps';
 import { encode } from 'fast-png';
 import { boxDownscaleRegion } from '../src/session/downscale';
+import { rgbToCanvas } from '../src/io/display';
 
 // Capture the real canonical planner/graph on Dawn. Rust replays exactly these
 // WGSL descriptors and binary inputs, without replacing any numerical gate.
@@ -36,6 +37,7 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
     { ...baseline, grainEnabled: true },
     { ...baseline, cameraDiffusionEnabled: true },
     { ...baseline, process: 'scanNegative' as const },
+    { ...baseline, outputColorSpace: 'Display P3' },
   ];
   // Dawn on Windows cannot safely coexist with cold, allocation-heavy Hanatos
   // preparation. Complete all CPU arenas before acquiring a GPU device.
@@ -156,7 +158,7 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
     },
   };
   const renderer = new NativeRenderer(host, bundle, plan => prepared.get(plan.arenaKey)!.shift()!);
-  const fixtures: { params: unknown; rgba: number[] }[] = [];
+  const fixtures: { params: unknown; rgba: number[]; p3rgba: number[] }[] = [];
   let baselineRgb: Float32Array | undefined;
   try {
     for (const [index, params] of cases.entries()) {
@@ -176,7 +178,8 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
         }
         expect(maximum).toBeLessThanOrEqual(1e-5);
       }
-      fixtures.push({ params, rgba: Array.from({ length: width * height * 4 }, (_, i) =>
+      fixtures.push({ params, p3rgba: Array.from(rgbToCanvas(rgb, width, height, params.outputColorSpace, 'display-p3')),
+        rgba: Array.from({ length: width * height * 4 }, (_, i) =>
         i % 4 === 3 ? 255 : Math.round(255 * Math.max(0, Math.min(1, rgb[Math.floor(i / 4) * 3 + i % 4]!)))) });
       if (index === 2 && process.env.DICHROIC_TRACE_CAMERA === '1') {
         for (const tap of [Tap.LOG_E_FILM, Tap.CMY_FILM, Tap.LOG_E_PRINT, Tap.CMY_PRINT]) {

@@ -1,6 +1,6 @@
 # DICHROIC native iOS
 
-Flutter presents the editor; Swift owns photo import, cached CoreVideo textures,
+Flutter presents the editor; Swift owns photo import, cached profiled UIKit image surfaces,
 native inference and file encoding. A headless JavaScriptCore host runs the
 original TypeScript planner and parameter rules. Rust/wgpu executes the original
 WGSL on Metal. There is no WebView or replacement approximation of film math.
@@ -21,8 +21,8 @@ editing invalidates it, without developing the photo for every gesture.
 
 Exports use bounded tiles and a file-backed grading cache reused across
 compatible formats. PNG 8/16, TIFF 16, JPEG, ten output ICC profiles and
-17/33/65-point Cube LUTs are implemented. WebP/AVIF are offered only when the
-system reports their encoders, matching the web editor's capability probing.
+17/33/65-point Cube LUTs are implemented. WebP/AVIF are offered only after an actual 4x4 native encode succeeds,
+matching the web editor's capability probing.
 The export sheet shows actual adaptive output dimensions and retains settings.
 Cancellation stops between tiles; it cannot interrupt an active GPU dispatch
 or system image encoder. Whole-frame FFT/lens effects retain the canonical
@@ -45,8 +45,9 @@ the existing DICHROIC icon; display name and launch background match the app.
 See [the current handoff](../docs/IOS_PORT_HANDOFF.md) for exact build evidence
 and unresolved checks. Source implementation and compilation are not evidence
 of physical iPhone stability or perfect visual equivalence. In particular,
-the present preview compositor uses sRGB textures; wide-gamut exports preserve
-their selected profile, but out-of-sRGB display preview parity remains open.
+the preview uses native UIKit sRGB/P3 image profiles instead of untagged Flutter
+textures. The new path has independent pixel/profile checks but still needs
+current simulator execution and physical display/gesture validation.
 
 The user chose Windows and free personal signing. See
 [the installation guide](../docs/IOS_FREE_INSTALL.md). No paid Apple Developer

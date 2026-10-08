@@ -53,11 +53,11 @@ final class NativeGraphRuntime {
     private(set) var exportRenderCount = 0
     private let cancellation: NativeCancellation
     var outputCube = ""
-    var onPublish: ((Data, Int, Int) throws -> Void)?
+    var onPublish: ((Data, Int, Int, String) throws -> Void)?
     var onProgress: ((Int, Int) -> Void)?
     var onMask: ((Data, Int, Int) throws -> Void)?
-    var onOriginal: ((Data, Int, Int) throws -> Void)?
-    var onDetail: ((Data, Data, Int, Int) throws -> Void)?
+    var onOriginal: ((Data, Int, Int, String) throws -> Void)?
+    var onDetail: ((Data, Data, Int, Int, String, String) throws -> Void)?
     var detailMetadata: [String: Int]?
     private(set) var depthReady = false
     var sourceStore: NativeSourceStore?
@@ -374,24 +374,16 @@ final class NativeGraphRuntime {
                 }
             } catch { self.fail(error); return nil }
         }
-        let publish: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
+        let publish: @convention(block) (JSValue, Int, Int, String) -> Void = { [weak self] value, width, height, gamut in
             guard let self = self else { return }
             do {
                 let raw = try self.typedBytes(value)
-                guard raw.count == width * height * 3 * 4 else { throw GraphRuntimeError.message("Invalid preview readback") }
-                let input = raw.bindMemory(to: Float.self)
-                var rgba = Data(count: width * height * 4)
-                rgba.withUnsafeMutableBytes { output in
-                    let bytes = output.bindMemory(to: UInt8.self)
-                    for pixel in 0..<(width * height) {
-                        for c in 0..<3 { bytes[pixel * 4 + c] = Self.quantize(input[pixel * 3 + c]) }
-                        bytes[pixel * 4 + 3] = 255
-                    }
-                }
-                try self.onPublish?(rgba, width, height)
+                guard raw.count == width * height * 4 else { throw GraphRuntimeError.message("Invalid preview readback") }
+                let rgba = Data(bytes: raw.baseAddress!, count: raw.count)
+                try self.onPublish?(rgba, width, height, gamut)
             } catch { self.fail(error) }
         }
-        let detail: @convention(block) (JSValue, JSValue, String) -> Void = { [weak self] value, original, json in
+        let detail: @convention(block) (JSValue, JSValue, String, String, String) -> Void = { [weak self] value, original, json, gamut, originalGamut in
             guard let self = self else { return }
             do {
                 guard let meta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Int],
@@ -399,19 +391,12 @@ final class NativeGraphRuntime {
                     throw GraphRuntimeError.message("Invalid detail dimensions")
                 }
                 let raw = try self.typedBytes(value)
-                guard raw.count == width * height * 12 else { throw GraphRuntimeError.message("Invalid detail readback") }
-                let floats = raw.bindMemory(to: Float.self)
-                var rgba = Data(count: width * height * 4)
-                rgba.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
-                    for p in 0..<(width * height) {
-                        for c in 0..<3 { output[p * 4 + c] = Self.quantize(floats[p * 3 + c]) }
-                        output[p * 4 + 3] = 255
-                    }
-                }
+                guard raw.count == width * height * 4 else { throw GraphRuntimeError.message("Invalid detail readback") }
+                let rgba = Data(bytes: raw.baseAddress!, count: raw.count)
                 let before = try self.typedBytes(original)
                 guard before.count == rgba.count else { throw GraphRuntimeError.message("Invalid original detail pixels") }
                 let originalData = Data(bytes: before.baseAddress!, count: before.count)
-                try self.onDetail?(rgba, originalData, width, height)
+                try self.onDetail?(rgba, originalData, width, height, gamut, originalGamut)
                 self.detailMetadata = meta
             } catch { self.fail(error) }
         }
@@ -461,22 +446,14 @@ final class NativeGraphRuntime {
             } catch { self.fail(error) }
         }
         let progress: @convention(block) (Int, Int) -> Void = { [weak self] done, total in self?.onProgress?(done, total) }
-        let original: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
+        let original: @convention(block) (JSValue, Int, Int, String) -> Void = { [weak self] value, width, height, gamut in
             guard let self = self else { return }
             do {
                 let raw = try self.typedBytes(value)
-                guard width > 0, height > 0, raw.count == width * height * 12 else { throw GraphRuntimeError.message("Invalid original preview") }
-                let floats = raw.bindMemory(to: Float.self)
-                var rgba = Data(count: width * height * 4)
-                rgba.withUnsafeMutableBytes { output in
-                    let bytes = output.bindMemory(to: UInt8.self)
-                    for p in 0..<(width * height) {
-                        for c in 0..<3 { bytes[p * 4 + c] = Self.quantize(floats[p * 3 + c]) }
-                        bytes[p * 4 + 3] = 255
-                    }
-                }
+                guard width > 0, height > 0, raw.count == width * height * 4 else { throw GraphRuntimeError.message("Invalid original preview") }
+                let rgba = Data(bytes: raw.baseAddress!, count: raw.count)
                 self.previewRGBA = rgba; self.previewWidth = width; self.previewHeight = height
-                try self.onOriginal?(rgba, width, height)
+                try self.onOriginal?(rgba, width, height, gamut)
             } catch { self.fail(error) }
         }
         let savePatch: @convention(block) (JSValue) -> Int = { [weak self] value in

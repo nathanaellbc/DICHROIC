@@ -9,26 +9,23 @@ import { buildIccProfile } from '../io/icc';
 import { prepareFocusOverlay } from '../ui/engine/focusCheck';
 import { diffusionRenderLongEdge, previewRenderLongEdge } from '../session/renderSize';
 import { NativeSource, type NativeSourceHost } from './source';
-import { sourceToDisplay, rgbToCanvas } from '../io/display';
+import { sourceToDisplay, rgbToCanvas, canvasColorSpaceFor } from '../io/display';
 import { dcrawGammaCurve, invertDcrawCurve } from '../io/dcrawGamma';
 import { iccDescription, colorSpaceForIcc } from '../io/metadata';
 
 export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   previewInput(): Float32Array;
-  publish(rgb: Float32Array, width: number, height: number): void;
+  publish(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
   complete(id: number, json: string): void;
   publishMask?(rgba: Uint8ClampedArray, width: number, height: number): void;
   publishCube?(text: string): void;
-  publishOriginal?(rgb: Float32Array, width: number, height: number): void;
-  publishDetail?(rgb: Float32Array, original: Uint8ClampedArray, json: string): void;
+  publishOriginal?(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
+  publishDetail?(rgba: Uint8ClampedArray, original: Uint8ClampedArray, json: string,
+    gamut: PredefinedColorSpace, originalGamut: PredefinedColorSpace): void;
 }
 
-function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]): Uint8ClampedArray {
-  const frame = sourceToDisplay(values, 4, width * height, meta);
-  if (frame.colorSpace === 'srgb') return frame.pixels;
-  const rgb = new Float32Array(width * height * 3);
-  for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
-  return rgbToCanvas(rgb, width, height, 'Display P3', 'srgb');
+function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]) {
+  return sourceToDisplay(values, 4, width * height, meta);
 }
 
 /** JavaScriptCore hosts canonical math only; all compute/photography is native. */
@@ -59,10 +56,8 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     originalPreview(edge: number): string {
       if (!source) throw new Error('Native source is missing.');
       sourcePreview = source.preview(edge);
-      const { rgba, width, height } = sourcePreview, pixels = nativeDisplay(rgba, width, height, source.meta);
-      const rgb = new Float32Array(width * height * 3);
-      for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = pixels[p * 4 + c]! / 255;
-      host.publishOriginal?.(rgb, width, height);
+      const { rgba, width, height } = sourcePreview, frame = nativeDisplay(rgba, width, height, source.meta);
+      host.publishOriginal?.(frame.pixels, width, height, frame.colorSpace);
       return JSON.stringify({ width, height });
     },
     attachSource(json: string): void {
@@ -91,10 +86,8 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     removalPreview(edge: number, candidate: boolean): void {
       if (!source) throw new Error('Native removal source is missing.');
       const image = source.preview(edge, candidate);
-      const pixels = nativeDisplay(image.rgba, image.width, image.height, source.meta);
-      const rgb = new Float32Array(image.width * image.height * 3);
-      for (let p = 0; p < image.width * image.height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = pixels[p * 4 + c]! / 255;
-      host.publish(rgb, image.width, image.height);
+      const frame = nativeDisplay(image.rgba, image.width, image.height, source.meta);
+      host.publish(frame.pixels, image.width, image.height, frame.colorSpace);
     },
     renderSize(json: string): string {
       const { width, height, requested, params, preview } = JSON.parse(json) as {
@@ -126,7 +119,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     },
     depthInput(width: number, height: number) {
       const input = source ? source.preview(Math.max(width, height)).rgba : host.previewInput();
-      const rgba = source ? nativeDisplay(input, width, height, source.meta) : Uint8ClampedArray.from(input, v => v * 255);
+      const rgba = source ? nativeDisplay(input, width, height, source.meta).pixels : Uint8ClampedArray.from(input, v => v * 255);
       const [mw, mh] = modelInputSize(width, height, 392);
       const rgb = resampleRGB(rgba, width, height, mw, mh);
       guide = { rgba, width, height, rgb, mw, mh };
@@ -187,7 +180,10 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
             const rgb = await renderer.detail(request.params, request.width, request.height, measure, region);
             if (rgb) {
               const original = source.region(request.width, request.height, region.x, region.y, region.width, region.height, undefined, false, true);
-              host.publishDetail?.(rgb, nativeDisplay(original, region.width, region.height, source.meta), JSON.stringify({ ...region, fullWidth: request.width, fullHeight: request.height }));
+              const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
+              const before = nativeDisplay(original, region.width, region.height, source.meta);
+              host.publishDetail?.(rgbToCanvas(rgb, region.width, region.height, request.params.outputColorSpace, gamut),
+                before.pixels, JSON.stringify({ ...region, fullWidth: request.width, fullHeight: request.height }), gamut, before.colorSpace);
             }
             host.complete(id, '{"result":null}'); return;
           }
@@ -201,14 +197,11 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
           const input = sourcePreview?.rgba ?? (source ? new Float32Array() : host.previewInput());
           if (request.operation === 'preview') {
             const rgb = await renderer.preview(request.params, input, request.width, request.height);
-            host.publish(rgb, request.width, request.height);
+            const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
+            const pixels = rgbToCanvas(rgb, request.width, request.height, request.params.outputColorSpace, gamut);
+            host.publish(pixels, request.width, request.height, gamut);
             if (depth) {
-              const pixels = new Uint8ClampedArray(request.width * request.height * 4);
-              for (let i = 0; i < request.width * request.height; i++) {
-                for (let c = 0; c < 3; c++) pixels[i * 4 + c] = rgb[i * 3 + c]! * 255;
-                pixels[i * 4 + 3] = 255;
-              }
-              focusOverlay = prepareFocusOverlay({ width: request.width, height: request.height, pixels, colorSpace: 'srgb' }, depth);
+              focusOverlay = prepareFocusOverlay({ width: request.width, height: request.height, pixels, colorSpace: gamut }, depth);
             }
           } else if (request.operation === 'export') {
             exportSize = { width: request.width, height: request.height };

@@ -5,6 +5,7 @@ import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'editor_widgets.dart';
 import 'removal_brush.dart';
+import 'native_preview.dart';
 
 /// Gestures transform the cached native texture; they never schedule a develop.
 class PhotoViewport extends StatefulWidget {
@@ -289,12 +290,11 @@ class _PhotoViewportState extends State<PhotoViewport>
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Texture(
+                            NativePreview(
                               textureId: _before
                                   ? widget.photo.originalTextureId ??
                                         widget.photo.textureId
                                   : widget.photo.textureId,
-                              filterQuality: FilterQuality.medium,
                             ),
                             if (widget.detail != null && widget.brush == null)
                               Positioned(
@@ -304,11 +304,10 @@ class _PhotoViewportState extends State<PhotoViewport>
                                 height:
                                     widget.detail!.rect.height * _image.height,
                                 child: IgnorePointer(
-                                  child: Texture(
+                                  child: NativePreview(
                                     textureId: _before
                                         ? widget.detail!.originalTextureId
                                         : widget.detail!.textureId,
-                                    filterQuality: FilterQuality.medium,
                                   ),
                                 ),
                               ),
@@ -322,7 +321,7 @@ class _PhotoViewportState extends State<PhotoViewport>
                               ),
                             if (_picking && widget.photo.focusTextureId != null)
                               IgnorePointer(
-                                child: Texture(
+                                child: NativePreview(
                                   textureId: widget.photo.focusTextureId!,
                                 ),
                               ),

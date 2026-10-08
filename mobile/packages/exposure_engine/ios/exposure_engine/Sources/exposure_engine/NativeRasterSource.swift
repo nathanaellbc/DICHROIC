@@ -1,6 +1,7 @@
 import Foundation
 import ImageIO
 import CoreGraphics
+import Accelerate
 
 /// Retain decoded channel codes, bit depth and input gamut instead of drawing
 /// the entire photo into an 8-bit sRGB CGContext. Orient rows directly into
@@ -56,7 +57,26 @@ enum NativeRasterSource {
                 let file = try FileHandle(forWritingTo: output); defer { try? file.close() }
                 var row = Data(count: width * 4 * outputBytes)
                 for y in 0..<height {
-                    row.withUnsafeMutableBytes { (target: UnsafeMutableRawBufferPointer) in
+                    try row.withUnsafeMutableBytes { (target: UnsafeMutableRawBufferPointer) in
+                        if orientation == 1 && bits == 8 && model == .rgb && !premultiplied && [3, 4].contains(count) {
+                            var origin = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: input + y * image.bytesPerRow),
+                                height: 1, width: vImagePixelCount(width), rowBytes: image.bytesPerRow)
+                            var destination = vImage_Buffer(data: target.baseAddress!, height: 1,
+                                width: vImagePixelCount(width), rowBytes: width * 4)
+                            let status: vImage_Error
+                            if count == 3 {
+                                status = vImageConvert_RGB888toRGBA8888(&origin, nil, 255, &destination, false, vImage_Flags(kvImageDoNotTile))
+                            } else {
+                                var channels = [first ? 1 : 0, first ? 2 : 1, first ? 3 : 2, first ? 0 : 3]
+                                if reversePixel { channels = channels.map { 3 - $0 } }
+                                status = channels.map { UInt8($0) }.withUnsafeBufferPointer {
+                                    vImagePermuteChannels_ARGB8888(&origin, &destination, $0.baseAddress!, vImage_Flags(kvImageDoNotTile))
+                                }
+                                if !hasAlpha { for x in 0..<width { target[x * 4 + 3] = 255 } }
+                            }
+                            guard status == kvImageNoError else { throw GraphRuntimeError.message("Native pixel conversion failed") }
+                            return
+                        }
                         for x in 0..<width {
                             let sx: Int, sy: Int
                             switch orientation {
@@ -70,6 +90,23 @@ enum NativeRasterSource {
                             default: sx = x; sy = y
                             }
                             let base = sy * image.bytesPerRow + sx * count * bytes
+                            // Preserve integer codes directly for rotated phone
+                            // photos too; avoid four Float divisions/closures per pixel.
+                            if model == .rgb && !premultiplied && !floating && [8, 16].contains(bits) {
+                                for c in 0..<4 {
+                                    let alphaChannel = c == 3
+                                    var channel = alphaChannel ? (first ? 0 : count - 1) : (first ? 1 : 0) + c
+                                    if reversePixel { channel = count - 1 - channel }
+                                    let p = base + channel * bytes, at = (x * 4 + c) * bytes
+                                    if bits == 8 { target[at] = alphaChannel && !hasAlpha ? 255 : input[p] }
+                                    else {
+                                        let code: UInt16 = alphaChannel && !hasAlpha ? 65535 :
+                                            (bigEndian ? UInt16(input[p]) << 8 | UInt16(input[p + 1]) : UInt16(input[p + 1]) << 8 | UInt16(input[p]))
+                                        target.storeBytes(of: code, toByteOffset: at, as: UInt16.self)
+                                    }
+                                }
+                                continue
+                            }
                             func component(_ channel: Int) -> Float {
                                 let index = reversePixel ? count - 1 - channel : channel, p = base + index * bytes
                                 if bits == 8 { return Float(input[p]) / 255 }

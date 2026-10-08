@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/main.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
 import 'package:exposure_ios/native_editor_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -30,6 +30,7 @@ Future<Uint8List> decodedRgba(Uint8List encoded) async {
 }
 
 void main() {
+  debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
     'ImageIO, canonical host and Metal match independent Dawn images',
@@ -52,6 +53,29 @@ void main() {
       for (final test in reference['cases'] as List) {
         final params = Map<String, dynamic>.from(test['params'] as Map);
         await engine.develop(params);
+        final preview = await const MethodChannel(
+          'exposure/native',
+        ).invokeMapMethod<String, dynamic>('debugPreview');
+        final wideGamut = params['outputColorSpace'] == 'Display P3';
+        expect(
+          preview!['colorSpace'],
+          wideGamut ? 'kCGColorSpaceDisplayP3' : 'kCGColorSpaceSRGB',
+        );
+        final previewBytes = preview['rgba'] as Uint8List;
+        final previewExpected = (test[wideGamut ? 'p3rgba' : 'rgba'] as List)
+            .cast<int>();
+        expect(previewBytes.length, previewExpected.length);
+        var previewError = 0;
+        for (var i = 0; i < previewBytes.length; i++) {
+          final error = (previewBytes[i] - previewExpected[i]).abs();
+          if (error > previewError) previewError = error;
+        }
+        expect(
+          previewError,
+          lessThanOrEqualTo(1),
+          reason:
+              'Profiled native preview differs from independent P3 reference',
+        );
         final path = await engine.developExport(params);
         final codec = await ui.instantiateImageCodec(
           await File(path).readAsBytes(),
@@ -81,6 +105,7 @@ void main() {
         await File(path).delete();
       }
       for (final format in (catalog['exportFormats'] as List).cast<String>()) {
+        debugPrint('Native export encoder: $format');
         expect(
           await engine.exportSize(baseline, longEdge: 24),
           const Size(24, 18),
@@ -146,6 +171,7 @@ void main() {
       await editor.open(file.path);
       await tester.pumpWidget(
         MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: dichroicTheme(),
           home: NativeEditorScreen(controller: editor),
         ),
@@ -278,6 +304,10 @@ void main() {
         final photo = await engine.open(file.path);
         expect([photo.sourceWidth, photo.sourceHeight], [8144, 5424]);
         debugPrint('44 MP native JPEG open: ${watch.elapsedMilliseconds} ms');
+        final importStats = await const MethodChannel(
+          'exposure/native',
+        ).invokeMapMethod<String, dynamic>('debugStats');
+        debugPrint('44 MP import breakdown: $importStats');
         await engine.develop(params);
         debugPrint('44 MP native first grade: ${watch.elapsedMilliseconds} ms');
         final pending = engine.developExport({

@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -137,18 +136,51 @@ class LightSwitch extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: label,
     toggled: value,
-    child: SizedBox(
-      width: 44,
-      height: 44,
-      child: Center(
-        child: Transform.scale(
-          scale: .68,
-          child: CupertinoSwitch(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: signalBlue.withValues(alpha: .7),
-            inactiveTrackColor: const Color(0x47787880),
-            thumbColor: Colors.white,
+    enabled: onChanged != null,
+    onTap: onChanged == null ? null : () => onChanged!(!value),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onChanged == null ? null : () => onChanged!(!value),
+      onHorizontalDragEnd: onChanged == null
+          ? null
+          : (details) {
+              final velocity = details.primaryVelocity ?? 0;
+              if (velocity.abs() > 40) onChanged!(velocity > 0);
+            },
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(
+          child: AnimatedContainer(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 160),
+            width: 28,
+            height: 16,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: value
+                  ? signalBlue.withValues(alpha: .7)
+                  : const Color(0x47787880),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: AnimatedAlign(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 160),
+              curve: Curves.easeOutCubic,
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+              child: const SizedBox(
+                width: 12,
+                height: 12,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
