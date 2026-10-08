@@ -1,5 +1,6 @@
 import Foundation
 import RawNative
+import ImageIO
 
 enum NativeRawSource {
     static let extensions: Set<String> = ["arw", "dng", "cr2", "cr3", "nef", "nrw", "raf", "rw2", "orf", "pef", "srw", "raw", "iiq", "3fr", "fff", "rwl", "mos", "mrw", "kdc", "dcr", "erf", "srf", "sr2"]
@@ -15,8 +16,14 @@ enum NativeRawSource {
             throw GraphRuntimeError.message(dichroic_raw_error().map { String(cString: $0) } ?? "RAW decoder failed")
         }
         do {
+            var exif: [CFString: Any] = [:]
+            if info.iso > 0 { exif[kCGImagePropertyExifISOSpeedRatings] = [info.iso] }
+            if info.shutter > 0 { exif[kCGImagePropertyExifExposureTime] = info.shutter }
+            if info.aperture > 0 { exif[kCGImagePropertyExifFNumber] = info.aperture }
+            if info.focal_length > 0 { exif[kCGImagePropertyExifFocalLength] = info.focal_length }
             return try NativeSourceStore(url: output, width: Int(info.width), height: Int(info.height), bits: Int(info.bits),
-                channels: Int(info.channels), colorSpace: "ACES2065-1", encoding: "linear", lookup: lookup, byteOffset: Int(info.byte_offset), bigEndian: true)
+                channels: Int(info.channels), colorSpace: "ACES2065-1", encoding: "linear", lookup: lookup, byteOffset: Int(info.byte_offset), bigEndian: true,
+                metadata: [kCGImagePropertyExifDictionary: exif])
         } catch { try? FileManager.default.removeItem(at: output); throw error }
     }
 }

@@ -571,7 +571,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                             let colorSpace = params["outputColorSpace"] as? String ?? "sRGB"
                             finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace,
                                 icc: graph.icc(colorSpace), bits: bits, format: format, quality: (args["quality"] as? NSNumber)?.doubleValue ?? 1,
-                                sourceURL: url).path)
+                                sourceURL: url, sourceMetadata: graph.sourceStore?.metadata ?? [:]).path)
                         } catch { fail(error) }
                     }
                 }
@@ -650,7 +650,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     }
 
     private func writePNG(_ rgba: Data, width: Int, height: Int, outputColorSpace: String = "sRGB", icc: Data? = nil,
-                          bits: Int = 8, format: String = "png8", quality: Double = 1, sourceURL: URL? = nil) throws -> URL {
+                          bits: Int = 8, format: String = "png8", quality: Double = 1, sourceURL: URL? = nil,
+                          sourceMetadata: [CFString: Any] = [:]) throws -> URL {
         var space = icc.flatMap { CGColorSpace(iccData: $0 as CFData) }
         if space == nil {
         let name: CFString
@@ -689,10 +690,15 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         }
         var metadata: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: min(1, max(0.01, quality)),
             kCGImagePropertyOrientation: 1, kCGImagePropertyPixelWidth: width, kCGImagePropertyPixelHeight: height]
+        metadata.merge(sourceMetadata) { current, _ in current }
         if let sourceURL = sourceURL, let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
            let original = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] {
             for key in [kCGImagePropertyExifDictionary, kCGImagePropertyGPSDictionary, kCGImagePropertyIPTCDictionary, kCGImagePropertyTIFFDictionary] {
-                metadata[key] = original[key]
+                if let dictionary = original[key] as? [CFString: Any] {
+                    var combined = metadata[key] as? [CFString: Any] ?? [:]
+                    combined.merge(dictionary) { _, original in original }
+                    metadata[key] = combined
+                }
             }
         }
         var exif = metadata[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
