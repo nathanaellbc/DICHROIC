@@ -35,6 +35,12 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     'texture': 'halationAmount',
   };
   final brush = RemovalBrush();
+
+  /// Bumped by Done in Remove Object: the photo plays the develop sweep.
+  int reveal = 0;
+
+  /// Before/After of the removal preview.
+  bool beforeRemoval = false;
   final exportPreferences = ExportPreferences();
   String? _alerted;
 
@@ -261,14 +267,17 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
   /// and Export; the brand alone with no photo.
   Widget topBar(bool wide) {
     final erasing = controller.erasing, photo = controller.photo != null;
-    if (!photo && !erasing) {
+    if (!photo || erasing) {
+      // Brand alone: no photo yet, or Remove Object (its controls hold Done).
       return SizedBox(
         height: 52,
         child: Align(
           alignment: Alignment.centerLeft,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: brand('Your pocket darkroom'),
+            child: brand(
+              erasing ? 'Original · grading paused' : 'Your pocket darkroom',
+            ),
           ),
         ),
       );
@@ -453,107 +462,231 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     );
   }
 
+  /// "Done": leaves Remove Object; the photo sweeps from original to film.
+  Future<void> doneRemoval() async {
+    await controller.finishRemoval(apply: false);
+    if (mounted) {
+      setState(() {
+        reveal++;
+        beforeRemoval = false;
+      });
+    }
+  }
+
+  /// Remove Object panel, as the web `RemoveContent` controls.
   Widget removalControls() => ListenableBuilder(
     listenable: brush,
-    builder: (context, _) => Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Row(
-            children: [
-              Glyph('erase', size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Remove Object',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-              Spacer(),
-              Text(
-                'Original · grading paused',
-                style: TextStyle(color: secondary, fontSize: 11),
-              ),
+    builder: (context, _) {
+      final c = controller, busy = c.busy, result = c.removalReady;
+      final strokes = !brush.isEmpty;
+      Widget capsule(
+        String label, {
+        String? glyph,
+        VoidCallback? onTap,
+        bool selected = false,
+        bool prominent = false,
+      }) => Press(
+        label: label,
+        selected: selected || prominent,
+        filled: prominent,
+        radius: 22,
+        onTap: onTap,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (glyph != null) ...[
+              Glyph(glyph, size: 16, color: prominent ? Colors.white : null),
+              const SizedBox(width: 6),
             ],
-          ),
-          const SizedBox(height: 8),
-          if (!controller.removalReady)
+            Text(
+              label,
+              style: TextStyle(color: prominent ? Colors.white : null),
+            ),
+          ],
+        ),
+      );
+      final status = c.removing && c.status?.isNotEmpty == true
+          ? c.status!
+          : c.removalStatus;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Remove Object',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Original · grading paused',
+                        style: TextStyle(fontSize: 12, color: secondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Press(
+                  label: 'Done',
+                  selected: true,
+                  filled: true,
+                  radius: 22,
+                  onTap: busy ? null : doneRemoval,
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('Brush size', style: TextStyle(fontSize: 13)),
+                ),
+                Text(
+                  '${brush.diameter.round()} px',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: secondary,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
             DetailSlider(
               value: brush.diameter,
               min: 8,
-              max: 80,
+              max: 100,
               step: 1,
               label: 'Brush size',
+              enabled: !busy && !result,
               onChanged: (v) => setState(() => brush.diameter = v),
+              onReset: () => setState(() => brush.diameter = 32),
             ),
-          Row(
-            children: [
-              Press(
-                label: 'Brush',
-                selected: brush.painting && !brush.eraser,
-                onTap: () => setState(() {
-                  brush.painting = true;
-                  brush.eraser = false;
-                }),
-                child: const Glyph('erase', size: 20),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  for (final w in <Widget>[
+                    capsule(
+                      'Brush',
+                      glyph: 'erase',
+                      selected: brush.painting,
+                      onTap: busy || result
+                          ? null
+                          : () => setState(() => brush.painting = true),
+                    ),
+                    capsule(
+                      'Move',
+                      glyph: 'move',
+                      selected: !brush.painting,
+                      onTap: () => setState(() => brush.painting = false),
+                    ),
+                    capsule(
+                      'Undo',
+                      glyph: 'undo',
+                      onTap: busy || !strokes || result ? null : brush.undo,
+                    ),
+                    capsule(
+                      'Clear',
+                      onTap: busy || (!strokes && !result)
+                          ? null
+                          : () {
+                              brush.clear();
+                              if (result) c.restartRemoval();
+                            },
+                    ),
+                    if (c.canUndoRemoval)
+                      capsule(
+                        'Undo remove',
+                        onTap: busy || result ? null : c.undoRemoval,
+                      ),
+                    if (result) ...[
+                      capsule(
+                        beforeRemoval ? 'After' : 'Before',
+                        glyph: 'compare',
+                        selected: beforeRemoval,
+                        onTap: busy
+                            ? null
+                            : () => setState(
+                                () => beforeRemoval = !beforeRemoval,
+                              ),
+                      ),
+                      capsule(
+                        'Apply',
+                        prominent: true,
+                        onTap: busy
+                            ? null
+                            : () async {
+                                setState(() => beforeRemoval = false);
+                                brush.clear();
+                                await c.applyRemoval();
+                              },
+                      ),
+                    ] else
+                      capsule(
+                        busy ? 'Working…' : 'Remove',
+                        glyph: busy ? 'loader' : 'erase',
+                        prominent: true,
+                        onTap: busy || !strokes
+                            ? null
+                            : () async {
+                                final photo = c.photo!,
+                                    mask = await brush.mask(
+                                      photo.width,
+                                      photo.height,
+                                    );
+                                await c.previewRemoval(
+                                  mask.pixels,
+                                  mask.width,
+                                  mask.height,
+                                );
+                              },
+                      ),
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Center(child: w),
+                    ),
+                ],
               ),
-              const SizedBox(width: 6),
-              Press(
-                label: 'Move photo',
-                selected: !brush.painting,
-                onTap: () => setState(() => brush.painting = false),
-                child: const Glyph('move', size: 20),
+            ),
+            const SizedBox(height: 6),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                status,
+                style: const TextStyle(fontSize: 13, color: secondary),
               ),
-              const SizedBox(width: 6),
-              Press(
-                label: 'Undo brush stroke',
-                onTap: brush.isEmpty || controller.removalReady
-                    ? null
-                    : brush.undo,
-                child: const Glyph('undo', size: 20),
+            ),
+            if (c.removalError != null)
+              Text(
+                c.removalError!,
+                style: const TextStyle(fontSize: 13, color: Color(0xffff6961)),
               ),
-              const Spacer(),
-              if (controller.removalReady)
-                Press(
-                  label: 'Try again',
-                  onTap: controller.busy
-                      ? null
-                      : () {
-                          brush.clear();
-                          controller.restartRemoval();
-                        },
-                  child: const Text('Try again'),
-                )
-              else
-                Press(
-                  label: 'Remove object',
-                  selected: true,
-                  filled: true,
-                  onTap: brush.isEmpty || controller.busy
-                      ? null
-                      : () async {
-                          final photo = controller.photo!,
-                              mask = await brush.mask(
-                                photo.width,
-                                photo.height,
-                              );
-                          await controller.previewRemoval(
-                            mask.pixels,
-                            mask.width,
-                            mask.height,
-                          );
-                        },
-                  child: Text(controller.removing ? 'Removing…' : 'Remove'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Brush over the object. Pinch or use two fingers to move.',
-            style: TextStyle(color: secondary, fontSize: 11),
-          ),
-        ],
-      ),
-    ),
+            // Read by VoiceOver only on phones, as on the web.
+            Semantics(
+              label:
+                  'Pinch with two fingers to zoom and move. On-device LaMa · first use downloads 62 MB.',
+              child: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      );
+    },
   );
   Future<void> export() => editorSheet<void>(
     context,
@@ -786,6 +919,8 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
       detailRevision: controller.revision,
       onDetailRequest: controller.requestDetail,
       rendering: controller.rendering,
+      showOriginal: controller.erasing && beforeRemoval,
+      reveal: reveal,
       brush: controller.erasing ? brush : null,
       showBrush: !controller.removalReady && !controller.removing,
       focus:

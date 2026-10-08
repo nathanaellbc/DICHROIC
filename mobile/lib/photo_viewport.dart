@@ -32,6 +32,8 @@ class PhotoViewport extends StatefulWidget {
     this.onDetailRequest,
     this.rendering = false,
     this.compareInset = 12,
+    this.showOriginal = false,
+    this.reveal = 0,
   });
   final NativePhoto photo;
   final Offset? focus;
@@ -49,13 +51,24 @@ class PhotoViewport extends StatefulWidget {
   /// Distance of the Compare button from the bottom edge.
   final double compareInset;
 
+  /// Show the untouched original (Remove Object's Before).
+  final bool showOriginal;
+
+  /// Bumped when Remove Object closes: a blue line sweeps down, developing
+  /// the film result over the original (web develop sweep).
+  final int reveal;
+
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
 }
 
 class _PhotoViewportState extends State<PhotoViewport>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final Ticker _ticker;
+  late final _sweep = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
   Size _viewport = Size.zero;
   Size _image = Size.zero;
   double _scale = 1;
@@ -111,6 +124,9 @@ class _PhotoViewportState extends State<PhotoViewport>
       _split = .5;
     }
     if (oldWidget.rendering != widget.rendering) _watchRendering();
+    if (oldWidget.reveal != widget.reveal && widget.reveal > 0) {
+      _sweep.forward(from: 0);
+    }
     if (oldWidget.detailRevision != widget.detailRevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _requestDetail();
@@ -132,6 +148,7 @@ class _PhotoViewportState extends State<PhotoViewport>
   @override
   void dispose() {
     _slowTimer?.cancel();
+    _sweep.dispose();
     _ticker.dispose();
     super.dispose();
   }
@@ -498,13 +515,23 @@ class _PhotoViewportState extends State<PhotoViewport>
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            _surface(original: peeking),
+                            _surface(original: peeking || widget.showOriginal),
                             if (_comparing && hasOriginal)
                               ClipRect(
                                 clipper: _SplitClipper(_split),
                                 child: _surface(original: true),
                               ),
-                            if (widget.brush != null && widget.showBrush)
+                            if (hasOriginal)
+                              _DevelopSweep(
+                                animation: _sweep,
+                                reduced: MediaQuery.disableAnimationsOf(
+                                  context,
+                                ),
+                                child: _surface(original: true),
+                              ),
+                            if (widget.brush != null &&
+                                widget.showBrush &&
+                                !widget.showOriginal)
                               IgnorePointer(
                                 child: CustomPaint(
                                   painter: BrushPainter(widget.brush!),
@@ -798,4 +825,67 @@ class _SplitClipper extends CustomClipper<Rect> {
       Rect.fromLTWH(0, 0, size.width * split, size.height);
   @override
   bool shouldReclip(_SplitClipper old) => old.split != split;
+}
+
+/// The original covering the photo below a blue glowing line that moves
+/// down, revealing the film result (a fade under Reduce Motion).
+class _DevelopSweep extends StatelessWidget {
+  const _DevelopSweep({
+    required this.animation,
+    required this.reduced,
+    required this.child,
+  });
+  final AnimationController animation;
+  final bool reduced;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: animation,
+    builder: (context, _) {
+      if (!animation.isAnimating) return const SizedBox.shrink();
+      final t = Curves.easeInOutCubic.transform(animation.value);
+      if (reduced) {
+        return IgnorePointer(
+          child: Opacity(opacity: 1 - t, child: child),
+        );
+      }
+      return IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, box) {
+            final y = box.maxHeight * t;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRect(clipper: _BelowClipper(y), child: child),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: y - 1,
+                  height: 2,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xff5cb8ff),
+                      boxShadow: [
+                        BoxShadow(color: Color(0xb30091ff), blurRadius: 12),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
+class _BelowClipper extends CustomClipper<Rect> {
+  _BelowClipper(this.top);
+  final double top;
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(0, top.clamp(0, size.height), size.width, size.height);
+  @override
+  bool shouldReclip(_BelowClipper old) => old.top != top;
 }

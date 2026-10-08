@@ -251,6 +251,8 @@ class NativeEditorController extends ChangeNotifier {
       _detailQueued = null;
       erasing = true;
       removalReady = false;
+      removalStatus = 'Brush over the object, then choose Remove.';
+      removalError = null;
     } catch (e) {
       error = e.toString();
     } finally {
@@ -259,17 +261,67 @@ class NativeEditorController extends ChangeNotifier {
     }
   }
 
+  /// Remove Object status and error lines (web Remove.tsx).
+  String removalStatus = '';
+  String? removalError;
+  bool get canUndoRemoval => _removalCursor > 0;
+
+  String _message(Object e) =>
+      e is PlatformException ? e.message ?? e.code : e.toString();
+
+  /// Apply keeps the previewed removal and stays in Remove Object.
+  Future<void> applyRemoval() async {
+    if (busy || !erasing || !removalReady) return;
+    removalStatus = 'Applying removal…';
+    removalError = null;
+    await finishRemoval(apply: true);
+    await _render;
+    await beginRemoval();
+    removalStatus = 'Applied. Film and export use the retouched photo.';
+    _notify();
+  }
+
+  /// "Undo remove": steps back over the last applied removal.
+  Future<void> undoRemoval() async {
+    if (busy || !erasing || removalReady || !canUndoRemoval) return;
+    removing = true;
+    removalStatus = 'Undoing removal…';
+    removalError = null;
+    _notify();
+    try {
+      await engine.cancelRemoval();
+      final before = _snapshot();
+      await engine.restoreRemoval(_removalCursor - 1);
+      _removalCursor--;
+      _resetDepth();
+      _undo.add(before);
+      _redo.clear();
+      _trimHistory();
+      _revision++;
+      _rendered = -1;
+      await engine.beginRemoval();
+      removalStatus = 'Removal undone.';
+    } catch (e) {
+      removalError = _message(e);
+    } finally {
+      removing = false;
+      _notify();
+    }
+  }
+
   Future<void> previewRemoval(Uint8List mask, int width, int height) async {
     if (busy || !erasing) return;
     removing = true;
-    error = null;
+    removalError = null;
+    removalStatus = 'Preparing the selected area…';
     removalReady = false;
     _notify();
     try {
       await engine.previewRemoval(mask, width, height);
       removalReady = true;
+      removalStatus = 'Preview ready. Apply to keep this removal.';
     } catch (e) {
-      error = e.toString();
+      removalError = _message(e);
     } finally {
       removing = false;
       _notify();
@@ -313,8 +365,9 @@ class NativeEditorController extends ChangeNotifier {
       await engine.cancelRemoval();
       await engine.beginRemoval();
       removalReady = false;
+      removalStatus = 'Brush over the object, then choose Remove.';
     } catch (e) {
-      error = e.toString();
+      removalError = _message(e);
     } finally {
       removing = false;
       _notify();

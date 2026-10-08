@@ -29,6 +29,10 @@ class LayoutEngine extends ExposureEngine {
   Future<void> close() async {}
   @override
   Future<String?> loadExportPreferences() async => null;
+  @override
+  Future<void> beginRemoval() async {}
+  @override
+  Future<void> cancelRemoval() async {}
 }
 
 void main() {
@@ -92,6 +96,13 @@ void main() {
       expect(tester.takeException(), isNull, reason: 'Export sheet at $size');
       await tester.tap(find.byTooltip('Cancel'));
       await tester.pumpAndSettle();
+      await editor.beginRemoval();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'Remove Object at $size');
+      expect(find.text('Brush over the object, then choose Remove.'), findsOne);
+      await tester.tap(find.byTooltip('Done'));
+      await tester.pumpAndSettle();
+      expect(editor.erasing, isFalse);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
     });

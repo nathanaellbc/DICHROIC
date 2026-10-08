@@ -116,7 +116,7 @@ class BrushPainter extends CustomPainter {
   final RemovalBrush brush;
   @override
   void paint(Canvas canvas, Size size) =>
-      paintBrush(canvas, size, brush.strokes, const Color(0x99ff4d78));
+      paintBrush(canvas, size, brush.strokes, const Color(0x73ff4650));
   @override
   bool shouldRepaint(BrushPainter oldDelegate) => oldDelegate.brush != brush;
 }
