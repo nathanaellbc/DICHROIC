@@ -79,6 +79,37 @@ void main() {
       final cube = await engine.exportCube(baseline, 17);
       expect(await File(cube).readAsString(), contains('LUT_3D_SIZE 17'));
       await File(cube).delete();
+      final first = await engine.exportImage(
+        baseline,
+        format: 'png8',
+        longEdge: 24,
+      );
+      final countBefore = await const MethodChannel(
+        'exposure/native',
+      ).invokeMapMethod<String, dynamic>('debugStats');
+      final second = await engine.exportImage(
+        baseline,
+        format: 'jpeg',
+        longEdge: 24,
+        quality: .8,
+      );
+      final countAfter = await const MethodChannel(
+        'exposure/native',
+      ).invokeMapMethod<String, dynamic>('debugStats');
+      expect(
+        countAfter!['exportRenderCount'],
+        countBefore!['exportRenderCount'],
+        reason: 'Changing format must reuse cached grading',
+      );
+      await File(first).delete();
+      await File(second).delete();
+      final detail = await engine.detail(
+        baseline,
+        const Rect.fromLTWH(.25, .25, .5, .5),
+        32,
+      );
+      expect(detail, isNotNull);
+      expect(detail!.textureId, isNot(detail.originalTextureId));
       final editor = NativeEditorController(engine);
       await editor.open(file.path);
       await tester.pumpWidget(

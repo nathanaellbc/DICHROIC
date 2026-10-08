@@ -50,6 +50,7 @@ final class NativeGraphRuntime {
     private var outputBits = 8
     private var exportKey: Data?
     private var pendingExportKey: Data?
+    private(set) var exportRenderCount = 0
     private let cancellation: NativeCancellation
     var outputCube = ""
     var onPublish: ((Data, Int, Int) throws -> Void)?
@@ -172,6 +173,7 @@ final class NativeGraphRuntime {
                 queue.async { completion(.success(())) }; return
             }
             invalidateExport(); pendingExportKey = key
+            exportRenderCount += 1
             outputStore = try NativeOutputStore(count: width * height * 4 * (outputBits / 8))
             outputRGBA = outputStore!.data
         }

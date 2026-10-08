@@ -62,11 +62,13 @@ class Press extends StatefulWidget {
     this.selected = false,
     this.plain = false,
     this.filled = false,
+    this.radius = 14,
   });
   final Widget child;
   final String label;
   final VoidCallback? onTap;
   final bool selected, plain, filled;
+  final double radius;
   @override
   State<Press> createState() => _PressState();
 }
@@ -98,7 +100,7 @@ class _PressState extends State<Press> {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: ShapeDecoration(
                 shape: RoundedSuperellipseBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(widget.radius),
                   side: widget.selected && !widget.filled
                       ? const BorderSide(color: signalBlue, width: 1.5)
                       : BorderSide.none,

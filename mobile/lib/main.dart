@@ -33,9 +33,6 @@ ThemeData dichroicTheme() => ThemeData(
     fillColor: const Color(0x47787880),
     hintStyle: const TextStyle(color: secondary),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
-      borderSide: BorderSide.none,
-    ),
+    border: InputBorder.none,
   ),
 );

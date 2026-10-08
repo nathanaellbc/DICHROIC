@@ -797,6 +797,12 @@ export class RenderGraph {
       readback.unmap();
 
       return result;
+    } catch (error) {
+      // Failed allocations/readbacks must not pin a partial frame in the
+      // reusable pool. Successful frames retain their normal reuse path.
+      this.pool.release();
+      this.releaseFrameResources();
+      throw error;
     } finally {
       for (const buffer of transient) buffer.destroy();
       this.pool.flushRetired();

@@ -447,6 +447,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                             label: controller.erasing
                                 ? 'Cancel removal'
                                 : 'More options',
+                            radius: 16,
                             onTap: controller.busy
                                 ? null
                                 : controller.erasing
@@ -524,6 +525,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                             label: controller.erasing
                                 ? 'Apply removal'
                                 : 'Export',
+                            radius: 16,
                             selected: true,
                             filled: true,
                             onTap:
@@ -550,7 +552,12 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                               Expanded(child: viewport),
                               SizedBox(
                                 width: 320,
-                                child: Glass(child: controls),
+                                child: Glass(
+                                  child: SingleChildScrollView(
+                                    physics: const BouncingScrollPhysics(),
+                                    child: controls,
+                                  ),
+                                ),
                               ),
                             ],
                           )
@@ -981,14 +988,21 @@ class _StockSheetState extends State<StockSheet> {
               ],
             ),
           ),
-          TextField(
-            onChanged: (v) => setState(() => search = v.toLowerCase()),
-            decoration: const InputDecoration(
-              prefixIcon: Padding(
-                padding: EdgeInsets.all(12),
-                child: Glyph('search', size: 16, color: secondary),
+          ClipPath(
+            clipper: ShapeBorderClipper(
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              hintText: 'Search',
+            ),
+            child: TextField(
+              onChanged: (v) => setState(() => search = v.toLowerCase()),
+              decoration: const InputDecoration(
+                prefixIcon: Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Glyph('search', size: 16, color: secondary),
+                ),
+                hintText: 'Search',
+              ),
             ),
           ),
           const SizedBox(height: 8),

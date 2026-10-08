@@ -77,12 +77,17 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private let focusTexture = PreviewTexture()
     private let detailTexture = PreviewTexture()
     private let originalDetailTexture = PreviewTexture()
+    private let spareDetailTexture = PreviewTexture()
+    private let spareOriginalDetailTexture = PreviewTexture()
+    private var detailUsesSpare = false
     private let registry: FlutterTextureRegistry
     private var textureId: Int64 = -1
     private var originalTextureId: Int64 = -1
     private var focusTextureId: Int64 = -1
     private var detailTextureId: Int64 = -1
     private var originalDetailTextureId: Int64 = -1
+    private var spareDetailTextureId: Int64 = -1
+    private var spareOriginalDetailTextureId: Int64 = -1
     private var engine: UnsafeMutableRawPointer?
     private var graph: NativeGraphRuntime?
     private var photoURL: URL?
@@ -114,6 +119,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         focusTextureId = registry.register(focusTexture)
         detailTextureId = registry.register(detailTexture)
         originalDetailTextureId = registry.register(originalDetailTexture)
+        spareDetailTextureId = registry.register(spareDetailTexture)
+        spareOriginalDetailTextureId = registry.register(spareOriginalDetailTexture)
         memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil, queue: .main) { [weak self] _ in
             self?.queue.async { [weak self] in
@@ -140,6 +147,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         registry.unregisterTexture(focusTextureId)
         registry.unregisterTexture(detailTextureId)
         registry.unregisterTexture(originalDetailTextureId)
+        registry.unregisterTexture(spareDetailTextureId)
+        registry.unregisterTexture(spareOriginalDetailTextureId)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -185,7 +194,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             pickerResult = result; presenter.present(picker, animated: true); return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "detail"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "debugStats", "detail"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -216,6 +225,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         graph.commitSource()
                         graph.clearDepth(); focusTexture.clear()
                         detailTexture.clear(); originalDetailTexture.clear()
+                        spareDetailTexture.clear(); spareOriginalDetailTexture.clear()
                         photoURL = url
                         value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
                             "width": size.width, "height": size.height, "sourceWidth": source.width, "sourceHeight": source.height,
@@ -251,6 +261,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     }
                 default:
                     photoURL = nil; preview = nil; texture.clear(); originalTexture.clear(); focusTexture.clear(); detailTexture.clear(); originalDetailTexture.clear()
+                    spareDetailTexture.clear(); spareOriginalDetailTexture.clear()
                     graph = nil
                     if let handle = engine { exposure_destroy(handle); engine = nil }
                     value = nil
@@ -273,11 +284,17 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         self.graph = graph
         graph.onDetail = { [weak self] rgba, original, width, height in
             guard let self = self else { return }
-            try self.detailTexture.publish(rgba, width: width, height: height)
-            try self.originalDetailTexture.publish(original, width: width, height: height)
+            let spare = !self.detailUsesSpare
+            let graded = spare ? self.spareDetailTexture : self.detailTexture
+            let untouched = spare ? self.spareOriginalDetailTexture : self.originalDetailTexture
+            try graded.publish(rgba, width: width, height: height)
+            try untouched.publish(original, width: width, height: height)
+            self.detailUsesSpare = spare
+            let gradedId = spare ? self.spareDetailTextureId : self.detailTextureId
+            let originalId = spare ? self.spareOriginalDetailTextureId : self.originalDetailTextureId
             DispatchQueue.main.async {
-                self.registry.textureFrameAvailable(self.detailTextureId)
-                self.registry.textureFrameAvailable(self.originalDetailTextureId)
+                self.registry.textureFrameAvailable(gradedId)
+                self.registry.textureFrameAvailable(originalId)
             }
         }
         graph.onOriginal = { [weak self] rgba, width, height in
@@ -357,6 +374,13 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             func fail(_ error: Error) { finish(FlutterError(code: "native_graph", message: error.localizedDescription, details: nil)) }
             do {
                 let graph = try graphRuntime()
+                if call.method == "debugStats" {
+                    #if DEBUG
+                    finish(["exportRenderCount": graph.exportRenderCount]); return
+                    #else
+                    finish(FlutterMethodNotImplemented); return
+                    #endif
+                }
                 if call.method == "catalog" {
                     var catalog = try JSONSerialization.jsonObject(with: Data(graph.catalog.utf8)) as! [String: Any]
                     let encoders = CGImageDestinationCopyTypeIdentifiers() as! [String]
@@ -409,7 +433,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         do {
                             try outcome.get()
                             guard var meta = graph.detailMetadata else { finish(nil); return }
-                            meta["textureId"] = Int(self.detailTextureId); meta["originalTextureId"] = Int(self.originalDetailTextureId)
+                            meta["textureId"] = Int(self.detailUsesSpare ? self.spareDetailTextureId : self.detailTextureId)
+                            meta["originalTextureId"] = Int(self.detailUsesSpare ? self.spareOriginalDetailTextureId : self.originalDetailTextureId)
                             finish(meta)
                         } catch { fail(error) }
                     }
