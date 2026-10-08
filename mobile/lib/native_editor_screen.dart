@@ -280,6 +280,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                         SizedBox(
                           height: 88,
                           child: ListView.separated(
+                            key: PageStorageKey('tools-$groupId'),
                             scrollDirection: Axis.horizontal,
                             physics: const BouncingScrollPhysics(
                               parent: AlwaysScrollableScrollPhysics(),
@@ -301,6 +302,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                                     Stack(
                                       children: [
                                         Press(
+                                          key: ValueKey('tool-${tool['id']}'),
                                           label: tool['title'] as String,
                                           selected: active,
                                           onTap: () => setState(

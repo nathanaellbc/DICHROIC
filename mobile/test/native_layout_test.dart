@@ -61,6 +61,24 @@ void main() {
           isNull,
           reason: '${group['label']} at $size',
         );
+        final horizontal = find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.right,
+        );
+        tester.state<ScrollableState>(horizontal).position.jumpTo(0);
+        await tester.pumpAndSettle();
+        for (final tool in group['tools'] as List) {
+          final target = find.byKey(ValueKey('tool-${tool['id']}'));
+          await tester.scrollUntilVisible(target, 130, scrollable: horizontal);
+          await tester.tap(target);
+          await tester.pumpAndSettle();
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: '${tool['title']} at $size',
+          );
+        }
       }
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
