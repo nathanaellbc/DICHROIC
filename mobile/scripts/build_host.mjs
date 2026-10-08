@@ -10,6 +10,7 @@ await build({
   absWorkingDir: root, entryPoints: ['src/native/runtime.ts'], bundle: true,
   format: 'iife', globalName: 'ExposureHost', platform: 'neutral', target: 'es2022',
   outfile: join(destination, 'renderer.js'), treeShaking: true,
+  banner: { js: await readFile(join(root, 'mobile/scripts/native_web_primitives.js'), 'utf8') },
   plugins: [{ name: 'native-shared-shaders', setup(api) {
     api.onResolve({ filter: /webgpuGlobals$/ }, () => ({ path: join(root, 'src/native/constants.ts') }));
     api.onLoad({ filter: /\.wgsl$/ }, async args => ({
