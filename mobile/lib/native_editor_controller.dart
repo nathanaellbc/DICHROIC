@@ -30,6 +30,7 @@ class NativeEditorController extends ChangeNotifier {
   Future<void>? _editing, _render;
   int _revision = 0, _rendered = -1, _generation = 0;
   bool _disposed = false;
+  bool _exportCancelled = false;
   Json? _focusQueued;
   bool _focusWorking = false;
   NativeDetail? detail;
@@ -172,6 +173,7 @@ class NativeEditorController extends ChangeNotifier {
       }
       erasing = false;
       removalReady = false;
+      _invalidateDetail();
       _rendered = -1;
     } catch (e) {
       error = e.toString();
@@ -365,31 +367,43 @@ class NativeEditorController extends ChangeNotifier {
     }
   }
 
-  Future<void> undo() async {
+  Future<void> undo() => _history(_undo, _redo);
+
+  Future<void> redo() => _history(_redo, _undo);
+
+  Future<void> _history(List<Json> from, List<Json> to) async {
     if (busy || erasing) return;
-    await _editing;
-    if (_undo.isEmpty) return;
-    _redo.add(_snapshot());
-    await _restore(_undo.removeLast());
-    _revision++;
-    await _controls();
+    loading = true;
+    error = null;
     _notify();
-    _scheduleRender();
+    try {
+      await _editing;
+      await _render;
+      await _detailTask;
+      if (from.isEmpty) return;
+      final before = _snapshot();
+      await _restore(from.last);
+      from.removeLast();
+      to.add(before);
+      _revision++;
+      await _controls();
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      loading = false;
+      _notify();
+      _scheduleRender();
+    }
   }
 
-  Future<void> redo() async {
-    if (busy || erasing) return;
-    await _editing;
-    if (_redo.isEmpty) return;
-    _undo.add(_snapshot());
-    await _restore(_redo.removeLast());
-    _revision++;
-    await _controls();
-    _notify();
-    _scheduleRender();
-  }
-
-  Future<void> resetAll() => edit('fields', 'all', catalog['baseline']);
+  Future<void> resetAll() => edit('fields', 'all', {
+    ...Map<String, dynamic>.from(catalog['baseline'] as Map),
+    if (params.containsKey('inputColorSpace')) ...{
+      'inputColorSpace': photo!.inputColorSpace,
+      'inputCctfDecoding': photo!.encoding == 'encoded',
+      'autoExposure': photo!.encoding == 'linear',
+    },
+  });
   Future<void> _restore(Json snapshot) async {
     final restored = Map<String, dynamic>.of(snapshot);
     final cursor = restored.remove('_retouchCursor') as int? ?? 0;
@@ -410,12 +424,14 @@ class NativeEditorController extends ChangeNotifier {
   }) async {
     if (photo == null || busy || erasing) return null;
     exporting = true;
+    _exportCancelled = false;
     error = null;
     _notify();
     try {
       await _editing;
       await _render;
       await _detailTask;
+      if (_exportCancelled) return null;
       if (cubeSize != null) {
         return await engine.exportCube(Map.of(params), cubeSize);
       }
@@ -429,13 +445,21 @@ class NativeEditorController extends ChangeNotifier {
         quality: quality,
       );
     } catch (e) {
-      error = e.toString();
+      if (!_exportCancelled) error = e.toString();
       return null;
     } finally {
       exporting = false;
       _notify();
       if (_rendered != _revision) _scheduleRender();
     }
+  }
+
+  Future<void> cancelExport() async {
+    if (!exporting) return;
+    _exportCancelled = true;
+    status = 'Stopping…';
+    _notify();
+    await engine.cancelExport();
   }
 
   @override

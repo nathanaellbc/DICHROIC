@@ -176,4 +176,5 @@ class ExposureEngine {
   }
 
   Future<void> close() => _channel.invokeMethod<void>('close');
+  Future<void> cancelExport() => _channel.invokeMethod<void>('cancelExport');
 }

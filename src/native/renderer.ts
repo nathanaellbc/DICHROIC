@@ -26,6 +26,7 @@ export interface NativeRenderHost extends NativeGpuHost {
   /** Write only the tile core into the native output image/encoder. */
   outputTile(tile: TileSpec, rgb: Float32Array): void;
   progress(done: number, total: number): void;
+  isCancelled?(): boolean;
 }
 
 export function nativeAssets(host: Pick<NativeRenderHost, 'readAsset' | 'readText'>): AssetBundle {
@@ -118,23 +119,28 @@ export class NativeRenderer {
       return pixels;
     };
     try {
+      if (this.host.isCancelled?.()) throw new Error('Export cancelled.');
       await this.graph!.runToTiles(source, plan.core, Tap.RGB_OUT,
         (rgb, tile) => this.host.outputTile(tile, rgb), {
           maxBufferBytes: Math.min(this.native.limits.maxStorageBufferBindingSize, 32 * 1024 * 1024),
           memoryBudget: 192 * 1024 * 1024, overlap: plan.overlap, exportOverlap: plan.exportOverlap,
           frame: plan.frame, wholeFrame: plan.chain.lensBlur === true || !!plan.chain.cameraDiffusion || !!plan.chain.printDiffusion,
           onProgress: (done, total) => this.host.progress(done, total),
+          isCancelled: () => this.host.isCancelled?.() ?? false,
         });
+      if (this.host.isCancelled?.()) throw new Error('Export cancelled.');
     } finally {
       this.graph!.releaseFrameResources();
       this.pool.release();
     }
   }
   async exportCube(params: RenderParams, size: number): Promise<string> {
+    if (this.host.isCancelled?.()) throw new Error('Export cancelled.');
     const lattice = identityLattice(size), plan = this.prepare(params, lattice.width, lattice.height, lattice.rgba, lattice.width, lattice.height, 'cube');
     try {
       const rgb = await this.graph!.run(lattice.rgba, plan.core, Tap.RGB_OUT, { output: 'rgb', frame: plan.frame, overlap: 0,
         maxBufferBytes: 32 * 1024 * 1024 });
+      if (this.host.isCancelled?.()) throw new Error('Export cancelled.');
       return formatCube(rgb, size, { title: `DICHROIC ${params.film} / ${params.paper}`, film: params.film,
         paper: params.paper, inputColorSpace: params.inputColorSpace, outputColorSpace: params.outputColorSpace,
         disabledEffects: plan.disabledEffects, version: DICHROIC_VERSION });

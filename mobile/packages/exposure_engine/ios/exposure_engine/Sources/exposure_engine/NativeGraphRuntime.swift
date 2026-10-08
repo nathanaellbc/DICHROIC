@@ -18,6 +18,13 @@ private final class NativeGPUHandle {
     deinit { dichroic_gpu_destroy(pointer) }
 }
 
+final class NativeCancellation {
+    private let lock = NSLock()
+    private var cancelled = false
+    func set(_ value: Bool) { lock.lock(); cancelled = value; lock.unlock() }
+    var value: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+}
+
 /// One runtime on the plugin's serial render queue. JavaScriptCore runs only
 /// canonical host mathematics; wgpu executes the unchanged WGSL on Metal.
 /// The bridge transfers typed-array storage directly, never JSON photo pixels.
@@ -41,6 +48,9 @@ final class NativeGraphRuntime {
     var outputRGBA = Data()
     private var outputStore: NativeOutputStore?
     private var outputBits = 8
+    private var exportKey: Data?
+    private var pendingExportKey: Data?
+    private let cancellation: NativeCancellation
     var outputCube = ""
     var onPublish: ((Data, Int, Int) throws -> Void)?
     var onProgress: ((Int, Int) -> Void)?
@@ -53,6 +63,7 @@ final class NativeGraphRuntime {
     private var sourceBackup: NativeSourceStore?
 
     func attachSource(_ source: NativeSourceStore) throws {
+        invalidateExport()
         sourceBackup = sourceStore
         sourceStore = source
         let json = String(decoding: try JSONSerialization.data(withJSONObject: ["width": source.width, "height": source.height,
@@ -61,10 +72,14 @@ final class NativeGraphRuntime {
     }
     func commitSource() { runtime?.invokeMethod("commitSource", withArguments: []); sourceBackup = nil }
     func rollbackSource() { runtime?.invokeMethod("rollbackSource", withArguments: []); sourceStore = sourceBackup; sourceBackup = nil }
-    func clearSource() { runtime?.invokeMethod("clearSource", withArguments: []); sourceStore = nil }
+    func clearSource() { runtime?.invokeMethod("clearSource", withArguments: []); sourceStore = nil; invalidateExport() }
     func hibernate() {
+        invalidateExport()
         if isBusy { purgePending = true }
-        else { runtime?.invokeMethod("hibernate", withArguments: []); purgePending = false }
+        else {
+            runtime?.invokeMethod("hibernate", withArguments: []); purgePending = false
+            JSGarbageCollect(context.jsGlobalContextRef)
+        }
     }
     func rawLookup() throws -> [Float] {
         guard let value = runtime?.invokeMethod("rawLookup", withArguments: []) else { throw GraphRuntimeError.message("RAW gamma table is missing") }
@@ -110,11 +125,11 @@ final class NativeGraphRuntime {
         try checkException(); return Int(result?.toInt32() ?? 0)
     }
 
-    init(queue: DispatchQueue) throws {
+    init(queue: DispatchQueue, cancellation: NativeCancellation = NativeCancellation()) throws {
         guard let context = JSContext() else {
             throw GraphRuntimeError.message(Self.nativeMessage())
         }
-        self.context = context; gpu = try NativeGPUHandle(); self.queue = queue
+        self.context = context; gpu = try NativeGPUHandle(); self.queue = queue; self.cancellation = cancellation
         #if SWIFT_PACKAGE
         resources = Bundle.module.bundleURL.appendingPathComponent("Resources")
         #else
@@ -151,6 +166,12 @@ final class NativeGraphRuntime {
         if operation == "export" {
             request["measureWidth"] = previewWidth; request["measureHeight"] = previewHeight
             outputBits = bits == 16 ? 16 : 8
+            let key = try JSONSerialization.data(withJSONObject: ["params": params, "width": width, "height": height, "bits": outputBits], options: .sortedKeys)
+            if key == exportKey, let store = outputStore {
+                outputRGBA = store.data
+                queue.async { completion(.success(())) }; return
+            }
+            invalidateExport(); pendingExportKey = key
             outputStore = try NativeOutputStore(count: width * height * 4 * (outputBits / 8))
             outputRGBA = outputStore!.data
         }
@@ -166,11 +187,13 @@ final class NativeGraphRuntime {
         }
     }
 
-    func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); outputStore = nil; outputCube = ""; sourceWidth = 0; sourceHeight = 0 }
+    func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); outputCube = ""; sourceWidth = 0; sourceHeight = 0 }
+    func invalidateExport() { exportKey = nil; pendingExportKey = nil; outputRGBA = Data(); outputStore = nil }
 
     var isBusy: Bool { !pending.isEmpty }
 
     func clearDepth() {
+        invalidateExport()
         runtime?.invokeMethod("clearDepth", withArguments: [])
         depthReady = false
     }
@@ -459,6 +482,20 @@ final class NativeGraphRuntime {
                 try self.onOriginal?(rgba, width, height)
             } catch { self.fail(error) }
         }
+        let savePatch: @convention(block) (JSValue) -> Int = { [weak self] value in
+            guard let self, let source = self.sourceStore else { return -1 }
+            do {
+                let bytes = try self.typedBytes(value)
+                return try source.saveRemoval(Data(bytes: bytes.baseAddress!, count: bytes.count))
+            } catch { self.fail(error); return -1 }
+        }
+        let loadPatch: @convention(block) (Int) -> JSValue? = { [weak self] id in
+            guard let self, let source = self.sourceStore else { return nil }
+            do {
+                let bytes = try source.loadRemoval(id)
+                return try self.arrayBuffer(count: bytes.count) { bytes.copyBytes(to: $0) }
+            } catch { self.fail(error); return nil }
+        }
         let cube: @convention(block) (String) -> Void = { [weak self] text in self?.outputCube = text }
         let mask: @convention(block) (JSValue, Int, Int) -> Void = { [weak self] value, width, height in
             guard let self = self else { return }
@@ -474,22 +511,34 @@ final class NativeGraphRuntime {
             // runtime, start another operation, or change its source buffers.
             let error = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
             let result: Result<Void, Error> = error?["error"].map { .failure(GraphRuntimeError.message(String(describing: $0))) } ?? .success(())
+            if let key = self.pendingExportKey {
+                if case .success = result { self.exportKey = key; self.pendingExportKey = nil }
+                else { self.invalidateExport() }
+            }
             self.queue.async {
                 if self.purgePending { self.hibernate() }
+                JSGarbageCollect(self.context.jsGlobalContextRef)
                 completion(result)
             }
         }
         let timer: @convention(block) (JSValue, Double) -> Void = { [weak self] callback, delay in
             guard let self = self else { return }
             self.queue.asyncAfter(deadline: .now() + max(0, min(delay, 1000)) / 1000) { [weak self] in
-                guard self != nil else { return }; callback.call(withArguments: [])
+                guard let self else { return }
+                // Tile boundary: the JS stack has yielded and old source-strip
+                // buffers can be reclaimed before the next GPU submission.
+                JSGarbageCollect(self.context.jsGlobalContextRef)
+                callback.call(withArguments: [])
             }
         }
+        let cancelled: @convention(block) () -> Bool = { [weak self] in self?.cancellation.value ?? true }
         for (name, block) in ["nativeCommand": command as Any, "nativeUpload": upload as Any,
+            "nativeCancelled": cancelled as Any,
             "nativeRead": read as Any, "nativeAsset": asset as Any, "nativeText": text as Any,
             "nativeInput": input as Any, "nativePublish": publish as Any, "nativeSource": source as Any,
             "nativeOutput": output as Any, "nativeProgress": progress as Any, "nativeComplete": complete as Any, "nativeMask": mask as Any,
             "nativeRegion": region as Any, "nativeSamples": samples as Any,
+            "nativeSavePatch": savePatch as Any, "nativeLoadPatch": loadPatch as Any,
             "nativeCube": cube as Any,
             "nativeOriginal": original as Any,
             "nativeDetail": detail as Any,
@@ -499,7 +548,9 @@ final class NativeGraphRuntime {
                 readAsset: nativeAsset, readText: nativeText, previewInput: () => new Float32Array(nativeInput()),
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
                 progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube, publishOriginal: nativeOriginal, publishDetail: nativeDetail,
-                sourceRegion: (x,y,w,h) => new Float32Array(nativeRegion(x,y,w,h)), sourceSamples: b => new Float32Array(nativeSamples(b)) };
+                sourceRegion: (x,y,w,h) => new Float32Array(nativeRegion(x,y,w,h)), sourceSamples: b => new Float32Array(nativeSamples(b)),
+                saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
+                loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled };
             """)
     }
 

@@ -74,7 +74,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       if (sourceBackup) { source = sourceBackup.source; sourcePreview = sourceBackup.preview; sourceBackup = undefined; }
     },
     clearSource(): void { source = undefined; sourcePreview = undefined; },
-    hibernate(): void { renderer.clearResources(); sourcePreview = undefined; guide = undefined; focusOverlay = undefined; },
+    hibernate(): void { renderer.clearResources(); source?.purgeCache(); sourcePreview = undefined; guide = undefined; focusOverlay = undefined; },
     removalInput(json: string, buffer: ArrayBuffer): Float32Array {
       if (!source) throw new Error('Native removal source is missing.');
       const { width, height } = JSON.parse(json) as { width: number; height: number };

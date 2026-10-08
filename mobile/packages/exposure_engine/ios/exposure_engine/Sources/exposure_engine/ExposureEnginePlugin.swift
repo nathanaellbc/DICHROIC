@@ -71,6 +71,7 @@ private final class PreviewTexture: NSObject, FlutterTexture {
 
 public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UIDocumentPickerDelegate {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
+    private let cancellation = NativeCancellation()
     private let texture = PreviewTexture()
     private let originalTexture = PreviewTexture()
     private let focusTexture = PreviewTexture()
@@ -142,6 +143,28 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if call.method == "cancelExport" { cancellation.set(true); result(nil); return }
+        if ["developExport", "cubeExport"].contains(call.method) { cancellation.set(false) }
+        #if DEBUG
+        if call.method == "debugScreenshot" {
+            guard let window = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+                .flatMap({ $0.windows }).first(where: { $0.isKeyWindow }) else { result(nil); return }
+            let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+            }
+            do {
+                let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let file = directory.appendingPathComponent("editor.png")
+                guard let bytes = image.pngData() else { result(nil); return }
+                try bytes.write(to: file); result(file.path)
+            } catch { result(FlutterError(code: "screenshot", message: error.localizedDescription, details: nil)) }
+            return
+        }
+        if call.method == "debugMemoryWarning" {
+            NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+            result(nil); return
+        }
+        #endif
         if call.method == "chooseFile" {
             guard pickerResult == nil else { result(FlutterError(code: "picker_busy", message: "File picker is already open", details: nil)); return }
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image, .rawImage, .data], asCopy: true)
@@ -233,7 +256,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
 
     private func graphRuntime() throws -> NativeGraphRuntime {
         if let graph = graph { return graph }
-        let graph = try NativeGraphRuntime(queue: queue)
+        let graph = try NativeGraphRuntime(queue: queue, cancellation: cancellation)
         graph.onPublish = { [weak self] pixels, width, height in
             guard let self = self else { return }
             try self.texture.publish(pixels, width: width, height: height)
@@ -454,6 +477,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         defer { graph.releaseExport() }
                         do {
                             try outcome.get()
+                            guard !self.cancellation.value else { throw NativeError.message("Export cancelled") }
                             let colorSpace = params["outputColorSpace"] as? String ?? "sRGB"
                             finish(try self.writePNG(graph.outputRGBA, width: full.width, height: full.height, outputColorSpace: colorSpace,
                                 icc: graph.icc(colorSpace), bits: bits, format: format, quality: (args["quality"] as? NSNumber)?.doubleValue ?? 1,

@@ -4,11 +4,16 @@ import { boxDownscaleRegion, measurementImage } from '../src/session/downscale';
 import { applyRemoval, prepareRemoval, removalSource, removalModelInput } from '../src/retouch/patch';
 import type { DecodedImage } from '../src/io/decoded';
 
-it('bounded native reads match web source edits, box sampling, apply and undo exactly', () => {
+it.each([false, true])('bounded native reads match web edits with disk history=%s', disk => {
   const width = 64, height = 48;
   const rgba = Float32Array.from({ length: width * height * 4 }, (_, i) => i % 4 === 3 ? 1 : ((i * 13) % 257) / 256);
   const image: DecodedImage = { width, height, rgba, encoding: 'encoded', suggestedColorSpace: 'sRGB', source: { format: 'png', bitDepth: 8 } };
+  const stored = new Map<number, Float32Array>();
   const native = new NativeSource({
+    ...(disk ? {
+      saveRemoval(pixels: Float32Array) { const id = stored.size; stored.set(id, pixels.slice()); return id; },
+      loadRemoval(id: number) { return stored.get(id)!.slice(); },
+    } : {}),
     sourceRegion(x, y, w, h) {
       const out = new Float32Array(w * h * 4);
       for (let row = 0; row < h; row++) out.set(rgba.subarray(((y + row) * width + x) * 4, ((y + row) * width + x + w) * 4), row * w * 4);
@@ -31,6 +36,7 @@ it('bounded native reads match web source edits, box sampling, apply and undo ex
   applyRemoval(expected, crop, result); native.finish(result);
   expect(native.preview(32, true).rgba).toEqual(boxDownscaleRegion(expected.rgba, width, height, 32, 24, 0, 0, 32, 24));
   expect(native.commit()).toBe(1);
+  native.purgeCache();
   expect(native.region(width, height, 0, 0, width, height)).toEqual(expected.rgba);
   expect(native.region(width, height, 0, 0, width, height, undefined, false, true)).toEqual(rgba);
   expect(native.measurement(31, 23)).toEqual(measurementImage(expected.rgba, width, height, 31, 23));

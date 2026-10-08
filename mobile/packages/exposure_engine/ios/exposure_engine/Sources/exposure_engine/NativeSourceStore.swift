@@ -15,6 +15,22 @@ final class NativeSourceStore {
     let lookup: [Float]?
     let byteOffset: Int
     let bigEndian: Bool
+    private var patches: [Int: URL] = [:]
+    private var patchSerial = 0
+
+    func saveRemoval(_ data: Data) throws -> Int {
+        guard data.count == 512 * 512 * 16 else { throw GraphRuntimeError.message("Invalid removal history") }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("Dichroic-patch-\(UUID().uuidString).f32")
+        try data.write(to: file, options: .atomic)
+        patchSerial += 1; patches[patchSerial] = file
+        return patchSerial
+    }
+    func loadRemoval(_ id: Int) throws -> Data {
+        guard let file = patches[id] else { throw GraphRuntimeError.message("Removal history is missing") }
+        let data = try Data(contentsOf: file, options: .alwaysMapped)
+        guard data.count == 512 * 512 * 16 else { throw GraphRuntimeError.message("Removal history is truncated") }
+        return data
+    }
 
     init(rgba: Data, width: Int, height: Int) throws {
         guard width > 0, height > 0, rgba.count == width * height * 4 else {
@@ -49,5 +65,8 @@ final class NativeSourceStore {
         }
         return raw.loadUnaligned(fromByteOffset: byteOffset + index * 4, as: Float.self)
     }
-    deinit { try? FileManager.default.removeItem(at: url) }
+    deinit {
+        for file in patches.values { try? FileManager.default.removeItem(at: file) }
+        try? FileManager.default.removeItem(at: url)
+    }
 }

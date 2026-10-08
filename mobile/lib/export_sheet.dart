@@ -260,6 +260,14 @@ class _ExportSheetState extends State<ExportSheet> {
           ),
         ),
         const SizedBox(height: 8),
+        if (c.exporting) ...[
+          Press(
+            label: 'Stop export',
+            onTap: c.cancelExport,
+            child: const Text('Stop'),
+          ),
+          const SizedBox(height: 8),
+        ],
         Press(
           label: path == null ? 'Develop export' : 'Save or share',
           selected: true,

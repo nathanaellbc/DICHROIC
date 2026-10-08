@@ -90,6 +90,10 @@ void main() {
       // Keep the rendered screen available to the simulator screenshot command.
       await tester.pump(const Duration(seconds: 2));
       expect(tester.takeException(), isNull);
+      final proof = await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<String>('debugScreenshot');
+      expect(proof, isNotNull);
     },
     timeout: const Timeout(Duration(minutes: 10)),
   );
@@ -137,5 +141,77 @@ void main() {
       }
       await engine.close();
     },
+  );
+  testWidgets(
+    'native LaMa apply/undo and depth survive memory pressure',
+    (tester) async {
+      final engine = ExposureEngine();
+      final catalog = await engine.catalog();
+      final params = Map<String, dynamic>.from(catalog['baseline'] as Map);
+      final bytes = await rootBundle.load('assets/parity/source.png');
+      final file = File('${Directory.systemTemp.path}/dichroic-model-test.png');
+      await file.writeAsBytes(
+        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+      );
+      await engine.open(file.path);
+      await engine.develop(params);
+      final originalPath = await engine.developExport(params);
+      final original = await File(originalPath).readAsBytes();
+      final sourceBefore = await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<Uint8List>('debugSource');
+      await engine.beginRemoval();
+      final mask = Uint8List(32 * 24);
+      for (var y = 8; y < 16; y++) {
+        for (var x = 12; x < 20; x++) {
+          mask[y * 32 + x] = 255;
+        }
+      }
+      await engine.previewRemoval(mask, 32, 24);
+      expect(await engine.applyRemoval(), 1);
+      final editedPath = await engine.developExport(params);
+      final edited = await File(editedPath).readAsBytes();
+      expect(
+        edited,
+        isNot(orderedEquals(original)),
+        reason: 'Apply must change the developed photo',
+      );
+      final sourceAfter = await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<Uint8List>('debugSource');
+      expect(
+        sourceAfter,
+        orderedEquals(sourceBefore!),
+        reason: 'Before must retain the original object',
+      );
+      await engine.restoreRemoval(0);
+      final undoPath = await engine.developExport(params);
+      expect(await File(undoPath).readAsBytes(), orderedEquals(original));
+      await engine.restoreRemoval(1);
+      await const MethodChannel(
+        'exposure/native',
+      ).invokeMethod<void>('debugMemoryWarning');
+      final redoPath = await engine.developExport(params);
+      expect(await File(redoPath).readAsBytes(), orderedEquals(edited));
+      params['lensBlurEnabled'] = true;
+      await engine.develop(params);
+      await engine.focusPreview({
+        ...params,
+        'lensFocusX': .5,
+        'lensFocusY': .5,
+      });
+      await engine.develop({...params, 'lensFocusX': .5, 'lensFocusY': .5});
+      await engine.close();
+      for (final path in [
+        originalPath,
+        editedPath,
+        undoPath,
+        redoPath,
+        file.path,
+      ]) {
+        await File(path).delete();
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 15)),
   );
 }
