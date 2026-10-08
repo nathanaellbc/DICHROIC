@@ -156,6 +156,11 @@ class NativeEditorController extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       photo = next;
       params = Map<String, dynamic>.from(catalog['baseline'] as Map);
+      if (params.containsKey('inputColorSpace')) {
+        params['inputColorSpace'] = next.inputColorSpace;
+        params['inputCctfDecoding'] = next.encoding == 'encoded';
+        params['autoExposure'] = next.encoding == 'linear';
+      }
       _undo.clear();
       _redo.clear();
       _gestureBefore = null;

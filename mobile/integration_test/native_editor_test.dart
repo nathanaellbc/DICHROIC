@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/main.dart';
@@ -91,5 +92,50 @@ void main() {
       expect(tester.takeException(), isNull);
     },
     timeout: const Timeout(Duration(minutes: 10)),
+  );
+  testWidgets(
+    'native imports preserve web RAW orientation, gamut and 16-bit source codes',
+    (tester) async {
+      final engine = ExposureEngine();
+      final cases =
+          jsonDecode(await rootBundle.loadString('assets/parity/decode.json'))
+              as List;
+      for (final test in cases) {
+        final name = test['file'] as String;
+        final bytes = await rootBundle.load('assets/parity/$name');
+        final file = File('${Directory.systemTemp.path}/$name');
+        await file.writeAsBytes(
+          bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
+        );
+        final photo = await engine.open(file.path);
+        expect(
+          [photo.sourceWidth, photo.sourceHeight],
+          [test['width'], test['height']],
+        );
+        expect(photo.inputColorSpace, test['colorSpace']);
+        expect(photo.encoding, test['encoding']);
+        final actual = await const MethodChannel(
+          'exposure/native',
+        ).invokeMethod<Uint8List>('debugSource');
+        expect(actual, isNotNull);
+        final expected = await rootBundle.load('assets/parity/$name.f32');
+        final nativeView = ByteData.sublistView(actual!);
+        var maximum = 0.0;
+        for (var i = 0; i < expected.lengthInBytes; i += 4) {
+          final error =
+              (nativeView.getFloat32(i, Endian.little) -
+                      expected.getFloat32(i, Endian.little))
+                  .abs();
+          if (error > maximum) maximum = error;
+        }
+        expect(
+          maximum,
+          lessThanOrEqualTo(test['tolerance']),
+          reason: '$name source decode differs from web',
+        );
+        await file.delete();
+      }
+      await engine.close();
+    },
   );
 }

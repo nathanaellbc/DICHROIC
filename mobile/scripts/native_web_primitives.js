@@ -20,13 +20,22 @@ if (typeof globalThis.TextEncoder === 'undefined') {
 if (typeof globalThis.TextDecoder === 'undefined') {
   globalThis.TextDecoder = class TextDecoder {
     constructor(label = 'utf-8', options = {}) {
-      if (!['utf-8', 'utf8', 'unicode-1-1-utf-8'].includes(String(label).trim().toLowerCase())) throw new RangeError('Only UTF-8 is used by the native host');
+      const encoding = String(label).trim().toLowerCase();
+      this.latin = ['latin1', 'iso-8859-1', 'windows-1252', 'ascii', 'us-ascii'].includes(encoding);
+      if (!this.latin && !['utf-8', 'utf8', 'unicode-1-1-utf-8'].includes(encoding)) throw new RangeError('Unsupported native text encoding');
       this.fatal = !!options.fatal;
       this.ignoreBOM = !!options.ignoreBOM;
     }
-    get encoding() { return 'utf-8'; }
+    get encoding() { return this.latin ? 'windows-1252' : 'utf-8'; }
     decode(input = new Uint8Array()) {
       const bytes = ArrayBuffer.isView(input) ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength) : new Uint8Array(input);
+      if (this.latin) {
+        // WHATWG latin1 aliases windows-1252, including its control-range map.
+        const controls = [0x20ac, 0x81, 0x201a, 0x192, 0x201e, 0x2026, 0x2020, 0x2021, 0x2c6, 0x2030, 0x160, 0x2039, 0x152, 0x8d, 0x17d, 0x8f, 0x90, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x2dc, 0x2122, 0x161, 0x203a, 0x153, 0x9d, 0x17e, 0x178];
+        let text = '';
+        for (const byte of bytes) text += String.fromCharCode(byte >= 0x80 && byte <= 0x9f ? controls[byte - 0x80] : byte);
+        return text;
+      }
       let text = '', i = 0;
       const invalid = () => { if (this.fatal) throw new TypeError('Invalid UTF-8'); text += '\ufffd'; };
       while (i < bytes.length) {

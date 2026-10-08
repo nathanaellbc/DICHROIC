@@ -43,21 +43,27 @@ export class NativeSource {
     for (let row = 0; row < h; row++) {
       const oy = y + row, y0 = Math.floor(oy * height / outH), y1 = Math.max(y0 + 1, Math.floor((oy + 1) * height / outH));
       const x0 = Math.floor(x * width / outW), x1 = Math.max(x0 + 1, Math.floor((x + w) * width / outW));
-      const sw = x1 - x0, sh = y1 - y0;
-      if (sw * sh * 16 > 4 * 1024 * 1024) throw new Error('Source strip exceeds native read budget.');
-      const pixels = this.host.sourceRegion(x0, y0, sw, sh);
-      if (pixels.length !== sw * sh * 4) throw new Error('Invalid native source strip.');
-      this.apply(pixels, x0, y0, sw, sh, candidate);
-      if (same) { out.set(pixels, row * w * 4); continue; }
-      for (let col = 0; col < w; col++) {
-        const ax = Math.floor((x + col) * width / outW), bx = Math.max(ax + 1, Math.floor((x + col + 1) * width / outW));
-        const sums = [0, 0, 0, 0];
-        for (let yy = 0; yy < sh; yy++) for (let xx = ax; xx < bx; xx++) {
-          const at = (yy * sw + xx - x0) * 4;
-          for (let c = 0; c < 4; c++) sums[c]! += pixels[at + c]!;
+      const sw = x1 - x0, sh = y1 - y0, stripRows = Math.max(1, Math.floor(4 * 1024 * 1024 / (sw * 16)));
+      const sums = same ? undefined : new Float64Array(w * 4);
+      for (let top = y0; top < y1; top += stripRows) {
+        const rows = Math.min(stripRows, y1 - top), pixels = this.host.sourceRegion(x0, top, sw, rows);
+        if (pixels.length !== sw * rows * 4) throw new Error('Invalid native source strip.');
+        this.apply(pixels, x0, top, sw, rows, candidate);
+        if (same) { out.set(pixels, row * w * 4); continue; }
+        for (let col = 0; col < w; col++) {
+          const ax = Math.floor((x + col) * width / outW), bx = Math.max(ax + 1, Math.floor((x + col + 1) * width / outW)), dest = col * 4;
+          let r = sums![dest]!, g = sums![dest + 1]!, b = sums![dest + 2]!, a = sums![dest + 3]!;
+          for (let yy = 0; yy < rows; yy++) for (let xx = ax; xx < bx; xx++) {
+            const at = (yy * sw + xx - x0) * 4;
+            r += pixels[at]!; g += pixels[at + 1]!; b += pixels[at + 2]!; a += pixels[at + 3]!;
+          }
+          sums![dest] = r; sums![dest + 1] = g; sums![dest + 2] = b; sums![dest + 3] = a;
         }
+      }
+      if (!same) for (let col = 0; col < w; col++) {
+        const ax = Math.floor((x + col) * width / outW), bx = Math.max(ax + 1, Math.floor((x + col + 1) * width / outW));
         const n = sh * (bx - ax), dest = (row * w + col) * 4;
-        for (let c = 0; c < 4; c++) out[dest + c] = sums[c]! / n;
+        for (let c = 0; c < 4; c++) out[dest + c] = sums![col * 4 + c]! / n;
       }
     }
     return out;
@@ -66,6 +72,20 @@ export class NativeSource {
   preview(edge: number, candidate = false) {
     const size = boxDownscaleSize(this.meta.width, this.meta.height, edge);
     return { ...size, rgba: this.region(size.width, size.height, 0, 0, size.width, size.height, undefined, candidate) };
+  }
+
+  /** Identical full-output measurement sampling as web, without a full frame. */
+  measurement(outW: number, outH: number) {
+    const scale = Math.min(1, 256 / Math.max(outW, outH)), width = Math.max(1, Math.round(outW * scale)), height = Math.max(1, Math.round(outH * scale));
+    const rgba = new Float32Array(width * height * 4);
+    for (let y = 0; y < height; y++) {
+      const sy = Math.min(outH - 1, Math.floor(y * outH / height)), row = this.region(outW, outH, 0, sy, outW, 1);
+      for (let x = 0; x < width; x++) {
+        const sx = Math.min(outW - 1, Math.floor(x * outW / width));
+        rgba.set(row.subarray(sx * 4, sx * 4 + 4), (y * width + x) * 4);
+      }
+    }
+    return { rgba, width, height };
   }
 
   prepare(mask: RemovalMask): Float32Array {

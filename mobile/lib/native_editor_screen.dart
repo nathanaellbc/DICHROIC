@@ -46,6 +46,21 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
     }
   }
 
+  Future<void> pickFile() async {
+    try {
+      final path = await controller.engine.chooseFile();
+      if (path != null) {
+        await controller.open(path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open file: $e')));
+      }
+    }
+  }
+
   String stockName(String kind) {
     if (kind == 'film' && controller.params['filmEnabled'] == false) {
       return 'Film Off';
@@ -72,7 +87,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
       children: [
         ListTile(
           leading: const Glyph('open'),
-          title: const Text('Open photo'),
+          title: const Text('Open from Photos'),
           onTap: () {
             Navigator.pop(context);
             pick();
@@ -143,6 +158,14 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
               label: 'Brush size',
               onChanged: (v) => setState(() => brush.diameter = v),
             ),
+          ListTile(
+            leading: const Glyph('open'),
+            title: const Text('Open from Files'),
+            onTap: () {
+              Navigator.pop(context);
+              pickFile();
+            },
+          ),
           Row(
             children: [
               Press(
@@ -382,6 +405,7 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                           !controller.removalReady && !controller.removing,
                       focus:
                           !controller.erasing &&
+                              !controller.rendering &&
                               controller.params['lensBlurEnabled'] == true
                           ? Offset(
                               (controller.params['lensFocusX'] as num)

@@ -7,8 +7,8 @@ Pod::Spec.new do |s|
   s.author = { 'Exposure' => 'https://github.com/nathanaellbc' }
   s.source = { :path => '.' }
   s.source_files = 'exposure_engine/Sources/exposure_engine/**/*.swift'
-  s.vendored_frameworks = 'exposure_engine/Frameworks/ExposureNative.xcframework'
-  s.resource_bundles = { 'ExposureHost' => ['exposure_engine/Resources/renderer.js', 'exposure_engine/Resources/data', 'exposure_engine/Resources/luts'] }
+  s.vendored_frameworks = 'exposure_engine/Frameworks/ExposureNative.xcframework', 'exposure_engine/Frameworks/RawNative.xcframework'
+  s.resource_bundles = { 'ExposureHost' => ['exposure_engine/Resources/renderer.js', 'exposure_engine/Resources/data', 'exposure_engine/Resources/luts', 'exposure_engine/Resources/licenses'] }
   s.dependency 'Flutter'
   s.dependency 'onnxruntime-objc', '1.30.0'
   s.platform = :ios, '16.0'

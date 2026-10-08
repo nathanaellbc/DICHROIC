@@ -40,6 +40,7 @@ workflows:
           set -euo pipefail
           source "$HOME/.cargo/env"
           bash mobile/scripts/build_native.sh
+          bash mobile/scripts/build_raw.sh
       - name: Prepare iOS host
         script: bash mobile/scripts/prepare_ios.sh
       - name: Check Flutter app

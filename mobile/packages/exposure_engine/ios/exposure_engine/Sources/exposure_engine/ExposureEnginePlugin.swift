@@ -69,7 +69,7 @@ private final class PreviewTexture: NSObject, FlutterTexture {
     }
 }
 
-public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamHandler, UIDocumentPickerDelegate {
     private let queue = DispatchQueue(label: "exposure.render", qos: .userInitiated)
     private let texture = PreviewTexture()
     private let originalTexture = PreviewTexture()
@@ -84,6 +84,12 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private var preview: PhotoFrame?
     private var memoryObserver: NSObjectProtocol?
     private var eventSink: FlutterEventSink?
+    private var pickerResult: FlutterResult?
+
+    public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        pickerResult?(urls.first?.path); pickerResult = nil
+    }
+    public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { pickerResult?(nil); pickerResult = nil }
 
     public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         eventSink = events; return nil
@@ -128,8 +134,19 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        if call.method == "chooseFile" {
+            guard pickerResult == nil else { result(FlutterError(code: "picker_busy", message: "File picker is already open", details: nil)); return }
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image, .rawImage, .data], asCopy: true)
+            picker.delegate = self
+            guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive }),
+                  var presenter = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+                result(FlutterError(code: "picker_window", message: "The editor window is not active", details: nil)); return
+            }
+            while let presented = presenter.presentedViewController { presenter = presented }
+            pickerResult = result; presenter.present(picker, animated: true); return
+        }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -143,19 +160,29 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 case "open":
                     guard let path = args["path"] as? String else { throw NativeError.message("Photo path is missing") }
                     let url = URL(fileURLWithPath: path)
-                    let frame = try decode(url, longEdge: 1600)
-                    // Keep the untouched import on a separate, bounded texture. Compare never renders.
-                    try originalTexture.publish(frame.rgba, width: frame.width, height: frame.height)
-                    try texture.publish(frame.rgba, width: frame.width, height: frame.height)
-                    photoURL = url; preview = frame
-                    graph?.clearDepth()
-                    graph?.clearSource()
-                    focusTexture.clear()
-                    value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
-                        "width": frame.width, "height": frame.height]
-                    DispatchQueue.main.async {
-                        self.registry.textureFrameAvailable(self.textureId)
-                        self.registry.textureFrameAvailable(self.originalTextureId)
+                    let graph = try graphRuntime()
+                    guard !graph.isBusy else { throw NativeError.message("Finish development before opening another photo") }
+                    graph.hibernate()
+                    status("Opening photo…")
+                    let source: NativeSourceStore
+                    if NativeRawSource.extensions.contains(url.pathExtension.lowercased()) {
+                        status("Developing RAW with LibRaw…")
+                        source = try NativeRawSource.decode(url, lookup: graph.rawLookup())
+                    } else {
+                        source = try NativeRasterSource.decode(url, profileSpace: graph.profileSpace)
+                    }
+                    do {
+                        try graph.attachSource(source)
+                        let size = try graph.originalPreview(edge: 1280)
+                        graph.commitSource()
+                        graph.clearDepth(); focusTexture.clear()
+                        photoURL = url
+                        value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
+                            "width": size.width, "height": size.height, "sourceWidth": source.width, "sourceHeight": source.height,
+                            "inputColorSpace": source.colorSpace, "encoding": source.encoding]
+                        status("")
+                    } catch {
+                        graph.rollbackSource(); status(""); throw error
                     }
                 case "render":
                     let ev = try exposure(args)
@@ -204,6 +231,16 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
         }
         self.graph = graph
+        graph.onOriginal = { [weak self] rgba, width, height in
+            guard let self = self else { return }
+            try self.originalTexture.publish(rgba, width: width, height: height)
+            try self.texture.publish(rgba, width: width, height: height)
+            self.preview = PhotoFrame(width: width, height: height, rgba: rgba)
+            DispatchQueue.main.async {
+                self.registry.textureFrameAvailable(self.originalTextureId)
+                self.registry.textureFrameAvailable(self.textureId)
+            }
+        }
         graph.onProgress = { [weak self] done, total in self?.status("Developing…", done: done, total: total) }
         graph.onMask = { [weak self] rgba, width, height in
             guard let self = self else { return }
@@ -224,6 +261,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     try autoreleasepool {
                         let full = try decode(url, longEdge: nil)
                         try graph.attachSource(NativeSourceStore(rgba: full.rgba, width: full.width, height: full.height))
+                        graph.commitSource()
                     }
                 }
                 var value: Any?
@@ -279,6 +317,22 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                     catalog["exportFormats"] = formats
                     finish(String(decoding: try JSONSerialization.data(withJSONObject: catalog), as: UTF8.self)); return
                 }
+                if call.method == "debugSource" {
+                    #if DEBUG
+                    guard let source = graph.sourceStore, source.width * source.height <= 65536 else {
+                        throw NativeError.message("Source probe only accepts small integration fixtures")
+                    }
+                    var pixels = Data(count: source.width * source.height * 16)
+                    source.data.withUnsafeBytes { input in pixels.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+                        for p in 0..<(source.width * source.height) { for c in 0..<4 {
+                            output.storeBytes(of: source.value(input, pixel: p, channel: c), toByteOffset: (p * 4 + c) * 4, as: Float.self)
+                        } }
+                    } }
+                    finish(FlutterStandardTypedData(bytes: pixels)); return
+                    #else
+                    finish(FlutterMethodNotImplemented); return
+                    #endif
+                }
                 if call.method == "patch" { finish(try graph.patch(args)); return }
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
@@ -299,14 +353,27 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 }
                 guard let url = photoURL else { throw NativeError.message("Open a photo first") }
                 guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
-                let measured = try preview ?? decode(url, longEdge: 1600)
+                let measured: PhotoFrame
+                if let preview = preview { measured = preview }
+                else if let source = graph.sourceStore {
+                    let size = scaledSize(source.width, source.height, edge: 1280)
+                    measured = PhotoFrame(width: size.width, height: size.height, rgba: Data())
+                } else { measured = try decode(url, longEdge: 1600) }
                 preview = measured
                 let edge = try graph.renderSize(params, width: measured.width, height: measured.height, requested: 1600, preview: true)
-                let frame = edge < max(measured.width, measured.height) ? try decode(url, longEdge: edge) : measured
+                let frame: PhotoFrame
+                if let source = graph.sourceStore {
+                    let size = scaledSize(source.width, source.height, edge: edge)
+                    frame = PhotoFrame(width: size.width, height: size.height, rgba: measured.rgba)
+                } else { frame = edge < max(measured.width, measured.height) ? try decode(url, longEdge: edge) : measured }
                 graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
                 if params["lensBlurEnabled"] as? Bool == true && !graph.depthReady {
                     status("Preparing depth…")
-                    let guide = try decode(url, longEdge: 1024)
+                    let guide: PhotoFrame
+                    if let source = graph.sourceStore {
+                        let size = scaledSize(source.width, source.height, edge: 1024)
+                        guide = PhotoFrame(width: size.width, height: size.height, rgba: Data())
+                    } else { guide = try decode(url, longEdge: 1024) }
                     graph.previewRGBA = guide.rgba; graph.previewWidth = guide.width; graph.previewHeight = guide.height
                     let input = try graph.prepareDepth()
                     status("Downloading depth model (27 MB, cached for next time)…")
@@ -325,10 +392,14 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         switch outcome { case .success: finish(nil); case .failure(let error): fail(error) }
                     }
                 } else {
-                    let dimensions = try sourceDimensions(url)
+                    let dimensions = try graph.sourceStore.map { (width: $0.width, height: $0.height) } ?? sourceDimensions(url)
                     let edge = try graph.renderSize(params, width: dimensions.width, height: dimensions.height,
                         requested: (args["longEdge"] as? NSNumber)?.intValue, preview: false)
-                    let full = try autoreleasepool { try decode(url, longEdge: edge) }
+                    let full: PhotoFrame
+                    if let source = graph.sourceStore {
+                        let size = scaledSize(source.width, source.height, edge: edge)
+                        full = PhotoFrame(width: size.width, height: size.height, rgba: Data())
+                    } else { full = try autoreleasepool { try decode(url, longEdge: edge) } }
                     graph.sourceRGBA = full.rgba; graph.sourceWidth = full.width; graph.sourceHeight = full.height
                     let format = args["format"] as? String ?? "png8", bits = ["png16", "tiff16"].contains(format) ? 16 : 8
                     try graph.request(operation: "export", params: params, width: full.width, height: full.height, bits: bits) { [weak self, weak graph] outcome in
@@ -361,6 +432,10 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
               let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue else { throw NativeError.message("Source dimensions are missing") }
         let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
         return orientation >= 5 ? (height, width) : (width, height)
+    }
+    private func scaledSize(_ width: Int, _ height: Int, edge: Int) -> (width: Int, height: Int) {
+        let scale = min(1, Double(edge) / Double(max(width, height)))
+        return (max(1, Int((Double(width) * scale).rounded())), max(1, Int((Double(height) * scale).rounded())))
     }
 
     private func decode(_ url: URL, longEdge: Int?) throws -> PhotoFrame {

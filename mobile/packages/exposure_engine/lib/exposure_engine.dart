@@ -9,16 +9,23 @@ class NativePhoto {
     this.height, {
     this.originalTextureId,
     this.focusTextureId,
+    this.inputColorSpace = 'sRGB',
+    this.encoding = 'encoded',
+    this.sourceWidth,
+    this.sourceHeight,
   });
   final int textureId;
   final int width;
   final int height;
   final int? originalTextureId;
   final int? focusTextureId;
+  final String inputColorSpace, encoding;
+  final int? sourceWidth, sourceHeight;
 }
 
 class ExposureEngine {
   static const _channel = MethodChannel('exposure/native');
+  Future<String?> chooseFile() => _channel.invokeMethod<String>('chooseFile');
   Stream<Map<String, dynamic>> get events => const EventChannel(
     'exposure/status',
   ).receiveBroadcastStream().map((e) => Map<String, dynamic>.from(e as Map));
@@ -112,6 +119,10 @@ class ExposureEngine {
       result['height'] as int,
       originalTextureId: result['originalTextureId'] as int?,
       focusTextureId: result['focusTextureId'] as int?,
+      inputColorSpace: result['inputColorSpace'] as String? ?? 'sRGB',
+      encoding: result['encoding'] as String? ?? 'encoded',
+      sourceWidth: result['sourceWidth'] as int?,
+      sourceHeight: result['sourceHeight'] as int?,
     );
   }
 

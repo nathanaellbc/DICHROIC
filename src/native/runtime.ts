@@ -10,6 +10,8 @@ import { prepareFocusOverlay } from '../ui/engine/focusCheck';
 import { diffusionRenderLongEdge, previewRenderLongEdge } from '../session/renderSize';
 import { NativeSource, type NativeSourceHost } from './source';
 import { sourceToDisplay } from '../io/display';
+import { dcrawGammaCurve, invertDcrawCurve } from '../io/dcrawGamma';
+import { iccDescription, colorSpaceForIcc } from '../io/metadata';
 
 export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   previewInput(): Float32Array;
@@ -17,6 +19,7 @@ export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   complete(id: number, json: string): void;
   publishMask?(rgba: Uint8ClampedArray, width: number, height: number): void;
   publishCube?(text: string): void;
+  publishOriginal?(rgb: Float32Array, width: number, height: number): void;
 }
 
 /** JavaScriptCore hosts canonical math only; all compute/photography is native. */
@@ -24,6 +27,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
   const bundle = nativeAssets(host);
   let source: NativeSource | undefined;
   let sourcePreview: { width: number; height: number; rgba: Float32Array } | undefined;
+  let sourceBackup: { source: NativeSource | undefined; preview: typeof sourcePreview } | undefined;
   let exportSize = { width: 0, height: 0 };
   const renderer = new NativeRenderer({ ...host, sourceTile(tile, into) {
     if (source) source.region(exportSize.width, exportSize.height, tile.tileOriginX, tile.tileOriginY, tile.tileWidth, tile.tileHeight, into);
@@ -37,7 +41,29 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
   let focusOverlay: ReturnType<typeof prepareFocusOverlay> | undefined;
   return {
     catalog: () => nativeCatalog(bundle),
-    attachSource(json: string): void { source = new NativeSource(host, JSON.parse(json)); sourcePreview = undefined; },
+    profileSpace(buffer: ArrayBuffer): string {
+      return colorSpaceForIcc(iccDescription(new Uint8Array(buffer)) ?? '') ?? '';
+    },
+    rawLookup(): Float32Array {
+      return Float32Array.from(invertDcrawCurve(dcrawGammaCurve(0.45, 4.5, 2, 0x10000)), v => v / 65535);
+    },
+    originalPreview(edge: number): string {
+      if (!source) throw new Error('Native source is missing.');
+      sourcePreview = source.preview(edge);
+      const { rgba, width, height } = sourcePreview, frame = sourceToDisplay(rgba, 4, width * height, source.meta);
+      const rgb = new Float32Array(width * height * 3);
+      for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
+      host.publishOriginal?.(rgb, width, height);
+      return JSON.stringify({ width, height });
+    },
+    attachSource(json: string): void {
+      sourceBackup = { source, preview: sourcePreview };
+      source = new NativeSource(host, JSON.parse(json)); sourcePreview = undefined;
+    },
+    commitSource(): void { sourceBackup = undefined; },
+    rollbackSource(): void {
+      if (sourceBackup) { source = sourceBackup.source; sourcePreview = sourceBackup.preview; sourceBackup = undefined; }
+    },
     clearSource(): void { source = undefined; sourcePreview = undefined; },
     hibernate(): void { renderer.clearResources(); sourcePreview = undefined; guide = undefined; focusOverlay = undefined; },
     removalInput(json: string, buffer: ArrayBuffer): Float32Array {
@@ -162,8 +188,9 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
             }
           } else if (request.operation === 'export') {
             exportSize = { width: request.width, height: request.height };
-            await renderer.export(request.params, request.width, request.height, input,
-              sourcePreview?.width ?? request.measureWidth!, sourcePreview?.height ?? request.measureHeight!);
+            const measure = source?.measurement(request.width, request.height);
+            await renderer.export(request.params, request.width, request.height, measure?.rgba ?? input,
+              measure?.width ?? sourcePreview?.width ?? request.measureWidth!, measure?.height ?? sourcePreview?.height ?? request.measureHeight!);
           } else throw new Error('Unknown native operation');
           host.complete(id, '{"result":null}');
         } catch (error) {

@@ -36,6 +36,7 @@ jobs:
           npm ci
           npm run typecheck
           node mobile/scripts/build_host.mjs
+          node mobile/scripts/build_icons.mjs
       - name: Install Flutter
         run: |
           git clone --depth 1 --branch 3.44.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
@@ -50,7 +51,9 @@ jobs:
           node scripts/curve_fixture.mjs --check
           cargo test --features gpu-tests --locked -- --test-threads=1
       - name: Build native XCFramework
-        run: bash mobile/scripts/build_native.sh
+        run: |
+          bash mobile/scripts/build_native.sh
+          bash mobile/scripts/build_raw.sh
       - name: Prepare Flutter iOS host
         run: bash mobile/scripts/prepare_ios.sh
       - name: Flutter analysis and tests
@@ -64,6 +67,8 @@ jobs:
       - name: Build simulator application
         working-directory: mobile
         run: flutter build ios --simulator --debug
+      - name: Exercise native editor
+        run: bash mobile/scripts/test_ios.sh
       - name: Package unsigned IPA for personal sideloading
         run: bash mobile/scripts/package_unsigned_ipa.sh
       - uses: actions/upload-artifact@v4

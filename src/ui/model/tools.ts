@@ -242,7 +242,7 @@ export const GROUPS: readonly ToolGroup[] = [
     label: 'Lens',
     icon: 'lens',
     tools: [
-      { kind: 'lens', id: 'lensBlur', field: 'lensBlurEnabled', label: 'Lens', title: 'Lens Blur', icon: 'lens', note: `Defocus like a real lens, from a depth map estimated on this device. Choose “Pick Focus”, then hold and drag over the subject. ${LENS_NOTE}` },
+      { kind: 'lens', id: 'lensBlur', field: 'lensBlurEnabled', label: 'Lens', title: 'Lens Blur', icon: 'lens', note: `Defocus like a real lens, from a depth map estimated on this device. Hold and drag the focus point over the subject. ${LENS_NOTE}` },
       { kind: 'slider', id: 'lensFocusDistanceM', field: 'lensFocusDistanceM', requires: 'lensBlurEnabled', scale: 'log10', label: 'Focus', title: 'Focus Distance', icon: 'focus', min: LENS_LIMITS.focusDistanceM.min, max: LENS_LIMITS.focusDistanceM.max, step: 0.005, digits: 2, unit: ' m', note: 'How far the focused subject was from the camera. With the aperture and focal length, it sets how quickly the background falls out of focus.' },
       { kind: 'stepper', id: 'lensFNumber', field: 'lensFNumber', requires: 'lensBlurEnabled', label: 'Aperture', title: 'Aperture', icon: 'aperture', min: LENS_LIMITS.fNumber.min, max: LENS_LIMITS.fNumber.max, step: 1, values: F_STOPS },
       { kind: 'slider', id: 'lensFocalLengthMm', field: 'lensFocalLengthMm', requires: 'lensBlurEnabled', scale: 'log2', zeroAs: 'normalFocal', label: 'Focal Length', title: 'Focal Length', icon: 'focalLength', min: LENS_LIMITS.focalLengthMm.min, max: LENS_LIMITS.focalLengthMm.max, step: 0.01, digits: 0, unit: ' mm', note: 'Longer lenses blur the background more at the same aperture. Normal matches the film format.' },
