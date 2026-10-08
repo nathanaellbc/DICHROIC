@@ -20,6 +20,70 @@ Future<void> mount(WidgetTester tester, NativePhoto image) => tester.pumpWidget(
 );
 
 void main() {
+  testWidgets('dragging a focus pin follows the finger at a zoomed scale', (
+    tester,
+  ) async {
+    Offset? selected;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 390,
+              height: 500,
+              child: PhotoViewport(
+                photo: photo,
+                focus: const Offset(.5, .5),
+                onFocusPreview: (p) => selected = p,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final viewport = find.byType(PhotoViewport),
+        center = tester.getCenter(find.byType(PhotoViewport));
+    final left = await tester.startGesture(
+      center - const Offset(60, 0),
+      pointer: 1,
+    );
+    final right = await tester.startGesture(
+      center + const Offset(60, 0),
+      pointer: 2,
+    );
+    await tester.pump();
+    await left.moveTo(center - const Offset(140, 0));
+    await right.moveTo(center + const Offset(140, 0));
+    await tester.pump();
+    await left.moveTo(center - const Offset(180, 0));
+    await right.moveTo(center + const Offset(180, 0));
+    await tester.pump();
+    await left.up();
+    await right.up();
+    await tester.pumpAndSettle();
+    final scale = tester
+        .widgetList<Transform>(
+          find.descendant(of: viewport, matching: find.byType(Transform)),
+        )
+        .elementAt(1)
+        .transform
+        .storage[0];
+    expect(scale, greaterThan(1.5));
+    final finger = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('focus-pin'))),
+      pointer: 3,
+    );
+    await finger.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(selected, isNotNull);
+    final start = selected!;
+    await finger.moveBy(const Offset(78, 0));
+    await tester.pump();
+    expect(selected!.dx - start.dx, closeTo(78 / (390 * scale), .003));
+    await finger.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('compare switches cached textures and preserves zoom', (
     tester,
   ) async {

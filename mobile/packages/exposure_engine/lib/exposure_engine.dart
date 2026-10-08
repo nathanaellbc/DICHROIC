@@ -23,9 +23,44 @@ class NativePhoto {
   final int? sourceWidth, sourceHeight;
 }
 
+class NativeDetail {
+  NativeDetail(Map<String, dynamic> value)
+    : textureId = value['textureId'] as int,
+      originalTextureId = value['originalTextureId'] as int,
+      longEdge = (value['fullWidth'] as int) > (value['fullHeight'] as int)
+          ? value['fullWidth'] as int
+          : value['fullHeight'] as int,
+      rect = Rect.fromLTWH(
+        (value['x'] as num) / (value['fullWidth'] as num),
+        (value['y'] as num) / (value['fullHeight'] as num),
+        (value['width'] as num) / (value['fullWidth'] as num),
+        (value['height'] as num) / (value['fullHeight'] as num),
+      );
+  final int textureId, originalTextureId, longEdge;
+  final Rect rect;
+}
+
 class ExposureEngine {
   static const _channel = MethodChannel('exposure/native');
   Future<String?> chooseFile() => _channel.invokeMethod<String>('chooseFile');
+  Future<NativeDetail?> detail(
+    Map<String, dynamic> params,
+    Rect rect,
+    int longEdge,
+  ) async {
+    final result = await _channel.invokeMapMethod<String, dynamic>('detail', {
+      'params': params,
+      'longEdge': longEdge,
+      'rect': {
+        'x': rect.left,
+        'y': rect.top,
+        'width': rect.width,
+        'height': rect.height,
+      },
+    });
+    return result == null ? null : NativeDetail(result);
+  }
+
   Stream<Map<String, dynamic>> get events => const EventChannel(
     'exposure/status',
   ).receiveBroadcastStream().map((e) => Map<String, dynamic>.from(e as Map));

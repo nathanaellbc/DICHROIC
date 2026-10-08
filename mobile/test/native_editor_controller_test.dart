@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:exposure_ios/native_editor_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,13 +25,35 @@ class CanonicalFake extends ExposureEngine {
   final frames = <Map<String, dynamic>>[];
   Completer<void>? gate;
   final exports = <Map<String, dynamic>>[];
+  final details = <({Rect rect, int edge})>[];
+  Completer<NativeDetail?>? detailGate;
+  @override
+  Future<NativeDetail?> detail(
+    Map<String, dynamic> params,
+    Rect rect,
+    int longEdge,
+  ) async {
+    details.add((rect: rect, edge: longEdge));
+    if (detailGate != null) return detailGate!.future;
+    return NativeDetail({
+      'textureId': 20,
+      'originalTextureId': 21,
+      'x': (rect.left * longEdge).round(),
+      'y': (rect.top * longEdge).round(),
+      'width': (rect.width * longEdge).round(),
+      'height': (rect.height * longEdge).round(),
+      'fullWidth': longEdge,
+      'fullHeight': longEdge,
+    });
+  }
+
   @override
   Future<Map<String, dynamic>> catalog() async => {
     'baseline': {'a': 0, 'b': 0},
   };
   @override
   Future<NativePhoto> open(String path) async =>
-      const NativePhoto(1, 1200, 800);
+      const NativePhoto(1, 1200, 800, sourceWidth: 8144, sourceHeight: 5424);
   @override
   Future<List<dynamic>> controls(Map<String, dynamic> params) async => [];
   @override
@@ -65,6 +88,35 @@ class CanonicalFake extends ExposureEngine {
 Future<void> flush() => Future<void>.delayed(Duration.zero);
 
 void main() {
+  test(
+    'zoom detail retains its high-water resolution and export waits for detail work',
+    () async {
+      final engine = CanonicalFake();
+      final c = NativeEditorController(engine);
+      await c.open('photo');
+      await flush();
+      const area = Rect.fromLTWH(.25, .25, .5, .5);
+      c.requestDetail(area, 4096);
+      await flush();
+      expect(engine.details.length, 1);
+      final cached = c.detail;
+      c.requestDetail(const Rect.fromLTWH(.1, .1, .8, .8), 2048);
+      await flush();
+      c.requestDetail(area, 4096);
+      await flush();
+      expect(c.detail, same(cached));
+      expect(engine.details.length, 1);
+      engine.detailGate = Completer();
+      c.requestDetail(area, 6144);
+      await flush();
+      final export = c.export();
+      await flush();
+      expect(engine.exports, isEmpty);
+      engine.detailGate!.complete(null);
+      expect(await export, 'photo.png');
+      c.dispose();
+    },
+  );
   test(
     'coalesces renders while retaining updates to different controls',
     () async {

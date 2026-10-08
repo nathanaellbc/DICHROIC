@@ -141,6 +141,30 @@ export class NativeRenderer {
     } finally { this.releaseFrame(); }
   }
 
+  /** Render only visible canonical export tiles at their full-image pitch. */
+  async detail(params: RenderParams, width: number, height: number, measure: { rgba: Float32Array; width: number; height: number },
+    region: { x: number; y: number; width: number; height: number }): Promise<Float32Array | undefined> {
+    const plan = this.prepare(params, width, height, measure.rgba, measure.width, measure.height);
+    // The global FFT/lens path keeps its whole-frame size policy. A cropped
+    // approximation would change the effect and violate render parity.
+    if (plan.chain.lensBlur || plan.chain.cameraDiffusion || plan.chain.printDiffusion) return undefined;
+    if (region.width * region.height > 1_600_000) throw new Error('Detail viewport exceeds native image budget');
+    const output = new Float32Array(region.width * region.height * 3);
+    try {
+      await this.graph!.runToTiles((tile, into) => { this.host.sourceTile(tile, into); return into.subarray(0, tile.tileWidth * tile.tileHeight * 4); },
+        plan.core, Tap.RGB_OUT, (rgb, tile) => {
+          const left = Math.max(region.x, tile.activeOriginX), right = Math.min(region.x + region.width, tile.activeOriginX + tile.activeWidth);
+          const top = Math.max(region.y, tile.activeOriginY), bottom = Math.min(region.y + region.height, tile.activeOriginY + tile.activeHeight);
+          for (let y = top; y < bottom; y++) {
+            const at = ((y - tile.activeOriginY) * tile.activeWidth + left - tile.activeOriginX) * 3;
+            output.set(rgb.subarray(at, at + (right - left) * 3), ((y - region.y) * region.width + left - region.x) * 3);
+          }
+        }, { maxBufferBytes: Math.min(this.native.limits.maxStorageBufferBindingSize, 32 * 1024 * 1024), memoryBudget: 192 * 1024 * 1024, overlap: plan.overlap,
+          exportOverlap: plan.exportOverlap, frame: plan.frame, region });
+      return output;
+    } finally { this.releaseFrame(); }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.graph?.dispose();

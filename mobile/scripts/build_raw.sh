@@ -15,7 +15,7 @@ for target in device arm64-simulator x86_64-simulator; do
   build="$root/native/target/raw-$target"
   cmake -S "$root/native/io" -B "$build" -DCMAKE_SYSTEM_NAME=iOS \
     -DCMAKE_OSX_SYSROOT="$(xcrun --sdk "$sdk" --show-sdk-path)" \
-    -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
+    -DCMAKE_OSX_ARCHITECTURES="$arch" -DCMAKE_SYSTEM_PROCESSOR="$arch" -DCMAKE_OSX_DEPLOYMENT_TARGET=16.0 \
     -DCMAKE_BUILD_TYPE=Release -DRAW_SOURCE="$cache/libraw" -DLCMS_SOURCE="$cache/lcms" -DJPEG_SOURCE="$cache/jpeg"
   cmake --build "$build" --config Release --target raw_native -j 6
   libtool -static -o "$build/libRawNative.a" "$build/libraw_native.a" "$build/libdichroic_lcms.a" "$build/jpeg/libjpeg.a"

@@ -10,6 +10,7 @@ import { NativeRenderer, type NativeRenderHost } from '../src/native/renderer';
 import { gpuBufferUsage, gpuMapMode } from '../src/engine/webgpuGlobals';
 import { Tap } from '../src/engine/taps';
 import { encode } from 'fast-png';
+import { boxDownscaleRegion } from '../src/session/downscale';
 
 // Capture the real canonical planner/graph on Dawn. Rust replays exactly these
 // WGSL descriptors and binary inputs, without replacing any numerical gate.
@@ -66,7 +67,8 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
       const b = readFileSync(join('public', name)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
     },
     readText: name => readFileSync(join('public', name), 'utf8'),
-    sourceTile: () => { throw new Error('Unexpected export source in preview test'); },
+    sourceTile: (tile, into) => { boxDownscaleRegion(rgba, width, height, width, height,
+      tile.tileOriginX, tile.tileOriginY, tile.tileWidth, tile.tileHeight, into); },
     outputTile: () => { throw new Error('Unexpected export output in preview test'); },
     progress: () => {},
     command: json => {
@@ -158,6 +160,17 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
       const rgb = await renderer.preview(params, rgba, width, height);
       expect(rgb.length).toBe(width * height * 3);
       expect(rgb.every(Number.isFinite)).toBe(true);
+      if (index === 0 || index === 3) {
+        const region = { x: 7, y: 5, width: 13, height: 11 };
+        captureLabel = `detail:${index}:rgb_out`;
+        const detail = await renderer.detail(params, width, height, { rgba, width, height }, region);
+        expect(detail).toBeDefined();
+        let maximum = 0;
+        for (let y = 0; y < region.height; y++) for (let x = 0; x < region.width; x++) for (let c = 0; c < 3; c++) {
+          maximum = Math.max(maximum, Math.abs(detail![(y * region.width + x) * 3 + c]! - rgb[((region.y + y) * width + region.x + x) * 3 + c]!));
+        }
+        expect(maximum).toBeLessThanOrEqual(1e-5);
+      }
       fixtures.push({ params, rgba: Array.from({ length: width * height * 4 }, (_, i) =>
         i % 4 === 3 ? 255 : Math.round(255 * Math.max(0, Math.min(1, rgb[Math.floor(i / 4) * 3 + i % 4]!)))) });
       if (index === 2 && process.env.DICHROIC_TRACE_CAMERA === '1') {

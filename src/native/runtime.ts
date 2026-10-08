@@ -9,7 +9,7 @@ import { buildIccProfile } from '../io/icc';
 import { prepareFocusOverlay } from '../ui/engine/focusCheck';
 import { diffusionRenderLongEdge, previewRenderLongEdge } from '../session/renderSize';
 import { NativeSource, type NativeSourceHost } from './source';
-import { sourceToDisplay } from '../io/display';
+import { sourceToDisplay, rgbToCanvas } from '../io/display';
 import { dcrawGammaCurve, invertDcrawCurve } from '../io/dcrawGamma';
 import { iccDescription, colorSpaceForIcc } from '../io/metadata';
 
@@ -20,6 +20,15 @@ export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
   publishMask?(rgba: Uint8ClampedArray, width: number, height: number): void;
   publishCube?(text: string): void;
   publishOriginal?(rgb: Float32Array, width: number, height: number): void;
+  publishDetail?(rgb: Float32Array, original: Uint8ClampedArray, json: string): void;
+}
+
+function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]): Uint8ClampedArray {
+  const frame = sourceToDisplay(values, 4, width * height, meta);
+  if (frame.colorSpace === 'srgb') return frame.pixels;
+  const rgb = new Float32Array(width * height * 3);
+  for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
+  return rgbToCanvas(rgb, width, height, 'Display P3', 'srgb');
 }
 
 /** JavaScriptCore hosts canonical math only; all compute/photography is native. */
@@ -50,9 +59,9 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     originalPreview(edge: number): string {
       if (!source) throw new Error('Native source is missing.');
       sourcePreview = source.preview(edge);
-      const { rgba, width, height } = sourcePreview, frame = sourceToDisplay(rgba, 4, width * height, source.meta);
+      const { rgba, width, height } = sourcePreview, pixels = nativeDisplay(rgba, width, height, source.meta);
       const rgb = new Float32Array(width * height * 3);
-      for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
+      for (let p = 0; p < width * height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = pixels[p * 4 + c]! / 255;
       host.publishOriginal?.(rgb, width, height);
       return JSON.stringify({ width, height });
     },
@@ -82,9 +91,9 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     removalPreview(edge: number, candidate: boolean): void {
       if (!source) throw new Error('Native removal source is missing.');
       const image = source.preview(edge, candidate);
-      const frame = sourceToDisplay(image.rgba, 4, image.width * image.height, source.meta);
+      const pixels = nativeDisplay(image.rgba, image.width, image.height, source.meta);
       const rgb = new Float32Array(image.width * image.height * 3);
-      for (let p = 0; p < image.width * image.height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = frame.pixels[p * 4 + c]! / 255;
+      for (let p = 0; p < image.width * image.height; p++) for (let c = 0; c < 3; c++) rgb[p * 3 + c] = pixels[p * 4 + c]! / 255;
       host.publish(rgb, image.width, image.height);
     },
     renderSize(json: string): string {
@@ -117,7 +126,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     },
     depthInput(width: number, height: number) {
       const input = source ? source.preview(Math.max(width, height)).rgba : host.previewInput();
-      const rgba = source ? sourceToDisplay(input, 4, width * height, source.meta).pixels : Uint8ClampedArray.from(input, v => v * 255);
+      const rgba = source ? nativeDisplay(input, width, height, source.meta) : Uint8ClampedArray.from(input, v => v * 255);
       const [mw, mh] = modelInputSize(width, height, 392);
       const rgb = resampleRGB(rgba, width, height, mw, mh);
       guide = { rgba, width, height, rgb, mw, mh };
@@ -164,10 +173,22 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       active = true;
       const task = Promise.resolve().then(async () => {
         try {
-          const request = JSON.parse(json) as { operation: 'preview' | 'export' | 'cube'; size?: number; params: RenderParams;
-            width: number; height: number; measureWidth?: number; measureHeight?: number };
+          const request = JSON.parse(json) as { operation: 'preview' | 'export' | 'cube' | 'detail'; size?: number; params: RenderParams;
+            width: number; height: number; measureWidth?: number; measureHeight?: number;
+            region?: { x: number; y: number; width: number; height: number } };
           if (request.operation === 'cube') {
             host.publishCube?.(await renderer.exportCube(request.params, request.size ?? 33));
+            host.complete(id, '{"result":null}'); return;
+          }
+          if (request.operation === 'detail') {
+            if (!source || !request.region) throw new Error('Native detail source is missing');
+            exportSize = { width: request.width, height: request.height };
+            const region = request.region, measure = source.measurement(request.width, request.height);
+            const rgb = await renderer.detail(request.params, request.width, request.height, measure, region);
+            if (rgb) {
+              const original = source.region(request.width, request.height, region.x, region.y, region.width, region.height, undefined, false, true);
+              host.publishDetail?.(rgb, nativeDisplay(original, region.width, region.height, source.meta), JSON.stringify({ ...region, fullWidth: request.width, fullHeight: request.height }));
+            }
             host.complete(id, '{"result":null}'); return;
           }
           if (source && request.operation === 'preview' && (sourcePreview?.width !== request.width || sourcePreview.height !== request.height)) {

@@ -17,6 +17,9 @@ class PhotoViewport extends StatefulWidget {
     this.onFocusEnd,
     this.brush,
     this.showBrush = true,
+    this.detail,
+    this.detailRevision = 0,
+    this.onDetailRequest,
   });
   final NativePhoto photo;
   final Offset? focus;
@@ -24,6 +27,9 @@ class PhotoViewport extends StatefulWidget {
   final ValueChanged<Offset>? onFocusPreview, onFocusEnd;
   final RemovalBrush? brush;
   final bool showBrush;
+  final NativeDetail? detail;
+  final int detailRevision;
+  final void Function(Rect, int)? onDetailRequest;
 
   @override
   State<PhotoViewport> createState() => _PhotoViewportState();
@@ -67,6 +73,11 @@ class _PhotoViewportState extends State<PhotoViewport>
       _scale = 1;
       _offset = Offset.zero;
       _before = false;
+    }
+    if (oldWidget.detailRevision != widget.detailRevision) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _requestDetail();
+      });
     }
   }
 
@@ -157,6 +168,7 @@ class _PhotoViewportState extends State<PhotoViewport>
         _scale = scale;
         _offset = target;
       });
+      _requestDetail();
       return;
     }
     const spring = SpringDescription(mass: 1, stiffness: 280, damping: 28);
@@ -185,18 +197,68 @@ class _PhotoViewportState extends State<PhotoViewport>
     });
     if (_xSpring!.isDone(t) && _ySpring!.isDone(t) && _scaleSpring!.isDone(t)) {
       _ticker.stop();
+      _requestDetail();
     }
+  }
+
+  void _requestDetail() {
+    if (widget.onDetailRequest == null ||
+        widget.brush != null ||
+        _image.isEmpty ||
+        _viewport.isEmpty) {
+      return;
+    }
+    final left =
+        (.5 + (-_viewport.width / 2 - _offset.dx) / (_image.width * _scale))
+            .clamp(0.0, 1.0);
+    final top =
+        (.5 + (-_viewport.height / 2 - _offset.dy) / (_image.height * _scale))
+            .clamp(0.0, 1.0);
+    final right =
+        (.5 + (_viewport.width / 2 - _offset.dx) / (_image.width * _scale))
+            .clamp(0.0, 1.0);
+    final bottom =
+        (.5 + (_viewport.height / 2 - _offset.dy) / (_image.height * _scale))
+            .clamp(0.0, 1.0);
+    final rect = Rect.fromLTRB(
+      (left - .025).clamp(0.0, 1.0),
+      (top - .025).clamp(0.0, 1.0),
+      (right + .025).clamp(0.0, 1.0),
+      (bottom + .025).clamp(0.0, 1.0),
+    );
+    final needed =
+        (_image.longestSide * _scale * MediaQuery.devicePixelRatioOf(context))
+            .ceil();
+    final edge = [
+      1600,
+      2048,
+      2560,
+      3200,
+      4096,
+      5120,
+      6144,
+      8192,
+      12288,
+      16384,
+    ].firstWhere((v) => v >= needed, orElse: () => 16384);
+    widget.onDetailRequest!(rect, edge);
   }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
+      final changed = _viewport != constraints.biggest;
       _viewport = constraints.biggest;
       final fit = math.min(
         _viewport.width / widget.photo.width,
         _viewport.height / widget.photo.height,
       );
       _image = Size(widget.photo.width * fit, widget.photo.height * fit);
+      if (changed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _requestDetail();
+        });
+      }
       return Stack(
         children: [
           Positioned.fill(
@@ -234,6 +296,22 @@ class _PhotoViewportState extends State<PhotoViewport>
                                   : widget.photo.textureId,
                               filterQuality: FilterQuality.medium,
                             ),
+                            if (widget.detail != null && widget.brush == null)
+                              Positioned(
+                                left: widget.detail!.rect.left * _image.width,
+                                top: widget.detail!.rect.top * _image.height,
+                                width: widget.detail!.rect.width * _image.width,
+                                height:
+                                    widget.detail!.rect.height * _image.height,
+                                child: IgnorePointer(
+                                  child: Texture(
+                                    textureId: _before
+                                        ? widget.detail!.originalTextureId
+                                        : widget.detail!.textureId,
+                                    filterQuality: FilterQuality.medium,
+                                  ),
+                                ),
+                              ),
                             if (widget.brush != null &&
                                 widget.showBrush &&
                                 !_before)
@@ -259,8 +337,9 @@ class _PhotoViewportState extends State<PhotoViewport>
                                         _image.height -
                                     22,
                                 child: GestureDetector(
+                                  key: const ValueKey('focus-pin'),
                                   behavior: HitTestBehavior.opaque,
-                                  onPanStart: (_) {
+                                  onPanDown: (_) {
                                     setState(() {
                                       _picking = true;
                                       _focus = widget.focus;
@@ -272,8 +351,8 @@ class _PhotoViewportState extends State<PhotoViewport>
                                     final point =
                                         (_focus ?? widget.focus!) +
                                         Offset(
-                                          d.delta.dx / (_image.width * _scale),
-                                          d.delta.dy / (_image.height * _scale),
+                                          d.delta.dx / _image.width,
+                                          d.delta.dy / _image.height,
                                         );
                                     setState(
                                       () => _focus = Offset(

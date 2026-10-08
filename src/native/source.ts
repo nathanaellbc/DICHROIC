@@ -34,7 +34,7 @@ export class NativeSource {
     }
   }
 
-  region(outW: number, outH: number, x: number, y: number, w: number, h: number, into?: Float32Array, candidate = false): Float32Array {
+  region(outW: number, outH: number, x: number, y: number, w: number, h: number, into?: Float32Array, candidate = false, untouched = false): Float32Array {
     const out = into?.subarray(0, w * h * 4) ?? new Float32Array(w * h * 4);
     const { width, height } = this.meta;
     const same = width === outW && height === outH;
@@ -48,7 +48,7 @@ export class NativeSource {
       for (let top = y0; top < y1; top += stripRows) {
         const rows = Math.min(stripRows, y1 - top), pixels = this.host.sourceRegion(x0, top, sw, rows);
         if (pixels.length !== sw * rows * 4) throw new Error('Invalid native source strip.');
-        this.apply(pixels, x0, top, sw, rows, candidate);
+        if (!untouched) this.apply(pixels, x0, top, sw, rows, candidate);
         if (same) { out.set(pixels, row * w * 4); continue; }
         for (let col = 0; col < w; col++) {
           const ax = Math.floor((x + col) * width / outW), bx = Math.max(ax + 1, Math.floor((x + col + 1) * width / outW)), dest = col * 4;

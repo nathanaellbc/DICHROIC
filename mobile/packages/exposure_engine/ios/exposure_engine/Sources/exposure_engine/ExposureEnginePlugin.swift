@@ -74,10 +74,14 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
     private let texture = PreviewTexture()
     private let originalTexture = PreviewTexture()
     private let focusTexture = PreviewTexture()
+    private let detailTexture = PreviewTexture()
+    private let originalDetailTexture = PreviewTexture()
     private let registry: FlutterTextureRegistry
     private var textureId: Int64 = -1
     private var originalTextureId: Int64 = -1
     private var focusTextureId: Int64 = -1
+    private var detailTextureId: Int64 = -1
+    private var originalDetailTextureId: Int64 = -1
     private var engine: UnsafeMutableRawPointer?
     private var graph: NativeGraphRuntime?
     private var photoURL: URL?
@@ -107,6 +111,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         textureId = registry.register(texture)
         originalTextureId = registry.register(originalTexture)
         focusTextureId = registry.register(focusTexture)
+        detailTextureId = registry.register(detailTexture)
+        originalDetailTextureId = registry.register(originalDetailTexture)
         memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil, queue: .main) { [weak self] _ in
             self?.queue.async { [weak self] in
@@ -131,6 +137,8 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
         registry.unregisterTexture(textureId)
         registry.unregisterTexture(originalTextureId)
         registry.unregisterTexture(focusTextureId)
+        registry.unregisterTexture(detailTextureId)
+        registry.unregisterTexture(originalDetailTextureId)
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -146,7 +154,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             pickerResult = result; presenter.present(picker, animated: true); return
         }
         if call.method.hasPrefix("erase") { handleRemoval(call, result: result); return }
-        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource"].contains(call.method) {
+        if ["catalog", "controls", "patch", "develop", "developExport", "cubeExport", "focusPreview", "debugSource", "detail"].contains(call.method) {
             handleGraph(call, result: result); return
         }
         guard ["open", "render", "export", "close"].contains(call.method) else {
@@ -176,6 +184,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         let size = try graph.originalPreview(edge: 1280)
                         graph.commitSource()
                         graph.clearDepth(); focusTexture.clear()
+                        detailTexture.clear(); originalDetailTexture.clear()
                         photoURL = url
                         value = ["textureId": textureId, "originalTextureId": originalTextureId, "focusTextureId": focusTextureId,
                             "width": size.width, "height": size.height, "sourceWidth": source.width, "sourceHeight": source.height,
@@ -210,7 +219,7 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                         return try writePNG(full.rgba, width: full.width, height: full.height).path
                     }
                 default:
-                    photoURL = nil; preview = nil; texture.clear(); originalTexture.clear(); focusTexture.clear()
+                    photoURL = nil; preview = nil; texture.clear(); originalTexture.clear(); focusTexture.clear(); detailTexture.clear(); originalDetailTexture.clear()
                     graph = nil
                     if let handle = engine { exposure_destroy(handle); engine = nil }
                     value = nil
@@ -231,6 +240,15 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
             DispatchQueue.main.async { self.registry.textureFrameAvailable(self.textureId) }
         }
         self.graph = graph
+        graph.onDetail = { [weak self] rgba, original, width, height in
+            guard let self = self else { return }
+            try self.detailTexture.publish(rgba, width: width, height: height)
+            try self.originalDetailTexture.publish(original, width: width, height: height)
+            DispatchQueue.main.async {
+                self.registry.textureFrameAvailable(self.detailTextureId)
+                self.registry.textureFrameAvailable(self.originalDetailTextureId)
+            }
+        }
         graph.onOriginal = { [weak self] rgba, width, height in
             guard let self = self else { return }
             try self.originalTexture.publish(rgba, width: width, height: height)
@@ -337,6 +355,35 @@ public final class ExposureEnginePlugin: NSObject, FlutterPlugin, FlutterStreamH
                 guard var params = args["params"] as? [String: Any] else { throw NativeError.message("Render parameters are missing") }
                 if call.method == "controls" { finish(try graph.controlState(params)); return }
                 if call.method == "focusPreview" { try graph.focusPreview(params); finish(nil); return }
+                if call.method == "detail" {
+                    if ["lensBlurEnabled", "cameraDiffusionEnabled", "printDiffusionEnabled"].contains(where: { params[$0] as? Bool == true }) {
+                        finish(nil); return
+                    }
+                    guard !graph.isBusy, let source = graph.sourceStore,
+                          let rect = args["rect"] as? [String: NSNumber], let left = rect["x"]?.doubleValue,
+                          let top = rect["y"]?.doubleValue, let rw = rect["width"]?.doubleValue, let rh = rect["height"]?.doubleValue,
+                          [left, top, rw, rh].allSatisfy({ $0.isFinite }), left >= 0, top >= 0, rw > 0, rh > 0, left + rw <= 1.00001, top + rh <= 1.00001 else {
+                        throw NativeError.message("Invalid detail viewport")
+                    }
+                    let requested = max(1, min(max(source.width, source.height), (args["longEdge"] as? NSNumber)?.intValue ?? 1600))
+                    var scale = Double(requested) / Double(max(source.width, source.height))
+                    let area = Double(source.width * source.height) * scale * scale * rw * rh
+                    if area > 1_500_000 { scale *= sqrt(1_500_000 / area) }
+                    let width = max(1, Int((Double(source.width) * scale).rounded())), height = max(1, Int((Double(source.height) * scale).rounded()))
+                    let x = min(width - 1, Int(floor(left * Double(width)))), y = min(height - 1, Int(floor(top * Double(height))))
+                    let right = min(width, Int(ceil((left + rw) * Double(width)))), bottom = min(height, Int(ceil((top + rh) * Double(height))))
+                    params["outputColorSpace"] = "sRGB"
+                    try graph.request(operation: "detail", params: params, width: width, height: height,
+                        region: ["x": x, "y": y, "width": max(1, right - x), "height": max(1, bottom - y)]) { outcome in
+                        do {
+                            try outcome.get()
+                            guard var meta = graph.detailMetadata else { finish(nil); return }
+                            meta["textureId"] = Int(self.detailTextureId); meta["originalTextureId"] = Int(self.originalDetailTextureId)
+                            finish(meta)
+                        } catch { fail(error) }
+                    }
+                    return
+                }
                 if call.method == "cubeExport" {
                     guard !graph.isBusy else { throw NativeError.message("Native renderer is busy") }
                     let size = (args["size"] as? Int) ?? 33

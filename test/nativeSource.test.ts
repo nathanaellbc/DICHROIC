@@ -32,6 +32,7 @@ it('bounded native reads match web source edits, box sampling, apply and undo ex
   expect(native.preview(32, true).rgba).toEqual(boxDownscaleRegion(expected.rgba, width, height, 32, 24, 0, 0, 32, 24));
   expect(native.commit()).toBe(1);
   expect(native.region(width, height, 0, 0, width, height)).toEqual(expected.rgba);
+  expect(native.region(width, height, 0, 0, width, height, undefined, false, true)).toEqual(rgba);
   expect(native.measurement(31, 23)).toEqual(measurementImage(expected.rgba, width, height, 31, 23));
   native.restore(0);
   expect(native.region(width, height, 0, 0, width, height)).toEqual(rgba);

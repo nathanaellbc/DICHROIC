@@ -400,6 +400,9 @@ class _NativeEditorScreenState extends State<NativeEditorScreen> {
                     )
                   : PhotoViewport(
                       photo: controller.photo!,
+                      detail: controller.detail,
+                      detailRevision: controller.revision,
+                      onDetailRequest: controller.requestDetail,
                       brush: controller.erasing ? brush : null,
                       showBrush:
                           !controller.removalReady && !controller.removing,

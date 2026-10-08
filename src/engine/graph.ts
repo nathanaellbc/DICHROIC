@@ -481,12 +481,19 @@ export class RenderGraph {
       /** Apron tile ekspor (baku `overlap`); lih. `EXPORT_APRON_SIGMAS`. */
       exportOverlap?: number;
       frame: FrameParams; wholeFrame?: boolean; isCancelled?: () => boolean;
+      /** Optional viewport crop; retain the normal tile origins and aprons. */
+      region?: { x: number; y: number; width: number; height: number };
       /** Dipanggil sebelum tiap tile (`done` = tile selesai) dan sekali di akhir. */
       onProgress?: (done: number, total: number, tile: TileSpec) => void },
   ): Promise<void> {
-    const tiles = options.wholeFrame ? planTiles(params.width, params.height, options.maxBufferBytes, options.overlap)
+    let tiles = options.wholeFrame ? planTiles(params.width, params.height, options.maxBufferBytes, options.overlap)
       : planExportTiles(params.width, params.height, options.maxBufferBytes, options.exportOverlap ?? options.overlap, options.memoryBudget);
     if (options.wholeFrame && tiles.length !== 1) throw new RangeError('This effect requires a whole-frame render.');
+    if (options.region) {
+      const r = options.region;
+      tiles = tiles.filter(t => t.activeOriginX < r.x + r.width && t.activeOriginX + t.activeWidth > r.x &&
+        t.activeOriginY < r.y + r.height && t.activeOriginY + t.activeHeight > r.y);
+    }
     // Satu buffer input dan satu buffer RGB untuk seluruh tile (dipakai lewat
     // subarray): tanpa ini tiap tile meninggalkan puluhan MB sampah yang di
     // Safari bisa menumpuk sebelum GC berjalan.

@@ -46,6 +46,8 @@ final class NativeGraphRuntime {
     var onProgress: ((Int, Int) -> Void)?
     var onMask: ((Data, Int, Int) throws -> Void)?
     var onOriginal: ((Data, Int, Int) throws -> Void)?
+    var onDetail: ((Data, Data, Int, Int) throws -> Void)?
+    var detailMetadata: [String: Int]?
     private(set) var depthReady = false
     var sourceStore: NativeSourceStore?
     private var sourceBackup: NativeSourceStore?
@@ -141,6 +143,7 @@ final class NativeGraphRuntime {
 
     func request(operation: String, params: [String: Any], width: Int, height: Int,
                  bits: Int = 8, cubeSize: Int = 33,
+                 region: [String: Int]? = nil,
                  completion: @escaping (Result<Void, Error>) -> Void) throws {
         guard pending.isEmpty else { throw GraphRuntimeError.message("Native renderer is busy") }
         var request: [String: Any] = ["operation": operation, "params": params,
@@ -152,6 +155,7 @@ final class NativeGraphRuntime {
             outputRGBA = outputStore!.data
         }
         if operation == "cube" { request["size"] = cubeSize; outputCube = "" }
+        if operation == "detail" { request["region"] = region; detailMetadata = nil }
         let json = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
         serial += 1; let id = serial
         pending[id] = completion
@@ -367,6 +371,30 @@ final class NativeGraphRuntime {
                 try self.onPublish?(rgba, width, height)
             } catch { self.fail(error) }
         }
+        let detail: @convention(block) (JSValue, JSValue, String) -> Void = { [weak self] value, original, json in
+            guard let self = self else { return }
+            do {
+                guard let meta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Int],
+                      let width = meta["width"], let height = meta["height"], width > 0, height > 0, width * height <= 1_600_000 else {
+                    throw GraphRuntimeError.message("Invalid detail dimensions")
+                }
+                let raw = try self.typedBytes(value)
+                guard raw.count == width * height * 12 else { throw GraphRuntimeError.message("Invalid detail readback") }
+                let floats = raw.bindMemory(to: Float.self)
+                var rgba = Data(count: width * height * 4)
+                rgba.withUnsafeMutableBytes { (output: UnsafeMutableRawBufferPointer) in
+                    for p in 0..<(width * height) {
+                        for c in 0..<3 { output[p * 4 + c] = Self.quantize(floats[p * 3 + c]) }
+                        output[p * 4 + 3] = 255
+                    }
+                }
+                let before = try self.typedBytes(original)
+                guard before.count == rgba.count else { throw GraphRuntimeError.message("Invalid original detail pixels") }
+                let originalData = Data(bytes: before.baseAddress!, count: before.count)
+                try self.onDetail?(rgba, originalData, width, height)
+                self.detailMetadata = meta
+            } catch { self.fail(error) }
+        }
         let source: @convention(block) (JSValue, JSValue) -> Void = { [weak self] tile, value in
             guard let self = self else { return }
             do {
@@ -464,12 +492,13 @@ final class NativeGraphRuntime {
             "nativeRegion": region as Any, "nativeSamples": samples as Any,
             "nativeCube": cube as Any,
             "nativeOriginal": original as Any,
+            "nativeDetail": detail as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeHost = { command: nativeCommand, upload: nativeUpload, read: nativeRead,
                 readAsset: nativeAsset, readText: nativeText, previewInput: () => new Float32Array(nativeInput()),
                 publish: nativePublish, sourceTile: nativeSource, outputTile: nativeOutput,
-                progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube, publishOriginal: nativeOriginal,
+                progress: nativeProgress, complete: nativeComplete, publishMask: nativeMask, publishCube: nativeCube, publishOriginal: nativeOriginal, publishDetail: nativeDetail,
                 sourceRegion: (x,y,w,h) => new Float32Array(nativeRegion(x,y,w,h)), sourceSamples: b => new Float32Array(nativeSamples(b)) };
             """)
     }

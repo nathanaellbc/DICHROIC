@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:exposure_engine/exposure_engine.dart';
 import 'package:flutter/foundation.dart';
 
@@ -31,10 +32,89 @@ class NativeEditorController extends ChangeNotifier {
   bool _disposed = false;
   Json? _focusQueued;
   bool _focusWorking = false;
+  NativeDetail? detail;
+  bool detailRendering = false;
+  Future<void>? _detailTask;
+  ({Rect rect, int edge})? _detailQueued, _detailWish, _detailAttempt;
+  int _detailHighWater = 0;
+  int get revision => _revision;
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
   bool get busy => loading || exporting || removing;
   Json _snapshot() => {...params, '_retouchCursor': _removalCursor};
+
+  void requestDetail(Rect rect, int longEdge) {
+    if (photo == null || busy || erasing || rect.isEmpty) return;
+    final sourceEdge =
+        (photo!.sourceWidth ?? photo!.width) >
+            (photo!.sourceHeight ?? photo!.height)
+        ? photo!.sourceWidth ?? photo!.width
+        : photo!.sourceHeight ?? photo!.height;
+    final edge = longEdge.clamp(1, sourceEdge);
+    if (edge <= 1600) return;
+    if (edge < _detailHighWater && detail != null) return;
+    if (edge > _detailHighWater) _detailHighWater = edge;
+    final attempt = _detailAttempt;
+    if (attempt != null &&
+        attempt.edge >= _detailHighWater &&
+        attempt.rect.left <= rect.left + 1e-6 &&
+        attempt.rect.top <= rect.top + 1e-6 &&
+        attempt.rect.right >= rect.right - 1e-6 &&
+        attempt.rect.bottom >= rect.bottom - 1e-6) {
+      return;
+    }
+    _detailWish = (rect: rect, edge: _detailHighWater);
+    _detailQueued = _detailWish;
+    _scheduleDetail();
+  }
+
+  void _invalidateDetail() {
+    detail = null;
+    _detailAttempt = null;
+    _detailQueued = _detailWish;
+  }
+
+  void _scheduleDetail() {
+    if (_disposed ||
+        busy ||
+        erasing ||
+        rendering ||
+        detailRendering ||
+        _editing != null ||
+        _detailQueued == null ||
+        _rendered != _revision) {
+      return;
+    }
+    _detailTask = _renderDetail();
+  }
+
+  Future<void> _renderDetail() async {
+    final request = _detailQueued!;
+    _detailQueued = null;
+    final revision = _revision;
+    detailRendering = true;
+    try {
+      final result = await engine.detail(
+        Map.of(params),
+        request.rect,
+        request.edge,
+      );
+      if (!_disposed && revision == _revision) {
+        detail = result;
+        _detailAttempt = request;
+      }
+    } catch (e) {
+      if (!_disposed) {
+        error = e.toString();
+        _detailAttempt = request;
+      }
+    } finally {
+      detailRendering = false;
+      _notify();
+      if (_rendered != _revision) _scheduleRender();
+      _scheduleDetail();
+    }
+  }
 
   Future<void> beginRemoval() async {
     if (busy || erasing || photo == null) return;
@@ -44,7 +124,10 @@ class NativeEditorController extends ChangeNotifier {
     try {
       await _editing;
       await _render;
+      await _detailTask;
       await engine.beginRemoval();
+      detail = null;
+      _detailQueued = null;
       erasing = true;
       removalReady = false;
     } catch (e) {
@@ -150,6 +233,7 @@ class NativeEditorController extends ChangeNotifier {
     try {
       await _editing;
       await _render;
+      await _detailTask;
       _pending.clear();
       if (catalog.isEmpty) catalog = await engine.catalog();
       final next = await engine.open(path);
@@ -165,6 +249,11 @@ class NativeEditorController extends ChangeNotifier {
       _redo.clear();
       _gestureBefore = null;
       _removalCursor = 0;
+      detail = null;
+      _detailQueued = null;
+      _detailWish = null;
+      _detailAttempt = null;
+      _detailHighWater = 0;
       erasing = false;
       removalReady = false;
       _revision++;
@@ -232,6 +321,7 @@ class NativeEditorController extends ChangeNotifier {
           }
           params = next;
           _revision++;
+          _invalidateDetail();
           error = null;
           await _controls();
           _notify();
@@ -244,11 +334,12 @@ class NativeEditorController extends ChangeNotifier {
       _notify();
     } finally {
       _editing = null;
+      _scheduleDetail();
     }
   }
 
   void _scheduleRender() {
-    if (busy || erasing || _disposed || rendering) return;
+    if (busy || erasing || _disposed || rendering || detailRendering) return;
     _render = _drainRender();
   }
 
@@ -270,6 +361,7 @@ class NativeEditorController extends ChangeNotifier {
     } finally {
       rendering = false;
       _notify();
+      _scheduleDetail();
     }
   }
 
@@ -307,6 +399,7 @@ class NativeEditorController extends ChangeNotifier {
       _removalCursor = cursor;
     }
     params = restored;
+    _invalidateDetail();
   }
 
   Future<String?> export({
@@ -322,6 +415,7 @@ class NativeEditorController extends ChangeNotifier {
     try {
       await _editing;
       await _render;
+      await _detailTask;
       if (cubeSize != null) {
         return await engine.exportCube(Map.of(params), cubeSize);
       }
@@ -352,6 +446,7 @@ class NativeEditorController extends ChangeNotifier {
     Future<void>(() async {
       await _editing;
       await _render;
+      await _detailTask;
       await engine.close();
     }).catchError((Object _) {});
     super.dispose();
