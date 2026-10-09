@@ -41,7 +41,9 @@ for entry in catalog['images']:
     subprocess.run(['sips', '-z', str(size), str(size), '../public/icons/icon-512.png',
                     '--out', str(icons / filename)], check=True, stdout=subprocess.DEVNULL)
 (icons / 'Contents.json').write_text(json.dumps(catalog, indent=2))
-# The launch screen keeps the template's white, matching the white app icon.
+# Launch screen in Signal Blue, matching the app icon's background.
+launch = Path('ios/Runner/Base.lproj/LaunchScreen.storyboard')
+launch.write_text(launch.read_text().replace('red="1" green="1" blue="1"', 'red="0" green="0.5686" blue="1"'))
 podfile = Path('ios/Podfile')
 if podfile.exists():
     pods = podfile.read_text()

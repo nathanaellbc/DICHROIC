@@ -45,15 +45,15 @@ function inSheet(x, y) {
 }
 
 /**
- * Warna satu titik pada grid 256, versi signature untuk ikon app: cakram dan
- * kertas Signal Blue, tumpang tindihnya dilubangi ke latar putih.
+ * Warna satu titik pada grid 256, versi ikon app: cakram dan kertas putih di
+ * atas latar Signal Blue, tumpang tindihnya dilubangi ke latar biru.
  */
 function shade(x, y) {
-  return inSheet(x, y) !== inDisc(x, y) ? BLUE : WHITE;
+  return inSheet(x, y) !== inDisc(x, y) ? WHITE : BLUE;
 }
 
 /**
- * Menggambar motif ke kanvas RGB `width` x `height` berlatar putih; lebar
+ * Menggambar motif ke kanvas RGB `width` x `height` berlatar biru; lebar
  * kotak pembatas motif `markWidth` piksel, berpusat di (cx, cy).
  */
 function drawMark(pixels, width, height, cx, cy, markWidth) {
@@ -81,7 +81,8 @@ function drawMark(pixels, width, height, cx, cy, markWidth) {
 }
 
 function png(width, height, markWidth) {
-  const pixels = new Uint8Array(width * height * 3).fill(255);
+  const pixels = new Uint8Array(width * height * 3);
+  for (let i = 0; i < pixels.length; i += 3) pixels.set(BLUE, i);
   drawMark(pixels, width, height, width / 2, height / 2, markWidth);
   return encode({ width, height, data: pixels, channels: 3, depth: 8 });
 }
@@ -121,7 +122,7 @@ for (const [w, h, scale] of SCREENS) {
   splash.push({ file, media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait)` });
 }
 
-// favicon.svg: motif biru di atas petak putih membulat. Sudut kertas memakai kubik
+// favicon.svg: motif putih di atas petak Signal Blue membulat. Sudut kertas memakai kubik
 // yang mendekati superelips yang sama.
 const fmt = (v) => String(Number(v.toFixed(2)));
 const q = ((8 * 2 ** (-1 / N) - 4) / 3) * A;
@@ -137,10 +138,10 @@ const discD = `M${pt(dcx - dr, dcy)}A${dr},${dr} 0 1 1 ${pt(dcx + dr, dcy)}A${dr
 const fs = (0.7 * 256) / BBOX_W;
 writeFileSync(
   join('public', 'favicon.svg'),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#fff"/>` +
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#0091ff"/>` +
     `<g transform="translate(${fmt(128 - BBOX_CX * fs)} ${fmt(128 - BBOX_CY * fs)}) scale(${fmt(fs)})">` +
-    // Satu path evenodd: kertas + cakram biru, tumpang tindihnya berlubang.
-    `<path fill="#0091ff" fill-rule="evenodd" d="${sheetD}${discD}"/></g></svg>\n`,
+    // Satu path evenodd: kertas + cakram putih, tumpang tindihnya berlubang.
+    `<path fill="#fff" fill-rule="evenodd" d="${sheetD}${discD}"/></g></svg>\n`,
 );
 
 writeFileSync(join('tools', 'splash-screens.json'), `${JSON.stringify(splash, null, 2)}\n`);
