@@ -17,7 +17,7 @@ The icon set in `public/` is generated from the same geometry by
 | `dichroic-horizontal-on-dark.svg` / `-on-light.svg` | Symbol + wordmark side by side: headers, README, social cards |
 | `dichroic-stacked-on-dark.svg` / `-on-light.svg` | Symbol over wordmark: splash, square formats |
 | `dichroic-wordmark-on-dark.svg` / `-on-light.svg` | Wordmark alone |
-| `dichroic-app-icon.svg` | Full-bleed app icon: Signal Blue signature on white (iOS and the PWA mask it themselves) |
+| `dichroic-app-icon.svg` | Full-bleed app icon: white signature on Signal Blue (iOS and the PWA mask it themselves) |
 | `png/` | 1024 px symbols and app icon, 1600 px wide lockups, `board.png` (the mark in use) |
 
 ## Construction (256 grid)
