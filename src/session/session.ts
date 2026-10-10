@@ -450,6 +450,10 @@ export class Session {
       if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) || data.length !== width * height) {
         throw new RangeError(`Peta kedalaman ${width}x${height} butuh ${width * height} float, diterima ${data.length}.`);
       }
+      const layers = map.layers;
+      if (layers && [layers.foreground, layers.background, layers.alpha].some((plane) => plane.length !== width * height)) {
+        throw new RangeError(`Lapisan kedalaman ${width}x${height} butuh ${width * height} float per bidang.`);
+      }
     }
     this.#depth = map ?? undefined;
     this.#depthId += 1;

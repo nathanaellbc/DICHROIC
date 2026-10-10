@@ -15,6 +15,7 @@ import type * as Ort from 'onnxruntime-web';
 import { DEPTH_CACHE, VARIANTS, DepthAssetNotCachedError, fetchCached, variantUrl } from './model';
 import type { DepthBackend } from './model';
 import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB, rgbaFrom, toModelTensor } from './refine';
+import { detailDepth } from './matte';
 import type { DepthRequest, DepthResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -116,10 +117,13 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
           ? result.rgb
           : resampleRGB(rgbaFrom(result.rgb, result.mw, result.mh), result.mw, result.mh, result.ow, result.oh);
       const up = jointBilateralUpsample(result.raw, result.ow, result.oh, guideLow, req.rgba, req.width, req.height);
-      const depth = normaliseDisparity(up);
+      // Detail halus (matte.ts): kedalaman dibersihkan berpanduan foto, lalu dua
+      // lapis + matte di tepi subjek supaya helai rambut tetap tajam di atas
+      // latar yang blur.
+      const { depth, layers } = detailDepth(up, req.rgba, req.width, req.height, { lowMemory: req.lowMemory }, normaliseDisparity);
       post(
-        { type: 'result', id: req.id, width: req.width, height: req.height, depth, backend, variant: VARIANTS[backend].id, inferMs: Math.round(result.inferMs) },
-        [depth.buffer],
+        { type: 'result', id: req.id, width: req.width, height: req.height, depth, layers, backend, variant: VARIANTS[backend].id, inferMs: Math.round(result.inferMs) },
+        [depth.buffer, layers.foreground.buffer, layers.background.buffer, layers.alpha.buffer],
       );
     } catch (err) {
       post({

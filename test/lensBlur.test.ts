@@ -225,6 +225,56 @@ describe('lens blur: tahap GPU', () => {
     expect(fg[edge]!, 'foreground gelap menyebar ke latar').toBeLessThan(sharp[edge]! * 0.9);
   }, 120_000);
 
+  it('dua lapis (rambut): helai tipis tetap tajam, latar di selanya blur dan tidak ternoda helai', async () => {
+    // Kiri: subjek gelap dekat (fokus). Kanan: latar jauh bergaris (1 | 3,
+    // periode 4 px). Helai gelap 1 px menjulur ke latar; peta kedalaman TIDAK
+    // memuatnya (jaringan tidak melihatnya), lapisan dari matte memuatnya.
+    const width = SIZE;
+    const strands = new Set([132, 142, 152, 162]);
+    const rgba = new Float32Array(width * SIZE * 4);
+    for (let y = 0; y < SIZE; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const v = x < 120 || strands.has(x) ? 0.02 : (x >> 1) % 2 ? 3 : 1;
+        rgba.set([v, v, v, 1], (y * width + x) * 4);
+      }
+    }
+    const image = { width, height: SIZE, rgba };
+    const n = width * SIZE;
+    const data = new Float32Array(n);
+    const foreground = new Float32Array(n);
+    const background = new Float32Array(n);
+    const alpha = new Float32Array(n).fill(1);
+    for (let y = 0; y < SIZE; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = y * width + x;
+        data[i] = x < 120 ? 1 : 0;
+        const zone = x >= 112 && x < 180;
+        foreground[i] = zone ? 1 : data[i]!;
+        background[i] = zone ? 0 : data[i]!;
+        if (zone) alpha[i] = x < 120 || strands.has(x) ? 1 : 0;
+      }
+    }
+    const focus = { ...BASE, lensFocusX: 0.2, lensFocusY: 0.5 };
+    const plain: DepthMap = { width, height: SIZE, data };
+    const layered: DepthMap = { width, height: SIZE, data, layers: { foreground, background, alpha } };
+    const { out: one } = await lensOnly(image, focus, plain);
+    const { out: two } = await lensOnly(image, focus, layered);
+    const { out: sharp } = await lensOnly(image, focus, undefined);
+    const g = (out: Float32Array, x: number) => out[(128 * width + x) * 4 + 1]!;
+    // Latar tanpa helai jauh dari subjek = rujukan blur latar.
+    const farBg = g(one, 220);
+    expect(Math.abs(g(sharp, 220) - farBg), 'latar memang blur').toBeGreaterThan(0.2);
+    for (const x of strands) {
+      // Satu lapis: helai ikut lapis latar dan luntur jadi blur.
+      expect(g(one, x) / g(sharp, x), `satu lapis x=${x}`).toBeGreaterThan(5);
+      // Dua lapis: helai keluar persis tajam.
+      expect(g(two, x), `dua lapis x=${x}`).toBe(g(sharp, x));
+      // Sela di antara helai: latar blur (bukan garis tajam), tidak digelapkan helai.
+      const gap = g(two, x + 5);
+      expect(Math.abs(gap - farBg) / farBg, `sela x=${x + 5}`).toBeLessThan(0.2);
+    }
+  }, 120_000);
+
   it('rantai penuh: lens blur hanya dibangun bila aktif dan ada peta kedalaman', async () => {
     const { bundle, arenas, engine } = await sharedResources(STOCK_ID, PRINT);
     const image = pointLight();

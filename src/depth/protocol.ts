@@ -27,6 +27,8 @@ export type DepthResponse =
       height: number;
       /** Disparitas ternormalisasi: 0 di jangkar jauh (tak hingga), 1 di jangkar dekat. */
       depth: Float32Array;
+      /** Dua lapis di tepi subjek (`matte.ts` `depthLayers`), seukuran `depth`. */
+      layers: { foreground: Float32Array; background: Float32Array; alpha: Float32Array };
       backend: DepthBackend;
       variant: 'fp16' | 'int8';
       inferMs: number;

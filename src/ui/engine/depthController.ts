@@ -115,7 +115,7 @@ export class DepthController {
       });
       if (!current()) return;
       this.#clearStall();
-      await this.deps.deliver({ width: result.width, height: result.height, data: result.data });
+      await this.deps.deliver({ width: result.width, height: result.height, data: result.data, ...(result.layers ? { layers: result.layers } : {}) });
       if (!current()) return;
       this.#set({ status: 'ready', backend: result.backend, variant: result.variant, ms: result.inferMs });
     } catch (error) {

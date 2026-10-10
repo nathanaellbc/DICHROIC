@@ -13,6 +13,8 @@ export interface DepthResult {
   height: number;
   /** Disparitas ternormalisasi, baris atas-ke-bawah: 0 = tak hingga. */
   data: Float32Array;
+  /** Dua lapis + matte di tepi subjek (`DepthMap.layers`). */
+  layers?: { foreground: Float32Array; background: Float32Array; alpha: Float32Array };
   backend: DepthBackend;
   variant: 'fp16' | 'int8';
   inferMs: number;
@@ -152,7 +154,7 @@ export class DepthEstimator {
       p.reject(msg.code === 'not-cached' ? new DepthNotCachedError(msg.message) : new Error(msg.message));
       return;
     }
-    p.resolve({ width: msg.width, height: msg.height, data: msg.depth, backend: msg.backend, variant: msg.variant, inferMs: msg.inferMs });
+    p.resolve({ width: msg.width, height: msg.height, data: msg.depth, layers: msg.layers, backend: msg.backend, variant: msg.variant, inferMs: msg.inferMs });
   }
 
   /**

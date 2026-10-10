@@ -94,16 +94,26 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     return targets;
   }
 
+  /**
+   * Tiga bidang berurutan: lapis depan, lapis belakang, alfa lapis depan
+   * (`lensBlur.wgsl` planeAt). Tanpa `layers`: depan = belakang = peta, alfa 1
+   * -- shader lalu identik dengan satu lapis.
+   */
   function depthBuffer(map: DepthMap): GPUBuffer {
     if (depthCache?.map === map) return depthCache.buffer;
     depthCache?.buffer.destroy();
+    const n = map.data.length;
     const buffer = device.createBuffer({
       label: 'lensBlur:depth',
-      size: Math.max(map.data.byteLength, 16),
+      size: Math.max(n * 3 * 4, 16),
       usage: gpuBufferUsage.STORAGE,
       mappedAtCreation: true,
     });
-    new Float32Array(buffer.getMappedRange()).set(map.data);
+    const planes = new Float32Array(buffer.getMappedRange());
+    planes.set(map.layers?.foreground ?? map.data, 0);
+    planes.set(map.layers?.background ?? map.data, n);
+    if (map.layers) planes.set(map.layers.alpha, 2 * n);
+    else planes.fill(1, 2 * n, 3 * n);
     buffer.unmap();
     depthCache = { map, buffer };
     return buffer;

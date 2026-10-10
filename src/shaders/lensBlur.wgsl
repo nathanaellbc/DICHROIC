@@ -26,6 +26,14 @@
 // dan di-mip); combine membaca adegan tajam langsung dari buffer f32, jadi
 // piksel dengan CoC < 0,5 px (di dalam fokus) keluar BIT-IDENTIK dengan
 // masukannya.
+//
+// Detail halus (rambut): buffer kedalaman membawa tiga bidang -- lapis depan,
+// lapis belakang (latar di balik helai), dan alfa lapis depan (`depth/matte.ts`).
+// Medan blur dibangun dari lapis belakang dengan warna lapis depan diredam
+// (bobot 1 - alfa di prep), lalu combine mencampur hasil lapis belakang dan
+// lapis depan dengan alfa: latar blur tembus di sela helai yang tetap tajam.
+// Di luar zona tepi (alfa 1, depan = belakang) semua jalur identik dengan
+// satu lapis.
 
 struct Lens {
   fullSize: vec2<u32>,
@@ -64,16 +72,41 @@ const SMALL_TAPS: i32 = 16;
 
 // --- bersama ----------------------------------------------------------------
 
-fn depthAt(uv: vec2<f32>) -> f32 {
+// Bidang `plane` buffer kedalaman (0 depan, 1 belakang, 2 alfa), bilinear.
+fn planeAt(uv: vec2<f32>, plane: u32) -> f32 {
   let size = vec2<f32>(lens.depthSize);
   let p = clamp(uv * size - 0.5, vec2<f32>(0.0), size - 1.0);
   let p0 = vec2<u32>(floor(p));
   let p1 = min(p0 + 1u, lens.depthSize - 1u);
   let t = p - vec2<f32>(p0);
   let w = lens.depthSize.x;
-  let a = mix(depth[p0.y * w + p0.x], depth[p0.y * w + p1.x], t.x);
-  let b = mix(depth[p1.y * w + p0.x], depth[p1.y * w + p1.x], t.x);
+  let o = plane * w * lens.depthSize.y;
+  let a = mix(depth[o + p0.y * w + p0.x], depth[o + p0.y * w + p1.x], t.x);
+  let b = mix(depth[o + p1.y * w + p0.x], depth[o + p1.y * w + p1.x], t.x);
   return mix(a, b, t.y);
+}
+
+fn depthAt(uv: vec2<f32>) -> f32 {
+  return planeAt(uv, 0u);
+}
+
+fn alphaAt(uv: vec2<f32>) -> f32 {
+  return planeAt(uv, 2u);
+}
+
+// Lapis depan yang blur di depan bidang fokus ditangani medan dekat seperti
+// biasa (diameter CoC px render); dua lapis hanya berlaku bila lapis depan
+// fokus atau di belakangnya -- kasus potret.
+const NEAR_LAYER_PX: f32 = 1.0;
+
+// Kedalaman yang dipakai medan blur: lapis belakang (latar di balik helai),
+// kecuali lapis depan sendiri blur di depan bidang fokus.
+fn fieldDepth(uv: vec2<f32>) -> f32 {
+  let f = depthAt(uv);
+  if (signedCoc(f) < -NEAR_LAYER_PX) {
+    return f;
+  }
+  return planeAt(uv, 1u);
 }
 
 // Diameter CoC bertanda, px render: + di belakang bidang fokus, - di depan
@@ -152,15 +185,32 @@ fn prep(@builtin(global_invocation_id) gid: vec3<u32>) {
   let x1 = max(x0 + 1u, ((gid.x + 1u) * W) / lens.gridSize.x);
   let y0 = (gid.y * H) / lens.gridSize.y;
   let y1 = max(y0 + 1u, ((gid.y + 1u) * H) / lens.gridSize.y);
+  let uv = (vec2<f32>(gid.xy) + 0.5) / vec2<f32>(lens.gridSize);
+  // Warna sel: rata-rata kotak. Bila sel ini mewakili lapis belakang, piksel
+  // lapis depan (helai) diredam dengan bobot 1 - alfa supaya warnanya tidak
+  // ikut menyebar sebagai bokeh latar; sel yang seluruhnya lapis depan (atau
+  // tanpa lapisan, alfa 1) kembali ke rata-rata biasa.
+  let layered = signedCoc(depthAt(uv)) >= -NEAR_LAYER_PX;
   var c = vec3<f32>(0.0);
+  var cb = vec3<f32>(0.0);
+  var wb = 0.0;
   for (var y = y0; y < y1; y = y + 1u) {
     for (var x = x0; x < x1; x = x + 1u) {
-      c += scene[y * W + x].rgb;
+      let s = scene[y * W + x].rgb;
+      c += s;
+      if (layered) {
+        let wgt = 1.0 - alphaAt((vec2<f32>(f32(x), f32(y)) + 0.5) / vec2<f32>(lens.fullSize));
+        cb += s * wgt;
+        wb += wgt;
+      }
     }
   }
-  c /= f32((x1 - x0) * (y1 - y0));
-  let uv = (vec2<f32>(gid.xy) + 0.5) / vec2<f32>(lens.gridSize);
-  let coc = signedCoc(depthAt(uv));
+  let count = f32((x1 - x0) * (y1 - y0));
+  c /= count;
+  if (wb > 0.05 * count) {
+    c = cb / wb;
+  }
+  let coc = signedCoc(fieldDepth(uv));
   textureStore(gridOut, vec2<i32>(gid.xy), vec4<f32>(c, coc * 0.5 * lens.gridScale));
 }
 
@@ -401,6 +451,22 @@ fn tent(t: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
                + textureSampleLevel(t, gridSampler, uv + vec2<f32>(h.x, h.y), 0.0));
 }
 
+// Warna satu lapis berjari-jari CoC r (px render): tajam, cakram kecil di
+// resolusi penuh, atau medan jauh grid untuk blur besar.
+fn layerColor(p: vec2<f32>, uv: vec2<f32>, sharp: vec3<f32>, r: f32) -> vec3<f32> {
+  // Ambang grid, px render.
+  let cell = GRID_MIN_RADIUS / lens.gridScale;
+  var base = sharp;
+  if (r >= 0.5) {
+    base = smallDisc(p, min(r, 2.0 * cell));
+  }
+  let blend = smoothstep(cell, 2.0 * cell, r);
+  if (blend > 0.0) {
+    base = mix(base, tent(farTex, uv).rgb, blend);
+  }
+  return base;
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (gid.x >= lens.fullSize.x || gid.y >= lens.fullSize.y) {
@@ -410,16 +476,13 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
   let source = scene[index];
   let p = vec2<f32>(gid.xy) + 0.5;
   let uv = p / vec2<f32>(lens.fullSize);
-  let r = abs(signedCoc(depthAt(uv))) * 0.5;
-  // Ambang grid, px render.
-  let cell = GRID_MIN_RADIUS / lens.gridScale;
-  var base = source.rgb;
-  if (r >= 0.5) {
-    base = smallDisc(p, min(r, 2.0 * cell));
-  }
-  let blend = smoothstep(cell, 2.0 * cell, r);
-  if (blend > 0.0) {
-    base = mix(base, tent(farTex, uv).rgb, blend);
+  let front = signedCoc(depthAt(uv));
+  var base = layerColor(p, uv, source.rgb, abs(front) * 0.5);
+  // Dua lapis: latar blur tembus di sela helai lapis depan.
+  let a = alphaAt(uv);
+  if (a < 1.0 && front >= -NEAR_LAYER_PX) {
+    let back = layerColor(p, uv, source.rgb, abs(signedCoc(planeAt(uv, 1u))) * 0.5);
+    base = mix(back, base, a);
   }
   let nearValue = tent(nearTex, uv);
   if (nearValue.a > 0.0) {

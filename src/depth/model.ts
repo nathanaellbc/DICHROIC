@@ -108,10 +108,15 @@ export async function depthProfile(): Promise<DepthProfile> {
   if (isAppleMobile()) return { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
   const coarse = window.matchMedia?.('(pointer: coarse)').matches === true;
   const backend = await preferredBackend();
-  return coarse
-    ? { backend, inputSize: 392, guideMaxEdge: 1024, lowMemory: true }
-    : { backend, inputSize: DEPTH_MODEL.inputSize, guideMaxEdge: 1536, lowMemory: false };
+  if (coarse) return { backend, inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
+  // Desktop: guide 2048 untuk matte rambut (`matte.ts`). Di GPU jaringan
+  // melihat 770 px (bukan 518): tepi subjek lebih rapat; atensi berskala
+  // kuadrat token, jadi jalur CPU tetap 518.
+  return { backend, inputSize: backend === 'webgpu' ? HIGH_DETAIL_INPUT : DEPTH_MODEL.inputSize, guideMaxEdge: 2048, lowMemory: false };
 }
+
+/** Masukan jaringan desktop ber-GPU (kelipatan 14). */
+export const HIGH_DETAIL_INPUT = 770;
 
 export async function isModelCached(backend: DepthBackend): Promise<boolean> {
   try {

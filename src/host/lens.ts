@@ -140,6 +140,13 @@ export interface DepthMap {
   width: number;
   height: number;
   data: Float32Array;
+  /**
+   * Dua lapis di tepi subjek (`depth/matte.ts`), seukuran `data`: kedalaman
+   * lapis depan dan latar di belakangnya, plus bagian lapis depan (0..1).
+   * Lens blur memakainya untuk detail halus seperti rambut; tanpa ini
+   * (atau di luar zona tepi) hasilnya sama dengan satu lapis.
+   */
+  layers?: { foreground: Float32Array; background: Float32Array; alpha: Float32Array };
 }
 
 /**
