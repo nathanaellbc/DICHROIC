@@ -289,7 +289,9 @@ The kernel footprint scales with render dimensions (sigma 1.5 px at a 4096 px lo
 
 ## Film Off
 
-Select Off at the top of the Film list, or disable Film Simulation in the Film controls. This bypasses spectral film exposure/develop, halation, DIR, grain, paper and scanner processing while retaining Camera develop, Soften Detail, Lens Blur and camera diffusion. Output still converts to the selected output primaries and transfer function. Film auto-exposure and film/print exposure controls are bypassed. Stock and paper selections are retained; choosing a film re-enables simulation. Preview and image export share the same path; the graph cache includes the bypass state.
+Select Off at the top of the Film list, or disable Film Simulation in the Film controls. Off uses a neutral negative instead of a selected spectral stock, keeping exposure, development, film format and texture controls active. Cineon print LUTs can process this neutral negative; photographic papers require a film stock. Stock and paper selections are retained; choosing a film re-enables its stock response. Preview and image export share the same path; the graph cache includes the neutral-negative state.
+
+The native iOS editor uses the same planner and WGSL on Metal. See [the native app](mobile/README.md), [build evidence](docs/IOS_PORT_HANDOFF.md) and [free Windows installation](docs/IOS_FREE_INSTALL.md).
 
 ## Squircle interface geometry
 
