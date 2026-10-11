@@ -45,10 +45,10 @@ the existing DICHROIC icon; display name and launch background match the app.
 
 See [the current handoff](../docs/IOS_PORT_HANDOFF.md) for exact build evidence
 and unresolved checks. Source implementation and compilation are not evidence
-of physical iPhone stability or perfect visual equivalence. In particular,
-the preview uses native UIKit sRGB/P3 image profiles instead of untagged Flutter
-textures. The new path has independent pixel/profile checks but still needs
-current simulator execution and physical display/gesture validation.
+of physical iPhone stability or perfect visual equivalence. UIKit sRGB/P3
+preview pixels and encoded PNGs pass seven independent Dawn comparisons with
+at most one byte of error. Physical display, gesture and peak-memory acceptance
+still requires installation on the user's iPhone.
 
 The user chose Windows and free personal signing. See
 [the installation guide](../docs/IOS_FREE_INSTALL.md). No paid Apple Developer
