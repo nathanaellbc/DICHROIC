@@ -1126,7 +1126,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 
 /* Vectorscope (gaya DaVinci Resolve): selalu latar gelap seperti monitor scope. */
-.vectorscope { position: relative; flex-shrink: 0; border-radius: 50%; background: radial-gradient(circle, #121214 0%, #0b0b0c 70%, rgba(11, 11, 12, 0) 72%); }
+.vectorscope { position: relative; flex-shrink: 0; border-radius: 50%; background: radial-gradient(circle, rgba(18, 18, 20, 0.5) 0%, rgba(11, 11, 12, 0.42) 70%, rgba(11, 11, 12, 0) 72%); }
 .scope-overlay {
   z-index: 2; padding: 6px; border: 0; border-radius: 22px; cursor: pointer;
   background: rgba(10, 10, 12, 0.72); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
@@ -1134,7 +1134,7 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 .scope-overlay:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .scope-badge { position: absolute; left: 8px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 3px #000; }
-.scope-panel { flex-shrink: 0; border-top: 1px solid var(--hairline); padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; background: #0b0b0c; }
+/* Panel scope tembus pandang: material grafit beku yang sama dengan panel editor lain. */
 .scope-panel-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .scope-chip {
   height: 20px; padding: 0 6px; border: 0; border-radius: 6px; font: inherit; font-size: 10.5px; font-weight: 600;
@@ -1142,7 +1142,12 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 .scope-chip[aria-pressed='true'] { color: #fff; background: rgba(0, 145, 255, 0.55); }
 .scope-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
-.waveform { position: relative; flex-shrink: 0; border-radius: 8px; background: #0b0b0c; overflow: hidden; }
+.waveform { position: relative; flex-shrink: 0; border-radius: 8px; background: rgba(11, 11, 12, 0.42); overflow: hidden; }
+@media (prefers-reduced-transparency: reduce) {
+  .scope-panel { background: #1c1c1e; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .waveform { background: #0b0b0c; }
+  .vectorscope { background: radial-gradient(circle, #121214 0%, #0b0b0c 70%, rgba(11, 11, 12, 0) 72%); }
+}
 .scope-overlay .waveform { border-radius: 14px; }
 .scope-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: rgba(255, 255, 255, 0.06); }
 .scope-tabs button { height: 20px; padding: 0 7px; border: 0; border-radius: 5px; font: inherit; font-size: 10.5px; font-weight: 600; color: var(--label-2); background: transparent; cursor: pointer; }

@@ -152,6 +152,11 @@ export interface RenderParams {
   cameraHsvSaturation: number;
   /** Input detail attenuation, 0..1; zero bypasses the spatial stage. */
   cameraSoftenDetail: number;
+  /**
+   * "Natural": membalik gaya ISP HP pada input ter-encode (`host/naturalize.ts`),
+   * 0..1; nol (atau tanpa decode CCTF, mis. RAW/EXR) melewati tahapnya.
+   */
+  cameraNatural: number;
 
   // Lens blur (`host/lens.ts`, `stages/lensBlur.ts`): defocus sintetis dari
   // peta kedalaman Depth Anything V2 yang diestimasi di perangkat. Tanpa peta
@@ -230,6 +235,7 @@ export const BASELINE_RENDER_PARAMS: Readonly<RenderParams> = Object.freeze({
   cameraSaturation: 1,
   cameraHsvSaturation: 1,
   cameraSoftenDetail: 0,
+  cameraNatural: 0,
   lensBlurEnabled: false,
   lensFocusX: 0.5,
   lensFocusY: 0.5,

@@ -5,6 +5,7 @@ import { createNeutralFilmStage } from './stages/neutralFilm';
 import { createPrintLutStage } from './stages/printLut';
 import type { PrintCube } from '../profiles/printLuts';
 import { createSoftenDetailStage } from './stages/softenDetail';
+import { createNaturalStage } from './stages/natural';
 import { createHalationStage } from './stages/halation';
 import { createCurveDevelopStage } from './stages/curveDevelop';
 import { createDirStage } from './stages/dir';
@@ -144,9 +145,11 @@ function lensStages(device: GPUDevice, spec: ChainSpec): Stage[] {
 
 export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec, cube?: PrintCube): Stage[] {
   if (spec.softenDetail && spec.family === 'lut') throw new Error('Soften Detail is spatial and cannot be baked into a cube LUT.');
+  if (spec.natural && spec.family === 'lut') throw new Error('Natural reads image-wide statistics and cannot be baked into a cube LUT.');
   if (spec.filmOff || spec.printLut) return [
     createMaterializeActiveRegionStage(device),
     ...(spec.softenDetail ? [createSoftenDetailStage(device)] : []),
+    ...(spec.natural ? [createNaturalStage(device)] : []),
     createFilmExposureStage(device, arenas, spec.filmOff === true),
     ...(spec.filmOff ? [createNeutralFilmStage(device, 'expose')] : []),
     ...lensStages(device, spec),
@@ -174,6 +177,7 @@ export function buildChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec, c
   return [
     createMaterializeActiveRegionStage(device),
     ...(spec.softenDetail ? [createSoftenDetailStage(device)] : []),
+    ...(spec.natural ? [createNaturalStage(device)] : []),
     createFilmExposureStage(device, arenas),
     ...lensStages(device, spec),
     cameraDiffusionStage(device, arenas, spec),
@@ -208,6 +212,7 @@ function buildPrintChain(device: GPUDevice, arenas: Arenas, spec: ChainSpec): St
   return [
     createMaterializeActiveRegionStage(device),
     ...(spec.softenDetail ? [createSoftenDetailStage(device)] : []),
+    ...(spec.natural ? [createNaturalStage(device)] : []),
     createFilmExposureStage(device, arenas),
     ...lensStages(device, spec),
     cameraDiffusionStage(device, arenas, spec),

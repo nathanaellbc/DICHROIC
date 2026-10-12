@@ -1098,7 +1098,7 @@ export class Session {
     }
     const key =
       `${plan.arenaKey}|${plan.chain.family}|grain=${plan.chain.grain}|scan=${plan.chain.scan ?? false}` +
-      `|off=${plan.chain.filmOff ?? false}|lut=${plan.chain.printLut ?? ''}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}`;
+      `|off=${plan.chain.filmOff ?? false}|lut=${plan.chain.printLut ?? ''}|dc=${plan.chain.cameraDiffusion ?? false}|dp=${plan.chain.printDiffusion ?? false}|lb=${plan.chain.lensBlur ?? false}|soft=${plan.chain.softenDetail ?? false}|nat=${plan.chain.natural ?? false}`;
     const existing = this.graphs.get(key);
     if (existing) {
       this.graphs.delete(key);

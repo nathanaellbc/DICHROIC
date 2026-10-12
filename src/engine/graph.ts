@@ -23,6 +23,7 @@ import type { DiffusionFilterConfig } from '../host/diffusionFilter';
 import type { LensFrame } from '../host/lens';
 import { CORE_PARAMS_BYTES, writeCoreParams } from './params';
 import type { CoreParams } from './params';
+import type { NaturalFrame } from '../host/naturalize';
 import type { EngineDevice } from './device';
 import type { TapName } from './taps';
 import { gpuBufferUsage, gpuMapMode } from './webgpuGlobals';
@@ -42,6 +43,8 @@ export interface FrameParams {
   neutralFilm?: Float32Array;
   cameraOutput?: Float32Array;
   softenDetail?: { amount: number; luma: readonly number[] };
+  /** Ekstensi "Natural" (`host/naturalize.ts`): hanya dibaca tahap `natural`. */
+  natural?: NaturalFrame;
   filmFormatMm: number;
   /**
    * Fase 2C: `camera.exposure_compensation_ev` Python (EV kompensasi, TANPA

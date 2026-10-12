@@ -27,6 +27,8 @@ import { measureAutoExposureEv } from '../host/autoExposure';
 import { CAMERA_LIMITS, cameraFrameValues, isNeutralCamera, invert3, lumaWeights, measureScenePivot } from '../host/cameraDevelop';
 import type { CameraSettings } from '../host/cameraDevelop';
 import { softenKernel } from '../host/softenDetail';
+import { NATURAL_STRENGTH, naturalExposureGain, naturalGrid } from '../host/naturalize';
+import type { NaturalFrame } from '../host/naturalize';
 import { LENS_LIMITS, lensSettings, resolveLensFrame } from '../host/lens';
 import type { DepthMap } from '../host/lens';
 import { decodeWithLut } from '../host/colorDecode';
@@ -45,6 +47,8 @@ export interface ChainSpec {
   printLut?: PrintLutId;
   filmOff?: boolean;
   softenDetail?: boolean;
+  /** Ekstensi "Natural": membalik gaya ISP pada input ter-encode. */
+  natural?: boolean;
   family: 'measured' | 'lut';
   /** Tahap grain disertakan. Selalu `false` untuk `lut`. */
   grain: boolean;
@@ -292,6 +296,7 @@ const CAMERA_FIELD_LIMITS: ReadonlyArray<[keyof RenderParams, { min: number; max
   ['cameraSaturation', CAMERA_LIMITS.saturation],
   ['cameraHsvSaturation', CAMERA_LIMITS.hsvSaturation],
   ['cameraSoftenDetail', { min: 0, max: 1 }],
+  ['cameraNatural', { min: 0, max: 1 }],
 ];
 
 export function validateCamera(params: RenderParams): void {
@@ -416,7 +421,12 @@ export function buildRenderPlan(
       };
 
   const filmFormatMm = FILM_FORMAT_LONG_EDGE_MM[params.filmFormat];
-  const softenDetail = family === 'measured' && params.cameraSoftenDetail > 0;
+  // "Natural" hanya untuk input ter-encode (decode CCTF menyala: JPEG/HEIC/PNG);
+  // RAW dan EXR sudah linear tanpa gaya ISP. Ia ikut menaikkan Soften Detail
+  // (halo sharpening), tanpa pernah menurunkan nilai pilihan pengguna.
+  const natural = family === 'measured' && params.inputCctfDecoding && params.cameraNatural > 0;
+  const softenAmount = Math.max(params.cameraSoftenDetail, natural ? params.cameraNatural * NATURAL_STRENGTH.soften : 0);
+  const softenDetail = family === 'measured' && softenAmount > 0;
   const softenApron = softenDetail ? 2 * softenKernel(Math.max(image.width, image.height)).radius : 0;
   const overlap = family === 'lut' ? 0 : measuredOverlapPx(params, bundle, image, filmFormatMm) + softenApron;
   const exportOverlap = family === 'lut' ? 0 : exportApronPx(params, bundle, image, filmFormatMm) + softenApron;
@@ -458,6 +468,7 @@ export function buildRenderPlan(
       ...(printDiffusion ? { printDiffusion: true } : {}),
       ...(lensBlur ? { lensBlur: true } : {}),
       ...(softenDetail ? { softenDetail: true } : {}),
+      ...(natural ? { natural: true } : {}),
     },
     overlap,
     exportOverlap,
@@ -472,8 +483,9 @@ export function buildRenderPlan(
       ...(printDiffusion ? { printDiffusion: { family: params.printDiffusionFamily, strength: params.printDiffusionStrength } } : {}),
       inputDecodeScale: params.inputCctfDecoding ? 2 ** autoEv : 1,
       ...(camera ? { camera } : {}),
+      ...(natural ? { natural: naturalFrame(params.cameraNatural, bundle, image, inputColorSpace) } : {}),
       ...(softenDetail ? { softenDetail: {
-        amount: params.cameraSoftenDetail,
+        amount: softenAmount,
         luma: lumaWeights(Array.from({ length: 9 }, (_, i) => bundle.staticTable('inputMeterXyzMatrices')[inputColorSpace * 9 + i]!)),
       } } : {}),
       ...(lensBlur
@@ -538,6 +550,22 @@ export function validateOutputColorSpace(bundle: AssetBundle, label: string): vo
       `hanya ${supported.join(', ')} yang punya padanan colour-science`,
     );
   }
+}
+
+/**
+ * Data tahap Natural: baris tabel decode colour space input (sama dengan
+ * filmExposure), bobot luminans, dan peta kontras kasar seluruh foto
+ * (diukur dari gambar ukur bila ada -- uv-nya sama pada pratinjau dan ekspor).
+ */
+function naturalFrame(amount: number, bundle: AssetBundle, image: PlanImage, inputColorSpace: number): NaturalFrame {
+  const { colorSpaces } = bundle.manifest;
+  const size = colorSpaces.transferLutSize;
+  const lut = bundle.staticTable('colorDecodeLuts').slice(inputColorSpace * size, (inputColorSpace + 1) * size);
+  const luma = lumaWeights(Array.from({ length: 9 }, (_, i) => bundle.staticTable('inputMeterXyzMatrices')[inputColorSpace * 9 + i]!));
+  const m = image.measure ?? image;
+  const { grid, logMean } = naturalGrid(m.rgba, m.width, m.height, luma, inputDecoder(bundle, inputColorSpace));
+  const frame = { amount, luma, lut: Float32Array.from(lut), lutMin: colorSpaces.decodeLutMin, lutMax: colorSpaces.decodeLutMax, logMean, grid };
+  return { ...frame, gain: naturalExposureGain(m.rgba, m.width, m.height, frame) };
 }
 
 function inputDecoder(bundle: AssetBundle, colorSpace: number): (value: number) => number {
