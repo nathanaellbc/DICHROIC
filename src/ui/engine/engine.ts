@@ -135,7 +135,8 @@ function storedDepthModel(): { model: DepthModelId; gpu: boolean; notice?: strin
   try {
     const store = storage();
     let model: DepthModelId = isDepthModelId(store?.getItem(DEPTH_MODEL_KEY)) ? store!.getItem(DEPTH_MODEL_KEY) as DepthModelId : 'fast';
-    let gpu = store?.getItem(DEPTH_GPU_KEY) === '1';
+    // GPU bawaan menyala; hanya pilihan eksplisit (atau tab yang mati di GPU) mematikannya.
+    let gpu = store?.getItem(DEPTH_GPU_KEY) !== '0';
     const [crashed, where] = (store?.getItem(DEPTH_RUNNING_KEY) ?? '').split('|');
     if (!isDepthModelId(crashed)) return { model, gpu };
     store?.removeItem(DEPTH_RUNNING_KEY);
@@ -152,7 +153,7 @@ function storedDepthModel(): { model: DepthModelId; gpu: boolean; notice?: strin
     }
     return { model, gpu, notice: `${DEPTH_MODELS[crashed].name} ran out of memory on this device; ${blamed.join(' and ') || 'try again'}.` };
   } catch {
-    return { model: 'fast', gpu: false };
+    return { model: 'fast', gpu: true };
   }
 }
 
