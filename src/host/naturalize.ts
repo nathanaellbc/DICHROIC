@@ -28,7 +28,10 @@ export const NATURAL_STRENGTH = Object.freeze({
   tone: 0.55,
   local: 0.3,
   highlight: 0.55,
-  vibrance: 0.18,
+  /** Kompresi saturasi di atas `vibranceKnee` (0 = tidak ada). */
+  vibrance: 0.45,
+  /** Saturasi (max-min)/max di bawah ini tidak diubah sama sekali. */
+  vibranceKnee: 0.55,
   clipDesaturate: 0.4,
   noise: 0.0035,
   /** Soften Detail ikut naik sampai sekian (halo sharpening). */
@@ -129,23 +132,28 @@ function gridAt(g: NaturalFrame['grid'], u: number, v: number): number {
 export function naturalPixel(rgb: readonly [number, number, number], x: number, y: number, fullW: number, fullH: number, f: NaturalFrame): [number, number, number] {
   const s = f.amount;
   const S = NATURAL_STRENGTH;
-  // 1. Kurva S kamera dibalik di nilai ter-encode (kontinu di 0 dan 1).
-  const enc = rgb.map((e) => (e >= 0 && e <= 1 ? e + (inverseSmoothstep(e) - e) * S.tone * s : e));
-  // 2. Linear.
-  const lin = enc.map((e) => decodeWith(f, e));
+  // 1-2. Linear, lalu kurva S kamera dibalik HANYA pada luminans (di nilai
+  // ter-encode-nya) dan RGB diskalakan dengan rasio yang sama: kontras tone
+  // seperti RAW, hue dan saturasi tidak tersentuh. (Membalik per kanal dulu
+  // menekan jarak antar-kanal -- semua warna ikut pudar.)
+  const lin = rgb.map((e) => decodeWith(f, e));
   const Y = f.luma[0] * lin[0]! + f.luma[1] * lin[1]! + f.luma[2] * lin[2]!;
   if (!(Y > 1e-5)) return [rgb[0], rgb[1], rgb[2]];
+  const Ye = encodeWith(f, Y);
+  const Yt = Ye >= 0 && Ye <= 1 ? decodeWith(f, Ye + (inverseSmoothstep(Ye) - Ye) * S.tone * s) : Y;
   // 3. Kontras skala besar.
   const base = gridAt(f.grid, (x + 0.5) / fullW, (y + 0.5) / fullH);
-  let Yn = Y * f.gain * Math.exp(s * S.local * (base - f.logMean));
+  let Yn = Yt * f.gain * Math.exp(s * S.local * (base - f.logMean));
   // 4. Highlight dekat-terpotong (diukur dari encode asli).
   const knee = smoothstep(0.82, 1, Math.max(rgb[0], rgb[1], rgb[2]));
   Yn *= 1 + s * S.highlight * knee * knee;
   let c = lin.map((v) => (v * Yn) / Y);
-  // 5. Vibrance dibalik + redam warna di dekat potongan.
+  // 5. Vibrance: hanya saturasi ekstrem (jejak dorongan ISP) dikompres dengan
+  // knee lembut; di bawah knee warna tidak diubah. Plus redam di dekat potongan.
   const mx = Math.max(c[0]!, c[1]!, c[2]!), mn = Math.min(c[0]!, c[1]!, c[2]!);
   const sat = (mx - mn) / Math.max(mx, 1e-6);
-  const keep = Math.min(Math.max(1 - s * S.vibrance * smoothstep(0.15, 0.85, sat) - s * S.clipDesaturate * knee, 0), 1);
+  const target = sat <= S.vibranceKnee ? sat : S.vibranceKnee + (sat - S.vibranceKnee) * (1 - S.vibrance * s);
+  const keep = Math.min(Math.max((sat > 1e-6 ? target / sat : 1) * (1 - s * S.clipDesaturate * knee), 0), 1);
   c = c.map((v) => Yn + (v - Yn) * keep);
   // 6. Derau sensor halus.
   const n = pixelNoise(x, y) * s * S.noise * Math.sqrt(Math.max(Yn, 0));

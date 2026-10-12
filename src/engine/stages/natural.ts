@@ -29,7 +29,7 @@ export function createNaturalStage(device: GPUDevice): Stage {
         nat.amount, nat.logMean, nat.lutMin, nat.lutMax,
         nat.luma[0], nat.luma[1], nat.luma[2], nat.lut.length,
         S.tone, S.local, S.highlight, S.vibrance,
-        S.clipDesaturate, S.noise, nat.gain, 0,
+        S.clipDesaturate, S.noise, nat.gain, S.vibranceKnee,
       ], 8);
       settings.unmap();
       const upload = (label: string, data: Float32Array) => {

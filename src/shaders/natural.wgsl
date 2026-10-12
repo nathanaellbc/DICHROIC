@@ -8,7 +8,7 @@ struct Cfg {
   ctl: vec4<f32>,       // amount, logMean, lutMin, lutMax
   luma: vec4<f32>,      // bobot luminans, jumlah entri tabel
   strength0: vec4<f32>, // tone, local, highlight, vibrance
-  strength1: vec4<f32>, // clipDesaturate, noise, gain (kompensasi eksposur), -
+  strength1: vec4<f32>, // clipDesaturate, noise, gain (kompensasi eksposur), vibranceKnee
 }
 
 @group(0) @binding(0) var<storage, read> source: array<vec4<f32>>;
@@ -91,29 +91,43 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
   let i = gid.y * cfg.size.x + gid.x;
   let src = source[i];
   let s = cfg.ctl.x;
-  // 1. Kurva S kamera dibalik di nilai ter-encode.
-  let enc = vec3<f32>(unTone(src.r, s), unTone(src.g, s), unTone(src.b, s));
-  // 2. Linear.
-  let lin = vec3<f32>(decode(enc.r), decode(enc.g), decode(enc.b));
+  // 1-2. Linear, lalu kurva S kamera dibalik HANYA pada luminans (nilai
+  // ter-encode-nya); RGB ikut rasionya -- hue dan saturasi tidak tersentuh.
+  let lin = vec3<f32>(decode(src.r), decode(src.g), decode(src.b));
   let Y = dot(cfg.luma.xyz, lin);
   if (!(Y > 1.0e-5)) {
     dest[i] = src;
     return;
   }
+  let Ye = encode(Y);
+  var Yt = Y;
+  if (Ye >= 0.0 && Ye <= 1.0) {
+    Yt = decode(unTone(Ye, s));
+  }
   let ax = gid.x + cfg.origin.x;
   let ay = gid.y + cfg.origin.y;
   // 3. Kontras skala besar.
   let uv = (vec2<f32>(f32(ax), f32(ay)) + 0.5) / vec2<f32>(f32(cfg.size.z), f32(cfg.size.w));
-  var Yn = Y * cfg.strength1.z * exp(s * cfg.strength0.y * (gridAt(uv) - cfg.ctl.y));
+  var Yn = Yt * cfg.strength1.z * exp(s * cfg.strength0.y * (gridAt(uv) - cfg.ctl.y));
   // 4. Highlight dekat-terpotong.
   let knee = smoothstep(0.82, 1.0, max(src.r, max(src.g, src.b)));
   Yn *= 1.0 + s * cfg.strength0.z * knee * knee;
   var c = lin * (Yn / Y);
-  // 5. Vibrance dibalik + redam warna di dekat potongan.
+  // 5. Vibrance: hanya saturasi di atas knee dikompres lembut; plus redam di
+  // dekat potongan.
   let mx = max(c.r, max(c.g, c.b));
   let mn = min(c.r, min(c.g, c.b));
   let sat = (mx - mn) / max(mx, 1.0e-6);
-  let keep = clamp(1.0 - s * cfg.strength0.w * smoothstep(0.15, 0.85, sat) - s * cfg.strength1.x * knee, 0.0, 1.0);
+  let kv = cfg.strength1.w;
+  var satTarget = sat;
+  if (sat > kv) {
+    satTarget = kv + (sat - kv) * (1.0 - cfg.strength0.w * s);
+  }
+  var ratio = 1.0;
+  if (sat > 1.0e-6) {
+    ratio = satTarget / sat;
+  }
+  let keep = clamp(ratio * (1.0 - s * cfg.strength1.x * knee), 0.0, 1.0);
   c = vec3<f32>(Yn) + (c - vec3<f32>(Yn)) * keep;
   // 6. Derau sensor halus.
   let n = pixelNoise(ax, ay) * s * cfg.strength1.y * sqrt(max(Yn, 0.0));

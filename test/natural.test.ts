@@ -66,6 +66,13 @@ describe('Natural: referensi', () => {
     expect(satOut, `saturasi ${satIn.toFixed(2)}`).toBeLessThan(satLinIn);
     const grey = naturalPixel([0.42, 0.44, 0.46], 34, 30, W, H, f);
     for (let c = 0; c < 3; c += 1) expect(Math.abs(grey[c]! - [0.42, 0.44, 0.46][c]!)).toBeLessThan(0.06);
+    // Saturasi normal (di bawah knee vibrance) praktis tidak berubah: kurva tone
+    // dibalik pada luminans saja, bukan per kanal.
+    const skin = naturalPixel([0.6, 0.52, 0.47], 34, 30, W, H, f).map(decode);
+    const skinIn = [0.6, 0.52, 0.47].map(decode);
+    const sat = (c: number[]) => (Math.max(...c) - Math.min(...c)) / Math.max(...c);
+    expect(sat(skinIn)).toBeLessThan(0.55);
+    expect(Math.abs(sat(skin) - sat(skinIn)) / sat(skinIn)).toBeLessThan(0.03);
     expect(() => validateCamera({ ...NATURAL, cameraNatural: 1.01 })).toThrow();
   });
 });
