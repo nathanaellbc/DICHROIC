@@ -206,7 +206,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
       run('near', { 6: gridAll, 10: sampler, 12: { buffer: dilated }, 13: t.near.createView() }, gw, gh);
       run(
         'combine',
-        { 1: { buffer: ctx.source }, 2: { buffer: depth }, 10: sampler, 14: t.far.createView(), 15: t.near.createView(), 16: { buffer: ctx.dest }, 17: { buffer: matte } },
+        { 1: { buffer: ctx.source }, 2: { buffer: depth }, 6: gridAll, 10: sampler, 14: t.far.createView(), 15: t.near.createView(), 16: { buffer: ctx.dest }, 17: { buffer: matte } },
         width,
         height,
       );

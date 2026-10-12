@@ -309,6 +309,49 @@ describe('lens blur: tahap GPU', () => {
     }
   }, 120_000);
 
+  it('Refine Edge: piksel campuran di tepi subjek tidak membawa latar tajam ("outline")', async () => {
+    // Tepi subjek gelap (x < 118) ke latar jauh bergaris tajam (1 | 3), alfa
+    // turun bertahap 1 -> 0 di x = 118..122 seperti matte ViTMatte. Warna
+    // adegan di piksel campuran = a*S + (1-a)*latar TAJAM. Dulu combine
+    // mencampurnya apa adanya dan latar tajam tersisa berbobot a(1-a): cincin
+    // tipis yang tidak blur di sepanjang tepi, baru blur di luarnya.
+    const width = SIZE;
+    const S = 0.02;
+    const alphaAtX = (x: number) => Math.min(Math.max((122 - x) / 4, 0), 1);
+    const stripe = (x: number) => ((x >> 1) % 2 ? 3 : 1);
+    const rgba = new Float32Array(width * SIZE * 4);
+    const n = width * SIZE;
+    const data = new Float32Array(n), foreground = new Float32Array(n), background = new Float32Array(n), alpha = new Float32Array(n).fill(1);
+    for (let y = 0; y < SIZE; y += 1) for (let x = 0; x < width; x += 1) {
+      const i = y * width + x;
+      const a = x < 118 ? 1 : alphaAtX(x);
+      const v = a * S + (1 - a) * stripe(x);
+      rgba.set([v, v, v, 1], i * 4);
+      data[i] = x < 120 ? 1 : 0;
+      const zone = x >= 110 && x < 140;
+      foreground[i] = zone ? 1 : data[i]!;
+      background[i] = zone ? 0 : data[i]!;
+      if (zone) alpha[i] = a;
+    }
+    const image = { width, height: SIZE, rgba };
+    const focus = { ...BASE, lensFocusX: 0.2, lensFocusY: 0.5 };
+    const refined: DepthMap = { width, height: SIZE, data, layers: { foreground, background }, matte: { x: 0, y: 0, w: 1, h: 1, width, height: SIZE, alpha } };
+    const { out: two } = await lensOnly(image, focus, refined);
+    const { out: one } = await lensOnly(image, focus, { width, height: SIZE, data });
+    const { out: sharp } = await lensOnly(image, focus, undefined);
+    const g = (o: Float32Array, x: number) => o[(128 * width + x) * 4 + 1]!;
+    const subject = g(sharp, 100);
+    const farBg = g(one, 220);
+    const stripeAmp = Math.abs(g(sharp, 220) - farBg);
+    for (const x of [119, 120, 121]) {
+      const a = alphaAtX(x);
+      const expected = a * subject + (1 - a) * farBg;
+      // Sisa latar tajam lama: a(1-a) * amplitudo garis (~25 % di a = 0,5).
+      expect(Math.abs(g(two, x) - expected), `x=${x} a=${a}`).toBeLessThan(0.08 * stripeAmp);
+    }
+    // Subjek penuh tetap bit-identik tajam.
+    expect(g(two, 100)).toBe(g(sharp, 100));
+  }, 120_000);
   it('rantai penuh: lens blur hanya dibangun bila aktif dan ada peta kedalaman', async () => {
     const { bundle, arenas, engine } = await sharedResources(STOCK_ID, PRINT);
     const image = pointLight();

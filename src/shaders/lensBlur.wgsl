@@ -508,6 +508,52 @@ fn layerColor(p: vec2<f32>, uv: vec2<f32>, sharp: vec3<f32>, r: f32) -> vec3<f32
   return base;
 }
 
+// Latar blur di belakang piksel campuran: sampel medan jauh di cakram kecil
+// sekitarnya (spiral Vogel, 12 titik), berbobot sel grid yang benar-benar
+// mewakili latar blur (radius CoC grid besar). Sel lapis depan (CoC ~0) tidak
+// menyumbang. Tanpa sel latar di dekatnya, nilai semula.
+const FILL_TAPS: i32 = 12;
+
+fn backgroundFill(uv: vec2<f32>, rBack: f32, fallback: vec3<f32>) -> vec3<f32> {
+  let radius = clamp(rBack, 4.0, 16.0) / vec2<f32>(lens.fullSize);
+  var sum = vec3<f32>(0.0);
+  var wsum = 0.0;
+  for (var k = 0; k < FILL_TAPS; k = k + 1) {
+    let q = clamp(uv + vogel(k, FILL_TAPS) * radius, vec2<f32>(0.0), vec2<f32>(1.0));
+    let w = smoothstep(GRID_MIN_RADIUS, 2.0 * GRID_MIN_RADIUS, abs(gridCoc(q)));
+    if (w > 0.0) {
+      sum += tent(farTex, q).rgb * w;
+      wsum += w;
+    }
+  }
+  return select(fallback, sum / max(wsum, 1.0e-30), wsum > 1.0e-3);
+}
+
+// Dekontaminasi warna lapis depan di piksel campuran (Refine Edge): rata-rata
+// adegan di jendela 7x7 px berbobot alfa^4 -- hanya piksel yang hampir murni
+// subjek (helai, kulit) yang menyumbang, jadi latar tajam tidak terbawa.
+// Tanpa tetangga subjek, warna adegan sendiri.
+const DECONTAMINATE_RADIUS: i32 = 3;
+
+fn foregroundColor(p: vec2<f32>, fallback: vec3<f32>) -> vec3<f32> {
+  var sum = vec3<f32>(0.0);
+  var wsum = 0.0;
+  let size = vec2<f32>(lens.fullSize);
+  for (var dy = -DECONTAMINATE_RADIUS; dy <= DECONTAMINATE_RADIUS; dy = dy + 1) {
+    for (var dx = -DECONTAMINATE_RADIUS; dx <= DECONTAMINATE_RADIUS; dx = dx + 1) {
+      let q = clamp(p + vec2<f32>(f32(dx), f32(dy)), vec2<f32>(0.5), size - 0.5);
+      let aq = alphaAt(q / size);
+      let w = aq * aq * aq * aq;
+      if (w > 0.0) {
+        let i = u32(q.y - 0.5) * lens.fullSize.x + u32(q.x - 0.5);
+        sum += scene[i].rgb * w;
+        wsum += w;
+      }
+    }
+  }
+  return select(fallback, sum / max(wsum, 1.0e-30), wsum > 1.0e-3);
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
   if (gid.x >= lens.fullSize.x || gid.y >= lens.fullSize.y) {
@@ -522,8 +568,24 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Dua lapis: latar blur tembus di sela helai lapis depan.
   let a = alphaAt(uv);
   if (a < 1.0 && front >= -NEAR_LAYER_PX) {
-    let back = layerColor(p, uv, source.rgb, abs(signedCoc(planeAt(uv, 1u))) * 0.5);
-    base = mix(back, base, a);
+    let rBack = abs(signedCoc(planeAt(uv, 1u))) * 0.5;
+    var back = layerColor(p, uv, source.rgb, rBack);
+    // Sel grid di tepi subjek kebanyakan isinya subjek, jadi prep menggolongkan
+    // mereka sebagai lapis depan (tajam, tidak disebar) dan medan jauh di sana
+    // berisi warna subjek -- lapis belakang di piksel campuran jadi gelap/tajam.
+    // Ambil latar blur dari sel latar di sekitar.
+    if (a > 0.0 && rBack >= GRID_MIN_RADIUS / lens.gridScale) {
+      back = backgroundFill(uv, rBack, back);
+    }
+    var fore = base;
+    // Piksel campuran yang lapis depannya tajam: warna adegan di sini adalah
+    // a*F + (1-a)*latar TAJAM. Mencampurnya apa adanya meninggalkan latar tajam
+    // berbobot a(1-a) -- cincin tipis yang tidak blur di sepanjang tepi subjek.
+    // Ganti dengan warna lapis depan murni (dekontaminasi).
+    if (a > 0.0 && abs(front) * 0.5 < 0.5) {
+      fore = foregroundColor(p, source.rgb);
+    }
+    base = mix(back, fore, a);
   }
   let nearValue = tent(nearTex, uv);
   if (nearValue.a > 0.0) {

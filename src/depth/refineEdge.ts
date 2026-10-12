@@ -191,10 +191,19 @@ export async function computeMatte(
   return out;
 }
 
-/** Matte untuk shader: alfa di dalam pita, 1 di luarnya (di luar pita jalur satu lapis). */
-export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array, width: number, height: number): EdgeMatte {
+/**
+ * Matte untuk shader: alfa ViTMatte di dalam pita, nilai trimap di luarnya
+ * (0 sisi latar, 1 sisi subjek). JANGAN 1 di sisi latar: `layeredDepth`
+ * mengisi lapis depan dengan kedalaman subjek di texel kedalaman yang
+ * menyentuh pita, dan sampel bilinear shader merembes sekitar satu texel ke
+ * luar pita -- dengan alfa 1 di sana latar keluar tajam sebagai garis
+ * "outline" tipis di antara pita dan latar yang blur. Dengan alfa 0 sisi
+ * latar dirender dari lapis belakang; di tempat lapis depan = belakang
+ * hasilnya identik dengan satu lapis.
+ */
+export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array, trimap: Uint8Array, width: number, height: number): EdgeMatte {
   const out = new Float32Array(width * height);
-  for (let i = 0; i < out.length; i += 1) out[i] = band[i] ? alpha[i]! : 1;
+  for (let i = 0; i < out.length; i += 1) out[i] = band[i] ? alpha[i]! : trimap[i]! / 255;
   return { ...rect, width, height, alpha: out };
 }
 

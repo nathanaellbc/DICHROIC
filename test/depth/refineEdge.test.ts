@@ -53,14 +53,17 @@ describe('Refine Edge', () => {
     expect(alpha[100 * W + W - 1]).toBe(0);
   });
 
-  it('matte shader: alfa di pita, 1 di luar; lapis hanya berubah di sekitar pita', () => {
+  it('matte shader: alfa di pita, trimap di luar (sisi latar 0); lapis hanya berubah di sekitar pita', () => {
     const { depth, mask } = scene();
     const rect = bandBounds(mask)!;
     const W = 80, H = 120;
     const band = bandInCrop(mask, rect, W, H);
     const alpha = new Float32Array(W * H).fill(0.4);
-    const matte = shaderMatte(rect, alpha, band, W, H);
+    const trimap = new Uint8Array(W * H).fill(255);
+    trimap[W - 1] = 0; // satu piksel sisi latar di luar pita
+    const matte = shaderMatte(rect, alpha, band, trimap, W, H);
     expect(matte.alpha[0]).toBe(1);
+    expect(matte.alpha[W - 1]).toBe(0);
     expect(matte.alpha[60 * W + W / 2]).toBeCloseTo(0.4, 6);
     const { foreground, background } = layeredDepth(depth, rect, band, W, H, 0.5);
     // Jauh dari pita: identik dengan peta.

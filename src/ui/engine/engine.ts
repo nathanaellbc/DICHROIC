@@ -839,7 +839,7 @@ export class Engine {
   #withRefine(map: DepthMap): DepthMap {
     const refine = this.#refine;
     if (!refine) return map;
-    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.width, refine.height);
+    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height);
     const threshold = edgeThreshold(map, refine.rect, refine.width, refine.height);
     return { ...map, layers: layeredDepth(map, refine.rect, refine.band, refine.width, refine.height, threshold), matte };
   }
