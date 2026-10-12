@@ -289,7 +289,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
     case 'needs-download':
       status = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <p className="t-subhead" style={{ margin: 0 }}>Lens blur needs a one-time download of {DEPTH_MODELS[lens.model].name}. It stays on this device, and your photos never leave it.</p>
+          <p className="t-subhead" style={{ margin: 0 }}>One-time download of {DEPTH_MODELS[lens.model].name}. It stays on this device; photos never leave it.</p>
           <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onDownload}>
             Download · {megabytes(depth.bytes)}
           </PressButton>
@@ -321,7 +321,8 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
     <div className="lens-status" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
       {picker}
       {status}
-      {readout}
+      {/* Kedalaman ruang baru berarti setelah ada peta; tanpa ini kartu unduh/galat tidak muat di panel HP. */}
+      {(depth.status === 'ready' || depth.status === 'working') && readout}
     </div>
   );
 }

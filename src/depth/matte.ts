@@ -257,26 +257,29 @@ export function refineDepth(depth: Float32Array, guide: GuideImage, o: DetailOpt
 
 /**
  * Matte proyeksi warna di zona tepi: warna rata-rata lokal lapis depan (F)
- * dan latar (B) dari topeng kedalaman, lalu tiap piksel diproyeksikan ke
- * garis B -> F. Helai pirang di depan latar ungu mendapat ~1 walau jauh dari
+ * dan latar (B) dari trimap topeng kedalaman, lalu tiap piksel diproyeksikan
+ * ke garis B -> F. F hanya dari piksel yang PASTI depan (topeng dikikis) dan B
+ * hanya dari yang PASTI latar (topeng dilebarkan): tepi jaringan meluber
+ * beberapa piksel ke latar, dan pita itu jangan ikut menentukan warna subjek
+ * (latar terang di sebelah bahu lalu mendapat alfa tinggi dan tetap tajam). Helai pirang di depan latar ungu mendapat ~1 walau jauh dari
  * tepi topeng -- guided filter saja hanya menyebar sejauh radiusnya. Bila F
  * dan B hampir sama warnanya, keyakinannya turun dan matte topeng dipakai.
  */
-function colorMatte(guide: GuideImage, mask: Float32Array, maskMatte: Float32Array, r: number): Float32Array {
+function colorMatte(guide: GuideImage, fgSure: Float32Array, bgSure: Float32Array, maskMatte: Float32Array, r: number): Float32Array {
   const n = guide.size, { width: w, height: h } = guide, I = guide.channels;
   const tmp = new Float32Array(n), prod = new Float32Array(n);
-  const wF = boxMean(mask, w, h, r, new Float32Array(n), tmp);
-  const mean = (c: Float32Array, fg: boolean) => {
-    if (fg) for (let i = 0; i < n; i += 1) prod[i] = c[i]! * mask[i]!;
-    else for (let i = 0; i < n; i += 1) prod[i] = c[i]! * (1 - mask[i]!);
+  const wF = boxMean(fgSure, w, h, r, new Float32Array(n), tmp);
+  const wB = boxMean(bgSure, w, h, r, new Float32Array(n), tmp);
+  const mean = (c: Float32Array, sure: Float32Array) => {
+    for (let i = 0; i < n; i += 1) prod[i] = c[i]! * sure[i]!;
     return boxMean(prod, w, h, r, new Float32Array(n), tmp);
   };
-  const F = I.map((c) => mean(c, true));
-  const Bk = I.map((c) => mean(c, false));
+  const F = I.map((c) => mean(c, fgSure));
+  const Bk = I.map((c) => mean(c, bgSure));
   const out = prod;
   for (let i = 0; i < n; i += 1) {
     const wf = wF[i]!;
-    const wb = 1 - wf;
+    const wb = wB[i]!;
     if (wf < 0.02 || wb < 0.02) { out[i] = maskMatte[i]!; continue; }
     let dot = 0, len2 = 0;
     for (let c = 0; c < 3; c += 1) {
@@ -285,7 +288,11 @@ function colorMatte(guide: GuideImage, mask: Float32Array, maskMatte: Float32Arr
       dot += (I[c]![i]! - b) * d;
       len2 += d * d;
     }
-    const projected = Math.min(Math.max(dot / Math.max(len2, 1e-6), 0), 1);
+    // Ambang lembut 0,25..0,75: latar bertekstur yang warnanya sebagian ke
+    // arah subjek tidak ikut tajam; helai yang menutup separuh piksel (~0,5)
+    // tetap di tengah.
+    const raw = Math.min(Math.max((dot / Math.max(len2, 1e-6) - 0.25) / 0.5, 0), 1);
+    const projected = raw * raw * (3 - 2 * raw);
     // Keyakinan: jarak warna F-B 0,05..0,15 (skala 0..1 per kanal).
     const t = Math.min(Math.max((Math.sqrt(len2) - 0.05) / 0.1, 0), 1);
     const confidence = t * t * (3 - 2 * t);
@@ -340,7 +347,12 @@ export function depthLayers(depth: Float32Array, guide: GuideImage, o: DetailOpt
   // dibersihkan sekali lagi dengan guided filter kecil.
   const filter = o.lowMemory ? guidedFilterGray : guidedFilterColor;
   const maskMatte = filter(guide, mask, R.matte, 1e-4);
-  const matte = filter(guide, colorMatte(guide, mask, maskMatte, R.zone), R.matte, 1e-5);
+  // Trimap: pita +-setengah zona di sekitar tepi topeng tidak dipercaya.
+  const band = Math.max(1, R.zone >> 1);
+  const fgSure = slidingExtreme(mask, w, h, band, false);
+  const bgSure = slidingExtreme(mask, w, h, band, true);
+  for (let i = 0; i < n; i += 1) bgSure[i] = 1 - bgSure[i]!;
+  const matte = filter(guide, colorMatte(guide, fgSure, bgSure, maskMatte, R.zone), R.matte, 1e-5);
   const foreground = near; // dipakai ulang sebagai keluaran
   const background = far;
   const alpha = mask;

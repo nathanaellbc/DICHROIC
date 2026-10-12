@@ -117,4 +117,31 @@ describe('matte: dua lapis kedalaman (rambut)', () => {
       expect(layers.alpha[y * w + x], `x=${x}`).toBeGreaterThan(0.99);
     }
   });
+
+  it('tepi kedalaman yang meluber ke latar: pita latar itu tetap lapis belakang (blur)', () => {
+    // Bahu zaitun di kiri, latar terang bergaris di kanan; jaringan menaruh
+    // tepi kedalaman 6 px terlalu jauh ke kanan. Dulu warna subjek dirata-rata
+    // dari topeng itu (ikut latar terang), jadi pita latar dapat alfa tinggi
+    // dan tetap tajam di sebelah bahu.
+    const w = 256, h = 64, edge = 128, bleed = 6;
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    const depth = new Float32Array(w * h);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = y * w + x;
+        const stripe = (x >> 2) % 2 ? [235, 225, 230] : [200, 120, 140];
+        rgba.set(x < edge ? [110, 105, 70, 255] : [...stripe, 255], i * 4);
+        depth[i] = x < edge + bleed ? 1 : 0;
+      }
+    }
+    const layers = depthLayers(depth, new GuideImage(rgba, w, h), { lowMemory: false, radii: { zone: 16 } });
+    const y = h >> 1;
+    for (let x = edge + 1; x < edge + bleed; x += 1) {
+      expect(layers.alpha[y * w + x], `x=${x}`).toBeLessThan(0.3);
+    }
+    // Subjek di sisi dalam tepi tetap lapis depan.
+    for (let x = edge - 12; x < edge - 1; x += 1) {
+      expect(layers.alpha[y * w + x], `x=${x}`).toBeGreaterThan(0.9);
+    }
+  });
 });
