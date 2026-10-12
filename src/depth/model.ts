@@ -52,7 +52,8 @@ export const VARIANTS: Readonly<Record<DepthBackend, ModelVariant>> = {
  *   prapemrosesan dan keluaran sama), lebih akurat, ~100-200 MB. Di HP
  *   eksperimental (int8 102 MB, masukan 392 px).
  * - `pro`: Apple Depth Pro -- tepi paling tajam, masukan 1536^2, keluaran
- *   JARAK (dibalik ke disparitas di worker); 600 MB q4f16, hanya desktop GPU.
+ *   JARAK (dibalik ke disparitas di worker); 600 MB q4f16, hanya di GPU. Di HP
+ *   eksperimental (iPhone menjalankannya lewat GPU walau jalur biasanya CPU).
  */
 export type DepthModelId = 'fast' | 'detail' | 'pro';
 
@@ -118,7 +119,7 @@ export const DEPTH_MODELS: Readonly<Record<DepthModelId, DepthModelSpec>> = {
     mean: [0.5, 0.5, 0.5],
     std: [0.5, 0.5, 0.5],
     output: 'depth',
-    mobile: 'no',
+    mobile: 'experimental',
   },
 };
 
@@ -133,11 +134,21 @@ export function modelVariant(model: DepthModelId, backend: DepthBackend): ModelV
   return DEPTH_MODELS[model].variants[backend];
 }
 
+/**
+ * Backend tempat `model` berjalan di perangkat ini: backend profil bila model
+ * punya variannya, kalau tidak GPU fp16 bila ada (Depth Pro di iPhone).
+ */
+export function modelBackend(model: DepthModelId, profile: DepthProfile): DepthBackend | undefined {
+  const spec = DEPTH_MODELS[model];
+  if (spec.variants[profile.backend]) return profile.backend;
+  return profile.gpuF16 && spec.variants.webgpu ? 'webgpu' : undefined;
+}
+
 /** Model yang bisa dipilih di perangkat dengan profil ini. */
 export function availableModels(profile: DepthProfile): DepthModelId[] {
   return DEPTH_MODEL_IDS.filter((id) => {
     const spec = DEPTH_MODELS[id];
-    return spec.variants[profile.backend] !== undefined && !(spec.mobile === 'no' && profile.lowMemory);
+    return modelBackend(id, profile) !== undefined && !(spec.mobile === 'no' && profile.lowMemory);
   });
 }
 
@@ -181,6 +192,11 @@ export interface DepthProfile {
   inputSize: number;
   guideMaxEdge: number;
   lowMemory: boolean;
+  /**
+   * GPU dengan fp16 tersedia walau `backend` CPU (iPhone): model yang hanya
+   * punya varian GPU (Depth Pro) tetap bisa dicoba di sana.
+   */
+  gpuF16?: boolean;
 }
 
 export function isAppleMobile(): boolean {
@@ -210,14 +226,14 @@ export async function preferredBackend(): Promise<DepthBackend> {
  * kali lebih besar.
  */
 export async function depthProfile(): Promise<DepthProfile> {
-  if (isAppleMobile()) return { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
+  if (isAppleMobile()) return { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true, gpuF16: (await preferredBackend()) === 'webgpu' };
   const coarse = window.matchMedia?.('(pointer: coarse)').matches === true;
   const backend = await preferredBackend();
-  if (coarse) return { backend, inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
-  // Desktop: guide 2048 untuk matte rambut (`matte.ts`). Di GPU jaringan
+  if (coarse) return { backend, inputSize: 392, guideMaxEdge: 1024, lowMemory: true, gpuF16: backend === 'webgpu' };
+  // Desktop: guide 2048 untuk tepi kedalaman yang lebih rapat. Di GPU jaringan
   // melihat 770 px (bukan 518): tepi subjek lebih rapat; atensi berskala
   // kuadrat token, jadi jalur CPU tetap 518.
-  return { backend, inputSize: backend === 'webgpu' ? HIGH_DETAIL_INPUT : DEPTH_MODEL.inputSize, guideMaxEdge: 2048, lowMemory: false };
+  return { backend, inputSize: backend === 'webgpu' ? HIGH_DETAIL_INPUT : DEPTH_MODEL.inputSize, guideMaxEdge: 2048, lowMemory: false, gpuF16: backend === 'webgpu' };
 }
 
 /** Masukan jaringan desktop ber-GPU (kelipatan 14). */

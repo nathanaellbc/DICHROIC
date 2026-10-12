@@ -27,7 +27,7 @@ import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { finishExportEncode, finishExportTiles, noteExportStage, rememberExportTiles, startExportEncode, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
-import { DEPTH_MODELS, availableModels, depthProfile, firstDownloadBytes, isDepthModelId, isExperimental } from '../../depth/model';
+import { DEPTH_MODELS, availableModels, depthProfile, firstDownloadBytes, isDepthModelId, isExperimental, modelBackend } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
 import type { DepthModelId, DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
@@ -254,7 +254,9 @@ export class Engine {
       const guarded = isExperimental(model, profile);
       if (guarded) storage()?.setItem(DEPTH_RUNNING_KEY, model);
       try {
-        return await this.#estimator.estimate(guide, { allowDownload, profile, model, onProgress });
+        // Depth Pro di iPhone: GPU, walau kedalaman biasanya di CPU.
+        const backend = modelBackend(model, profile) ?? profile.backend;
+        return await this.#estimator.estimate(guide, { allowDownload, profile: { ...profile, backend }, model, onProgress });
       } finally {
         if (guarded) storage()?.removeItem(DEPTH_RUNNING_KEY);
       }
@@ -265,7 +267,10 @@ export class Engine {
       await this.#client!.setDepthMap(map, this.#photoId);
       this.requestRender();
     },
-    downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend, this.#state.depthModel),
+    downloadBytes: async () => {
+      const profile = await this.#profile();
+      return firstDownloadBytes(modelBackend(this.#state.depthModel, profile) ?? profile.backend, this.#state.depthModel);
+    },
     onChange: (depth) => this.#set({ depth }),
     cancel: () => {
       this.#estimator?.dispose();

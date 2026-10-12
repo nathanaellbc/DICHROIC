@@ -137,13 +137,11 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
           ? result.rgb
           : resampleRGB(rgbaFrom(result.rgb, result.mw, result.mh), result.mw, result.mh, result.ow, result.oh);
       const up = jointBilateralUpsample(result.raw, result.ow, result.oh, guideLow, req.rgba, req.width, req.height);
-      // Detail halus (matte.ts): kedalaman dibersihkan berpanduan foto, lalu dua
-      // lapis + matte di tepi subjek supaya helai rambut tetap tajam di atas
-      // latar yang blur.
-      const { depth, layers } = detailDepth(up, req.rgba, req.width, req.height, { lowMemory: req.lowMemory }, normaliseDisparity);
+      // Derau kedalaman dibersihkan berpanduan foto (matte.ts).
+      const depth = detailDepth(up, req.rgba, req.width, req.height, normaliseDisparity);
       post(
-        { type: 'result', id: req.id, width: req.width, height: req.height, depth, layers, backend, model: req.model, variant: modelVariant(req.model, backend)!.id, inferMs: Math.round(result.inferMs) },
-        [depth.buffer, layers.foreground.buffer, layers.background.buffer, layers.alpha.buffer],
+        { type: 'result', id: req.id, width: req.width, height: req.height, depth, backend, model: req.model, variant: modelVariant(req.model, backend)!.id, inferMs: Math.round(result.inferMs) },
+        [depth.buffer],
       );
     } catch (err) {
       post({
