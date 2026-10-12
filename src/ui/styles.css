@@ -1134,13 +1134,29 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
 }
 .scope-overlay:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .scope-badge { position: absolute; left: 8px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 3px #000; }
-/* Panel scope tembus pandang: material grafit beku yang sama dengan panel editor lain. */
-.scope-panel-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
-.scope-chip {
-  height: 20px; padding: 0 6px; border: 0; border-radius: 6px; font: inherit; font-size: 10.5px; font-weight: 600;
-  color: var(--label-2); background: rgba(255, 255, 255, 0.07); cursor: pointer;
+/*
+ * Panel scope (HIG, kepadatan macOS): material grafit beku yang sama dengan
+ * panel editor lain; baris berjarak 10 px; segmented selebar panel dengan
+ * segmen sama lebar; tombol opsi 24 px dalam dua kelompok (nilai | sakelar).
+ */
+.scope-panel {
+  flex-shrink: 0; border-top: 1px solid var(--hairline); padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  background: rgba(28, 28, 30, 0.58); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
 }
-.scope-chip[aria-pressed='true'] { color: #fff; background: rgba(0, 145, 255, 0.55); }
+.scope-panel-head { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+.scope-panel-head .scope-tabs { flex: 1; }
+.scope-chip {
+  height: 24px; padding: 0 10px; border: 0; border-radius: 7px; font: inherit; font-size: 11px; font-weight: 500;
+  color: var(--label); background: var(--fill-soft); cursor: pointer; transition: background-color 0.12s;
+}
+@media (hover: hover) { .scope-chip:hover { background: rgba(255, 255, 255, 0.12); } }
+.scope-chip[aria-pressed='true'] { color: var(--blue-text); background: var(--blue-wash); }
+.scope-group { display: inline-flex; align-items: center; gap: 6px; }
+/* Sentuh (compact): target lebih besar dan teks ukuran iOS. */
+html[data-size="compact"] .scope-panel { padding: 14px 16px; gap: 12px; }
+html[data-size="compact"] .scope-chip { height: 32px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+html[data-size="compact"] .scope-tabs { border-radius: 11px; }
+html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px; font-size: 13px; }
 .scope-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .waveform { position: relative; flex-shrink: 0; border-radius: 8px; background: rgba(11, 11, 12, 0.42); overflow: hidden; }
 @media (prefers-reduced-transparency: reduce) {
@@ -1149,12 +1165,16 @@ html[data-size="regular"] .toast { top: 64px; height: 32px; }
   .vectorscope { background: radial-gradient(circle, #121214 0%, #0b0b0c 70%, rgba(11, 11, 12, 0) 72%); }
 }
 .scope-overlay .waveform { border-radius: 14px; }
-.scope-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: rgba(255, 255, 255, 0.06); }
-.scope-tabs button { height: 20px; padding: 0 7px; border: 0; border-radius: 5px; font: inherit; font-size: 10.5px; font-weight: 600; color: var(--label-2); background: transparent; cursor: pointer; }
+.scope-tabs { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); }
+.scope-tabs button {
+  flex: 1 1 0; min-width: 0; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; font: inherit; font-size: 11px; font-weight: 500;
+  color: var(--label-2); background: transparent; cursor: pointer; white-space: nowrap; transition: background-color 0.12s, color 0.12s;
+}
 .scope-tabs button[aria-selected='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }
 .scope-tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 .scope-badge-kind { position: absolute; right: 10px; bottom: 6px; font-size: 10px; font-weight: 700; color: rgba(255, 255, 255, 0.72); text-shadow: 0 1px 3px #000; }
-.scope-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.scope-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.scope-options > .scope-tabs { flex: 1; }
 .scope-options:empty { display: none; }
 .scope-tabs button[aria-checked='true'] { color: #fff; background: rgba(255, 255, 255, 0.16); }
 

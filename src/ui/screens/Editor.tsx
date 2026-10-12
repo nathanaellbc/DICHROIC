@@ -789,13 +789,18 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
       <div className="scope-options">
         {scope.kind === 'vectorscope' ? (
           <>
-            {chip(styles[styleIndex]![1], false, () => setScope({ style: styles[(styleIndex + 1) % styles.length]![0] }), 'Graticule style: Standard, Simplified, Hue Vectors, Off')}
-            {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
-            {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
-            {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
-            {chip('Colorize', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize: false color by hue (off: white)')}
+            {/* Tombol yang berganti nilai, lalu sakelar: dua kelompok berjarak. */}
+            <span className="scope-group">
+              {chip(styles[styleIndex]![1], false, () => setScope({ style: styles[(styleIndex + 1) % styles.length]![0] }), 'Graticule style: Standard, Simplified, Hue Vectors, Off')}
+              {chip(`${scope.targets}%`, false, () => setScope({ targets: scope.targets === 75 ? 100 : 75 }), 'Color bar targets: 75% or 100%')}
+            </span>
+            <span className="scope-group">
+              {chip('2×', scope.zoom === 2, () => setScope({ zoom: scope.zoom === 2 ? 1 : 2 }), 'Zoom 2×')}
+              {chip('Skin', scope.skinTone, () => setScope({ skinTone: !scope.skinTone }), 'Skin tone indicator')}
+              {chip('Colorize', scope.colorize, () => setScope({ colorize: !scope.colorize }), 'Colorize: false color by hue (off: white)')}
+            </span>
           </>
-        ) : traceChips}
+        ) : <span className="scope-group">{traceChips}</span>}
       </div>
       <div role="tabpanel" style={{ display: 'flex', justifyContent: 'center' }}>
         {scope.kind === 'vectorscope'
