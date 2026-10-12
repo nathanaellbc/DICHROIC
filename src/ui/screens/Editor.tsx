@@ -44,6 +44,7 @@ import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
 import { RemoveContent } from './Remove';
+import { RefineEdgeContent } from './RefineEdge';
 import { InspectorTool, ResetButton, ToolChips, ToolControl, ToolSwitch } from './ToolControls';
 import type { ToolContext } from './ToolControls';
 
@@ -54,6 +55,7 @@ type SheetState =
   | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks }
   | { kind: 'export' }
   | { kind: 'remove' }
+  | { kind: 'refine' }
   | { kind: 'list'; toolId: string }
   | null;
 
@@ -123,7 +125,11 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const [removalControls, setRemovalControls] = useState<HTMLDivElement | null>(null);
   // Naik saat Done di Remove Object: foto utama memutar sapuan develop (asli -> hasil film).
   const [revealCount, setRevealCount] = useState(0);
-  const removing = sheet?.kind === 'remove' && !!state.original && !!engine.imageSize;
+  const removingObject = sheet?.kind === 'remove' && !!state.original && !!engine.imageSize;
+  // Refine Edge memakai slot pratinjau dan kontrol yang sama dengan Remove Object.
+  const refining = sheet?.kind === 'refine' && !!state.original && state.depth.status === 'ready';
+  const removing = removingObject || refining;
+  const modeTitle = refining ? 'Refine Edge' : 'Remove Object';
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
   const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
@@ -158,6 +164,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       gpu: state.depthGpu,
       gpuOption: state.depthGpuOption,
       onGpu: (on) => engine.setDepthGpu(on),
+      refined: !!engine.refine,
+      onRefine: () => setSheet({ kind: 'refine' }),
     },
   };
 
@@ -276,7 +284,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     edited: hasPhoto && visibleTools(g, state.params).some((t) => isModified(t, state.params, state.defaults)),
   }));
 
-  const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, theme, setTheme, removing, removalControlsRef: setRemovalControls };
+  const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, theme, setTheme, removing, modeTitle, removalControlsRef: setRemovalControls };
 
   const menuActions: SheetAction[] = [
     { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
@@ -293,7 +301,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
-      {removing && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => { setSheet(null); setRevealCount((n) => n + 1); }} />}
+      {refining && state.original && removalPreview && removalControls && <RefineEdgeContent original={state.original} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => setSheet(null)} />}
+      {removingObject && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => { setSheet(null); setRevealCount((n) => n + 1); }} />}
 
       <Sheet
         open={sheet?.kind === 'stocks'}
@@ -411,6 +420,8 @@ interface LayoutProps {
   scope: ScopePrefs;
   setScope: (patch: Partial<ScopePrefs>) => void;
   removing: boolean;
+  /** Judul mode retouch (Remove Object / Refine Edge). */
+  modeTitle: string;
   removalControlsRef: (node: HTMLDivElement | null) => void;
   state: EngineState;
   /** Belum ada foto: area foto berisi DropZone, kontrol dinonaktifkan. */
@@ -795,7 +806,7 @@ function ScopePanel({ state, scope, setScope }: { state: EngineState; scope: Sco
   );
 }
 
-function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, removalControlsRef }: LayoutProps) {
+function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, compare, setCompare, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, removing, modeTitle, removalControlsRef }: LayoutProps) {
   const currentGroup = GROUPS.find((g) => g.id === group)!;
   const edited = engine.isEdited();
   const [reveal, setReveal] = useState(0);
@@ -818,7 +829,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
       }}
     >
       <header className="window-toolbar editor-frost" style={{ gridColumn: '1 / -1' }}>
-        {removing ? <><span className="t-headline">Remove Object</span><span className="t-footnote secondary">Original · grading paused</span></> : <>
+        {removing ? <><span className="t-headline">{modeTitle}</span><span className="t-footnote secondary">Original · grading paused</span></> : <>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 120, maxWidth: 380, flex: '0 1 auto' }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em' }}>DICHROIC</span>
           <span className="t-footnote secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={state.fileName}>{state.fileName ?? 'No photo'}</span>

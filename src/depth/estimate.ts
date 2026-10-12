@@ -6,7 +6,7 @@ import type { DecodedImage } from '../io/decoded';
 import { boxDownscale } from '../session/downscale';
 import { TO_REC709, srgbEncode, rgbToCanvas } from '../io/display';
 import type { DepthBackend, DepthModelId, DepthProfile, VariantId } from './model';
-import type { DepthPhase, DepthRequest, DepthResponse } from './protocol';
+import type { DepthPhase, DepthRequest, DepthResponse, MatteRequest } from './protocol';
 
 export interface DepthResult {
   width: number;
@@ -125,9 +125,12 @@ export class DepthEstimator {
     w.onmessage = (e: MessageEvent<DepthResponse>) => this.#receive(e.data);
     w.onerror = (e) => {
       const p = this.#pending;
+      const m = this.#matte;
       this.#pending = null;
+      this.#matte = null;
       this.#terminate();
       p?.reject(new Error(e.message || 'The depth worker failed to start.'));
+      m?.reject(new Error(e.message || 'The depth worker failed to start.'));
     };
     this.#worker = w;
     this.#backend = backend;
@@ -135,20 +138,35 @@ export class DepthEstimator {
   }
 
   #terminate(): void {
+    // Matte yang sedang berjalan mati bersama worker.
+    const m = this.#matte;
+    this.#matte = null;
+    m?.reject(new DepthCancelledError());
     this.#worker?.terminate();
     this.#worker = null;
     this.#backend = null;
   }
 
+  #matte: { id: number; resolve: (a: Float32Array) => void; reject: (e: Error) => void; onProgress?: (p: DepthProgress) => void; lowMemory: boolean } | null = null;
+
   #receive(msg: DepthResponse): void {
+    const m = this.#matte;
+    if (m && msg.id === m.id) {
+      if (msg.type === 'progress') { m.onProgress?.({ phase: msg.phase, loaded: msg.loaded, total: msg.total }); return; }
+      this.#matte = null;
+      if (m.lowMemory && !this.#pending) this.#terminate();
+      if (msg.type === 'error') m.reject(msg.code === 'not-cached' ? new DepthNotCachedError(msg.message) : new Error(msg.message));
+      else if (msg.type === 'matte-result') m.resolve(msg.alpha);
+      return;
+    }
     const p = this.#pending;
-    if (!p || msg.id !== p.id) return;
+    if (!p || msg.id !== p.id || msg.type === 'matte-result') return;
     if (msg.type === 'progress') {
       p.onProgress?.({ phase: msg.phase, loaded: msg.loaded, total: msg.total });
       return;
     }
     this.#pending = null;
-    if (p.lowMemory) this.#terminate();
+    if (p.lowMemory && !this.#matte) this.#terminate();
     if (msg.type === 'error') {
       p.reject(msg.code === 'not-cached' ? new DepthNotCachedError(msg.message) : new Error(msg.message));
       return;
@@ -189,7 +207,25 @@ export class DepthEstimator {
     });
   }
 
+  /**
+   * Refine Edge: alfa ViTMatte untuk potongan sRGB `rgba` dengan trimap. Lewat
+   * worker kedalaman yang sama (runtime dan cache bersama).
+   */
+  matte(rgba: Uint8ClampedArray, trimap: Uint8Array, width: number, height: number, opts: { allowDownload: boolean; profile: DepthProfile; onProgress?: (p: DepthProgress) => void }): Promise<Float32Array> {
+    this.#matte?.reject(new DepthCancelledError());
+    const worker = this.#ensureWorker(this.#backend ?? opts.profile.backend);
+    const id = this.#nextId++;
+    const rgbaCopy = rgba.slice(), trimapCopy = trimap.slice();
+    return new Promise<Float32Array>((resolve, reject) => {
+      this.#matte = { id, resolve, reject, onProgress: opts.onProgress, lowMemory: opts.profile.lowMemory };
+      const req: MatteRequest = { type: 'matte', id, rgba: rgbaCopy, trimap: trimapCopy, width, height, allowDownload: opts.allowDownload, lowMemory: opts.profile.lowMemory };
+      worker.postMessage(req, [rgbaCopy.buffer, trimapCopy.buffer]);
+    });
+  }
+
   dispose(): void {
+    this.#matte?.reject(new DepthCancelledError());
+    this.#matte = null;
     this.#pending?.reject(new DepthCancelledError());
     this.#pending = null;
     this.#terminate();

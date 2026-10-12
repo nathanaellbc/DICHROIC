@@ -139,6 +139,21 @@ export const DEPTH_MODELS: Readonly<Record<DepthModelId, DepthModelSpec>> = {
 
 export const DEPTH_MODEL_IDS: readonly DepthModelId[] = ['fast', 'detail', 'pro'];
 
+/**
+ * ViTMatte Small (Composition-1k) untuk Refine Edge (`refineEdge.ts`): foto +
+ * trimap -> alfa per piksel. int8, dijalankan di CPU (WebAssembly) di semua
+ * perangkat -- tile 512 px, ringan.
+ */
+export const MATTE_MODEL = {
+  name: 'ViTMatte Small',
+  repo: 'Xenova/vitmatte-small-composition-1k',
+  revision: '6bc1297f6140f055a227b6d2cfe8c093281f35d2',
+  file: 'onnx/model_quantized.onnx',
+  bytes: 27_499_369,
+} as const;
+
+export const MATTE_URL = `https://huggingface.co/${MATTE_MODEL.repo}/resolve/${MATTE_MODEL.revision}/${MATTE_MODEL.file}`;
+
 export function isDepthModelId(value: unknown): value is DepthModelId {
   return typeof value === 'string' && (DEPTH_MODEL_IDS as readonly string[]).includes(value);
 }

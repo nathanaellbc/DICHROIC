@@ -12,13 +12,14 @@
  */
 
 import type * as Ort from 'onnxruntime-web';
-import { DEPTH_CACHE, DEPTH_MODELS, DepthAssetNotCachedError, ensureCached, fetchCached, modelVariant, variantUrl } from './model';
+import { DEPTH_CACHE, DEPTH_MODELS, DepthAssetNotCachedError, MATTE_MODEL, MATTE_URL, ensureCached, fetchCached, modelVariant, variantUrl } from './model';
+import { computeMatte } from './refineEdge';
 import { runDepthPro } from './depthProSplit';
 import type { DepthProStage } from './depthProSplit';
 import type { DepthBackend, DepthModelId } from './model';
 import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB, rgbaFrom, toModelTensor } from './refine';
 import { detailDepth } from './matte';
-import type { DepthRequest, DepthResponse } from './protocol';
+import type { DepthRequest, DepthResponse, MatteRequest } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -177,8 +178,46 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
     }
   }
 
-  self.onmessage = async (e: MessageEvent<DepthRequest>) => {
+  /** ViTMatte selalu di CPU (int8): tile 512 px ringan, dan tidak menambah device GPU kedua. */
+  let matteSession: Promise<Ort.InferenceSession> | null = null;
+
+  async function matte(req: MatteRequest): Promise<void> {
+    try {
+      if (!req.allowDownload) {
+        const cache = await globalThis.caches?.open(DEPTH_CACHE).catch(() => null);
+        const runtimeUrl = new URL(ortWasmUrl, self.location.href).href;
+        if (!(await cache?.match(MATTE_URL)) || (!runtimeReady && !(await cache?.match(runtimeUrl)))) throw new DepthAssetNotCachedError();
+      }
+      await loadRuntime(req.id, req.allowDownload);
+      matteSession ??= (async () => {
+        const bytes = await fetchCached(MATTE_URL, MATTE_MODEL.bytes, (loaded, total) => post({ type: 'progress', id: req.id, phase: 'model', loaded, total }), req.allowDownload);
+        post({ type: 'progress', id: req.id, phase: 'compile', loaded: 0, total: 1 });
+        return ort.InferenceSession.create(new Uint8Array(bytes), sessionOptions('wasm', req.lowMemory));
+      })();
+      matteSession.catch(() => { matteSession = null; });
+      const s = await matteSession;
+      const alpha = await computeMatte(req.rgba, req.trimap, req.width, req.height, async (input, tw, th) => {
+        const tensor = new ort.Tensor('float32', input, [1, 4, th, tw]);
+        const out = await s.run({ [s.inputNames[0]!]: tensor });
+        const data = ((await out[s.outputNames[0]!]!.getData()) as Float32Array).slice();
+        tensor.dispose();
+        for (const t of Object.values(out)) t.dispose();
+        return data;
+      }, (done, total) => post({ type: 'progress', id: req.id, phase: 'matte', loaded: done, total }));
+      if (req.lowMemory) {
+        const s2 = matteSession;
+        matteSession = null;
+        await s2?.then((x) => x.release()).catch(() => {});
+      }
+      post({ type: 'matte-result', id: req.id, alpha }, [alpha.buffer]);
+    } catch (err) {
+      post({ type: 'error', id: req.id, code: err instanceof DepthAssetNotCachedError ? 'not-cached' : 'failed', message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  self.onmessage = async (e: MessageEvent<DepthRequest | MatteRequest>) => {
     const req = e.data;
+    if (req.type === 'matte') { await matte(req); return; }
     if (req.type !== 'estimate') return;
     try {
       let backend: DepthBackend = req.backend;

@@ -1,7 +1,7 @@
 /** Pesan antara halaman dan worker kedalaman (`workerCore.ts`). */
 import type { DepthBackend, DepthModelId, VariantId } from './model';
 
-export type DepthPhase = 'runtime' | 'model' | 'compile' | 'infer' | 'refine';
+export type DepthPhase = 'runtime' | 'model' | 'compile' | 'infer' | 'refine' | 'matte';
 
 export interface DepthRequest {
   type: 'estimate';
@@ -20,6 +20,18 @@ export interface DepthRequest {
   lowMemory: boolean;
 }
 
+/** Refine Edge: alfa ViTMatte untuk potongan `rgba` (sRGB RGBA8) dengan trimap 0/128/255. */
+export interface MatteRequest {
+  type: 'matte';
+  id: number;
+  rgba: Uint8ClampedArray;
+  trimap: Uint8Array;
+  width: number;
+  height: number;
+  allowDownload: boolean;
+  lowMemory: boolean;
+}
+
 export type DepthResponse =
   | { type: 'progress'; id: number; phase: DepthPhase; loaded: number; total: number }
   | {
@@ -34,4 +46,5 @@ export type DepthResponse =
       variant: VariantId;
       inferMs: number;
     }
+  | { type: 'matte-result'; id: number; alpha: Float32Array }
   | { type: 'error'; id: number; code: 'not-cached' | 'failed'; message: string };

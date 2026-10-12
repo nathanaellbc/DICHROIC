@@ -51,6 +51,9 @@ export interface LensContext {
   gpu: boolean;
   gpuOption: boolean;
   onGpu: (on: boolean) => void;
+  /** Refine Edge terpasang untuk foto ini, dan pembukanya. */
+  refined: boolean;
+  onRefine: () => void;
 }
 
 export interface ToolContext {
@@ -329,7 +332,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
           <span className="t-footnote secondary">
             Depth ready · {DEPTH_MODELS[depth.model].label} · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
           </span>
-          <span className="t-footnote secondary">Drag the focus pin on the photo to focus.</span>
+          <PressButton className="capsule bordered" onClick={lens.onRefine}>{lens.refined ? 'Refine Edge · On' : 'Refine Edge…'}</PressButton>
         </div>
       );
       break;

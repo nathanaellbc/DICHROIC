@@ -47,6 +47,7 @@ async function connect(fake: SessionLike, options?: ServeOptions): Promise<Sessi
 
 class FakeSession implements SessionLike {
   prepareRemoval(): never { throw new Error('unused'); }
+  refineSource(): never { throw new Error('unused'); }
   applyRemoval(): Promise<never> { return Promise.reject(new Error('unused')); }
   undoRemoval(): Promise<never> { return Promise.reject(new Error('unused')); }
   close() {}

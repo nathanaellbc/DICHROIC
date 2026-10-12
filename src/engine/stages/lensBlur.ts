@@ -21,7 +21,7 @@ export const DOF_TILE = 16;
 /** Sisi panjang grid gather tidak pernah melebihi ini: blur itu frekuensi rendah. */
 export const DOF_MAX_EDGE = 1536;
 const MAX_REACH_TILES = 8;
-const UNIFORM_BYTES = 80;
+const UNIFORM_BYTES = 112;
 
 /**
  * Skala grid gather: pangkat dua, paling besar setengah resolusi, dan sisi
@@ -76,7 +76,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     size: UNIFORM_BYTES,
     usage: gpuBufferUsage.UNIFORM | gpuBufferUsage.COPY_DST,
   });
-  let depthCache: { map: DepthMap; buffer: GPUBuffer } | undefined;
+  let depthCache: { map: DepthMap; depth: GPUBuffer; matte: GPUBuffer } | undefined;
 
   function targetsFor(gw: number, gh: number): Targets {
     const key = `${gw}x${gh}`;
@@ -94,25 +94,43 @@ export function createLensBlurStage(device: GPUDevice): Stage {
     return targets;
   }
 
-  function depthBuffer(map: DepthMap): GPUBuffer {
-    if (depthCache?.map === map) return depthCache.buffer;
-    depthCache?.buffer.destroy();
-    const buffer = device.createBuffer({
+  /**
+   * Dua bidang berurutan: lapis depan, lapis belakang (`lensBlur.wgsl`
+   * planeAt) -- tanpa `layers` keduanya = peta. Plus buffer matte Refine Edge
+   * (atau 4 byte kosong: binding wajib ada).
+   */
+  function depthBuffer(map: DepthMap): { depth: GPUBuffer; matte: GPUBuffer } {
+    if (depthCache?.map === map) return depthCache;
+    depthCache?.depth.destroy();
+    depthCache?.matte.destroy();
+    const n = map.data.length;
+    const depth = device.createBuffer({
       label: 'lensBlur:depth',
-      size: Math.max(map.data.byteLength, 16),
+      size: Math.max(n * 2 * 4, 16),
       usage: gpuBufferUsage.STORAGE,
       mappedAtCreation: true,
     });
-    new Float32Array(buffer.getMappedRange()).set(map.data);
-    buffer.unmap();
-    depthCache = { map, buffer };
-    return buffer;
+    const planes = new Float32Array(depth.getMappedRange());
+    planes.set(map.layers?.foreground ?? map.data, 0);
+    planes.set(map.layers?.background ?? map.data, n);
+    depth.unmap();
+    const alpha = map.matte?.alpha;
+    const matte = device.createBuffer({
+      label: 'lensBlur:matte',
+      size: Math.max(alpha?.byteLength ?? 0, 16),
+      usage: gpuBufferUsage.STORAGE,
+      mappedAtCreation: true,
+    });
+    if (alpha) new Float32Array(matte.getMappedRange()).set(alpha);
+    matte.unmap();
+    depthCache = { map, depth, matte };
+    return depthCache;
   }
 
   function releaseFrameResources(): void {
     targets?.grid.destroy(); targets?.far.destroy(); targets?.near.destroy();
     targets = undefined;
-    depthCache?.buffer.destroy(); depthCache = undefined;
+    depthCache?.depth.destroy(); depthCache?.matte.destroy(); depthCache = undefined;
   }
 
   return {
@@ -144,9 +162,14 @@ export function createLensBlurStage(device: GPUDevice): Stage {
       const diag = Math.hypot(width, height);
       f.set([width / diag, height / diag], 16);
       u.set([lens.blades, reach], 18);
+      const matteInfo = lens.depth.matte;
+      if (matteInfo) {
+        f.set([matteInfo.x, matteInfo.y, matteInfo.w, matteInfo.h], 20);
+        u.set([matteInfo.width, matteInfo.height], 24);
+      }
       device.queue.writeBuffer(uniform, 0, range);
 
-      const depth = depthBuffer(lens.depth);
+      const { depth, matte } = depthBuffer(lens.depth);
       const tileBytes = Math.max(tilesX * tilesY * 8, 16);
       const tiles = ctx.scratch('lensBlur:tiles', tileBytes);
       const dilated = ctx.scratch('lensBlur:dilated', tileBytes);
@@ -171,7 +194,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
         pass.end();
       };
 
-      run('prep', { 1: { buffer: ctx.source }, 2: { buffer: depth }, 3: gridLevel(0) }, gw, gh);
+      run('prep', { 1: { buffer: ctx.source }, 2: { buffer: depth }, 3: gridLevel(0), 17: { buffer: matte } }, gw, gh);
       for (let level = 1; level < t.mips; level += 1) {
         const w = Math.max(1, gw >> level);
         const h = Math.max(1, gh >> level);
@@ -183,7 +206,7 @@ export function createLensBlurStage(device: GPUDevice): Stage {
       run('near', { 6: gridAll, 10: sampler, 12: { buffer: dilated }, 13: t.near.createView() }, gw, gh);
       run(
         'combine',
-        { 1: { buffer: ctx.source }, 2: { buffer: depth }, 10: sampler, 14: t.far.createView(), 15: t.near.createView(), 16: { buffer: ctx.dest } },
+        { 1: { buffer: ctx.source }, 2: { buffer: depth }, 10: sampler, 14: t.far.createView(), 15: t.near.createView(), 16: { buffer: ctx.dest }, 17: { buffer: matte } },
         width,
         height,
       );

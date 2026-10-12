@@ -140,6 +140,23 @@ export interface DepthMap {
   width: number;
   height: number;
   data: Float32Array;
+  /**
+   * Refine Edge (`depth/refineEdge.ts`): kedalaman lapis depan dan lapis
+   * belakang seukuran `data` -- sama dengan `data` di luar pita yang disapu.
+   */
+  layers?: { foreground: Float32Array; background: Float32Array };
+  /** Alfa lapis depan resolusi tinggi di kotak uv (x, y, w, h); 1 di luar pita. */
+  matte?: EdgeMatte;
+}
+
+export interface EdgeMatte {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  width: number;
+  height: number;
+  alpha: Float32Array;
 }
 
 /**

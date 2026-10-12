@@ -27,6 +27,9 @@ import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { finishExportEncode, finishExportTiles, noteExportStage, rememberExportTiles, startExportEncode, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
+import type { DepthProgress } from '../../depth/estimate';
+import { bandBounds, bandInCrop, buildTrimap, edgeThreshold, layeredDepth, shaderMatte } from '../../depth/refineEdge';
+import type { BrushMask, UvRect } from '../../depth/refineEdge';
 import { DEPTH_MODELS, availableModels, depthProfile, firstDownloadBytes, isDepthModelId, isExperimental, modelBackend } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
 import type { DepthModelId, DepthProfile } from '../../depth/model';
@@ -161,6 +164,16 @@ const STORED_DEPTH = storedDepthModel();
 
 type Listener = () => void;
 
+/** Refine Edge yang terpasang: alfa dan pita di potongan `width x height` dari kotak uv `rect`. */
+export interface RefineResult {
+  rect: UvRect;
+  width: number;
+  height: number;
+  alpha: Float32Array;
+  band: Uint8Array;
+  trimap: Uint8Array;
+}
+
 function withExif(image: DecodedImage, bytes: Uint8Array): DecodedImage {
   const exif = captureExif(bytes);
   return exif ? { ...image, exif } : image;
@@ -283,7 +296,8 @@ export class Engine {
     deliver: async (map) => {
       // Salinan untuk cek fokus di thread UI: peta aslinya DITRANSFER ke worker.
       this.#depthMap = map ? { width: map.width, height: map.height, data: map.data.slice() } : undefined;
-      await this.#client!.setDepthMap(map, this.#photoId);
+      // Refine Edge foto ini tetap berlaku di peta baru (mis. ganti model).
+      await this.#client!.setDepthMap(this.#withRefine(map), this.#photoId);
       this.requestRender();
     },
     downloadBytes: async () => {
@@ -525,6 +539,7 @@ export class Engine {
       this.#depth.reset(guide);
       this.#paramsRevision += 1;
       this.#depthMap = undefined;
+      this.#refine = undefined;
       this.#clearHistory();
       this.#set({
         params,
@@ -566,6 +581,7 @@ export class Engine {
     if (generation !== this.#photoGeneration || client !== this.#client) return;
     this.#paramsRevision += 1;
     this.#depthMap = undefined;
+    this.#refine = undefined;
     this.#depth.reset(changed.guide);
     this.#canUndoRemoval = !!crop;
     // Never return to a frame containing the pre-retouch source while grading
@@ -584,6 +600,7 @@ export class Engine {
     this.#cancelRefinement();
     this.#openToken += 1;
     this.#depthMap = undefined;
+    this.#refine = undefined;
     this.#clearHistory();
     this.#photoGeneration += 1;
     this.#pendingPatches.clear();
@@ -809,6 +826,61 @@ export class Engine {
   /** Peta kedalaman foto terbuka (salinan UI, untuk cek fokus), bila sudah ada. */
   get depthMap(): DepthMap | undefined {
     return this.#depthMap;
+  }
+
+  /** Refine Edge foto terbuka: alfa ViTMatte di kotak sapuan (resolusi potongan). */
+  #refine: RefineResult | undefined;
+
+  get refine(): RefineResult | undefined {
+    return this.#refine;
+  }
+
+  /** Peta + lapis dan matte Refine Edge (ambang dan lapis dihitung ulang dari peta ini). */
+  #withRefine(map: DepthMap): DepthMap {
+    const refine = this.#refine;
+    if (!refine) return map;
+    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.width, refine.height);
+    const threshold = edgeThreshold(map, refine.rect, refine.width, refine.height);
+    return { ...map, layers: layeredDepth(map, matte, threshold), matte };
+  }
+
+  /**
+   * Refine Edge: sapuan `mask` (resolusi bebas, 1 = disapu) menjadi pita ragu
+   * trimap; ViTMatte menghitung alfa rambut di potongan resolusi tinggi, lalu
+   * lens blur memakai dua lapis hanya di pita itu. `allowDownload: false`
+   * memberi `DepthNotCachedError` bila model matte belum di perangkat.
+   */
+  async refineEdges(mask: BrushMask, opts: { allowDownload: boolean; onProgress?: (p: DepthProgress) => void }): Promise<RefineResult> {
+    const depth = this.#depthMap;
+    const client = this.#client;
+    if (!depth || !client) throw new Error('Lens blur needs a depth map first.');
+    const rect = bandBounds(mask);
+    if (!rect) throw new Error('Brush over the edge first.');
+    const photoId = this.#photoId;
+    const profile = await this.#profile();
+    const crop = await client.refineSource(rect, profile.lowMemory ? 1536 : 2560);
+    const band = bandInCrop(mask, rect, crop.width, crop.height);
+    const threshold = edgeThreshold(depth, rect, crop.width, crop.height);
+    const trimap = buildTrimap(depth, rect, band, crop.width, crop.height, threshold);
+    this.#estimator ??= new DepthEstimator();
+    const alpha = await this.#estimator.matte(crop.rgba, trimap, crop.width, crop.height, { allowDownload: opts.allowDownload, profile, onProgress: opts.onProgress });
+    if (photoId !== this.#photoId || this.#depthMap !== depth) throw new DepthCancelledError();
+    const result: RefineResult = { rect, width: crop.width, height: crop.height, alpha, band, trimap };
+    this.#refine = result;
+    await client.setDepthMap(this.#withRefine({ ...depth, data: depth.data.slice() }), this.#photoId);
+    this.requestRender();
+    return result;
+  }
+
+  /** Hapus Refine Edge foto ini: kembali ke satu lapis. */
+  async clearRefine(): Promise<void> {
+    if (!this.#refine) return;
+    this.#refine = undefined;
+    const depth = this.#depthMap;
+    if (depth && this.#client) {
+      await this.#client.setDepthMap({ ...depth, data: depth.data.slice() }, this.#photoId);
+      this.requestRender();
+    }
   }
 
   /** Ukuran gambar asli yang terbuka. */

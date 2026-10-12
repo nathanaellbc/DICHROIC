@@ -382,6 +382,32 @@ export class Session {
     this.#previewCache.clear();
   }
 
+  /**
+   * Refine Edge: potongan foto di kotak uv `rect`, sRGB RGBA8 seperti guide
+   * kedalaman, sisi panjang paling besar `maxEdge` (resolusi sumber bila lebih
+   * kecil) -- matte rambut dihitung dari piksel ini.
+   */
+  refineSource(rect: { x: number; y: number; w: number; h: number }, maxEdge: number): Guide {
+    this.assertAlive();
+    const image = this.#image;
+    if (!image) throw new SessionStateError('Open a photo first.');
+    const x0 = Math.max(0, Math.floor(rect.x * image.width)), y0 = Math.max(0, Math.floor(rect.y * image.height));
+    const x1 = Math.min(image.width, Math.ceil((rect.x + rect.w) * image.width)), y1 = Math.min(image.height, Math.ceil((rect.y + rect.h) * image.height));
+    const width = Math.max(1, x1 - x0), height = Math.max(1, y1 - y0);
+    // Dibaca langsung dari sumber ringkas (8/16-bit): tanpa mengembangkan foto utuh ke f32.
+    const { data, lut } = image.pixels;
+    const rgba = new Float32Array(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      const start = ((y0 + y) * image.width + x0) * 4;
+      const row = y * width * 4;
+      if (!lut) rgba.set((data as Float32Array).subarray(start, start + width * 4), row);
+      else for (let i = 0; i < width * 4; i += 1) rgba[row + i] = lut[data[start + i]!]!;
+    }
+    const { pixels, ...meta } = image;
+    void pixels;
+    return buildGuide({ ...meta, width, height, rgba }, maxEdge);
+  }
+
   prepareRemoval(selection: RemovalMask): RemovalCrop {
     this.assertAlive();
     if (!this.#image) throw new SessionStateError('Open a photo first.');
@@ -449,6 +475,13 @@ export class Session {
       const { width, height, data } = map;
       if (!(Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) || data.length !== width * height) {
         throw new RangeError(`Peta kedalaman ${width}x${height} butuh ${width * height} float, diterima ${data.length}.`);
+      }
+      const { layers, matte } = map;
+      if (layers && (layers.foreground.length !== data.length || layers.background.length !== data.length)) {
+        throw new RangeError('Depth layers must match the depth map size.');
+      }
+      if (matte && (!(matte.width > 0 && matte.height > 0) || matte.alpha.length !== matte.width * matte.height || !(matte.w > 0 && matte.h > 0))) {
+        throw new RangeError('Invalid Refine Edge matte.');
       }
     }
     this.#depth = map ?? undefined;
