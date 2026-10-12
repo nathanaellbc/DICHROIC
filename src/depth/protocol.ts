@@ -1,5 +1,5 @@
 /** Pesan antara halaman dan worker kedalaman (`workerCore.ts`). */
-import type { DepthBackend } from './model';
+import type { DepthBackend, DepthModelId, VariantId } from './model';
 
 export type DepthPhase = 'runtime' | 'model' | 'compile' | 'infer' | 'refine';
 
@@ -13,6 +13,8 @@ export interface DepthRequest {
   /** `false`: gagal dengan 'not-cached' alih-alih mulai mengunduh. */
   allowDownload: boolean;
   backend: DepthBackend;
+  /** Jaringan yang dipakai (`DEPTH_MODELS`). */
+  model: DepthModelId;
   /** Sisi pendek yang dilihat jaringan. */
   inputSize: number;
   lowMemory: boolean;
@@ -30,7 +32,8 @@ export type DepthResponse =
       /** Dua lapis di tepi subjek (`matte.ts` `depthLayers`), seukuran `depth`. */
       layers: { foreground: Float32Array; background: Float32Array; alpha: Float32Array };
       backend: DepthBackend;
-      variant: 'fp16' | 'int8';
+      model: DepthModelId;
+      variant: VariantId;
       inferMs: number;
     }
   | { type: 'error'; id: number; code: 'not-cached' | 'failed'; message: string };

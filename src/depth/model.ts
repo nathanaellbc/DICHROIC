@@ -1,10 +1,8 @@
 /**
- * Model kedalaman lens blur: Depth Anything V2 Small (Apache-2.0), ekspor
- * ONNX `onnx-community/depth-anything-v2-small`, dijalankan onnxruntime-web
- * (MIT) di perangkat -- foto tidak pernah meninggalkan perangkat.
- *
- * Small, bukan Base/Large: hanya Small yang Apache-2.0 (Base dan Large
- * CC-BY-NC-4.0), dan Large ratusan MB -- terlalu besar untuk HP.
+ * Model kedalaman lens blur, dijalankan onnxruntime-web (MIT) di perangkat --
+ * foto tidak pernah meninggalkan perangkat. Bawaannya Depth Anything V2 Small
+ * (ekspor ONNX `onnx-community/depth-anything-v2-small`, ringan untuk HP);
+ * desktop bisa memilih model yang lebih berat (`DEPTH_MODELS`).
  *
  * Bobot diunduh dari Hugging Face saat pertama dipakai, DIPATOK ke satu
  * revisi (berkas di balik URL yang di-cache tidak bisa berubah), dan
@@ -27,8 +25,10 @@ export const DEPTH_MODEL = {
 
 export type DepthBackend = 'webgpu' | 'wasm';
 
+export type VariantId = 'fp16' | 'int8' | 'q4f16';
+
 export interface ModelVariant {
-  id: 'fp16' | 'int8';
+  id: VariantId;
   file: string;
   bytes: number;
 }
@@ -43,6 +43,110 @@ export const VARIANTS: Readonly<Record<DepthBackend, ModelVariant>> = {
 };
 
 /**
+ * Model kedalaman yang bisa dipilih pengguna. Semua melewati refine yang sama
+ * (upsample bilateral, guided filter, matte dua lapis); yang berbeda hanya
+ * jaringannya:
+ *
+ * - `fast`: Depth Anything V2 Small -- bawaan, jalan di semua perangkat.
+ * - `detail`: Distill Any Depth Base (ViT-B, arsitektur Depth Anything V2,
+ *   prapemrosesan dan keluaran sama), lebih akurat, ~100-200 MB. Di HP
+ *   eksperimental (int8 102 MB, masukan 392 px).
+ * - `pro`: Apple Depth Pro -- tepi paling tajam, masukan 1536^2, keluaran
+ *   JARAK (dibalik ke disparitas di worker); 600 MB q4f16, hanya desktop GPU.
+ */
+export type DepthModelId = 'fast' | 'detail' | 'pro';
+
+export interface DepthModelSpec {
+  id: DepthModelId;
+  /** Label pemilih di grup Lens. */
+  label: string;
+  name: string;
+  repo: string;
+  revision: string;
+  variants: Partial<Record<DepthBackend, ModelVariant>>;
+  /** Masukan persegi tetap; tanpa ini sisi pendek profil, kelipatan 14. */
+  fixedInput?: number;
+  mean: readonly [number, number, number];
+  std: readonly [number, number, number];
+  /** `disparity`: makin dekat makin besar. `depth`: jarak, makin jauh makin besar. */
+  output: 'disparity' | 'depth';
+  /**
+   * Profil memori rendah (HP): `no` disembunyikan, `experimental` boleh dipilih
+   * tapi bisa kehabisan memori tab (engine kembali ke `fast` bila tab mati).
+   */
+  mobile: 'yes' | 'experimental' | 'no';
+}
+
+export const DEPTH_MODELS: Readonly<Record<DepthModelId, DepthModelSpec>> = {
+  fast: {
+    id: 'fast',
+    label: 'Fast',
+    name: DEPTH_MODEL.name,
+    repo: DEPTH_MODEL.repo,
+    revision: DEPTH_MODEL.revision,
+    variants: VARIANTS,
+    mean: DEPTH_MODEL.mean,
+    std: DEPTH_MODEL.std,
+    output: 'disparity',
+    mobile: 'yes',
+  },
+  detail: {
+    id: 'detail',
+    label: 'Detail',
+    name: 'Distill Any Depth Base',
+    repo: 'Ko033/distill-any-depth-base-onnx',
+    revision: '7ca2c05fd248d13fcb537698c44d3e7792f01868',
+    variants: {
+      webgpu: { id: 'fp16', file: 'onnx/model_fp16.onnx', bytes: 196_847_178 },
+      wasm: { id: 'int8', file: 'onnx/model_quantized.onnx', bytes: 102_212_799 },
+    },
+    mean: DEPTH_MODEL.mean,
+    std: DEPTH_MODEL.std,
+    output: 'disparity',
+    mobile: 'experimental',
+  },
+  pro: {
+    id: 'pro',
+    label: 'Pro',
+    name: 'Apple Depth Pro',
+    repo: 'onnx-community/DepthPro-ONNX',
+    revision: 'feefb662b967b477367485dc4f133aeecd638ba4',
+    variants: {
+      webgpu: { id: 'q4f16', file: 'onnx/model_q4f16.onnx', bytes: 600_274_893 },
+    },
+    fixedInput: 1536,
+    mean: [0.5, 0.5, 0.5],
+    std: [0.5, 0.5, 0.5],
+    output: 'depth',
+    mobile: 'no',
+  },
+};
+
+export const DEPTH_MODEL_IDS: readonly DepthModelId[] = ['fast', 'detail', 'pro'];
+
+export function isDepthModelId(value: unknown): value is DepthModelId {
+  return typeof value === 'string' && (DEPTH_MODEL_IDS as readonly string[]).includes(value);
+}
+
+/** Varian `model` untuk backend ini, atau `undefined` bila model tidak jalan di sana. */
+export function modelVariant(model: DepthModelId, backend: DepthBackend): ModelVariant | undefined {
+  return DEPTH_MODELS[model].variants[backend];
+}
+
+/** Model yang bisa dipilih di perangkat dengan profil ini. */
+export function availableModels(profile: DepthProfile): DepthModelId[] {
+  return DEPTH_MODEL_IDS.filter((id) => {
+    const spec = DEPTH_MODELS[id];
+    return spec.variants[profile.backend] !== undefined && !(spec.mobile === 'no' && profile.lowMemory);
+  });
+}
+
+/** Model ini di perangkat ini berisiko kehabisan memori tab. */
+export function isExperimental(model: DepthModelId, profile: DepthProfile): boolean {
+  return profile.lowMemory && DEPTH_MODELS[model].mobile === 'experimental';
+}
+
+/**
  * Biner WASM ONNX Runtime per build (`depthGpu.worker.ts` memakai build
  * WebGPU/asyncify, `depthCpu.worker.ts` build WASM polos). Diunduh sekali ke
  * cache kedalaman bersama bobot, jadi ikut dihitung dalam ukuran unduhan
@@ -53,15 +157,16 @@ export const RUNTIME_BYTES: Readonly<Record<DepthBackend, number>> = {
   wasm: 14_239_897,
 };
 
-/** Ukuran unduhan pertama di backend ini: bobot + runtime. */
-export function firstDownloadBytes(backend: DepthBackend): number {
-  return VARIANTS[backend].bytes + RUNTIME_BYTES[backend];
+/** Ukuran unduhan pertama model ini di backend ini: bobot + runtime. */
+export function firstDownloadBytes(backend: DepthBackend, model: DepthModelId = 'fast'): number {
+  return (modelVariant(model, backend)?.bytes ?? 0) + RUNTIME_BYTES[backend];
 }
 
 export const DEPTH_CACHE = 'dichroic.depth.v1';
 
-export function variantUrl(v: ModelVariant): string {
-  return `https://huggingface.co/${DEPTH_MODEL.repo}/resolve/${DEPTH_MODEL.revision}/${v.file}`;
+export function variantUrl(v: ModelVariant, model: DepthModelId = 'fast'): string {
+  const spec = DEPTH_MODELS[model];
+  return `https://huggingface.co/${spec.repo}/resolve/${spec.revision}/${v.file}`;
 }
 
 /**
@@ -118,10 +223,12 @@ export async function depthProfile(): Promise<DepthProfile> {
 /** Masukan jaringan desktop ber-GPU (kelipatan 14). */
 export const HIGH_DETAIL_INPUT = 770;
 
-export async function isModelCached(backend: DepthBackend): Promise<boolean> {
+export async function isModelCached(backend: DepthBackend, model: DepthModelId = 'fast'): Promise<boolean> {
+  const variant = modelVariant(model, backend);
+  if (!variant) return false;
   try {
     const cache = await caches.open(DEPTH_CACHE);
-    return (await cache.match(variantUrl(VARIANTS[backend]))) !== undefined;
+    return (await cache.match(variantUrl(variant, model))) !== undefined;
   } catch {
     return false;
   }

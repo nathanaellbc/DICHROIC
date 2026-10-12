@@ -5,7 +5,7 @@
 import type { DecodedImage } from '../io/decoded';
 import { boxDownscale } from '../session/downscale';
 import { TO_REC709, srgbEncode, rgbToCanvas } from '../io/display';
-import type { DepthBackend, DepthProfile } from './model';
+import type { DepthBackend, DepthModelId, DepthProfile, VariantId } from './model';
 import type { DepthPhase, DepthRequest, DepthResponse } from './protocol';
 
 export interface DepthResult {
@@ -16,7 +16,8 @@ export interface DepthResult {
   /** Dua lapis + matte di tepi subjek (`DepthMap.layers`). */
   layers?: { foreground: Float32Array; background: Float32Array; alpha: Float32Array };
   backend: DepthBackend;
-  variant: 'fp16' | 'int8';
+  model: DepthModelId;
+  variant: VariantId;
   inferMs: number;
 }
 
@@ -154,7 +155,7 @@ export class DepthEstimator {
       p.reject(msg.code === 'not-cached' ? new DepthNotCachedError(msg.message) : new Error(msg.message));
       return;
     }
-    p.resolve({ width: msg.width, height: msg.height, data: msg.depth, layers: msg.layers, backend: msg.backend, variant: msg.variant, inferMs: msg.inferMs });
+    p.resolve({ width: msg.width, height: msg.height, data: msg.depth, layers: msg.layers, backend: msg.backend, model: msg.model, variant: msg.variant, inferMs: msg.inferMs });
   }
 
   /**
@@ -162,7 +163,7 @@ export class DepthEstimator {
    * `DepthCancelledError`). `allowDownload: false` memberi
    * `DepthNotCachedError` alih-alih unduhan kejutan.
    */
-  estimate(guide: Guide, opts: { allowDownload: boolean; profile: DepthProfile; onProgress?: (p: DepthProgress) => void }): Promise<DepthResult> {
+  estimate(guide: Guide, opts: { allowDownload: boolean; profile: DepthProfile; model?: DepthModelId; onProgress?: (p: DepthProgress) => void }): Promise<DepthResult> {
     const { profile } = opts;
     if (this.#pending) {
       this.#pending.reject(new DepthCancelledError());
@@ -182,6 +183,7 @@ export class DepthEstimator {
         height: guide.height,
         allowDownload: opts.allowDownload,
         backend: profile.backend,
+        model: opts.model ?? 'fast',
         inputSize: profile.inputSize,
         lowMemory: profile.lowMemory,
       };

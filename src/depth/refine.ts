@@ -107,8 +107,13 @@ export function resampleRGB(src: Uint8ClampedArray, sw: number, sh: number, dw: 
 }
 
 /** `NormalizeImage` + `PrepareForNet`: mean/std ImageNet, HWC -> CHW. */
-export function toModelTensor(rgb: Float32Array, w: number, h: number): Float32Array {
-  const { mean, std } = DEPTH_MODEL;
+export function toModelTensor(
+  rgb: Float32Array,
+  w: number,
+  h: number,
+  mean: readonly [number, number, number] = DEPTH_MODEL.mean,
+  std: readonly [number, number, number] = DEPTH_MODEL.std,
+): Float32Array {
   const plane = w * h;
   const out = new Float32Array(plane * 3);
   for (let i = 0; i < plane; i += 1) {

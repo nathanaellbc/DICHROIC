@@ -17,7 +17,7 @@
 
 import { DepthCancelledError, DepthNotCachedError } from '../../depth/estimate';
 import type { DepthProgress, DepthResult, Guide } from '../../depth/estimate';
-import type { DepthBackend } from '../../depth/model';
+import type { DepthBackend, DepthModelId, VariantId } from '../../depth/model';
 import type { DepthPhase } from '../../depth/protocol';
 import type { DepthMap } from '../../host/lens';
 
@@ -25,7 +25,7 @@ export type DepthState =
   | { status: 'idle' }
   | { status: 'needs-download'; bytes: number }
   | { status: 'working'; phase: DepthPhase; loaded: number; total: number }
-  | { status: 'ready'; backend: DepthBackend; variant: 'fp16' | 'int8'; ms: number }
+  | { status: 'ready'; backend: DepthBackend; model: DepthModelId; variant: VariantId; ms: number }
   | { status: 'error'; message: string };
 
 /**
@@ -74,6 +74,20 @@ export class DepthController {
     if (this.#state.status === 'idle' || this.#state.status === 'error') void this.#run(false);
   }
 
+  /**
+   * Model kedalaman diganti: buang estimasi yang berjalan dan hitung ulang
+   * (tanpa mengunduh) untuk foto yang sama. Peta lama tetap dipakai `Session`
+   * sampai peta baru dikirim. `run: false` (lens blur mati): cukup tandai
+   * basi, `ensure()` berikutnya menghitung dengan model baru.
+   */
+  restart(run = true): void {
+    this.#clearStall();
+    this.#token += 1;
+    if (this.#state.status === 'working') this.deps.cancel?.();
+    this.#set({ status: 'idle' });
+    if (run) void this.#run(false);
+  }
+
   /** Pengguna menyetujui unduhan model. */
   download(): void {
     if (this.#state.status !== 'working' && this.#state.status !== 'ready') void this.#run(true);
@@ -117,7 +131,7 @@ export class DepthController {
       this.#clearStall();
       await this.deps.deliver({ width: result.width, height: result.height, data: result.data, ...(result.layers ? { layers: result.layers } : {}) });
       if (!current()) return;
-      this.#set({ status: 'ready', backend: result.backend, variant: result.variant, ms: result.inferMs });
+      this.#set({ status: 'ready', backend: result.backend, model: result.model, variant: result.variant, ms: result.inferMs });
     } catch (error) {
       // Yang tersalip bukan kegagalan: permintaan yang lebih baru memegang status.
       if (!current() || error instanceof DepthCancelledError) return;

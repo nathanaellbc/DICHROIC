@@ -27,9 +27,9 @@ import { exportFileName } from '../share';
 import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { finishExportEncode, finishExportTiles, noteExportStage, rememberExportTiles, startExportEncode, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
-import { depthProfile, firstDownloadBytes } from '../../depth/model';
+import { DEPTH_MODELS, availableModels, depthProfile, firstDownloadBytes, isDepthModelId, isExperimental } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
-import type { DepthProfile } from '../../depth/model';
+import type { DepthModelId, DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
 import type { DepthState } from './depthController';
 import { canvasColorSpaceFor, rgbToPixels, type Frame } from './display';
@@ -67,6 +67,11 @@ export interface EngineState {
   precisionOk: boolean;
   /** Peta kedalaman lens blur untuk foto terbuka. */
   depth: DepthState;
+  /** Model kedalaman terpilih, dan yang bisa dipilih di perangkat ini. */
+  depthModel: DepthModelId;
+  depthModels: DepthModelId[];
+  /** Pilihan yang bisa kehabisan memori di perangkat ini. */
+  depthExperimental: DepthModelId[];
   /** Langkah undo/redo yang tersedia untuk foto terbuka. */
   history: { canUndo: boolean; canRedo: boolean };
 }
@@ -103,6 +108,41 @@ function diffParams(from: RenderParams, to: RenderParams): Partial<RenderParams>
 
 /** Profil cadangan bila deteksi perangkat gagal: CPU, masukan kecil, hemat memori. */
 const FALLBACK_DEPTH_PROFILE: DepthProfile = { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
+
+const DEPTH_MODEL_KEY = 'dichroic.depthModel';
+/**
+ * Ditulis sebelum estimasi model eksperimental di HP dan dihapus setelahnya.
+ * Masih ada saat app dibuka = tab dimatikan sistem di tengah estimasi
+ * (iOS membunuh tab tanpa galat): kembali ke `fast`.
+ */
+const DEPTH_RUNNING_KEY = 'dichroic.depthModel.running';
+
+function storage(): Storage | undefined {
+  try {
+    return globalThis.localStorage ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Pilihan tersimpan, plus model yang membuat tab mati terakhir kali. */
+function storedDepthModel(): { model: DepthModelId; crashed?: DepthModelId } {
+  try {
+    const store = storage();
+    const crashed = store?.getItem(DEPTH_RUNNING_KEY);
+    if (isDepthModelId(crashed)) {
+      store?.removeItem(DEPTH_RUNNING_KEY);
+      store?.setItem(DEPTH_MODEL_KEY, 'fast');
+      return { model: 'fast', crashed };
+    }
+    const value = store?.getItem(DEPTH_MODEL_KEY);
+    return { model: isDepthModelId(value) ? value : 'fast' };
+  } catch {
+    return { model: 'fast' };
+  }
+}
+
+const STORED_DEPTH = storedDepthModel();
 
 type Listener = () => void;
 
@@ -171,6 +211,10 @@ export class Engine {
     rendering: false,
     precisionOk: true,
     depth: { status: 'idle' },
+    depthModel: STORED_DEPTH.model,
+    depthModels: ['fast'],
+    depthExperimental: [],
+    ...(STORED_DEPTH.crashed ? { notice: `${DEPTH_MODELS[STORED_DEPTH.crashed].name} ran out of memory on this device. Switched back to Fast.` } : {}),
     history: { canUndo: false, canRedo: false },
   };
   readonly #listeners = new Set<Listener>();
@@ -206,7 +250,14 @@ export class Engine {
       const profile = await this.#profile();
       if (token !== this.#photoGeneration) throw new DepthCancelledError();
       this.#estimator ??= new DepthEstimator();
-      return this.#estimator.estimate(guide, { allowDownload, profile, onProgress });
+      const model = this.#state.depthModel;
+      const guarded = isExperimental(model, profile);
+      if (guarded) storage()?.setItem(DEPTH_RUNNING_KEY, model);
+      try {
+        return await this.#estimator.estimate(guide, { allowDownload, profile, model, onProgress });
+      } finally {
+        if (guarded) storage()?.removeItem(DEPTH_RUNNING_KEY);
+      }
     },
     deliver: async (map) => {
       // Salinan untuk cek fokus di thread UI: peta aslinya DITRANSFER ke worker.
@@ -214,7 +265,7 @@ export class Engine {
       await this.#client!.setDepthMap(map, this.#photoId);
       this.requestRender();
     },
-    downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend),
+    downloadBytes: async () => firstDownloadBytes((await this.#profile()).backend, this.#state.depthModel),
     onChange: (depth) => this.#set({ depth }),
     cancel: () => {
       this.#estimator?.dispose();
@@ -235,8 +286,27 @@ export class Engine {
   }
 
   #profile(): Promise<DepthProfile> {
-    this.#depthProfile ??= depthProfile().catch(() => FALLBACK_DEPTH_PROFILE);
+    this.#depthProfile ??= depthProfile().catch(() => FALLBACK_DEPTH_PROFILE).then((profile) => {
+      // Pilihan tersimpan yang tidak jalan di perangkat ini jatuh ke bawaan.
+      const depthModels = availableModels(profile);
+      const depthModel = depthModels.includes(this.#state.depthModel) ? this.#state.depthModel : 'fast';
+      const depthExperimental = depthModels.filter((id) => isExperimental(id, profile));
+      this.#set({ depthModels, depthModel, depthExperimental });
+      return profile;
+    });
     return this.#depthProfile;
+  }
+
+  /** Ganti jaringan kedalaman; peta foto terbuka dihitung ulang dengannya. */
+  setDepthModel(model: DepthModelId): void {
+    if (model === this.#state.depthModel || !this.#state.depthModels.includes(model)) return;
+    try {
+      storage()?.setItem(DEPTH_MODEL_KEY, model);
+    } catch {
+      // Penyimpanan diblokir: pilihan berlaku untuk sesi ini saja.
+    }
+    this.#set({ depthModel: model });
+    this.#depth.restart(this.#state.params.lensBlurEnabled);
   }
 
   /** Berkas foto yang terbuka, untuk membukanya ulang setelah GPU hilang. */

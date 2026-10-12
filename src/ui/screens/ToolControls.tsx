@@ -10,6 +10,8 @@ import { useElasticScroll } from '../components/useElasticScroll';
 import { OptionRow, PopUp, PressButton, Slider, Stepper, Switch, centerInScroller } from '../components/controls';
 import { Spinner } from '../components/Overlays';
 import type { DepthState } from '../engine/depthController';
+import { DEPTH_MODELS, isDepthModelId } from '../../depth/model';
+import type { DepthModelId } from '../../depth/model';
 import { pressScale, snappy } from '../motion';
 import {
   DIFFUSION_FAMILIES,
@@ -39,6 +41,12 @@ export interface LensContext {
   aspect: number;
   onDownload: () => void;
   onRetry: () => void;
+  /** Model kedalaman terpilih dan pilihan di perangkat ini. */
+  model: DepthModelId;
+  models: readonly DepthModelId[];
+  /** Pilihan yang bisa kehabisan memori di perangkat ini. */
+  experimental: readonly DepthModelId[];
+  onModel: (model: DepthModelId) => void;
 }
 
 export interface ToolContext {
@@ -251,6 +259,18 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
   if (!params.lensBlurEnabled || !lens) return note;
 
   const readout = <p className="t-footnote secondary tabular" style={{ margin: 0 }}>{lensReadoutText(params, lens.aspect)}</p>;
+  // Pemilih jaringan kedalaman: hanya muncul bila perangkat punya pilihan.
+  const picker = lens.models.length > 1 ? (
+    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <span className="t-footnote secondary">Depth model</span>
+      <PopUp
+        label="Depth model"
+        options={lens.models.map((id) => ({ value: id, label: `${DEPTH_MODELS[id].label} · ${DEPTH_MODELS[id].name}${lens.experimental.includes(id) ? ' (experimental)' : ''}` }))}
+        value={lens.model}
+        onChange={(value) => { if (isDepthModelId(value)) lens.onModel(value); }}
+      />
+    </span>
+  ) : null;
   const { depth } = lens;
   let status: React.ReactNode;
   switch (depth.status) {
@@ -269,7 +289,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
     case 'needs-download':
       status = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <p className="t-subhead" style={{ margin: 0 }}>Lens blur needs a one-time download of the depth model. It stays on this device, and your photos never leave it.</p>
+          <p className="t-subhead" style={{ margin: 0 }}>Lens blur needs a one-time download of {DEPTH_MODELS[lens.model].name}. It stays on this device, and your photos never leave it.</p>
           <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onDownload}>
             Download · {megabytes(depth.bytes)}
           </PressButton>
@@ -290,7 +310,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
       status = (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="t-footnote secondary">
-            Depth ready · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
+            Depth ready · {DEPTH_MODELS[depth.model].label} · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
           </span>
           <span className="t-footnote secondary">Drag the focus pin on the photo to focus.</span>
         </div>
@@ -299,6 +319,7 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
   }
   return (
     <div className="lens-status" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+      {picker}
       {status}
       {readout}
     </div>

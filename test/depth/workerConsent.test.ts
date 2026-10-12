@@ -22,7 +22,7 @@ describe('depth download consent', () => {
     serveDepth({ env: { wasm: {} }, Tensor: class { dispose = dispose; }, InferenceSession: { create } } as unknown as typeof Ort,
       'https://app.test/runtime.wasm', 1);
     await (worker.onmessage as (e: { data: DepthRequest }) => Promise<void>)({ data: {
-      type: 'estimate', id: 1, backend: 'webgpu', allowDownload: false, lowMemory: false,
+      type: 'estimate', id: 1, backend: 'webgpu', model: 'fast', allowDownload: false, lowMemory: false,
       width: 1, height: 1, inputSize: 28, rgba: new Uint8ClampedArray(4),
     } });
     expect(release).toHaveBeenCalledOnce();
@@ -43,7 +43,7 @@ describe('depth download consent', () => {
     vi.stubGlobal('self', worker);
     serveDepth({ env: { wasm: {} } } as typeof Ort, runtimeUrl, 1);
     await (worker.onmessage as (e: { data: DepthRequest }) => Promise<void>)({ data: {
-      type: 'estimate', id: 1, backend: 'wasm', allowDownload: false, lowMemory: false,
+      type: 'estimate', id: 1, backend: 'wasm', model: 'fast', allowDownload: false, lowMemory: false,
       width: 1, height: 1, inputSize: 28, rgba: new Uint8ClampedArray(4),
     } });
     expect(fetch).not.toHaveBeenCalled();

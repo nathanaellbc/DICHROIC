@@ -46,6 +46,7 @@ const result = (w: number): DepthResult => ({
   height: 2,
   data: new Float32Array(w * 2).fill(0.5),
   backend: 'wasm',
+  model: 'fast',
   variant: 'int8',
   inferMs: 812,
 });
@@ -92,7 +93,7 @@ describe('DepthController', () => {
     await flush();
     expect(delivered).toHaveLength(1);
     expect(delivered[0]!.width).toBe(4);
-    expect(controller.state).toEqual({ status: 'ready', backend: 'wasm', variant: 'int8', ms: 812 });
+    expect(controller.state).toEqual({ status: 'ready', backend: 'wasm', model: 'fast', variant: 'int8', ms: 812 });
     expect(states.at(-1)).toEqual(controller.state);
   });
 

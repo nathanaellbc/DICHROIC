@@ -13,7 +13,7 @@ const client = vi.hoisted(() => ({
 }));
 const failure = vi.hoisted(() => ({ report: undefined as undefined | ((error: Error) => void) }));
 vi.mock('../../src/session/client', () => ({ SessionClient: { attach: (_port: unknown, onFailure?: (error: Error) => void) => { failure.report = onFailure; return client; } } }));
-vi.mock('../../src/depth/model', () => ({ depthProfile: async () => ({ backend: 'wasm', guideMaxEdge: 16 }), firstDownloadBytes: async () => 1 }));
+vi.mock('../../src/depth/model', () => ({ depthProfile: async () => ({ backend: 'wasm', guideMaxEdge: 16 }), firstDownloadBytes: async () => 1, availableModels: () => ['fast'], isExperimental: () => false, isDepthModelId: () => false }));
 import { Engine } from '../../src/ui/engine/engine';
 
 function deferred<T>() {

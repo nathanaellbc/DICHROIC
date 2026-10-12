@@ -151,6 +151,10 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       aspect: state.frame ? state.frame.width / state.frame.height : 1.5,
       onDownload: () => engine.downloadDepth(),
       onRetry: () => engine.retryDepth(),
+      model: state.depthModel,
+      models: state.depthModels,
+      experimental: state.depthExperimental,
+      onModel: (model) => engine.setDepthModel(model),
     },
   };
 
