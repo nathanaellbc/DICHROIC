@@ -199,40 +199,77 @@ export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array,
 }
 
 /**
- * Lapis depan/belakang di resolusi kedalaman: di piksel kedalaman yang
- * menyentuh pita, rata-rata kedalaman sisi subjek (> ambang) dan sisi latar
- * di jendela `radius` px; di tempat lain keduanya = kedalaman.
+ * Lapis depan/belakang di resolusi kedalaman. Di piksel kedalaman yang
+ * menyentuh PITA SAPUAN (bukan alfa < 1: helai yang matte-nya pasti subjek
+ * punya alfa 1 dan tetap harus memakai kedalaman subjek), lapis depan =
+ * rata-rata kedalaman sisi subjek (> ambang) dan lapis belakang = rata-rata
+ * sisi latar di jendela `radius` px; tanpa tetangga di sisi itu, kedalaman
+ * khas sisi itu di seluruh kotak (helai yang mencuat jauh dari tubuh di peta
+ * kedalaman). Di tempat lain keduanya = kedalaman.
  */
-export function layeredDepth(depth: DepthMap, matte: EdgeMatte, threshold: number, radius = 6): { foreground: Float32Array; background: Float32Array } {
+export function layeredDepth(
+  depth: DepthMap,
+  rect: UvRect,
+  band: Uint8Array,
+  bandWidth: number,
+  bandHeight: number,
+  threshold: number,
+): { foreground: Float32Array; background: Float32Array } {
   const { width: w, height: h, data } = depth;
   const foreground = data.slice();
   const background = data.slice();
-  const x0 = Math.max(0, Math.floor(matte.x * w) - 1), x1 = Math.min(w - 1, Math.ceil((matte.x + matte.w) * w) + 1);
-  const y0 = Math.max(0, Math.floor(matte.y * h) - 1), y1 = Math.min(h - 1, Math.ceil((matte.y + matte.h) * h) + 1);
+  const radius = Math.max(6, Math.round(0.03 * Math.max(w, h)));
+  const x0 = Math.max(0, Math.floor(rect.x * w) - 1), x1 = Math.min(w - 1, Math.ceil((rect.x + rect.w) * w) + 1);
+  const y0 = Math.max(0, Math.floor(rect.y * h) - 1), y1 = Math.min(h - 1, Math.ceil((rect.y + rect.h) * h) + 1);
+  // Kedalaman khas tiap sisi di kotak sapuan (median).
+  const fgAll: number[] = [], bgAll: number[] = [];
+  for (let y = y0; y <= y1; y += 1) for (let x = x0; x <= x1; x += 1) {
+    const d = data[y * w + x]!;
+    (d > threshold ? fgAll : bgAll).push(d);
+  }
+  const median = (v: number[], fallback: number) => (v.length ? v.sort((a, b) => a - b)[v.length >> 1]! : fallback);
+  const fgTypical = median(fgAll, threshold);
+  const bgTypical = median(bgAll, threshold);
   const touches = (x: number, y: number) => {
-    // Sampel matte di sekitar pusat piksel kedalaman (3x3): pita = alfa < 1.
+    // Pita di sekitar pusat piksel kedalaman (3x3 sampel).
     for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) {
-      const u = (x + 0.5 + dx * 0.5) / w, v = (y + 0.5 + dy * 0.5) / h;
-      const qx = (u - matte.x) / matte.w, qy = (v - matte.y) / matte.h;
+      const qx = ((x + 0.5 + dx * 0.5) / w - rect.x) / rect.w, qy = ((y + 0.5 + dy * 0.5) / h - rect.y) / rect.h;
       if (qx < 0 || qy < 0 || qx > 1 || qy > 1) continue;
-      const mx = Math.min(matte.width - 1, Math.floor(qx * matte.width)), my = Math.min(matte.height - 1, Math.floor(qy * matte.height));
-      if (matte.alpha[my * matte.width + mx]! < 1) return true;
+      const mx = Math.min(bandWidth - 1, Math.floor(qx * bandWidth)), my = Math.min(bandHeight - 1, Math.floor(qy * bandHeight));
+      if (band[my * bandWidth + mx]) return true;
     }
     return false;
+  };
+  // Jumlah geser lewat summed-area table di kotak + radius: O(1) per piksel.
+  const ax0 = Math.max(0, x0 - radius), ay0 = Math.max(0, y0 - radius);
+  const ax1 = Math.min(w - 1, x1 + radius), ay1 = Math.min(h - 1, y1 + radius);
+  const sw = ax1 - ax0 + 2, sh = ay1 - ay0 + 2;
+  const fSum = new Float64Array(sw * sh), fCnt = new Float64Array(sw * sh);
+  const bSum = new Float64Array(sw * sh), bCnt = new Float64Array(sw * sh);
+  for (let y = ay0; y <= ay1; y += 1) {
+    for (let x = ax0; x <= ax1; x += 1) {
+      const d = data[y * w + x]!;
+      const k = (y - ay0 + 1) * sw + (x - ax0 + 1);
+      const fg = d > threshold;
+      const up = k - sw, left = k - 1, diag = k - sw - 1;
+      fSum[k] = (fg ? d : 0) + fSum[up]! + fSum[left]! - fSum[diag]!;
+      fCnt[k] = (fg ? 1 : 0) + fCnt[up]! + fCnt[left]! - fCnt[diag]!;
+      bSum[k] = (fg ? 0 : d) + bSum[up]! + bSum[left]! - bSum[diag]!;
+      bCnt[k] = (fg ? 0 : 1) + bCnt[up]! + bCnt[left]! - bCnt[diag]!;
+    }
+  }
+  const box = (t: Float64Array, x: number, y: number) => {
+    const xa = Math.max(ax0, x - radius) - ax0, xb = Math.min(ax1, x + radius) - ax0 + 1;
+    const ya = Math.max(ay0, y - radius) - ay0, yb = Math.min(ay1, y + radius) - ay0 + 1;
+    return t[yb * sw + xb]! - t[ya * sw + xb]! - t[yb * sw + xa]! + t[ya * sw + xa]!;
   };
   for (let y = y0; y <= y1; y += 1) {
     for (let x = x0; x <= x1; x += 1) {
       if (!touches(x, y)) continue;
-      let fs = 0, fn = 0, bs = 0, bn = 0;
-      for (let j = Math.max(0, y - radius); j <= Math.min(h - 1, y + radius); j += 1) {
-        for (let i = Math.max(0, x - radius); i <= Math.min(w - 1, x + radius); i += 1) {
-          const d = data[j * w + i]!;
-          if (d > threshold) { fs += d; fn += 1; } else { bs += d; bn += 1; }
-        }
-      }
+      const fn = box(fCnt, x, y), bn = box(bCnt, x, y);
       const i = y * w + x;
-      if (fn) foreground[i] = fs / fn;
-      if (bn) background[i] = bs / bn;
+      foreground[i] = fn > 0 ? box(fSum, x, y) / fn : fgTypical;
+      background[i] = bn > 0 ? box(bSum, x, y) / bn : bgTypical;
     }
   }
   return { foreground, background };

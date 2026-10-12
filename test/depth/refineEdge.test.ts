@@ -62,7 +62,7 @@ describe('Refine Edge', () => {
     const matte = shaderMatte(rect, alpha, band, W, H);
     expect(matte.alpha[0]).toBe(1);
     expect(matte.alpha[60 * W + W / 2]).toBeCloseTo(0.4, 6);
-    const { foreground, background } = layeredDepth(depth, matte, 0.5);
+    const { foreground, background } = layeredDepth(depth, rect, band, W, H, 0.5);
     // Jauh dari pita: identik dengan peta.
     expect(foreground[2 * 64 + 2]).toBe(depth.data[2 * 64 + 2]);
     expect(background[40 * 64 + 60]).toBe(depth.data[40 * 64 + 60]);
@@ -70,5 +70,22 @@ describe('Refine Edge', () => {
     const i = 24 * 64 + 33;
     expect(foreground[i]).toBeCloseTo(1, 6);
     expect(background[i]).toBeCloseTo(0, 6);
+  });
+
+  it('helai pasti subjek (alfa 1) dan helai jauh dari tubuh di peta kedalaman tetap memakai kedalaman subjek', () => {
+    // Peta kedalaman: subjek hanya x < 10 (d = 0,8); pita sapuan x = 10..60 (rambut mencuat jauh).
+    const depth: DepthMap = { width: 64, height: 48, data: new Float32Array(64 * 48) };
+    for (let y = 0; y < 48; y += 1) for (let x = 0; x < 64; x += 1) depth.data[y * 64 + x] = x < 10 ? 0.8 : 0.1;
+    const rect = { x: 0, y: 0, w: 1, h: 1 };
+    const W = 64, H = 48;
+    const band = new Uint8Array(W * H);
+    for (let y = 0; y < H; y += 1) for (let x = 10; x < 60; x += 1) band[y * W + x] = 1;
+    const { foreground, background } = layeredDepth(depth, rect, band, W, H, 0.45);
+    for (const x of [12, 40, 58]) {
+      expect(foreground[24 * 64 + x], `x=${x}`).toBeCloseTo(0.8, 6);
+      expect(background[24 * 64 + x], `x=${x}`).toBeCloseTo(0.1, 6);
+    }
+    // Di luar pita: tidak berubah.
+    expect(foreground[24 * 64 + 62]).toBeCloseTo(0.1, 6);
   });
 });
