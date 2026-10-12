@@ -12,13 +12,17 @@
  */
 
 import type * as Ort from 'onnxruntime-web';
-import { DEPTH_CACHE, DEPTH_MODELS, DepthAssetNotCachedError, fetchCached, modelVariant, variantUrl } from './model';
+import { DEPTH_CACHE, DEPTH_MODELS, DepthAssetNotCachedError, ensureCached, fetchCached, modelVariant, variantUrl } from './model';
+import { runDepthPro } from './depthProSplit';
+import type { DepthProStage } from './depthProSplit';
 import type { DepthBackend, DepthModelId } from './model';
 import { jointBilateralUpsample, modelInputSize, normaliseDisparity, resampleRGB, rgbaFrom, toModelTensor } from './refine';
 import { detailDepth } from './matte';
 import type { DepthRequest, DepthResponse } from './protocol';
 
 declare const self: DedicatedWorkerGlobalScope;
+
+const LEGACY_DEPTH_PRO_URL = 'https://huggingface.co/onnx-community/DepthPro-ONNX/resolve/feefb662b967b477367485dc4f133aeecd638ba4/onnx/model_q4f16.onnx';
 
 /** Pasang handler pesan worker untuk satu build ONNX Runtime. */
 export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: number): void {
@@ -49,7 +53,7 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
 
   async function releaseOthers(keep: string): Promise<void> {
     for (const [k, s] of [...sessions]) {
-      if (k === keep) continue;
+      if (k === keep || k.startsWith(`${keep}|`)) continue;
       sessions.delete(k);
       await s.then((x) => x.release(), () => {}).catch(() => {});
     }
@@ -72,13 +76,8 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
         await loadRuntime(id, allowDownload);
         const bytes = await fetchCached(url, variant.bytes, (loaded, total) => post({ type: 'progress', id, phase: 'model', loaded, total }), allowDownload);
         post({ type: 'progress', id, phase: 'compile', loaded: 0, total: 1 });
-        return ort.InferenceSession.create(new Uint8Array(bytes), {
-          executionProviders: [backend],
-          graphOptimizationLevel: 'all',
-          // Arena dan memory pattern menahan memori yang tidak bisa diambil kembali di HP.
-          enableCpuMemArena: !lowMemory,
-          enableMemPattern: !lowMemory,
-        });
+        // Arena dan memory pattern menahan memori yang tidak bisa diambil kembali di HP.
+        return ort.InferenceSession.create(new Uint8Array(bytes), sessionOptions(backend, lowMemory));
       })();
       sessions.set(k, s);
       s.catch(() => sessions.delete(k));
@@ -86,8 +85,73 @@ export function serveDepth(ort: typeof Ort, ortWasmUrl: string, runtimeBytes: nu
     return s;
   }
 
+  const sessionOptions = (backend: DepthBackend, lowMemory: boolean): Ort.InferenceSession.SessionOptions => ({
+    executionProviders: [backend],
+    graphOptimizationLevel: 'all',
+    enableCpuMemArena: !lowMemory,
+    enableMemPattern: !lowMemory,
+  });
+
+  /**
+   * Model terpecah (Depth Pro): ketiga berkas dipastikan ada di cache lebih
+   * dulu (satu progres unduhan), lalu tiap tahap dimuat saat dipakai. Profil
+   * memori rendah melepas tiap tahap setelah dipakai -- hanya satu bagian
+   * bobot di memori; desktop menyimpannya untuk foto berikutnya.
+   */
+  async function inferSplit(backend: DepthBackend, req: DepthRequest) {
+    const spec = DEPTH_MODELS[req.model];
+    const split = spec.split!;
+    const k = key(req.model, backend);
+    const parts = Object.values(split);
+    if (!req.allowDownload) {
+      const cache = await globalThis.caches?.open(DEPTH_CACHE).catch(() => null);
+      const runtimeUrl = new URL(ortWasmUrl, self.location.href).href;
+      for (const p of parts) if (!(await cache?.match(variantUrl(p, req.model)))) throw new DepthAssetNotCachedError();
+      if (!runtimeReady && !(await cache?.match(runtimeUrl))) throw new DepthAssetNotCachedError();
+    }
+    await releaseOthers(k);
+    // Depth Pro utuh lama (600 MB, kedalamannya terbalik) tidak dipakai lagi.
+    void globalThis.caches?.open(DEPTH_CACHE).then((c) => c.delete(LEGACY_DEPTH_PRO_URL)).catch(() => {});
+    await loadRuntime(req.id, req.allowDownload);
+    const total = parts.reduce((sum, p) => sum + p.bytes, 0);
+    let before = 0;
+    for (const p of parts) {
+      await ensureCached(variantUrl(p, req.model), p.bytes, (loaded) => post({ type: 'progress', id: req.id, phase: 'model', loaded: before + loaded, total }), req.allowDownload);
+      before += p.bytes;
+    }
+    const size = spec.fixedInput!;
+    const rgb = resampleRGB(req.rgba, req.width, req.height, size, size);
+    const pixels = toModelTensor(rgb, size, size, spec.mean, spec.std);
+    const t0 = performance.now();
+    const raw = await runDepthPro(ort, pixels, {
+      open: async (stage: DepthProStage) => {
+        const sk = `${k}|${stage}`;
+        let s = sessions.get(sk);
+        if (!s) {
+          post({ type: 'progress', id: req.id, phase: 'compile', loaded: 0, total: 1 });
+          s = (async () => {
+            const part = split[stage];
+            const bytes = await fetchCached(variantUrl(part, req.model), part.bytes, undefined, req.allowDownload);
+            return ort.InferenceSession.create(new Uint8Array(bytes), sessionOptions(backend, req.lowMemory));
+          })();
+          sessions.set(sk, s);
+          s.catch(() => sessions.delete(sk));
+        }
+        return s;
+      },
+      done: async (stage, s) => {
+        if (!req.lowMemory) return;
+        sessions.delete(`${k}|${stage}`);
+        await s.release();
+      },
+      onStep: (done, steps) => post({ type: 'progress', id: req.id, phase: 'infer', loaded: done, total: steps }),
+    });
+    return { raw, ow: size, oh: size, rgb, mw: size, mh: size, inferMs: performance.now() - t0 };
+  }
+
   async function infer(backend: DepthBackend, req: DepthRequest) {
     const spec = DEPTH_MODELS[req.model];
+    if (spec.split) return inferSplit(backend, req);
     const s = await session(req.model, backend, req.id, req.allowDownload, req.lowMemory);
     // Depth Pro melihat persegi tetap (direntang; upsample bilateral memetakan
     // tiap sumbu terpisah), Depth Anything sisi pendek kelipatan 14.

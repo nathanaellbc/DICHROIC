@@ -51,9 +51,10 @@ export const VARIANTS: Readonly<Record<DepthBackend, ModelVariant>> = {
  * - `detail`: Distill Any Depth Base (ViT-B, arsitektur Depth Anything V2,
  *   prapemrosesan dan keluaran sama), lebih akurat, ~100-200 MB. Di HP
  *   eksperimental (int8 102 MB, masukan 392 px).
- * - `pro`: Apple Depth Pro -- tepi paling tajam, masukan 1536^2, keluaran
- *   JARAK (dibalik ke disparitas di worker); 600 MB q4f16, hanya di GPU. Di HP
- *   eksperimental (iPhone menjalankannya lewat GPU walau jalur biasanya CPU).
+ * - `pro`: Apple Depth Pro -- tepi paling tajam, masukan 1536^2; ekspor sendiri
+ *   tanpa kepala FOV, tiga sesi q4f16 (426 MB total, dimuat bergantian),
+ *   hanya di GPU. Di HP eksperimental (iPhone menjalankannya lewat GPU walau
+ *   jalur biasanya CPU).
  */
 export type DepthModelId = 'fast' | 'detail' | 'pro';
 
@@ -71,6 +72,11 @@ export interface DepthModelSpec {
   std: readonly [number, number, number];
   /** `disparity`: makin dekat makin besar. `depth`: jarak, makin jauh makin besar. */
   output: 'disparity' | 'depth';
+  /**
+   * Model terpecah (Depth Pro): tiga berkas yang dijalankan bergantian; varian
+   * hanya membawa ukuran totalnya (unduhan) dan `file` pertama.
+   */
+  split?: Readonly<Record<'image' | 'patch' | 'decoder', { file: string; bytes: number }>>;
   /**
    * Profil memori rendah (HP): `no` disembunyikan, `experimental` boleh dipilih
    * tapi bisa kehabisan memori tab (engine kembali ke `fast` bila tab mati).
@@ -110,15 +116,23 @@ export const DEPTH_MODELS: Readonly<Record<DepthModelId, DepthModelSpec>> = {
     id: 'pro',
     label: 'Pro',
     name: 'Apple Depth Pro',
-    repo: 'onnx-community/DepthPro-ONNX',
-    revision: 'feefb662b967b477367485dc4f133aeecd638ba4',
+    // Ekspor sendiri (`depthProSplit.ts`): tanpa kepala FOV, tiga sesi yang
+    // dimuat bergantian -- puncak bobot 174 MB, bukan 600 MB sekaligus.
+    repo: 'nathanaellbc/depth-pro-mobile-onnx',
+    revision: 'dbca736be26b065ae9b7db5f1df048b8dd61e9e9',
     variants: {
-      webgpu: { id: 'q4f16', file: 'onnx/model_q4f16.onnx', bytes: 600_274_893 },
+      webgpu: { id: 'q4f16', file: 'image.onnx', bytes: 173_857_851 + 173_889_448 + 78_501_241 },
+    },
+    split: {
+      image: { file: 'image.onnx', bytes: 173_857_851 },
+      patch: { file: 'patch.onnx', bytes: 173_889_448 },
+      decoder: { file: 'decoder.onnx', bytes: 78_501_241 },
     },
     fixedInput: 1536,
     mean: [0.5, 0.5, 0.5],
     std: [0.5, 0.5, 0.5],
-    output: 'depth',
+    // Inverse depth kanonis: makin dekat makin besar (= disparitas).
+    output: 'disparity',
     mobile: 'experimental',
   },
 };
@@ -175,9 +189,17 @@ export function firstDownloadBytes(backend: DepthBackend, model: DepthModelId = 
 
 export const DEPTH_CACHE = 'dichroic.depth.v1';
 
-export function variantUrl(v: ModelVariant, model: DepthModelId = 'fast'): string {
+export function variantUrl(v: { file: string }, model: DepthModelId = 'fast'): string {
   const spec = DEPTH_MODELS[model];
   return `https://huggingface.co/${spec.repo}/resolve/${spec.revision}/${v.file}`;
+}
+
+/** Semua berkas yang harus ada di perangkat untuk `model` (satu, atau tiga untuk model terpecah). */
+export function modelFiles(model: DepthModelId, backend: DepthBackend): Array<{ file: string; bytes: number }> {
+  const spec = DEPTH_MODELS[model];
+  if (spec.split) return Object.values(spec.split);
+  const v = spec.variants[backend];
+  return v ? [v] : [];
 }
 
 /**
@@ -240,11 +262,12 @@ export async function depthProfile(): Promise<DepthProfile> {
 export const HIGH_DETAIL_INPUT = 770;
 
 export async function isModelCached(backend: DepthBackend, model: DepthModelId = 'fast'): Promise<boolean> {
-  const variant = modelVariant(model, backend);
-  if (!variant) return false;
+  const files = modelFiles(model, backend);
+  if (files.length === 0) return false;
   try {
     const cache = await caches.open(DEPTH_CACHE);
-    return (await cache.match(variantUrl(variant, model))) !== undefined;
+    for (const f of files) if (!(await cache.match(variantUrl(f, model)))) return false;
+    return true;
   } catch {
     return false;
   }
@@ -305,6 +328,47 @@ export async function fetchCached(
     return downloadToMemory(again, total, onProgress);
   }
   return downloadToMemory(res, total, onProgress);
+}
+
+/**
+ * Pastikan `url` ada di cache kedalaman TANPA membacanya ke memori (model
+ * terpecah: bagian dibaca saat tahapnya dimuat). `false` bila tidak ada cache
+ * (mode privat, kuota): tahapnya nanti mengunduh langsung ke memori.
+ */
+export async function ensureCached(
+  url: string,
+  expectedBytes: number,
+  onProgress?: (loaded: number, total: number) => void,
+  allowDownload = true,
+): Promise<boolean> {
+  let cache: Cache;
+  try {
+    cache = await caches.open(DEPTH_CACHE);
+    if (await cache.match(url)) return true;
+  } catch {
+    if (!allowDownload) throw new DepthAssetNotCachedError();
+    return false;
+  }
+  if (!allowDownload) throw new DepthAssetNotCachedError();
+  const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+  if (!res.ok || !res.body) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
+  const total = Number(res.headers.get('content-length')) || expectedBytes;
+  let loaded = 0;
+  const counted = res.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        loaded += chunk.byteLength;
+        onProgress?.(loaded, total);
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  try {
+    await cache.put(url, new Response(counted, { headers: { 'content-type': 'application/octet-stream' } }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function downloadToMemory(res: Response, total: number, onProgress?: (loaded: number, total: number) => void): Promise<ArrayBuffer> {
