@@ -207,10 +207,14 @@ fn prep(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let count = f32((x1 - x0) * (y1 - y0));
   c /= count;
+  // Sel yang hampir seluruhnya lapis depan membawa warna subjek: CoC-nya
+  // CoC lapis depan. Dengan CoC latar, warna subjek menyebar sebagai bokeh
+  // latar dan tepinya tampak bergeser keluar.
+  var coc = signedCoc(depthAt(uv));
   if (wb > 0.05 * count) {
     c = cb / wb;
+    coc = signedCoc(fieldDepth(uv));
   }
-  let coc = signedCoc(fieldDepth(uv));
   textureStore(gridOut, vec2<i32>(gid.xy), vec4<f32>(c, coc * 0.5 * lens.gridScale));
 }
 

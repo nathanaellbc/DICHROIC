@@ -95,4 +95,26 @@ describe('matte: dua lapis kedalaman (rambut)', () => {
       expect(layers.foreground[i]).toBeCloseTo(layers.background[i]!, 6);
     }
   });
+
+  it('bagian dalam subjek yang rata tetap lapis depan penuh: latar tidak tembus ke sisi dalam tepi', () => {
+    // Subjek polos di kiri, latar bergaris di kanan. Dulu topeng menandai bagian
+    // dalam subjek (near = far) sebagai latar, sehingga alfa turun di pita dalam.
+    const w = 256, h = 64, edge = 128;
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    const depth = new Float32Array(w * h);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = y * w + x;
+        const stripe = (x >> 2) % 2 ? 150 : 60;
+        rgba.set(x < edge ? [200, 160, 110, 255] : [stripe, 50, 140, 255], i * 4);
+        depth[i] = x < edge ? 1 : 0;
+      }
+    }
+    const zone = 9;
+    const layers = depthLayers(depth, new GuideImage(rgba, w, h), { lowMemory: false, radii: { zone } });
+    const y = h >> 1;
+    for (let x = edge - zone; x < edge - 1; x += 1) {
+      expect(layers.alpha[y * w + x], `x=${x}`).toBeGreaterThan(0.99);
+    }
+  });
 });

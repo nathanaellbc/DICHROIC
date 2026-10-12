@@ -316,6 +316,13 @@ export function depthLayers(depth: Float32Array, guide: GuideImage, o: DetailOpt
   const R = detailRadii(w, h, o.radii);
   const near = slidingExtreme(depth, w, h, R.zone, true);
   const far = slidingExtreme(depth, w, h, R.zone, false);
+  // Topeng depan/belakang dari jendela 2x zona: matte warna membaca tetangga
+  // sejauh satu zona dari piksel zona, dan tiap tetangga itu harus dinilai
+  // terhadap tepi yang sama. Dengan jendela zona saja bagian dalam subjek yang
+  // rata (near = far) jatuh ke "latar", lalu latar blur tembus ke pita di sisi
+  // dalam tepi dan garis subjek tampak bergeser.
+  const near2 = slidingExtreme(depth, w, h, 2 * R.zone, true);
+  const far2 = slidingExtreme(depth, w, h, 2 * R.zone, false);
   const tmp = new Float32Array(n);
   // Zona lembut: 0 di bawah satu langkah, 1 di dua langkah -- tanpa tepi keras.
   const zone = new Float32Array(n);
@@ -324,7 +331,7 @@ export function depthLayers(depth: Float32Array, guide: GuideImage, o: DetailOpt
     const span = near[i]! - far[i]!;
     const t = Math.min(Math.max((span - LAYER_STEP) / LAYER_STEP, 0), 1);
     zone[i] = t * t * (3 - 2 * t);
-    mask[i] = depth[i]! > (near[i]! + far[i]!) * 0.5 ? 1 : 0;
+    mask[i] = depth[i]! > (near2[i]! + far2[i]!) * 0.5 ? 1 : 0;
   }
   // Kedalaman tiap lapis dihaluskan supaya tidak berpetak-petak di zona.
   const fgDepth = boxMean(near, w, h, R.zone >> 1, new Float32Array(n), tmp);
