@@ -219,7 +219,13 @@ fn prep(@builtin(global_invocation_id) gid: vec3<u32>) {
       let s = scene[y * W + x].rgb;
       c += s;
       if (layered) {
-        let wgt = 1.0 - alphaAt((vec2<f32>(f32(x), f32(y)) + 0.5) / vec2<f32>(lens.fullSize));
+        // Hanya piksel yang hampir murni latar: piksel campuran helai semi-
+        // transparan membawa warna rambut, dan disebar dengan CoC latar ia
+        // menjadi halo di sekitar subjek (lensa asli tidak begitu -- subjek
+        // tajam tidak bocor ke bokeh di belakangnya). Celahnya terisi dari
+        // latar sekitar oleh gather.
+        let open = 1.0 - alphaAt((vec2<f32>(f32(x), f32(y)) + 0.5) / vec2<f32>(lens.fullSize));
+        let wgt = open * open * open * open;
         cb += s * wgt;
         wb += wgt;
       }
@@ -227,11 +233,12 @@ fn prep(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let count = f32((x1 - x0) * (y1 - y0));
   c /= count;
-  // Sel yang hampir seluruhnya lapis depan membawa warna subjek: CoC-nya
-  // CoC lapis depan. Dengan CoC latar, warna subjek menyebar sebagai bokeh
-  // latar dan tepinya tampak bergeser keluar.
+  // Sel mewakili latar hanya bila setidaknya separuh isinya memang latar
+  // murni. Sel lain milik lapis depan (CoC subjek, tidak disebar): sel yang
+  // seluruhnya helai semi-transparan, dinormalisasi `cb / wb`, kembali ke
+  // warna rambut penuh dan dengan CoC latar menjadi halo di sekitar subjek.
   var coc = signedCoc(depthAt(uv));
-  if (wb > 0.05 * count) {
+  if (wb > 0.5 * count) {
     c = cb / wb;
     coc = signedCoc(fieldDepth(uv));
   }
@@ -251,12 +258,22 @@ fn mip(@builtin(global_invocation_id) gid: vec3<u32>) {
   }
   let src = vec2<i32>(textureDimensions(mipSrc)) - 1;
   let p = vec2<i32>(gid.xy) * 2;
-  var c = vec4<f32>(0.0);
-  c += textureLoad(mipSrc, min(p, src), 0);
-  c += textureLoad(mipSrc, min(p + vec2<i32>(1, 0), src), 0);
-  c += textureLoad(mipSrc, min(p + vec2<i32>(0, 1), src), 0);
-  c += textureLoad(mipSrc, min(p + vec2<i32>(1, 1), src), 0);
-  textureStore(mipDst, vec2<i32>(gid.xy), c * 0.25);
+  // Rata-rata hanya sel yang blur (|CoC| >= ambang grid): gather jauh membaca
+  // warna latar dari mip kasar, dan sel subjek yang tajam di dalamnya dulu
+  // ikut terbaur -- warna subjek/rambut bocor ke bokeh di belakangnya (halo).
+  // Lensa asli tidak begitu. Empat sel tajam semua: rata-rata biasa.
+  var all = vec4<f32>(0.0);
+  var blurred = vec4<f32>(0.0);
+  var nb = 0.0;
+  for (var k = 0; k < 4; k = k + 1) {
+    let t = textureLoad(mipSrc, min(p + vec2<i32>(k & 1, k >> 1), src), 0);
+    all += t;
+    if (abs(t.a) >= GRID_MIN_RADIUS) {
+      blurred += t;
+      nb += 1.0;
+    }
+  }
+  textureStore(mipDst, vec2<i32>(gid.xy), select(all * 0.25, blurred / nb, nb > 0.0));
 }
 
 // --- 3. tiles: cakram depan terlebar (x) dan cakram apa pun terlebar (y) ----

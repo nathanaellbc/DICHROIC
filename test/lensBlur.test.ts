@@ -276,6 +276,39 @@ describe('lens blur: tahap GPU', () => {
   }, 120_000);
 
 
+  it('Refine Edge: helai semi-transparan tidak menyebar sebagai halo di blur latar', async () => {
+    // Latar jauh gelap rata; pita helai terang semi-transparan (alfa 0,5) di
+    // x = 126..130 di depan latar. Subjek fokus di kiri (x < 100).
+    const width = SIZE;
+    const rgba = new Float32Array(width * SIZE * 4);
+    const n = width * SIZE;
+    const data = new Float32Array(n), foreground = new Float32Array(n), background = new Float32Array(n);
+    const alpha = new Float32Array(n).fill(1);
+    for (let y = 0; y < SIZE; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = y * width + x;
+        const strand = x >= 126 && x <= 130;
+        const v = x < 100 ? 0.05 : strand ? 0.5 * 3 + 0.5 * 0.05 : 0.05;
+        rgba.set([v, v, v, 1], i * 4);
+        data[i] = x < 100 ? 1 : 0;
+        const zone = x >= 100 && x < 160;
+        foreground[i] = zone ? 1 : data[i]!;
+        background[i] = zone ? 0 : data[i]!;
+        if (zone) alpha[i] = strand ? 0.5 : 0;
+      }
+    }
+    const image = { width, height: SIZE, rgba };
+    const focus = { ...BASE, lensFocusX: 0.2, lensFocusY: 0.5 };
+    const layered: DepthMap = { width, height: SIZE, data, layers: { foreground, background }, matte: { x: 0, y: 0, w: 1, h: 1, width, height: SIZE, alpha } };
+    const { out } = await lensOnly(image, focus, layered);
+    const { out: flat } = await lensOnly({ width, height: SIZE, rgba: Float32Array.from(rgba, (v, i) => (i % 4 === 3 ? 1 : (Math.floor(i / 4) % width) < 100 ? v : 0.05)) }, focus, { width, height: SIZE, data });
+    const g = (o: Float32Array, x: number) => o[(128 * width + x) * 4 + 1]!;
+    // Latar 8-14 px dari helai: nyaris sama dengan latar tanpa helai (log10 exposure).
+    for (const x of [116, 140, 144]) {
+      expect(Math.abs(g(out, x) - g(flat, x)), `halo x=${x}`).toBeLessThan(0.05);
+    }
+  }, 120_000);
+
   it('rantai penuh: lens blur hanya dibangun bila aktif dan ada peta kedalaman', async () => {
     const { bundle, arenas, engine } = await sharedResources(STOCK_ID, PRINT);
     const image = pointLight();
