@@ -47,6 +47,10 @@ export interface LensContext {
   /** Pilihan yang bisa kehabisan memori di perangkat ini. */
   experimental: readonly DepthModelId[];
   onModel: (model: DepthModelId) => void;
+  /** Sakelar GPU kedalaman (iPhone); disembunyikan bila tidak berarti. */
+  gpu: boolean;
+  gpuOption: boolean;
+  onGpu: (on: boolean) => void;
 }
 
 export interface ToolContext {
@@ -260,15 +264,28 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
 
   const readout = <p className="t-footnote secondary tabular" style={{ margin: 0 }}>{lensReadoutText(params, lens.aspect)}</p>;
   // Pemilih jaringan kedalaman: hanya muncul bila perangkat punya pilihan.
-  const picker = lens.models.length > 1 ? (
+  // Pemilih jaringan kedalaman dan sakelar GPU dalam satu baris: kartu Lens
+  // harus muat di panel HP tanpa scroll. Di HP (ada sakelar GPU) labelnya
+  // pendek supaya keduanya muat.
+  const short = lens.gpuOption;
+  const picker = lens.models.length > 1 || lens.gpuOption ? (
     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-      <span className="t-footnote secondary">Depth model</span>
+      {short ? null : <span className="t-footnote secondary">Depth model</span>}
       <PopUp
         label="Depth model"
-        options={lens.models.map((id) => ({ value: id, label: `${DEPTH_MODELS[id].label} · ${DEPTH_MODELS[id].name}${lens.experimental.includes(id) ? ' (experimental)' : ''}` }))}
+        options={lens.models.map((id) => ({
+          value: id,
+          label: `${DEPTH_MODELS[id].label}${short ? '' : ` · ${DEPTH_MODELS[id].name}`}${lens.experimental.includes(id) ? (short ? ' (exp.)' : ' (experimental)') : ''}`,
+        }))}
         value={lens.model}
         onChange={(value) => { if (isDepthModelId(value)) lens.onModel(value); }}
       />
+      {lens.gpuOption ? (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="t-footnote secondary">GPU</span>
+          <Switch label="Measure depth on the GPU" checked={lens.gpu} onChange={lens.onGpu} />
+        </span>
+      ) : null}
     </span>
   ) : null;
   const { depth } = lens;

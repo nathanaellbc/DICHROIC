@@ -155,6 +155,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       models: state.depthModels,
       experimental: state.depthExperimental,
       onModel: (model) => engine.setDepthModel(model),
+      gpu: state.depthGpu,
+      gpuOption: state.depthGpuOption,
+      onGpu: (on) => engine.setDepthGpu(on),
     },
   };
 

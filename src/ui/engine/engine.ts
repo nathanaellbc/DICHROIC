@@ -72,6 +72,9 @@ export interface EngineState {
   depthModels: DepthModelId[];
   /** Pilihan yang bisa kehabisan memori di perangkat ini. */
   depthExperimental: DepthModelId[];
+  /** Kedalaman di GPU walau perangkat biasanya CPU (iPhone), dan apakah sakelarnya ditampilkan. */
+  depthGpu: boolean;
+  depthGpuOption: boolean;
   /** Langkah undo/redo yang tersedia untuk foto terbuka. */
   history: { canUndo: boolean; canRedo: boolean };
 }
@@ -110,10 +113,12 @@ function diffParams(from: RenderParams, to: RenderParams): Partial<RenderParams>
 const FALLBACK_DEPTH_PROFILE: DepthProfile = { backend: 'wasm', inputSize: 392, guideMaxEdge: 1024, lowMemory: true };
 
 const DEPTH_MODEL_KEY = 'dichroic.depthModel';
+const DEPTH_GPU_KEY = 'dichroic.depthGpu';
 /**
- * Ditulis sebelum estimasi model eksperimental di HP dan dihapus setelahnya.
- * Masih ada saat app dibuka = tab dimatikan sistem di tengah estimasi
- * (iOS membunuh tab tanpa galat): kembali ke `fast`.
+ * Ditulis (`model|gpu` atau `model|cpu`) sebelum estimasi eksperimental di HP
+ * -- model eksperimental atau kedalaman di GPU iPhone -- dan dihapus
+ * setelahnya. Masih ada saat app dibuka = tab dimatikan sistem di tengah
+ * estimasi (iOS membunuh tab tanpa galat): yang berisiko dimatikan.
  */
 const DEPTH_RUNNING_KEY = 'dichroic.depthModel.running';
 
@@ -125,20 +130,29 @@ function storage(): Storage | undefined {
   }
 }
 
-/** Pilihan tersimpan, plus model yang membuat tab mati terakhir kali. */
-function storedDepthModel(): { model: DepthModelId; crashed?: DepthModelId } {
+/** Pilihan tersimpan; yang membuat tab mati terakhir kali sudah dimatikan, dengan pesannya. */
+function storedDepthModel(): { model: DepthModelId; gpu: boolean; notice?: string } {
   try {
     const store = storage();
-    const crashed = store?.getItem(DEPTH_RUNNING_KEY);
-    if (isDepthModelId(crashed)) {
-      store?.removeItem(DEPTH_RUNNING_KEY);
-      store?.setItem(DEPTH_MODEL_KEY, 'fast');
-      return { model: 'fast', crashed };
+    let model: DepthModelId = isDepthModelId(store?.getItem(DEPTH_MODEL_KEY)) ? store!.getItem(DEPTH_MODEL_KEY) as DepthModelId : 'fast';
+    let gpu = store?.getItem(DEPTH_GPU_KEY) === '1';
+    const [crashed, where] = (store?.getItem(DEPTH_RUNNING_KEY) ?? '').split('|');
+    if (!isDepthModelId(crashed)) return { model, gpu };
+    store?.removeItem(DEPTH_RUNNING_KEY);
+    const blamed: string[] = [];
+    if (DEPTH_MODELS[crashed].mobile === 'experimental') {
+      model = 'fast';
+      store?.setItem(DEPTH_MODEL_KEY, model);
+      blamed.push(`switched back to Fast`);
     }
-    const value = store?.getItem(DEPTH_MODEL_KEY);
-    return { model: isDepthModelId(value) ? value : 'fast' };
+    if (where === 'gpu' && crashed !== 'pro') {
+      gpu = false;
+      store?.setItem(DEPTH_GPU_KEY, '0');
+      blamed.push('turned GPU depth off');
+    }
+    return { model, gpu, notice: `${DEPTH_MODELS[crashed].name} ran out of memory on this device; ${blamed.join(' and ') || 'try again'}.` };
   } catch {
-    return { model: 'fast' };
+    return { model: 'fast', gpu: false };
   }
 }
 
@@ -214,7 +228,9 @@ export class Engine {
     depthModel: STORED_DEPTH.model,
     depthModels: ['fast'],
     depthExperimental: [],
-    ...(STORED_DEPTH.crashed ? { notice: `${DEPTH_MODELS[STORED_DEPTH.crashed].name} ran out of memory on this device. Switched back to Fast.` } : {}),
+    depthGpu: STORED_DEPTH.gpu,
+    depthGpuOption: false,
+    ...(STORED_DEPTH.notice ? { notice: STORED_DEPTH.notice } : {}),
     history: { canUndo: false, canRedo: false },
   };
   readonly #listeners = new Set<Listener>();
@@ -251,12 +267,14 @@ export class Engine {
       if (token !== this.#photoGeneration) throw new DepthCancelledError();
       this.#estimator ??= new DepthEstimator();
       const model = this.#state.depthModel;
-      const guarded = isExperimental(model, profile);
-      if (guarded) storage()?.setItem(DEPTH_RUNNING_KEY, model);
+      const run = this.#runProfile(profile);
+      // Depth Pro di iPhone: GPU, walau kedalaman biasanya di CPU.
+      const backend = modelBackend(model, run) ?? run.backend;
+      const onGpuByChoice = backend === 'webgpu' && profile.backend === 'wasm' && profile.lowMemory;
+      const guarded = isExperimental(model, profile) || onGpuByChoice;
+      if (guarded) storage()?.setItem(DEPTH_RUNNING_KEY, `${model}|${backend === 'webgpu' ? 'gpu' : 'cpu'}`);
       try {
-        // Depth Pro di iPhone: GPU, walau kedalaman biasanya di CPU.
-        const backend = modelBackend(model, profile) ?? profile.backend;
-        return await this.#estimator.estimate(guide, { allowDownload, profile: { ...profile, backend }, model, onProgress });
+        return await this.#estimator.estimate(guide, { allowDownload, profile: { ...run, backend }, model, onProgress });
       } finally {
         if (guarded) storage()?.removeItem(DEPTH_RUNNING_KEY);
       }
@@ -268,8 +286,8 @@ export class Engine {
       this.requestRender();
     },
     downloadBytes: async () => {
-      const profile = await this.#profile();
-      return firstDownloadBytes(modelBackend(this.#state.depthModel, profile) ?? profile.backend, this.#state.depthModel);
+      const run = this.#runProfile(await this.#profile());
+      return firstDownloadBytes(modelBackend(this.#state.depthModel, run) ?? run.backend, this.#state.depthModel);
     },
     onChange: (depth) => this.#set({ depth }),
     cancel: () => {
@@ -292,14 +310,41 @@ export class Engine {
 
   #profile(): Promise<DepthProfile> {
     this.#depthProfile ??= depthProfile().catch(() => FALLBACK_DEPTH_PROFILE).then((profile) => {
-      // Pilihan tersimpan yang tidak jalan di perangkat ini jatuh ke bawaan.
-      const depthModels = availableModels(profile);
-      const depthModel = depthModels.includes(this.#state.depthModel) ? this.#state.depthModel : 'fast';
-      const depthExperimental = depthModels.filter((id) => isExperimental(id, profile));
-      this.#set({ depthModels, depthModel, depthExperimental });
+      this.#profileValue = profile;
+      this.#refreshDepthChoices();
       return profile;
     });
     return this.#depthProfile;
+  }
+  #profileValue: DepthProfile | undefined;
+
+  /**
+   * Profil estimasi: sakelar GPU memindahkan perangkat yang biasanya CPU
+   * (iPhone) ke GPU fp16 bila ada.
+   */
+  #runProfile(profile: DepthProfile): DepthProfile {
+    return this.#state.depthGpu && profile.backend === 'wasm' && profile.gpuF16 ? { ...profile, backend: 'webgpu' } : profile;
+  }
+
+  /** Pilihan model (dan sakelar GPU) untuk profil dan sakelar sekarang. */
+  #refreshDepthChoices(): void {
+    const profile = this.#profileValue;
+    if (!profile) return;
+    const run = this.#runProfile(profile);
+    // Pilihan tersimpan yang tidak jalan di perangkat ini jatuh ke bawaan.
+    const depthModels = availableModels(run);
+    const depthModel = depthModels.includes(this.#state.depthModel) ? this.#state.depthModel : 'fast';
+    const depthExperimental = depthModels.filter((id) => isExperimental(id, profile));
+    this.#set({ depthModels, depthModel, depthExperimental, depthGpuOption: profile.backend === 'wasm' && profile.gpuF16 === true });
+  }
+
+  /** Sakelar GPU kedalaman (iPhone): peta foto terbuka dihitung ulang. */
+  setDepthGpu(on: boolean): void {
+    if (on === this.#state.depthGpu) return;
+    storage()?.setItem(DEPTH_GPU_KEY, on ? '1' : '0');
+    this.#set({ depthGpu: on });
+    this.#refreshDepthChoices();
+    this.#depth.restart(this.#state.params.lensBlurEnabled);
   }
 
   /** Ganti jaringan kedalaman; peta foto terbuka dihitung ulang dengannya. */
