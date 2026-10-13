@@ -218,7 +218,7 @@ final class EditorModel {
         openingName = stemOf(url)
         error = nil
         generation += 1
-        let generation = generation
+        let generation = self.generation
         defer { loading = false; openingName = nil }
         do {
             await settle()
@@ -363,7 +363,7 @@ final class EditorModel {
         rendering = true
         defer { rendering = false; renderTask = nil; scheduleDetail() }
         while !busy && !erasing && photo != nil && rendered != revision {
-            let revision = revision
+            let revision = self.revision
             let depth = params.bool("lensBlurEnabled") && depthAllowed
             do {
                 try await engine.develop(renderParams)
@@ -442,7 +442,7 @@ final class EditorModel {
     private func renderDetail() async {
         guard let request = detailQueued else { return }
         detailQueued = nil
-        let revision = revision
+        let revision = self.revision
         detailRendering = true
         defer {
             detailRendering = false

@@ -281,7 +281,7 @@ struct ExportSheet: View {
 
     private func make() {
         ticket += 1
-        let ticket = ticket, previous = running
+        let ticket = self.ticket, previous = running
         running = Task {
             // A newer request supersedes the running one; wait for it to stop.
             if let previous { model.cancelExport(); await previous.value }
