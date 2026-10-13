@@ -65,8 +65,11 @@ struct ExportSheet: View {
     /// Long-edge detents that really shrink the photo, plus "Source · N".
     private var detents: [Detent] {
         let (w, h) = source, long = max(w, h)
-        var out = [2048, 4096, 8192].filter { $0 < long }.map { d in
-            Detent(edge: d, label: "\(d)", w: Int((Double(w) * Double(d) / Double(long)).rounded()), h: Int((Double(h) * Double(d) / Double(long)).rounded()))
+        var out: [Detent] = []
+        for d in [2048, 4096, 8192] where d < long {
+            let scale = Double(d) / Double(long)
+            let dw = Int((Double(w) * scale).rounded()), dh = Int((Double(h) * scale).rounded())
+            out.append(Detent(edge: d, label: String(d), w: dw, h: dh))
         }
         out.append(Detent(edge: nil, label: "Source · \(long)", w: w, h: h))
         return out
@@ -182,10 +185,13 @@ struct ExportSheet: View {
 
     @ViewBuilder private func footer(info: (name: String, hint: String, ext: String), lossy: Bool, size: String) -> some View {
         let rendering = working && model.progressTotal > 0 && model.progressDone < model.progressTotal
-        let steps = [
-            "Developing \(selected.w) × \(selected.h) on the GPU"
-                + (rendering && model.progressTotal > 1 ? " · tile \(min(max(model.progressDone + 1, 1), model.progressTotal)) of \(model.progressTotal)" : ""),
-            "Encoding \(info.name)\(lossy ? " · quality \(p.quality)" : "")",
+        let total = model.progressTotal
+        let tile: Int = min(max(model.progressDone + 1, 1), max(total, 1))
+        let tileText: String = rendering && total > 1 ? " · tile \(tile) of \(total)" : ""
+        let qualityText: String = lossy ? " · quality \(p.quality)" : ""
+        let steps: [String] = [
+            "Developing \(selected.w) × \(selected.h) on the GPU" + tileText,
+            "Encoding \(info.name)" + qualityText,
         ]
         let busy = working || (!needsDevelop && !ready && failure == nil)
         VStack(alignment: .leading, spacing: 4) {
