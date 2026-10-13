@@ -126,7 +126,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
     focusPreview(json: string): void {
       if (!focusOverlay) return;
       const mask = focusOverlay(JSON.parse(json) as RenderParams);
-      // The native texture uses premultiplied alpha, as does Flutter's compositor.
+      // The native image uses premultiplied alpha, as does UIKit's compositor.
       for (let i = 0; i < mask.pixels.length; i += 4) {
         for (let c = 0; c < 3; c++) mask.pixels[i + c] = mask.pixels[i + c]! * mask.pixels[i + 3]! / 255;
       }

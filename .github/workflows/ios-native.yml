@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'mobile/**'
+      - 'ios/**'
       - 'native/**'
       - 'src/native/**'
       - 'src/engine/**'
@@ -35,12 +35,7 @@ jobs:
         run: |
           npm ci
           npm run typecheck
-          node mobile/scripts/build_host.mjs
-          node mobile/scripts/build_icons.mjs
-      - name: Install Flutter
-        run: |
-          git clone --depth 1 --branch 3.44.0 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
-          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          node ios/scripts/build_host.mjs
       - name: Install Rust
         run: |
           rustup toolchain install 1.85.0 --profile minimal
@@ -52,37 +47,23 @@ jobs:
           cargo test --features gpu-tests --locked -- --test-threads=1
       - name: Build native XCFramework
         run: |
-          bash mobile/scripts/build_native.sh
-          bash mobile/scripts/build_raw.sh
-      - name: Prepare Flutter iOS host
-        run: bash mobile/scripts/prepare_ios.sh
-      - name: Flutter analysis and tests
-        working-directory: mobile
+          bash ios/scripts/build_native.sh
+          bash ios/scripts/build_raw.sh
+      - name: Compile the SwiftUI app (device and simulator)
+        working-directory: ios
         run: |
-          flutter analyze
-          flutter test
-      - name: Build unsigned device application
-        working-directory: mobile
-        run: flutter build ios --release --no-codesign
-      - name: Build simulator application
-        working-directory: mobile
-        run: flutter build ios --simulator --debug
-      - name: Exercise native editor
-        run: bash mobile/scripts/test_ios.sh
-      - name: Package unsigned IPA for personal sideloading
-        run: bash mobile/scripts/package_unsigned_ipa.sh
+          xcodebuild -scheme Dichroic -destination 'generic/platform=iOS' -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -scheme Dichroic -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO build
+      # xtool on Linux/WSL builds against these: copy them into ios/ there.
       - uses: actions/upload-artifact@v4
         with:
-          name: dichroic-ios-unsigned
-          path: mobile/build/ios/iphoneos/*.app
+          name: dichroic-native-xcframework
+          path: ios/Frameworks/DichroicNative.xcframework
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: dichroic-ios-unsigned-ipa
-          path: mobile/build/ios/ipa/DICHROIC-unsigned.ipa
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dichroic-ios-simulator
-          path: mobile/build/ios/iphonesimulator/*.app
+          name: dichroic-engine-resources
+          path: ios/Sources/DichroicEngine/Resources
           if-no-files-found: error

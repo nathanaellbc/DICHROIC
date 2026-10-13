@@ -204,7 +204,7 @@ it('captures complete canonical film, neutral Cineon, camera and spatial graphs'
   // Byte fixtures exercise ImageIO -> JavaScriptCore -> Metal -> PNG on iOS.
   // Keep the independent Dawn reference, never regenerate it in the iOS test.
   if (process.env.DICHROIC_UPDATE_IOS_REFERENCE === '1') {
-    const target = 'mobile/assets/parity'; mkdirSync(target, { recursive: true });
+    const target = 'ios/Fixtures/parity'; mkdirSync(target, { recursive: true });
     writeFileSync(join(target, 'source.png'), encode({ width, height, channels: 4, data: Uint8Array.from(rgba, v => Math.round(v * 255)) }));
     writeFileSync(join(target, 'dawn.json'), JSON.stringify({ width, height, cases: fixtures }));
   }

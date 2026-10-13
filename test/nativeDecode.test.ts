@@ -9,7 +9,7 @@ import { dcrawGammaCurve, invertDcrawCurve } from '../src/io/dcrawGamma';
 import type { Manifest } from '../src/profiles/load';
 
 it.skipIf(!process.env.DICHROIC_UPDATE_IOS_DECODE)('captures independent web decoder references and checks the native LibRaw probe', async () => {
-  const folder = 'mobile/assets/parity', cases = [];
+  const folder = 'ios/Fixtures/parity', cases = [];
   mkdirSync(folder, { recursive: true });
   const wasmBinary = new Uint8Array(readFileSync('node_modules/libraw-wasm/dist/libraw.wasm'));
   const curve = invertDcrawCurve(dcrawGammaCurve(0.45, 4.5, 2, 0x10000));
