@@ -5,7 +5,8 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChromeWordmark, GlassOrb, StickerBurst } from '../components/WelcomeIntro';
+import { ChromeWordmark, GlassOrb } from '../components/WelcomeIntro';
+import { StickerBurst } from '../components/StickerField';
 import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
@@ -127,7 +128,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <div className="intro-sky" aria-hidden="true" />
       <div className="start-dropframe" aria-hidden="true" />
       <ChromeWordmark visible={phase === "splash" || phase === "lift"} reduce={reduce} />
-      <StickerBurst show={ready && !over} origin={orbCenter} box={box} compact={compact} reduce={reduce} />
+      <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
       {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} />}
 
       <AnimatePresence>

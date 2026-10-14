@@ -2,16 +2,14 @@
  * Intro layar mulai (referensi: onboarding "kaca cair" ala Wabi), dalam tema
  * DICHROIC: wordmark krom di atas hitam, kubah kaca dikroik di tepi bawah
  * ("Swipe up to enter"), lalu kubah naik menyusut jadi gelembung lalu tombol
- * "+" (buka foto), dan stiker film menyembur keluar dari gelembung.
+ * "+" (buka foto); stiker film ada di StickerField.
  *
  * Satu elemen kaca berubah bentuk lewat transform (scale/translate) -- tidak
  * ada animasi lebar/tinggi, jadi tetap 60 fps.
  */
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { useRef } from 'react';
-import type { ReactNode } from 'react';
 import { Icon } from './Icon';
-import type { UiIconName } from './Icon';
 import { useGlassFilter } from './LiquidGlass';
 import { DichroicWordmark } from './DichroicWordmark';
 
@@ -204,83 +202,6 @@ export function ChromeWordmark({ visible, reduce }: { visible: boolean; reduce: 
         </motion.div>
       )}
     </AnimatePresence>
-    </div>
-  );
-}
-
-type Sticker =
-  | { kind: 'stock'; label: string; sub: string; tone: string }
-  | { kind: 'icon'; icon: UiIconName }
-  | { kind: 'quote'; text: string }
-  | { kind: 'frame'; hue: number };
-
-/**
- * Stiker isi aplikasi: nama stok film (warna kotak filmnya -- isi, bukan
- * aksen UI), ikon kamar gelap, potongan bingkai film, dan kutipan pendek.
- * Posisi akhir dalam pecahan ruang di atas gelembung: nx -1..1 (kiri-kanan),
- * ny 0..1 (dari gelembung ke atas); r = rotasi. Seimbang kiri dan kanan.
- */
-const STICKERS: ReadonlyArray<{ s: Sticker; nx: number; ny: number; r: number; small?: boolean }> = [
-  { s: { kind: 'stock', label: 'Portra 400', sub: 'Kodak', tone: '#e8b04a' }, nx: -0.6, ny: 0.6, r: -9 },
-  { s: { kind: 'stock', label: 'Velvia 50', sub: 'Fujifilm', tone: '#2f9e5b' }, nx: 0.62, ny: 0.56, r: 7 },
-  { s: { kind: 'frame', hue: 28 }, nx: 0.02, ny: 0.8, r: 6 },
-  { s: { kind: 'quote', text: 'Shot on real film' }, nx: 0.5, ny: 0.92, r: 6 },
-  { s: { kind: 'icon', icon: 'aperture' }, nx: -0.3, ny: 0.26, r: -14 },
-  { s: { kind: 'stock', label: 'Vision3 500T', sub: 'Kodak', tone: '#d1452f' }, nx: 0.04, ny: 0.48, r: 4 },
-  { s: { kind: 'icon', icon: 'print' }, nx: 0.32, ny: 0.2, r: 10 },
-  { s: { kind: 'quote', text: 'Printed on 2383' }, nx: -0.5, ny: 0.96, r: -5 },
-  { s: { kind: 'icon', icon: 'format' }, nx: -0.66, ny: 0.3, r: 12, small: true },
-  { s: { kind: 'frame', hue: 205 }, nx: -0.12, ny: 1.0, r: -12, small: true },
-  { s: { kind: 'icon', icon: 'grain' }, nx: 0.7, ny: 0.2, r: -8, small: true },
-  { s: { kind: 'stock', label: 'HP5 Plus', sub: 'Ilford', tone: '#2b2b2e' }, nx: -0.78, ny: 0.28, r: 6, small: true },
-];
-
-function StickerFace({ s }: { s: Sticker }): ReactNode {
-  switch (s.kind) {
-    case 'stock':
-      return <span className="sticker sticker-stock" style={{ ['--tone' as string]: s.tone }}><b>{s.label}</b><small>{s.sub}</small></span>;
-    case 'icon':
-      return <span className="sticker sticker-icon"><Icon name={s.icon} size={20} strokeWidth={2} /></span>;
-    case 'quote':
-      return <span className="sticker sticker-quote">{s.text}</span>;
-    case 'frame':
-      return <span className="sticker sticker-frame" style={{ ['--hue' as string]: s.hue }} />;
-  }
-}
-
-/** Stiker menyembur dari gelembung (pegas, berselang 35 ms), lalu melayang pelan. */
-export function StickerBurst({ show, origin, box, compact, reduce }: {
-  show: boolean; origin: { x: number; y: number }; box: StageBox; compact: boolean; reduce: boolean;
-}) {
-  const items = compact ? STICKERS.filter((item) => !item.small) : STICKERS;
-  // Sebaran: lebar terbatas (stiker tidak menyentuh tepi), tinggi = ruang di atas gelembung.
-  const spreadX = Math.min(box.width / 2 - (compact ? 52 : 90), 320);
-  const spreadY = Math.max(120, origin.y - (compact ? 96 : 110) - 40);
-  return (
-    <div className="intro-stickers" aria-hidden="true">
-      <AnimatePresence>
-        {show && items.map((item, i) => {
-          const x = item.nx * spreadX, y = -(46 + item.ny * spreadY);
-          return (
-            <motion.div
-              key={i}
-              className="intro-sticker"
-              style={{ left: origin.x, top: origin.y }}
-              initial={reduce ? { opacity: 0, x, y, rotate: item.r } : { opacity: 0, x: 0, y: 0, scale: 0.2, rotate: 0 }}
-              animate={{ opacity: 1, x, y, scale: (item.small ? 0.84 : 1) * (compact ? 0.9 : 1), rotate: item.r }}
-              exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.2 } }}
-              transition={reduce ? { duration: 0.3 } : { type: 'spring', duration: 0.9, bounce: 0.32, delay: 0.05 + i * 0.035 }}
-            >
-              <motion.div
-                animate={reduce ? undefined : { y: [0, -5, 0] }}
-                transition={{ duration: 4 + (i % 4), repeat: Infinity, ease: 'easeInOut', delay: 1 + i * 0.2 }}
-              >
-                <StickerFace s={item.s} />
-              </motion.div>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
     </div>
   );
 }

@@ -611,8 +611,14 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 }
 
 .intro-stickers { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
-.intro-sticker { position: absolute; width: 0; height: 0; }
-.intro-sticker > div { position: absolute; transform: translate(-50%, -50%); }
+.intro-sticker {
+  position: absolute; left: 0; top: 0; pointer-events: auto; touch-action: none; cursor: grab;
+  will-change: transform; -webkit-tap-highlight-color: transparent;
+}
+.intro-sticker[data-held] { cursor: grabbing; z-index: 1; }
+.intro-sticker > .sticker { transition: box-shadow 0.2s; }
+.intro-sticker[data-held] > .sticker { box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45); }
+.intro-sticker[data-held] > .sticker-frame { box-shadow: 0 0 0 2px #fff, 0 16px 34px rgba(0, 0, 0, 0.45); }
 .sticker {
   display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
   border: 3px solid #fff; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
