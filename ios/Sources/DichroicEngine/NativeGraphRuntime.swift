@@ -1,5 +1,6 @@
 import Foundation
 import JavaScriptCore
+import CryptoKit
 import ExposureNative
 
 enum GraphRuntimeError: LocalizedError {
@@ -41,6 +42,9 @@ final class NativeGraphRuntime {
     private var handle: UnsafeMutableRawPointer { gpu.pointer }
     private let queue: DispatchQueue
     private let resources: URL
+    /// Constant colour tables saved between launches, named by the exact
+    /// renderer.js (a new host never reads tables of an older one).
+    private var precomputedURL: URL?
     private var runtime: JSValue?
     private var pending: [Int: (Result<Void, Error>) -> Void] = [:]
     private var serial = 0
@@ -158,6 +162,9 @@ final class NativeGraphRuntime {
         #endif
         installBridge()
         let script = try String(contentsOf: resources.appendingPathComponent("renderer.js"), encoding: .utf8)
+        let digest = SHA256.hash(data: Data(script.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        precomputedURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("DichroicPrecomputed-\(digest).bin")
         context.evaluateScript(script, withSourceURL: URL(string: "exposure://renderer.js"))
         try checkException()
         runtime = context.evaluateScript("ExposureHost.createNativeRuntime(nativeHost)")
@@ -580,6 +587,21 @@ final class NativeGraphRuntime {
             } catch { self.fail(error); return nil }
         }
         let ortClose: @convention(block) (Int) -> Void = { [weak self] id in self?.onnx.close(id) }
+        let readPrecomputed: @convention(block) () -> JSValue? = { [weak self] in
+            guard let self, let url = self.precomputedURL, let data = try? Data(contentsOf: url, options: .mappedIfSafe), !data.isEmpty else {
+                return nil
+            }
+            return try? self.arrayBuffer(count: data.count) { data.copyBytes(to: $0) }
+        }
+        let writePrecomputed: @convention(block) (JSValue) -> Void = { [weak self] value in
+            guard let self, let url = self.precomputedURL, let bytes = try? self.typedBytes(value) else { return }
+            let data = Data(bytes: bytes.baseAddress!, count: bytes.count)
+            // Older hosts' tables are useless once renderer.js changed.
+            if let folder = try? FileManager.default.contentsOfDirectory(at: url.deletingLastPathComponent(), includingPropertiesForKeys: nil) {
+                for old in folder where old.lastPathComponent.hasPrefix("DichroicPrecomputed-") && old != url { try? FileManager.default.removeItem(at: old) }
+            }
+            try? data.write(to: url, options: .atomic)
+        }
         let convertDisplay: @convention(block) (JSValue, Int, Int, String) -> JSValue? = { [weak self] value, width, height, json in
             guard let self else { return nil }
             do {
@@ -618,6 +640,7 @@ final class NativeGraphRuntime {
             "nativeOrtOpen": ortOpen as Any, "nativeOrtNames": ortNames as Any, "nativeOrtRun": ortRun as Any,
             "nativeOrtOutput": ortOutput as Any, "nativeOrtClose": ortClose as Any,
             "nativeDepthProgress": depthProgress as Any, "nativeMatte": matte as Any, "nativeConvertDisplay": convertDisplay as Any,
+            "nativeReadPrecomputed": readPrecomputed as Any, "nativeWritePrecomputed": writePrecomputed as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeReadStrip = new Float32Array(1024 * 1024);
@@ -631,7 +654,8 @@ final class NativeGraphRuntime {
                 saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
                 loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled,
                 ortOpen: nativeOrtOpen, ortNames: nativeOrtNames, ortRun: nativeOrtRun, ortOutput: nativeOrtOutput, ortClose: nativeOrtClose,
-                depthProgress: nativeDepthProgress, publishMatte: nativeMatte, convertDisplay: nativeConvertDisplay };
+                depthProgress: nativeDepthProgress, publishMatte: nativeMatte, convertDisplay: nativeConvertDisplay,
+                readPrecomputed: nativeReadPrecomputed, writePrecomputed: v => nativeWritePrecomputed(new Uint8Array(v)) };
             """)
     }
 

@@ -22,6 +22,7 @@ import type { DepthModelId } from '../depth/model';
 import { bandBounds, bandInCrop, buildTrimap, computeMatte, cropSize, edgeThreshold, layeredDepth, shaderMatte } from '../depth/refineEdge';
 import type { BrushMask, UvRect } from '../depth/refineEdge';
 import { ModelNotCachedError, NativeTensor, openSession, type NativeOrtHost } from './ort';
+import { loadPrecomputed, serializePrecomputed, takePrecomputedChanged } from '../host/precomputed';
 
 /** Refine Edge of the open photo (as `RefineResult` in the web engine). */
 interface NativeRefine { rect: UvRect; width: number; height: number; alpha: Float32Array; band: Uint8Array; trimap: Uint8Array }
@@ -36,6 +37,9 @@ export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost, P
    * in apps, and this per-pixel step runs on every developed frame.
    */
   convertDisplay?(rgb: Float32Array, width: number, height: number, transform: string): ArrayBuffer;
+  /** Constant colour tables saved between launches (see host/precomputed.ts); null when none. */
+  readPrecomputed?(): ArrayBuffer | null;
+  writePrecomputed?(data: ArrayBuffer): void;
   previewInput(): Float32Array;
   publish(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
   complete(id: number, json: string): void;
@@ -61,9 +65,13 @@ function base64(bytes: Uint8ClampedArray): string {
 }
 
 /** Frame pixels for the screen; natively when the host can (same math as `rgbToCanvas`). */
-function toCanvas(host: NativeRuntimeHost, rgb: Float32Array, width: number, height: number, label: string, gamut: PredefinedColorSpace): Uint8ClampedArray {
-  if (!host.convertDisplay) return rgbToCanvas(rgb, width, height, label, gamut);
-  return new Uint8ClampedArray(host.convertDisplay(rgb, width, height, JSON.stringify(displayTransform(label, gamut))));
+function toCanvas(host: NativeRuntimeHost, rgb: Float32Array, width: number, height: number, label: string, gamut: PredefinedColorSpace,
+  stride: 3 | 4 = 3): Uint8ClampedArray {
+  if (!host.convertDisplay) {
+    if (stride !== 3) throw new Error('RGBA frames need the native display conversion.');
+    return rgbToCanvas(rgb, width, height, label, gamut);
+  }
+  return new Uint8ClampedArray(host.convertDisplay(rgb, width, height, JSON.stringify({ ...displayTransform(label, gamut), stride })));
 }
 
 function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]) {
@@ -73,6 +81,10 @@ function nativeDisplay(values: Float32Array, width: number, height: number, meta
 /** JavaScriptCore hosts canonical math only; all compute/photography is native. */
 export function createNativeRuntime(host: NativeRuntimeHost) {
   const bundle = nativeAssets(host);
+  // Constant colour tables saved by an earlier launch (seconds to rebuild).
+  const saved = host.readPrecomputed?.();
+  if (saved) loadPrecomputed(saved);
+  const savePrecomputed = () => { if (takePrecomputedChanged()) host.writePrecomputed?.(serializePrecomputed()); };
   let source: NativeSource | undefined;
   let sourcePreview: { width: number; height: number; rgba: Float32Array } | undefined;
   let sourceBackup: { source: NativeSource | undefined; preview: typeof sourcePreview } | undefined;
@@ -422,9 +434,12 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
           // request the now-empty legacy preview buffer while recovering.
           const input = sourcePreview?.rgba ?? (source ? new Float32Array() : host.previewInput());
           if (request.operation === 'preview') {
-            const rgb = await renderer.preview(request.params, input, request.width, request.height);
+            // With native display conversion the GPU readback (RGBA) is used as
+            // is: no per-frame repack to RGB in JavaScriptCore.
+            const stride = host.convertDisplay ? 4 : 3;
+            const rgb = await renderer.preview(request.params, input, request.width, request.height, undefined, stride === 4 ? 'rgba' : 'rgb');
             const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
-            const pixels = toCanvas(host, rgb, request.width, request.height, request.params.outputColorSpace, gamut);
+            const pixels = toCanvas(host, rgb, request.width, request.height, request.params.outputColorSpace, gamut, stride);
             host.publish(pixels, request.width, request.height, gamut);
             display = { pixels, width: request.width, height: request.height };
             if (depth) {
@@ -439,7 +454,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
           host.complete(id, '{"result":null}');
         } catch (error) {
           host.complete(id, JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
-        } finally { active = false; tasks.delete(id); }
+        } finally { active = false; tasks.delete(id); savePrecomputed(); }
       });
       tasks.set(id, task);
     },

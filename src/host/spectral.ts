@@ -67,6 +67,7 @@ import { precomputeDiffusionFilter } from './diffusionFilter';
 import { filteredEnlargerIlluminant } from './enlarger';
 import type { EnlargerFilterState } from './enlarger';
 import { buildScannerCam16Static } from './cam16';
+import { precomputed } from './precomputed';
 
 /**
  * Perkiraan fungsi galat (erf), Abramowitz & Stegun 7.1.26 -- galat
@@ -400,6 +401,33 @@ function sampleResponseBilinear(
  * tanpa terlihat berbeda dari separuh pertama HANYA pada piksel achromatic
  * -- piksel berwarna (color_patches) akan benar-benar memakai kompresi ini.
  */
+/** Bilinear sample positions (x, y in texels) of the radially compressed grid. */
+function compressedSampleGrid(whiteXy: [number, number], locus: Array<[number, number]>, width: number, height: number): Float64Array {
+  const key = `xyGrid|${width}x${height}|${whiteXy.join(',')}|${locus.map((p) => p.join(',')).join(';')}`;
+  return precomputed(key, () => buildCompressedSampleGrid(whiteXy, locus, width, height));
+}
+
+function buildCompressedSampleGrid(whiteXy: [number, number], locus: Array<[number, number]>, width: number, height: number): Float64Array {
+  const coords = new Float64Array(width * height * 2);
+  for (let x = 0; x < width; x += 1) {
+    const tx = x / (width - 1);
+    const rootTx = Math.sqrt(Math.max(tx, 0));
+    for (let y = 0; y < height; y += 1) {
+      const ty = y / (height - 1);
+      const xy: [number, number] = [1 - rootTx, ty * rootTx];
+      const compressedXy = compressXyRadial(xy, whiteXy, locus);
+      const oneMinusX = Math.max(1 - compressedXy[0], 1e-10);
+      const sampleTx = Math.min(Math.max(oneMinusX * oneMinusX, 0), 1);
+      const sampleTy = Math.min(Math.max(compressedXy[1] / oneMinusX, 0), 1);
+      const c = (x * height + y) * 2;
+      coords[c] = sampleTx * (width - 1);
+      coords[c + 1] = sampleTy * (height - 1);
+    }
+  }
+
+  return coords;
+}
+
 function remapHanatosResponseForInputGamutCompression(
   baseResponse: Float32Array,
   whiteXy: [number, number],
@@ -412,23 +440,14 @@ function remapHanatosResponseForInputGamutCompression(
     out.set(baseResponse);
     return out;
   }
+  // The compressed sample position of each texel depends only on the white
+  // point, the locus and the grid, never on the stock: computed once and
+  // reused by every film (the ray tests dominate a stock change).
+  const coords = compressedSampleGrid(whiteXy, locus, width, height);
   for (let x = 0; x < width; x += 1) {
-    const tx = x / (width - 1);
-    const rootTx = Math.sqrt(Math.max(tx, 0));
     for (let y = 0; y < height; y += 1) {
-      const ty = y / (height - 1);
-      const xy: [number, number] = [1 - rootTx, ty * rootTx];
-      const compressedXy = compressXyRadial(xy, whiteXy, locus);
-      const oneMinusX = Math.max(1 - compressedXy[0], 1e-10);
-      const sampleTx = Math.min(Math.max(oneMinusX * oneMinusX, 0), 1);
-      const sampleTy = Math.min(Math.max(compressedXy[1] / oneMinusX, 0), 1);
-      const sampled = sampleResponseBilinear(
-        baseResponse,
-        width,
-        height,
-        sampleTx * (width - 1),
-        sampleTy * (height - 1),
-      );
+      const c = (x * height + y) * 2;
+      const sampled = sampleResponseBilinear(baseResponse, width, height, coords[c]!, coords[c + 1]!);
       const o = (x * height + y) * 3;
       out[o] = sampled[0];
       out[o + 1] = sampled[1];

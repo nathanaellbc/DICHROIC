@@ -123,7 +123,7 @@ export interface PlanImage {
    * membaca tile langsung dari sumber. Harus berisi nilai frame pada kisi
    * pengukuran <= 256 px (`measurementImage`), jadi hasilnya identik.
    */
-  measure?: { width: number; height: number; rgba: Float32Array };
+  measure?: { width: number; height: number; rgba: Float32Array; pivots?: Map<string, number> };
 }
 
 const CUBE_DISABLED_EFFECTS = [
@@ -343,7 +343,12 @@ function cameraFrame(
   const decode = params.inputCctfDecoding ? inputDecoder(bundle, inputColorSpace) : undefined;
   const scaled = decode && inputDecodeScale !== 1 ? (v: number) => decode(v * inputDecodeScale) : decode;
   const m = image.measure ?? image;
-  const pivot = measureScenePivot(m.rgba, m.width, m.height, lumaWeights(rgbToXyz), scaled);
+  // `pivots`: the caller's memo for this unchanging measurement image (iOS
+  // host: one per preview frame, so a slider drag does not measure again).
+  const key = `${inputColorSpace}|${params.inputCctfDecoding ? inputDecodeScale : 'raw'}`;
+  const cached = image.measure?.pivots?.get(key);
+  const pivot = cached ?? measureScenePivot(m.rgba, m.width, m.height, lumaWeights(rgbToXyz), scaled);
+  if (cached === undefined) image.measure?.pivots?.set(key, pivot);
   return cameraFrameValues(settings, rgbToXyz, pivot);
 }
 

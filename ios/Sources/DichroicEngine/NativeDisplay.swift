@@ -11,7 +11,9 @@ enum NativeDisplay {
             throw GraphRuntimeError.message("Invalid display transform")
         }
         let n = width * height
-        guard rgb.count >= n * 3, output.count >= n * 4 else { throw GraphRuntimeError.message("Invalid display frame") }
+        // 3: packed RGB; 4: the GPU readback as is (alpha ignored).
+        let stride = (t["stride"] as? NSNumber)?.intValue == 4 ? 4 : 3
+        guard rgb.count >= n * stride, output.count >= n * 4 else { throw GraphRuntimeError.message("Invalid display frame") }
         let out = output.bindMemory(to: UInt8.self)
         let source = rgb.baseAddress!, target = out.baseAddress!
         let rows = max(1, height), chunk = max(1, rows / (ProcessInfo.processInfo.activeProcessorCount * 4))
@@ -21,7 +23,7 @@ enum NativeDisplay {
                 let start = block * chunk * width, end = min(n, (block + 1) * chunk * width)
                 for i in start..<end {
                     for c in 0..<3 {
-                        let v = Double(source[i * 3 + c])
+                        let v = Double(source[i * stride + c])
                         target[i * 4 + c] = v > 0 ? (v >= 1 ? 255 : UInt8((v * 255).rounded(.toNearestOrAwayFromZero))) : 0
                     }
                     target[i * 4 + 3] = 255
@@ -49,7 +51,7 @@ enum NativeDisplay {
         DispatchQueue.concurrentPerform(iterations: (rows + chunk - 1) / chunk) { block in
             let start = block * chunk * width, end = min(n, (block + 1) * chunk * width)
             for i in start..<end {
-                let r = decode(Double(source[i * 3])), g = decode(Double(source[i * 3 + 1])), b = decode(Double(source[i * 3 + 2]))
+                let r = decode(Double(source[i * stride])), g = decode(Double(source[i * stride + 1])), b = decode(Double(source[i * stride + 2]))
                 target[i * 4] = store(m[0] * r + m[1] * g + m[2] * b)
                 target[i * 4 + 1] = store(m[3] * r + m[4] * g + m[5] * b)
                 target[i * 4 + 2] = store(m[6] * r + m[7] * g + m[8] * b)

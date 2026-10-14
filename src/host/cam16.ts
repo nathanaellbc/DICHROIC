@@ -40,6 +40,8 @@
  * bukan "hulu ketiga" yang menyimpang, ia MEMANG oracle yang sama).
  */
 
+import { precomputed } from './precomputed';
+
 /** Adaptation matrix M16 (CAT16), `colour.adaptation.CAT_CAT16`. */
 const MATRIX_16 = [
   0.401288, 0.650173, -0.051461,
@@ -385,8 +387,12 @@ export function buildScannerCam16Static(
   whitepointXyz: readonly [number, number, number] = SRGB_WHITEPOINT_XYZ,
   xyzToRgb: readonly number[] = SRGB_MATRIX_XYZ_TO_RGB,
 ): ScannerCam16Static {
+  // Depends only on the output colour space, not the stock: built once per
+  // space instead of on every film/paper change (~830k CAM16 inversions;
+  // seconds on a phone, where JavaScriptCore has no JIT). Callers only read it.
   // Fase 2C Task 9: whitepoint dan matriks keluaran per colour space (default sRGB).
   const viewing = computeViewingConstants(whitepointXyz);
-  const cmaxTable = buildCam16UcsGamutTable(viewing, xyzToRgb);
+  const cmaxTable = precomputed(`cam16Cmax|${whitepointXyz.join(',')}|${xyzToRgb.join(',')}`,
+    () => buildCam16UcsGamutTable(viewing, xyzToRgb));
   return { viewing, cmaxTable };
 }

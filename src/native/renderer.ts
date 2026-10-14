@@ -65,6 +65,7 @@ export class NativeRenderer {
   private chainKey?: string;
   private depth?: DepthMap;
   private readonly cubes = new Map<PrintLutId, PrintCube>();
+  private readonly pivots = new WeakMap<Float32Array, Map<string, number>>();
   private disposed = false;
 
   constructor(private readonly host: NativeRenderHost, private readonly bundle: AssetBundle,
@@ -77,8 +78,12 @@ export class NativeRenderer {
 
   private prepare(params: RenderParams, width: number, height: number, measure: Float32Array, measureWidth: number, measureHeight: number, mode: 'image' | 'cube' = 'image'): RenderPlan {
     if (this.disposed) throw new Error('Native renderer is closed.');
+    // The measurement image is replaced (never edited in place) when the photo
+    // or its retouch changes, so its scene pivot can be remembered by identity.
+    let pivots = this.pivots.get(measure);
+    if (!pivots) { pivots = new Map(); this.pivots.set(measure, pivots); }
     const plan = buildRenderPlan(params, this.bundle, { width, height,
-      rgba: measure, measure: { rgba: measure, width: measureWidth, height: measureHeight } }, mode,
+      rgba: measure, measure: { rgba: measure, width: measureWidth, height: measureHeight, pivots } }, mode,
     this.depth ? { depth: this.depth } : {});
     if (this.arenaKey !== plan.arenaKey) {
       this.graph?.dispose(); this.graph = undefined; this.chainKey = undefined;
@@ -109,13 +114,14 @@ export class NativeRenderer {
     return cube;
   }
 
-  async preview(params: RenderParams, rgba: Float32Array, width: number, height: number, collect: TapName = Tap.RGB_OUT): Promise<Float32Array> {
+  async preview(params: RenderParams, rgba: Float32Array, width: number, height: number, collect: TapName = Tap.RGB_OUT,
+    output: 'rgb' | 'rgba' = 'rgb'): Promise<Float32Array> {
     const plan = this.prepare(params, width, height, rgba, width, height);
     // Preview is already ImageIO-downsampled. Lens requires a whole frame;
     // other stages use the canonical overlap if this binding needs tiling.
     return this.graph!.run(rgba, plan.core, collect, {
       maxBufferBytes: Math.min(this.native.limits.maxStorageBufferBindingSize, 32 * 1024 * 1024),
-      overlap: plan.overlap, frame: plan.frame, output: 'rgb',
+      overlap: plan.overlap, frame: plan.frame, output,
     });
   }
 

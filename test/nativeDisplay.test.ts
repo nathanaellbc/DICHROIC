@@ -16,12 +16,12 @@ function roundHalfEven(x: number): number {
 }
 
 /** Literal transcription of NativeDisplay.convert. */
-function swiftConvert(rgb: Float32Array, width: number, height: number, t: DisplayTransform): Uint8Array {
-  const n = width * height, out = new Uint8Array(n * 4);
+function swiftConvert(rgb: Float32Array, width: number, height: number, t: DisplayTransform & { stride?: number }): Uint8Array {
+  const n = width * height, out = new Uint8Array(n * 4), stride = t.stride === 4 ? 4 : 3;
   if (t.kind === 'quantize') {
     for (let i = 0; i < n; i++) {
       for (let c = 0; c < 3; c++) {
-        const v = rgb[i * 3 + c]!;
+        const v = rgb[i * stride + c]!;
         out[i * 4 + c] = v > 0 ? (v >= 1 ? 255 : Math.round(v * 255)) : 0;
       }
       out[i * 4 + 3] = 255;
@@ -40,7 +40,7 @@ function swiftConvert(rgb: Float32Array, width: number, height: number, t: Displ
     return e >= 255 ? 255 : roundHalfEven(e);
   };
   for (let i = 0; i < n; i++) {
-    const r = decode(rgb[i * 3]!), g = decode(rgb[i * 3 + 1]!), b = decode(rgb[i * 3 + 2]!);
+    const r = decode(rgb[i * stride]!), g = decode(rgb[i * stride + 1]!), b = decode(rgb[i * stride + 2]!);
     out[i * 4] = store(m[0]! * r + m[1]! * g + m[2]! * b);
     out[i * 4 + 1] = store(m[3]! * r + m[4]! * g + m[5]! * b);
     out[i * 4 + 2] = store(m[6]! * r + m[7]! * g + m[8]! * b);
@@ -64,6 +64,10 @@ describe('native display conversion (iOS)', () => {
         // The transform crosses the bridge as JSON.
         const native = swiftConvert(rgb, values.length, 1, JSON.parse(JSON.stringify(t)) as DisplayTransform);
         expect(Array.from(native)).toEqual(Array.from(rgbToCanvas(rgb, values.length, 1, label, target)));
+        // RGBA readback straight from the GPU (alpha ignored): same bytes.
+        const rgba = new Float32Array(values.length * 4);
+        for (let i = 0; i < values.length; i++) rgba.set([rgb[i * 3]!, rgb[i * 3 + 1]!, rgb[i * 3 + 2]!, 0.25], i * 4);
+        expect(Array.from(swiftConvert(rgba, values.length, 1, { ...t, stride: 4 }))).toEqual(Array.from(native));
       });
     }
   }
