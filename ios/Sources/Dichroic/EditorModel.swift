@@ -40,15 +40,31 @@ final class EditorModel {
     var sourceStem = "photo"
     var fileName: String?
 
-    // Lens blur depth: idle, needs-download, working, ready, error. The model
-    // is downloaded only after the user taps Download.
+    // Lens blur depth (web DepthState): idle, needs-download, working, ready,
+    // error. A model is downloaded only after the user taps Download.
     var depthState = "idle"
-    var depthPhase = "Measuring depth"
+    /// runtime, model, compile, infer, refine (web `DEPTH_PHASE`).
+    var depthPhase = "model"
+    var depthLoaded = 0
+    var depthTotal = 0
     var depthError: String?
-    var depthBytes = 27_258_801
-    var depthSeconds = 0.0
-    private var depthAllowed = false
-    private var depthStarted: Date?
+    var depthMilliseconds = 0
+    var depthUsedGpu = false
+    var depthMeasuredModel = "fast"
+    /// Chosen network and the GPU switch, kept like the web (`dichroic.depthModel`, `dichroic.depthGpu`).
+    var depthModel: String = UserDefaults.standard.string(forKey: "dichroic.depthModel") ?? "fast"
+    var depthGpu: Bool = UserDefaults.standard.string(forKey: "dichroic.depthGpu") != "0"
+    private var depthDownload = false
+
+    // Refine Edge (web RefineEdge.tsx)
+    var refining = false
+    var refineBusy = false
+    var refineNeedsDownload = false
+    var refineStatus = ""
+    var refineError: String?
+    var refined = false
+    var matte: (image: UIImage, rect: CGRect)?
+    var showMatte = false
 
     // Remove Object
     var erasing = false
@@ -93,8 +109,9 @@ final class EditorModel {
             guard let self else { return }
             status = text.isEmpty ? nil : text
             if let total { progressDone = done ?? 0; progressTotal = total }
-            depthStatus(text)
         }
+        engine.onDepthProgress = { [weak self] phase, loaded, total in self?.depthProgress(phase, loaded, total) }
+        engine.onMatte = { [weak self] image, rect in self?.matte = (image, rect) }
     }
 
     // MARK: - Toast and errors
@@ -120,40 +137,136 @@ final class EditorModel {
 
     // MARK: - Depth
 
-    private func depthStatus(_ message: String) {
-        guard depthState != "ready" else { return }
-        if message.hasPrefix("Preparing depth") {
-            depthState = "working"; depthPhase = "Measuring depth"
-            if depthStarted == nil { depthStarted = Date() }
-        } else if message.hasPrefix("Downloading depth") {
-            depthState = "working"; depthPhase = "Downloading the depth model"
+    /// Networks the app runs (catalog `depthModels`).
+    var depthModels: [JSON] { catalog.list("depthModels") }
+    var depthSpec: JSON { depthModels.first { $0.string("id") == depthModel } ?? depthModels.first ?? [:] }
+    var matteModel: JSON { catalog.object("matteModel") }
+
+    private func depthProgress(_ phase: String, _ loaded: Int, _ total: Int) {
+        if refineBusy {
+            let pct = total > 0 ? " \(Int((100 * Double(loaded) / Double(total)).rounded()))%" : ""
+            refineStatus = phase == "model" ? "Downloading \(matteModel.string("name") ?? "the matting model")…\(pct)"
+                : phase == "compile" ? "Preparing the matting model…" : "Refining the edge…\(pct)"
+            return
         }
+        guard depthState == "working" else { return }
+        depthPhase = phase; depthLoaded = loaded; depthTotal = total
     }
 
-    private func resetDepth() { depthState = "idle"; depthError = nil; depthStarted = nil }
-
-    /// Checks the model before lens blur renders; without it, asks first.
-    private func checkDepth() {
-        guard params.bool("lensBlurEnabled"), depthState != "ready", !depthAllowed else { return }
-        let model = engine.depthModel()
-        depthBytes = model.bytes
-        if model.stored { depthAllowed = true } else { depthState = "needs-download" }
+    private func resetDepth() {
+        depthState = "idle"; depthError = nil
+        refined = false; matte = nil; showMatte = false
     }
 
-    /// "Download" in the lens card: allows the one-time depth model download.
+    /// Measures depth for lens blur; a model not on the device is offered for
+    /// download first (web `needs-download`).
+    private func measureDepth() async -> Bool {
+        depthState = "working"; depthPhase = "model"; depthLoaded = 0; depthTotal = 0; depthError = nil
+        do {
+            let result = try await engine.measureDepth(model: depthSpec.string("id") ?? "fast", gpu: depthGpu, allowDownload: depthDownload)
+            depthState = "ready"
+            depthMilliseconds = result.milliseconds; depthUsedGpu = result.gpu; depthMeasuredModel = result.model
+            return true
+        } catch let error where PhotoEngine.isNotCached(error) {
+            depthState = "needs-download"
+        } catch {
+            depthState = "error"; depthError = message(error)
+        }
+        return false
+    }
+
+    /// "Download" in the lens card: allows the one-time model download.
     func downloadDepth() {
-        depthAllowed = true
-        depthState = "working"
-        depthError = nil
+        depthDownload = true
+        depthState = "idle"
         rendered = -1
         scheduleRender()
     }
 
-    /// Parameters sent to the renderer: lens blur waits for the depth model.
+    /// The depth network (web `setDepthModel`): the open photo is measured again.
+    func setDepthModel(_ id: String) {
+        guard id != depthModel else { return }
+        depthModel = id
+        UserDefaults.standard.set(id, forKey: "dichroic.depthModel")
+        remeasureDepth()
+    }
+
+    /// The depth GPU switch (Core ML): the open photo is measured again.
+    func setDepthGpu(_ on: Bool) {
+        guard on != depthGpu else { return }
+        depthGpu = on
+        UserDefaults.standard.set(on ? "1" : "0", forKey: "dichroic.depthGpu")
+        remeasureDepth()
+    }
+
+    private func remeasureDepth() {
+        depthDownload = false
+        guard depthState != "idle" else { return }
+        depthState = "idle"
+        invalidateDetail()
+        rendered = -1
+        scheduleRender()
+    }
+
+    /// Bytes to download for the chosen network.
+    var depthBytes: Int { depthSpec.int("bytes") ?? 0 }
+
+    /// Parameters sent to the renderer: lens blur waits for the depth map.
     private var renderParams: JSON {
         var p = params
-        if params.bool("lensBlurEnabled") && !depthAllowed { p["lensBlurEnabled"] = false }
+        if params.bool("lensBlurEnabled") && depthState != "ready" { p["lensBlurEnabled"] = false }
         return p
+    }
+
+    // MARK: - Refine Edge
+
+    func openRefine() {
+        guard depthState == "ready", !busy else { return }
+        refineError = nil
+        refineNeedsDownload = false
+        refineStatus = refined ? "Refine Edge is on. Brush again to redo it." : "Brush along the hair or edge, then choose Refine."
+        showMatte = refined
+        refining = true
+    }
+
+    func closeRefine() {
+        refining = false
+        scheduleRender()
+    }
+
+    /// ViTMatte on the brushed band (`mask` at `width x height`, 1 = brushed).
+    func refine(mask: Data, width: Int, height: Int, allowDownload: Bool) async -> Bool {
+        guard !refineBusy else { return false }
+        refineBusy = true; refineError = nil; refineNeedsDownload = false
+        refineStatus = "Preparing the edge…"
+        defer { refineBusy = false; scheduleRender() }
+        await renderTask?.value
+        await detailTask?.value
+        do {
+            try await engine.refineEdges(mask: mask, width: width, height: height, allowDownload: allowDownload)
+            refined = true; showMatte = true
+            refineStatus = "Done. White is kept sharp, black is blurred. Brush again to redo."
+            invalidateDetail()
+            rendered = -1
+            return true
+        } catch let error where PhotoEngine.isNotCached(error) {
+            refineNeedsDownload = true; refineStatus = ""
+        } catch { refineError = message(error) }
+        return false
+    }
+
+    func clearRefine() async {
+        guard !refineBusy else { return }
+        refineBusy = true
+        defer { refineBusy = false; scheduleRender() }
+        await renderTask?.value
+        do {
+            try await engine.clearRefine()
+            refined = false; matte = nil; showMatte = false
+            refineStatus = "Refine Edge removed."
+            invalidateDetail()
+            rendered = -1
+        } catch { refineError = message(error) }
     }
 
     // MARK: - Defaults and history
@@ -252,7 +365,7 @@ final class EditorModel {
             return
         }
         loading = false
-        checkDepth()
+
         scheduleRender()
     }
 
@@ -299,7 +412,7 @@ final class EditorModel {
                 revision += 1
                 invalidateDetail()
                 error = nil
-                if lensOn { checkDepth() }
+                if lensOn && depthState == "error" { depthState = "idle" }
                 try await refreshControls()
                 scheduleRender()
             }
@@ -355,26 +468,23 @@ final class EditorModel {
     // MARK: - Render
 
     private func scheduleRender() {
-        guard !busy, !erasing, !rendering, !detailRendering, renderTask == nil else { return }
+        guard !busy, !erasing, !refineBusy, !rendering, !detailRendering, renderTask == nil else { return }
         renderTask = Task { await drainRender() }
     }
 
     private func drainRender() async {
         rendering = true
         defer { rendering = false; renderTask = nil; scheduleDetail() }
-        while !busy && !erasing && photo != nil && rendered != revision {
+        while !busy && !erasing && !refineBusy && photo != nil && rendered != revision {
             let revision = self.revision
-            let depth = params.bool("lensBlurEnabled") && depthAllowed
+            // Lens blur first measures depth (as the web engine); until then
+            // the photo develops without it.
+            if params.bool("lensBlurEnabled") && depthState == "idle" { _ = await measureDepth() }
             do {
                 try await engine.develop(renderParams)
             } catch {
-                if depth && depthState != "ready" { depthState = "error"; depthError = message(error) }
                 self.error = message(error)
                 return
-            }
-            if depth && depthState != "ready" {
-                depthState = "ready"
-                depthSeconds = depthStarted.map { Date().timeIntervalSince($0) } ?? 0
             }
             rendered = revision
             frames += 1

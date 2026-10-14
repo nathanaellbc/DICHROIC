@@ -16,8 +16,21 @@ import { iccDescription, colorSpaceForIcc } from '../io/metadata';
 import { accumulateScope, shadeScope } from '../ui/model/vectorscope';
 import type { ScopePrefs } from '../ui/model/vectorscope';
 import { accumulateWaveform, paradeLayout, shadeWaveform, waveformLayout } from '../ui/model/waveform';
+import { detailDepth } from '../depth/matte';
+import { DEPTH_MODELS, MATTE_MODEL, MATTE_URL, isDepthModelId, variantUrl } from '../depth/model';
+import type { DepthModelId } from '../depth/model';
+import { bandBounds, bandInCrop, buildTrimap, computeMatte, cropSize, edgeThreshold, layeredDepth, shaderMatte } from '../depth/refineEdge';
+import type { BrushMask, UvRect } from '../depth/refineEdge';
+import { ModelNotCachedError, NativeTensor, openSession, type NativeOrtHost } from './ort';
 
-export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost {
+/** Refine Edge of the open photo (as `RefineResult` in the web engine). */
+interface NativeRefine { rect: UvRect; width: number; height: number; alpha: Float32Array; band: Uint8Array; trimap: Uint8Array }
+
+export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost, Partial<NativeOrtHost> {
+  /** Depth and matte phases, as the web `DepthProgress` (phase, loaded, total). */
+  depthProgress?(phase: string, loaded: number, total: number): void;
+  /** Refine Edge matte view: RGBA (grey matte inside the band, clear outside) of the crop in `json` (rect, width, height). */
+  publishMatte?(rgba: Uint8ClampedArray, json: string): void;
   previewInput(): Float32Array;
   publish(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
   complete(id: number, json: string): void;
@@ -65,6 +78,107 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
   let focusOverlay: ReturnType<typeof prepareFocusOverlay> | undefined;
   // The last displayed preview: what the web scopes trace.
   let display: { pixels: Uint8ClampedArray; width: number; height: number } | undefined;
+  let refine: NativeRefine | undefined;
+  let refineMask: BrushMask | undefined;
+  /** Depth plus the two layers and matte of Refine Edge (web `#withRefine`). */
+  const applyDepth = () => {
+    if (!depth || !refine) { renderer.setDepth(depth); return; }
+    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height);
+    const threshold = edgeThreshold(depth, refine.rect, refine.width, refine.height);
+    renderer.setDepth({ ...depth, layers: layeredDepth(depth, refine.rect, refine.band, refine.width, refine.height, threshold), matte });
+  };
+  const ort = (): NativeOrtHost => {
+    if (!host.ortOpen || !host.ortNames || !host.ortRun || !host.ortOutput || !host.ortClose) throw new Error('On-device models are not available.');
+    return host as NativeOrtHost;
+  };
+  const progress = (phase: string, loaded: number, total: number) => host.depthProgress?.(phase, loaded, total);
+
+  /**
+   * Depth map for lens blur, as the web depth worker: the network at the phone
+   * profile (392 px input, 1024 px guide), joint bilateral upsample, then the
+   * photo-guided clean-up (`detailDepth`). Refine Edge stays on the new map.
+   */
+  async function measureDepth(req: { model: DepthModelId; allowDownload: boolean; gpu: boolean }) {
+    if (!source) throw new Error('Native source is missing.');
+    const spec = DEPTH_MODELS[req.model];
+    const variant = spec.variants.wasm;
+    if (spec.split || !variant) throw new Error(`${spec.name} is not available in the iOS app.`);
+    const t0 = Date.now();
+    const preview = source.preview(1024);
+    const { width, height } = preview;
+    const rgba = nativeDisplay(preview.rgba, width, height, source.meta).pixels;
+    progress('model', 0, variant.bytes);
+    const session = openSession(ort(), variantUrl(variant, req.model), variant.bytes, req.allowDownload, req.gpu);
+    let raw: Float32Array, ow: number, oh: number;
+    const [mw, mh] = spec.fixedInput ? [spec.fixedInput, spec.fixedInput] : modelInputSize(width, height, 392);
+    const rgb = resampleRGB(rgba, width, height, mw, mh);
+    try {
+      progress('infer', 0, 1);
+      const out = await session.run({ [session.inputNames[0]!]: new NativeTensor('float32', toModelTensor(rgb, mw, mh, spec.mean, spec.std), [1, 3, mh, mw]) });
+      const tensor = out['predicted_depth'] ?? out[session.outputNames[0]!]!;
+      raw = (tensor.data as Float32Array).slice();
+      if (spec.output === 'depth') for (let i = 0; i < raw.length; i += 1) raw[i] = 1 / Math.max(raw[i]!, 1e-3);
+      ow = tensor.dims[tensor.dims.length - 1]!; oh = tensor.dims[tensor.dims.length - 2]!;
+    } finally { await session.release(); }
+    progress('refine', 0, 1);
+    const guideLow = ow === mw && oh === mh ? rgb : resampleRGB(rgbaFrom(rgb, mw, mh), mw, mh, ow, oh);
+    const up = jointBilateralUpsample(raw, ow, oh, guideLow, rgba, width, height);
+    depth = { width, height, data: detailDepth(up, rgba, width, height, normaliseDisparity) };
+    guide = undefined; focusOverlay = undefined;
+    applyDepth();
+    return { ms: Date.now() - t0, model: req.model, backend: req.gpu ? 'gpu' : 'cpu' };
+  }
+
+  /** Grey matte inside the band, clear outside (web Refine Edge "Matte" view). */
+  function publishMatte() {
+    if (!refine) return;
+    const { width, height, alpha, band, rect } = refine;
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < width * height; i += 1) {
+      if (!band[i]) continue;
+      const v = alpha[i]! * 255;
+      pixels[i * 4] = v; pixels[i * 4 + 1] = v; pixels[i * 4 + 2] = v; pixels[i * 4 + 3] = 255;
+    }
+    host.publishMatte?.(pixels, JSON.stringify({ ...rect, width, height }));
+  }
+
+  /**
+   * Refine Edge, as the web engine: the brushed band becomes a trimap from the
+   * depth map, ViTMatte works out alpha on a high-resolution crop, and lens
+   * blur uses two layers inside the band only.
+   */
+  async function refineEdges(req: { allowDownload: boolean }) {
+    if (!source || !depth) throw new Error('Lens blur needs a depth map first.');
+    const mask = refineMask;
+    const rect = mask && bandBounds(mask);
+    if (!mask || !rect) throw new Error('Brush over the edge first.');
+    const crop = cropSize(rect, source.meta.width, source.meta.height, 1536);
+    // The crop is a window of the photo scaled so the window is crop-sized.
+    const outW = Math.max(crop.width, Math.round(crop.width / rect.w)), outH = Math.max(crop.height, Math.round(crop.height / rect.h));
+    const x = Math.min(outW - crop.width, Math.max(0, Math.round(rect.x * outW)));
+    const y = Math.min(outH - crop.height, Math.max(0, Math.round(rect.y * outH)));
+    const values = source.region(outW, outH, x, y, crop.width, crop.height);
+    const rgba = nativeDisplay(values, crop.width, crop.height, source.meta).pixels;
+    const band = bandInCrop(mask, rect, crop.width, crop.height);
+    const threshold = edgeThreshold(depth, rect, crop.width, crop.height);
+    const trimap = buildTrimap(depth, rect, band, crop.width, crop.height, threshold);
+    progress('model', 0, MATTE_MODEL.bytes);
+    // ViTMatte runs on the CPU, as on the web.
+    const session = openSession(ort(), MATTE_URL, MATTE_MODEL.bytes, req.allowDownload, false);
+    let alpha: Float32Array;
+    try {
+      alpha = await computeMatte(rgba, trimap, crop.width, crop.height, async (input, tw, th) => {
+        const out = await session.run({ [session.inputNames[0]!]: new NativeTensor('float32', input, [1, 4, th, tw]) });
+        return out[session.outputNames[0]!]!.data as Float32Array;
+      }, (done, total) => progress('matte', done, total));
+    } finally { await session.release(); }
+    refine = { rect, width: crop.width, height: crop.height, alpha, band, trimap };
+    refineMask = undefined;
+    applyDepth();
+    publishMatte();
+    return { ...rect, width: crop.width, height: crop.height };
+  }
+
   return {
     catalog: () => nativeCatalog(bundle),
     profileSpace(buffer: ArrayBuffer): string {
@@ -122,7 +236,42 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
       return JSON.stringify({ width: Math.max(1, Math.round(width * outputScale)), height: Math.max(1, Math.round(height * outputScale)), longEdge: edge });
     },
     setDepth: (depth: DepthMap | undefined) => renderer.setDepth(depth),
-    clearDepth: () => { renderer.setDepth(undefined); guide = undefined; depth = undefined; focusOverlay = undefined; },
+    clearDepth: () => { renderer.setDepth(undefined); guide = undefined; depth = undefined; focusOverlay = undefined; refine = undefined; refineMask = undefined; },
+    /** Brush of Refine Edge (preview resolution, 1 = brushed), for the next `refine` task. */
+    setRefineMask(json: string, buffer: ArrayBuffer): void {
+      const { width, height } = JSON.parse(json) as { width: number; height: number };
+      const data = new Uint8Array(buffer);
+      if (width <= 0 || height <= 0 || data.length !== width * height) throw new Error('Invalid Refine Edge brush.');
+      refineMask = { width, height, data };
+    },
+    /** Removes Refine Edge of this photo: one layer again. */
+    clearRefine(): void { refine = undefined; refineMask = undefined; applyDepth(); },
+    hasRefine: (): boolean => refine !== undefined,
+    /** Publishes the matte view of the current Refine Edge again. */
+    refineMatte(): void { publishMatte(); },
+    /**
+     * Model work that can take a while (`depth`, `refine`), finished with
+     * `host.complete` like `request`. A model that is not on the device
+     * yet fails with `code: 'not-cached'`.
+     */
+    task(id: number, json: string): void {
+      if (active || tasks.has(id)) { host.complete(id, JSON.stringify({ error: 'Native renderer is busy' })); return; }
+      active = true;
+      const run = Promise.resolve().then(async () => {
+        try {
+          const req = JSON.parse(json) as { operation: 'depth' | 'refine'; model?: string; allowDownload?: boolean; gpu?: boolean };
+          const allowDownload = req.allowDownload === true;
+          const result = req.operation === 'depth'
+            ? await measureDepth({ model: isDepthModelId(req.model) ? req.model : 'fast', allowDownload, gpu: req.gpu === true })
+            : await refineEdges({ allowDownload });
+          host.complete(id, JSON.stringify({ result }));
+        } catch (error) {
+          host.complete(id, JSON.stringify(error instanceof ModelNotCachedError ? { error: 'not-cached', code: 'not-cached' }
+            : { error: error instanceof Error ? error.message : String(error) }));
+        } finally { active = false; tasks.delete(id); }
+      });
+      tasks.set(id, run);
+    },
     focusPreview(json: string): void {
       if (!focusOverlay) return;
       const mask = focusOverlay(JSON.parse(json) as RenderParams);

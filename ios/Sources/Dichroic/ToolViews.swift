@@ -211,32 +211,83 @@ struct LensCard: View {
     private func foot(_ text: String) -> some View {
         Text(text).font(.system(size: 13)).foregroundStyle(Color.secondaryText)
     }
+    /// Web `DEPTH_PHASE`.
+    private static let phases = ["runtime": "Downloading the depth engine", "model": "Downloading the depth model",
+                                 "compile": "Preparing the depth model", "infer": "Measuring depth", "refine": "Refining edges"]
+    private static func megabytes(_ bytes: Int) -> String { "\(Int((Double(bytes) / 1_000_000).rounded())) MB" }
+
     var body: some View {
         if !model.params.bool("lensBlurEnabled") {
             foot(tool.string("note") ?? "")
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                switch model.depthState {
-                case "needs-download":
-                    Text("Lens blur needs a one-time download of the depth model. It stays on this device, and your photos never leave it.")
-                        .font(.system(size: 15))
-                    CapsuleButton(title: "Download · \(Int((Double(model.depthBytes) / 1_000_000).rounded())) MB") { model.downloadDepth() }
-                        .disabled(model.busy)
-                case "error":
-                    Text("Couldn’t measure depth: \(model.depthError ?? "")").font(.system(size: 15))
-                    CapsuleButton(title: "Try Again") { model.downloadDepth() }.disabled(model.busy)
-                case "ready":
-                    foot("Depth ready · CPU · \(String(format: "%.1f", model.depthSeconds)) s")
-                    foot("Drag the focus pin on the photo to focus.")
-                default:
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("\(model.depthPhase)…").font(.system(size: 15))
-                    }
+                picker
+                status
+                // Depth of field only means something once there is a map.
+                if model.depthState == "ready" || model.depthState == "working", let readout = tool.string("readout") {
+                    foot(readout).monospacedDigit()
                 }
-                if let readout = tool.string("readout") { foot(readout).monospacedDigit() }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Depth network and GPU switch in one row, short labels (web phone card).
+    private var picker: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker("Depth model", selection: Binding(get: { model.depthSpec.string("id") ?? "fast" }, set: { model.setDepthModel($0) })) {
+                    ForEach(model.depthModels.indices, id: \.self) { i in
+                        let spec = model.depthModels[i]
+                        Text("\(spec.string("label") ?? "")\(spec.bool("experimental") ? " (exp.)" : "")").tag(spec.string("id") ?? "")
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text("\(model.depthSpec.string("label") ?? "Fast")\(model.depthSpec.bool("experimental") ? " (exp.)" : "")")
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                }
+                .font(.system(size: 15, weight: .medium))
+                .padding(.horizontal, 12).frame(height: 32)
+                .background(Capsule().fill(Color.chip))
+            }
+            .disabled(model.busy || model.depthState == "working")
+            .accessibilityLabel("Depth model")
+            Spacer()
+            Text("GPU").font(.system(size: 13)).foregroundStyle(Color.secondaryText)
+            Toggle("Measure depth on the GPU", isOn: Binding(get: { model.depthGpu }, set: { model.setDepthGpu($0) }))
+                .labelsHidden().tint(.signal)
+                .disabled(model.busy || model.depthState == "working")
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        switch model.depthState {
+        case "needs-download":
+            VStack(alignment: .leading, spacing: 8) {
+                Text("One-time download of \(model.depthSpec.string("name") ?? "the depth model"). It stays on this device; photos never leave it.")
+                    .font(.system(size: 15))
+                CapsuleButton(title: "Download · \(Self.megabytes(model.depthBytes))") { model.downloadDepth() }.disabled(model.busy)
+            }
+        case "error":
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Couldn’t measure depth: \(model.depthError ?? "")").font(.system(size: 15))
+                CapsuleButton(title: "Try Again") { model.downloadDepth() }.disabled(model.busy)
+            }
+        case "ready":
+            HStack(spacing: 10) {
+                let label = model.depthModels.first { $0.string("id") == model.depthMeasuredModel }?.string("label") ?? "Fast"
+                foot("Depth ready · \(label) · \(model.depthUsedGpu ? "GPU" : "CPU") · \(String(format: "%.1f", Double(model.depthMilliseconds) / 1000)) s")
+                CapsuleButton(title: model.refined ? "Refine Edge · On" : "Refine Edge…") { model.openRefine() }.disabled(model.busy)
+            }
+        default:
+            let pct = model.depthState == "working" && model.depthTotal > 0
+                ? " \(Int((100 * Double(model.depthLoaded) / Double(model.depthTotal)).rounded()))%" : ""
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("\(Self.phases[model.depthState == "working" ? model.depthPhase : "runtime"] ?? "Measuring depth")…\(pct)")
+                    .font(.system(size: 15)).monospacedDigit()
+            }
         }
     }
 }

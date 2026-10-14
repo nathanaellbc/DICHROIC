@@ -16,6 +16,11 @@ struct PhotoViewport: View {
     var mode: Mode = .editor
     var brush: RemovalBrush?
     var showBrush = false
+    /// Paint colour: red for Remove Object, light blue for Refine Edge (web).
+    var brushColor = Color(red: 1, green: 0.27, blue: 0.31)
+    var brushOpacity = 0.45
+    /// Refine Edge matte view and its photo rect (0..1).
+    var matte: (image: UIImage, rect: CGRect)?
     /// Remove Object's Before: the untouched original.
     var showOriginal = false
     /// Lens focus point (0..1) while the pin is offered.
@@ -155,14 +160,26 @@ struct PhotoViewport: View {
             if let mask = model.focusMask, focusDrag != nil {
                 Image(uiImage: mask).resizable().interpolation(.medium).frame(width: fit.width, height: fit.height).allowsHitTesting(false)
             }
+            if let matte, brush?.isEmpty ?? true {
+                // Refine Edge Matte view: black and white inside the band.
+                Image(uiImage: matte.image).resizable().interpolation(.medium)
+                    .frame(width: matte.rect.width * fit.width, height: matte.rect.height * fit.height)
+                    .offset(x: matte.rect.minX * fit.width, y: matte.rect.minY * fit.height)
+                    .allowsHitTesting(false)
+            }
             if let brush, showBrush {
+                // One layer, so erase strokes cut through earlier paint.
                 Canvas { context, canvasSize in
-                    for (path, width) in brush.path(in: canvasSize) {
-                        if width == 0 { context.fill(path, with: .color(Color(red: 1, green: 0.27, blue: 0.31).opacity(0.45))) }
-                        else { context.stroke(path, with: .color(Color(red: 1, green: 0.27, blue: 0.31).opacity(0.45)),
-                                              style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round)) }
+                    context.drawLayer { layer in
+                        for item in brush.paths(in: canvasSize) {
+                            layer.blendMode = item.erase ? .clear : .normal
+                            if item.width == 0 { layer.fill(item.path, with: .color(brushColor)) }
+                            else { layer.stroke(item.path, with: .color(brushColor), style: StrokeStyle(lineWidth: item.width, lineCap: .round, lineJoin: .round)) }
+                        }
                     }
                 }
+                // Overlaps don't darken: the paint is opaque, the layer translucent.
+                .opacity(brushOpacity)
                 .frame(width: fit.width, height: fit.height)
                 .allowsHitTesting(false)
             }

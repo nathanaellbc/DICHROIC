@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct EditorView: View {
     @State private var model = EditorModel()
     @State private var brush = RemovalBrush()
+    @State private var refineBrush = RemovalBrush(diameter: 40)
     @State private var compactScopes = ScopePrefs("compact")
     @State private var wideScopes = ScopePrefs("wide")
     @AppStorage("DichroicAppearance") private var appearance = "system"
@@ -172,9 +173,9 @@ struct EditorView: View {
     /// Phone toolbar (web `.mobile-toolbar`): More, the stock capsule, Undo
     /// and Export; the brand alone with no photo or in Remove Object.
     @ViewBuilder private func topBar(wide: Bool) -> some View {
-        if model.photo == nil || model.erasing {
+        if model.photo == nil || model.erasing || model.refining {
             HStack {
-                brand(model.erasing ? "Original · grading paused" : "Your pocket darkroom")
+                brand(model.erasing ? "Original · grading paused" : model.refining ? "Original · Refine Edge" : "Your pocket darkroom")
                 Spacer()
             }
             .frame(height: 52).padding(.horizontal, 12)
@@ -218,7 +219,7 @@ struct EditorView: View {
         } else {
             ZStack {
                 photoView
-                if !model.erasing {
+                if !model.erasing && !model.refining {
                     VStack {
                         HStack {
                             Spacer()
@@ -237,18 +238,21 @@ struct EditorView: View {
     }
 
     private var photoView: some View {
-        let focusActive = !model.erasing && !model.rendering && groupId == "lens"
+        let focusActive = !model.erasing && !model.refining && !model.rendering && groupId == "lens"
             && model.params.bool("lensBlurEnabled") && model.depthState == "ready"
         return PhotoViewport(
             model: model,
-            brush: model.erasing ? brush : nil,
-            showBrush: !model.removalReady && !model.removing,
-            showOriginal: model.erasing && beforeRemoval,
+            brush: model.erasing ? brush : model.refining ? refineBrush : nil,
+            showBrush: model.refining ? !model.refineBusy : !model.removalReady && !model.removing,
+            brushColor: model.refining ? Color(red: 120 / 255, green: 200 / 255, blue: 1) : Color(red: 1, green: 0.27, blue: 0.31),
+            brushOpacity: model.refining ? 0.5 : 0.45,
+            matte: model.refining && model.showMatte ? model.matte : nil,
+            showOriginal: (model.erasing && beforeRemoval) || model.refining,
             focus: focusActive ? CGPoint(x: model.params.double("lensFocusX") ?? 0.5, y: model.params.double("lensFocusY") ?? 0.5) : nil,
             reveal: reveal,
             compare: $compare
         ) {
-            if !model.erasing { lightbox = true }
+            if !model.erasing && !model.refining { lightbox = true }
         }
     }
 
@@ -269,7 +273,7 @@ struct EditorView: View {
     }
 
     @ViewBuilder private var panel: some View {
-        if model.erasing { removalControls } else { adjustments }
+        if model.erasing { removalControls } else if model.refining { refineControls } else { adjustments }
     }
 
     private var adjustments: some View {
@@ -355,6 +359,96 @@ struct EditorView: View {
         .accessibilityHint("Pinch with two fingers to zoom and move. On-device LaMa · first use downloads 62 MB.")
     }
 
+    /// Refine Edge panel (web RefineEdge.tsx): brush the hair edge, ViTMatte
+    /// works out the matte, Matte shows it black and white.
+    private var refineControls: some View {
+        let busy = model.refineBusy, strokes = !refineBrush.isEmpty
+        let mode = !refineBrush.painting ? "move" : refineBrush.erase ? "erase" : "brush"
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Refine Edge").font(.system(size: 17, weight: .semibold))
+                    Text("Lens blur · hair and fine edges").font(.system(size: 12)).foregroundStyle(Color.secondaryText)
+                }
+                Spacer()
+                CapsuleButton(title: "Done", prominent: true) {
+                    refineBrush.clear()
+                    model.closeRefine()
+                }
+                .disabled(busy)
+            }
+            HStack {
+                Text("Brush size").font(.system(size: 13))
+                Spacer()
+                Text("\(Int(refineBrush.diameter.rounded())) px").font(.system(size: 13)).monospacedDigit().foregroundStyle(Color.secondaryText)
+            }
+            DetailSlider(value: refineBrush.diameter, range: 8...160, step: 1, label: "Brush size", enabled: !busy,
+                         onChange: { refineBrush.diameter = $0 }, onReset: { refineBrush.diameter = 40 })
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    CapsuleButton(title: "Brush", symbol: "eraser", selected: mode == "brush") {
+                        refineBrush.painting = true; refineBrush.erase = false
+                    }
+                    .disabled(busy)
+                    CapsuleButton(title: "Erase", selected: mode == "erase") {
+                        refineBrush.painting = true; refineBrush.erase = true
+                    }
+                    .disabled(busy)
+                    CapsuleButton(title: "Move", symbol: "arrow.up.and.down.and.arrow.left.and.right", selected: mode == "move") {
+                        refineBrush.painting = false
+                    }
+                    CapsuleButton(title: "Undo", symbol: "arrow.uturn.backward") { refineBrush.undo() }.disabled(busy || !strokes)
+                    if model.refined && !strokes {
+                        CapsuleButton(title: model.showMatte ? "Photo" : "Matte", selected: model.showMatte) { model.showMatte.toggle() }
+                            .disabled(busy)
+                    }
+                    if model.refined {
+                        CapsuleButton(title: "Remove") {
+                            refineBrush.clear()
+                            Task { await model.clearRefine() }
+                        }
+                        .disabled(busy)
+                    }
+                    if model.refineNeedsDownload {
+                        CapsuleButton(title: "Download · \(Int((Double(model.matteModel.int("bytes") ?? 0) / 1_000_000).rounded())) MB", prominent: true) {
+                            runRefine(allowDownload: true)
+                        }
+                        .disabled(busy)
+                    } else {
+                        CapsuleButton(title: busy ? "Working…" : "Refine", symbol: busy ? "hourglass" : "camera.aperture", prominent: true) {
+                            runRefine(allowDownload: false)
+                        }
+                        .disabled(busy || !strokes)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            if model.refineNeedsDownload {
+                Text("Refine Edge needs a one-time download of \(model.matteModel.string("name") ?? "the matting model"). It stays on this device; photos never leave it.")
+                    .font(.system(size: 13))
+            }
+            if !model.refineStatus.isEmpty {
+                Text(model.refineStatus).font(.system(size: 13)).foregroundStyle(Color.secondaryText).monospacedDigit()
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+            if let error = model.refineError { Text(error).font(.system(size: 13)).foregroundStyle(Color.danger) }
+        }
+        .padding(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+        .onChange(of: refineBrush.strokes.count) { _, count in if count > 0 { model.showMatte = false } }
+        .accessibilityHint("Cover the whole soft edge with the brush: inside the stroke the edge is worked out from the photo, outside it nothing changes. Pinch to zoom.")
+    }
+
+    private func runRefine(allowDownload: Bool) {
+        guard let photo = model.photo else { return }
+        // The brush at the preview's resolution, 1 where painted (web canvas, alpha > 32).
+        let mask = refineBrush.mask(width: photo.width, height: photo.height, maxEdge: max(photo.width, photo.height), threshold: 32, value: 1)
+        Task {
+            if await model.refine(mask: mask.pixels, width: mask.width, height: mask.height, allowDownload: allowDownload) {
+                refineBrush.clear()
+            }
+        }
+    }
+
     // MARK: - Wide layout (iPad, phone held sideways)
 
     /// Photo on the left, the inspector on the right (web regular layout).
@@ -366,7 +460,7 @@ struct EditorView: View {
             }
             VStack(spacing: 0) {
                 ScrollView {
-                    if model.erasing { removalControls } else {
+                    if model.erasing { removalControls } else if model.refining { refineControls } else {
                         let current = currentTools
                         VStack(spacing: 0) {
                             GroupTabs(groups: model.groups, selected: $groupId)
@@ -424,7 +518,7 @@ struct EditorView: View {
     /// Keyboard shortcuts of the web editor (iPad keyboards): ⌘Z, ⇧⌘Z, O,
     /// \, E and V. Ignored in Remove Object.
     private var shortcuts: some View {
-        let free = !model.erasing && !stockSheet && !exportSheet
+        let free = !model.erasing && !model.refining && !stockSheet && !exportSheet
         let photo = model.photo != nil
         return Group {
             Button("") { if free && model.canUndo && !model.busy { Task { await model.undo() } } }.keyboardShortcut("z", modifiers: .command)

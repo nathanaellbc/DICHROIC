@@ -24,6 +24,14 @@ public struct DetailTile {
     public let longEdge: Int
 }
 
+/// A measured lens blur depth map.
+public struct DepthResult: Sendable {
+    public let milliseconds: Int
+    /// Core ML (GPU/Neural Engine) was requested.
+    public let gpu: Bool
+    public let model: String
+}
+
 public enum EngineError: LocalizedError {
     case message(String)
     public var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
@@ -42,6 +50,10 @@ public final class PhotoEngine: @unchecked Sendable {
     public var onFocus: ((UIImage?) -> Void)?
     /// Status line ("Opening photo…") and export tile progress.
     public var onStatus: ((String, Int?, Int?) -> Void)?
+    /// Lens blur depth and Refine Edge phases: phase, loaded, total (web `DepthProgress`).
+    public var onDepthProgress: ((String, Int, Int) -> Void)?
+    /// Refine Edge matte view (grey inside the band, clear outside) and its photo rect (0..1).
+    public var onMatte: ((UIImage, CGRect) -> Void)?
 
     private let queue = DispatchQueue(label: "dichroic.render", qos: .userInitiated)
     private let cancellation = NativeCancellation()
@@ -109,6 +121,18 @@ public final class PhotoEngine: @unchecked Sendable {
             }
         }
         graph.onProgress = { [weak self] done, total in self?.status("Developing…", done: done, total: total) }
+        graph.onDepthProgress = { [weak self] phase, loaded, total in
+            DispatchQueue.main.async { self?.onDepthProgress?(phase, loaded, total) }
+        }
+        graph.onnx.onDownload = { [weak self] loaded, total in
+            DispatchQueue.main.async { self?.onDepthProgress?("model", loaded, total) }
+        }
+        graph.onMatte = { [weak self] rgba, meta in
+            // Straight alpha (grey, opaque inside the band) is premultiplied as is.
+            let image = try Self.image(rgba, width: Int(meta["width"] ?? 0), height: Int(meta["height"] ?? 0))
+            let rect = CGRect(x: meta["x"] ?? 0, y: meta["y"] ?? 0, width: meta["w"] ?? 0, height: meta["h"] ?? 0)
+            DispatchQueue.main.async { self?.onMatte?(image, rect) }
+        }
         graph.onMask = { [weak self] rgba, width, height in
             let image = try Self.image(rgba, width: width, height: height)
             DispatchQueue.main.async { self?.onFocus?(image) }
@@ -247,10 +271,6 @@ public final class PhotoEngine: @unchecked Sendable {
             guard let url = photoURL else { throw EngineError.message("Open a photo first") }
             guard !graph.isBusy else { throw EngineError.message("Native renderer is busy") }
             let frame = try previewFrame(graph, url: url, params: params)
-            if params["lensBlurEnabled"] as? Bool == true && !graph.depthReady {
-                try measureDepth(graph, url: url)
-                graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
-            }
             // UIKit composites the separately tagged sRGB/P3 image; preserve
             // the selected output profile through the graph.
             try graph.request(operation: "preview", params: params, width: frame.width, height: frame.height) { finish($0) }
@@ -275,26 +295,53 @@ public final class PhotoEngine: @unchecked Sendable {
         return frame
     }
 
-    private func measureDepth(_ graph: NativeGraphRuntime, url: URL) throws {
-        status("Preparing depth…")
-        defer { status("") }
-        let guide: PhotoFrame
-        if let source = graph.sourceStore {
-            let size = Self.scaled(source.width, source.height, edge: 1024)
-            guide = PhotoFrame(width: size.width, height: size.height, rgba: Data())
-        } else { guide = try Self.decode(url, longEdge: 1024) }
-        graph.previewRGBA = guide.rgba; graph.previewWidth = guide.width; graph.previewHeight = guide.height
-        let input = try graph.prepareDepth()
-        status("Downloading depth model (27 MB, cached for next time)…")
-        let model = try NativeModels.model(NativeModels.depthURL, name: NativeModels.depthName)
-        let result = try NativeModels.infer(model: model, input: input.data, shape: [1, 3, input.height, input.width])
-        guard result.shape.count >= 2 else { throw EngineError.message("Invalid depth dimensions") }
-        try graph.finishDepth(result.data, width: result.shape[result.shape.count - 1], height: result.shape[result.shape.count - 2])
+    // MARK: - Lens blur depth and Refine Edge (web depth worker code)
+
+    /// The model at `url` (a catalog `depthModels`/`matteModel` entry) is on this device.
+    public func isStored(url: String, bytes: Int) -> Bool {
+        URL(string: url).map { NativeModels.isStored($0, bytes: bytes) } ?? false
     }
 
-    /// Whether the lens blur depth model is on this device, and its size.
-    public func depthModel() -> (stored: Bool, bytes: Int) {
-        (NativeModels.isStored(name: NativeModels.depthName, bytes: NativeModels.depthBytes), NativeModels.depthBytes)
+    /// A model was needed that is not on the device; ask before downloading.
+    public static func isNotCached(_ error: Error) -> Bool {
+        if case GraphRuntimeError.notCached = error { return true }
+        return false
+    }
+
+    /// Measures the depth map for lens blur with `model` ("fast", "detail").
+    /// Progress arrives through `onDepthProgress`. Refine Edge stays on.
+    public func measureDepth(model: String, gpu: Bool, allowDownload: Bool) async throws -> DepthResult {
+        try await runAsync { [self] (finish: @escaping (Result<DepthResult, Error>) -> Void) in
+            let graph = try graphRuntime()
+            guard photoURL != nil, graph.sourceStore != nil else { throw EngineError.message("Open a photo first") }
+            graph.invalidateExport()
+            try graph.task(["operation": "depth", "model": model, "gpu": gpu, "allowDownload": allowDownload]) { [weak graph] outcome in
+                do {
+                    try outcome.get()
+                    graph?.depthReady = true
+                    let result = graph?.taskResult ?? [:]
+                    finish(.success(DepthResult(milliseconds: (result["ms"] as? NSNumber)?.intValue ?? 0,
+                                                gpu: result["backend"] as? String == "gpu", model: result["model"] as? String ?? model)))
+                } catch { finish(.failure(error)) }
+            }
+        }
+    }
+
+    /// Refine Edge: `mask` is the brush at `width x height` (1 = brushed).
+    /// The matte view arrives through `onMatte`.
+    public func refineEdges(mask: Data, width: Int, height: Int, allowDownload: Bool) async throws {
+        try await runAsync { [self] (finish: @escaping (Result<Void, Error>) -> Void) in
+            let graph = try graphRuntime()
+            guard graph.depthReady else { throw EngineError.message("Lens blur needs a depth map first.") }
+            try graph.setRefineMask(mask, width: width, height: height)
+            graph.invalidateExport()
+            try graph.task(["operation": "refine", "allowDownload": allowDownload]) { finish($0) }
+        }
+    }
+
+    /// Removes Refine Edge of this photo.
+    public func clearRefine() async throws {
+        try await run { [self] in try graphRuntime().clearRefine() }
     }
 
     /// Lens focus overlay for a pending focus point (`onFocus`).
@@ -376,11 +423,7 @@ public final class PhotoEngine: @unchecked Sendable {
             guard let url = photoURL else { throw EngineError.message("Open a photo first") }
             guard !graph.isBusy else { throw EngineError.message("Native renderer is busy") }
             do {
-                let frame = try previewFrame(graph, url: url, params: params)
-                if params["lensBlurEnabled"] as? Bool == true && !graph.depthReady {
-                    try measureDepth(graph, url: url)
-                    graph.previewRGBA = frame.rgba; graph.previewWidth = frame.width; graph.previewHeight = frame.height
-                }
+                _ = try previewFrame(graph, url: url, params: params)
                 let dimensions = try graph.sourceStore.map { (width: $0.width, height: $0.height) } ?? Self.sourceDimensions(url)
                 let edge = try graph.renderSize(params, width: dimensions.width, height: dimensions.height, requested: longEdge, preview: false)
                 let full: PhotoFrame
@@ -452,7 +495,7 @@ public final class PhotoEngine: @unchecked Sendable {
             let graph = try removalGraph()
             let input = try graph.prepareRemoval(mask, width: width, height: height)
             status("Downloading LaMa (62 MB, cached for next time)…")
-            let model = try NativeModels.model(NativeModels.lamaURL, name: "lama-418036c6-int8.onnx")
+            let model = try NativeModels.lama()
             status("Removing object on this device…")
             let output = try NativeModels.infer(model: model, input: input, shape: [1, 4, 512, 512])
             guard output.shape == [1, 3, 512, 512] else { throw EngineError.message("Invalid LaMa dimensions") }

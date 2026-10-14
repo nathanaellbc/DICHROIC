@@ -17,6 +17,7 @@ import { FILM_SECTIONS, PAPER_SECTIONS } from '../ui/model/stocks';
 import { NativeGpuDevice, type NativeGpuHost } from './gpuDevice';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
+import { DEPTH_MODELS, DEPTH_MODEL_IDS, MATTE_MODEL, MATTE_URL, variantUrl } from '../depth/model';
 
 export interface NativeRenderHost extends NativeGpuHost {
   readAsset(name: string): ArrayBuffer;
@@ -45,6 +46,13 @@ export function nativeCatalog(bundle: AssetBundle): string {
     printLuts: Object.entries(PRINT_LUTS).map(([id, lut]) => ({ id, ...lut })),
     inputColorSpaces: bundle.manifest.colorSpaces.labels,
     outputColorSpaces: Object.keys(bundle.manifest.outputColorSpaces),
+    // Lens blur depth networks the app runs (int8 on ONNX Runtime; the split
+    // fp16 Depth Pro needs half-precision I/O the iOS runtime does not expose).
+    depthModels: DEPTH_MODEL_IDS.flatMap((id) => {
+      const spec = DEPTH_MODELS[id], variant = spec.variants.wasm;
+      return spec.split || !variant ? [] : [{ id, label: spec.label, name: spec.name, url: variantUrl(variant, id), bytes: variant.bytes, experimental: spec.mobile === 'experimental' }];
+    }),
+    matteModel: { name: MATTE_MODEL.name, url: MATTE_URL, bytes: MATTE_MODEL.bytes },
   });
 }
 

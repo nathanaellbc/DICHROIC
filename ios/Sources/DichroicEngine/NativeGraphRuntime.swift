@@ -4,7 +4,14 @@ import ExposureNative
 
 enum GraphRuntimeError: LocalizedError {
     case message(String)
-    var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
+    /// The model is not on the device and downloads were not allowed.
+    case notCached
+    var errorDescription: String? {
+        switch self {
+        case .message(let value): return value
+        case .notCached: return "The model is not on this device yet."
+        }
+    }
 }
 
 private final class NativeGPUHandle {
@@ -59,7 +66,15 @@ final class NativeGraphRuntime {
     var onOriginal: ((Data, Int, Int, String) throws -> Void)?
     var onDetail: ((Data, Data, Int, Int, String, String) throws -> Void)?
     var detailMetadata: [String: Int]?
-    private(set) var depthReady = false
+    var depthReady = false
+    /// Lens blur depth and Refine Edge models (`src/native/ort.ts`).
+    let onnx = NativeOnnx()
+    /// Depth/matte phase, loaded, total (web `DepthProgress`).
+    var onDepthProgress: ((String, Int, Int) -> Void)?
+    /// Refine Edge matte view: RGBA and its crop (x, y, w, h in uv; width, height in px).
+    var onMatte: ((Data, [String: Double]) throws -> Void)?
+    /// `result` of the last finished task.
+    private(set) var taskResult: [String: Any]?
     var sourceStore: NativeSourceStore?
     private var sourceBackup: NativeSourceStore?
 
@@ -78,7 +93,7 @@ final class NativeGraphRuntime {
         invalidateExport()
         if isBusy { purgePending = true }
         else {
-            runtime?.invokeMethod("hibernate", withArguments: []); purgePending = false
+            runtime?.invokeMethod("hibernate", withArguments: []); purgePending = false; onnx.closeAll()
             JSGarbageCollect(context.jsGlobalContextRef)
         }
     }
@@ -189,6 +204,30 @@ final class NativeGraphRuntime {
         }
     }
 
+    /// Model work (`depth`, `refine`), finished like `request`; the result is in `taskResult`.
+    func task(_ request: [String: Any], completion: @escaping (Result<Void, Error>) -> Void) throws {
+        guard pending.isEmpty else { throw GraphRuntimeError.message("Native renderer is busy") }
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: request), as: UTF8.self)
+        serial += 1; let id = serial
+        pending[id] = completion
+        taskResult = nil
+        runtime?.invokeMethod("task", withArguments: [id, json])
+        if let exception = context.exception {
+            context.exception = nil; pending.removeValue(forKey: id)
+            throw GraphRuntimeError.message(exception.toString() ?? "Native host task failed")
+        }
+    }
+
+    func setRefineMask(_ mask: Data, width: Int, height: Int) throws {
+        guard width > 0, height > 0, mask.count == width * height else { throw GraphRuntimeError.message("Invalid Refine Edge brush") }
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: ["width": width, "height": height]), as: UTF8.self)
+        let buffer = try arrayBuffer(count: mask.count) { mask.copyBytes(to: $0) }
+        runtime?.invokeMethod("setRefineMask", withArguments: [json, buffer]); try checkException()
+    }
+    func clearRefine() throws { invalidateExport(); runtime?.invokeMethod("clearRefine", withArguments: []); try checkException() }
+    var hasRefine: Bool { runtime?.invokeMethod("hasRefine", withArguments: [])?.toBool() ?? false }
+    func refineMatte() { runtime?.invokeMethod("refineMatte", withArguments: []) }
+
     func releaseExport() { sourceRGBA = Data(); outputRGBA = Data(); outputCube = ""; sourceWidth = 0; sourceHeight = 0 }
     func invalidateExport() { exportKey = nil; pendingExportKey = nil; outputRGBA = Data(); outputStore = nil }
 
@@ -198,21 +237,6 @@ final class NativeGraphRuntime {
         invalidateExport()
         runtime?.invokeMethod("clearDepth", withArguments: [])
         depthReady = false
-    }
-
-    func prepareDepth() throws -> (data: Data, width: Int, height: Int) {
-        guard let result = runtime?.invokeMethod("depthInput", withArguments: [previewWidth, previewHeight]),
-              let value = result.forProperty("data") else { throw GraphRuntimeError.message("Depth input is missing") }
-        try checkException()
-        let width = Int(result.forProperty("width").toInt32()), height = Int(result.forProperty("height").toInt32())
-        let bytes = try typedBytes(value)
-        return (Data(bytes: bytes.baseAddress!, count: bytes.count), width, height)
-    }
-
-    func finishDepth(_ data: Data, width: Int, height: Int) throws {
-        let buffer = try arrayBuffer(count: data.count) { data.copyBytes(to: $0) }
-        runtime?.invokeMethod("depthResult", withArguments: [buffer, width, height])
-        try checkException(); depthReady = true
     }
 
     func icc(_ name: String) throws -> Data {
@@ -499,7 +523,9 @@ final class NativeGraphRuntime {
             // Yield outside the JS call stack before the caller can destroy a
             // runtime, start another operation, or change its source buffers.
             let error = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any]
-            let result: Result<Void, Error> = error?["error"].map { .failure(GraphRuntimeError.message(String(describing: $0))) } ?? .success(())
+            self.taskResult = error?["result"] as? [String: Any]
+            let result: Result<Void, Error> = error?["code"] as? String == "not-cached" ? .failure(GraphRuntimeError.notCached)
+                : error?["error"].map { .failure(GraphRuntimeError.message(String(describing: $0))) } ?? .success(())
             if let key = self.pendingExportKey {
                 if case .success = result { self.exportKey = key; self.pendingExportKey = nil }
                 else { self.invalidateExport() }
@@ -521,6 +547,52 @@ final class NativeGraphRuntime {
             }
         }
         let cancelled: @convention(block) () -> Bool = { [weak self] in self?.cancellation.value ?? true }
+        let ortOpen: @convention(block) (String, Double, Bool, Bool) -> Int = { [weak self] url, bytes, allowDownload, gpu in
+            guard let self else { return -1 }
+            do { return try self.onnx.open(url: url, bytes: Int(bytes), allowDownload: allowDownload, gpu: gpu) }
+            catch { self.fail(error); return -1 }
+        }
+        let ortNames: @convention(block) (Int) -> String? = { [weak self] id in
+            guard let self else { return nil }
+            do { return try self.onnx.names(id) } catch { self.fail(error); return nil }
+        }
+        let ortRun: @convention(block) (Int, String, JSValue) -> String? = { [weak self] id, json, buffers in
+            guard let self else { return nil }
+            do {
+                guard let meta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]] else {
+                    throw GraphRuntimeError.message("Invalid model input description")
+                }
+                let values: [JSValue] = (0..<meta.count).compactMap { buffers.atIndex($0) }
+                // Copy each typed array at once: its storage pointer is ephemeral.
+                var inputs: [Data] = []
+                for value in values {
+                    let bytes = try self.typedBytes(value)
+                    inputs.append(Data(bytes: bytes.baseAddress!, count: bytes.count))
+                }
+                return try self.onnx.run(id, meta: meta, inputs: inputs)
+            } catch { self.fail(error); return nil }
+        }
+        let ortOutput: @convention(block) (Int) -> JSValue? = { [weak self] index in
+            guard let self else { return nil }
+            do {
+                guard let data = self.onnx.output(index) else { throw GraphRuntimeError.message("Model output is missing") }
+                return try self.arrayBuffer(count: data.count) { data.copyBytes(to: $0) }
+            } catch { self.fail(error); return nil }
+        }
+        let ortClose: @convention(block) (Int) -> Void = { [weak self] id in self?.onnx.close(id) }
+        let depthProgress: @convention(block) (String, Double, Double) -> Void = { [weak self] phase, loaded, total in
+            self?.onDepthProgress?(phase, Int(loaded), Int(total))
+        }
+        let matte: @convention(block) (JSValue, String) -> Void = { [weak self] value, json in
+            guard let self else { return }
+            do {
+                guard let meta = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Double],
+                      let width = meta["width"], let height = meta["height"] else { throw GraphRuntimeError.message("Invalid matte view") }
+                let bytes = try self.typedBytes(value)
+                guard bytes.count == Int(width) * Int(height) * 4 else { throw GraphRuntimeError.message("Invalid matte view pixels") }
+                try self.onMatte?(Data(bytes: bytes.baseAddress!, count: bytes.count), meta)
+            } catch { self.fail(error) }
+        }
         for (name, block) in ["nativeCommand": command as Any, "nativeUpload": upload as Any,
             "nativeCancelled": cancelled as Any,
             "nativeRead": read as Any, "nativeAsset": asset as Any, "nativeText": text as Any,
@@ -531,6 +603,9 @@ final class NativeGraphRuntime {
             "nativeCube": cube as Any,
             "nativeOriginal": original as Any,
             "nativeDetail": detail as Any,
+            "nativeOrtOpen": ortOpen as Any, "nativeOrtNames": ortNames as Any, "nativeOrtRun": ortRun as Any,
+            "nativeOrtOutput": ortOutput as Any, "nativeOrtClose": ortClose as Any,
+            "nativeDepthProgress": depthProgress as Any, "nativeMatte": matte as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeReadStrip = new Float32Array(1024 * 1024);
@@ -542,7 +617,9 @@ final class NativeGraphRuntime {
                 sourceDownscaleRegion: (outWidth,outHeight,x,y,width,height,into) => nativeBox(JSON.stringify({outWidth,outHeight,x,y,width,height}),into),
                 sourceSamples: b => new Float32Array(nativeSamples(b)),
                 saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
-                loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled };
+                loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled,
+                ortOpen: nativeOrtOpen, ortNames: nativeOrtNames, ortRun: nativeOrtRun, ortOutput: nativeOrtOutput, ortClose: nativeOrtClose,
+                depthProgress: nativeDepthProgress, publishMatte: nativeMatte };
             """)
     }
 
