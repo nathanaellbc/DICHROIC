@@ -26,26 +26,49 @@ export function rgbToPixels(rgb: Float32Array, width: number, height: number, ou
   return rgbToCanvas(rgb, width, height, outputColorSpace, canvasColorSpaceFor(outputColorSpace));
 }
 
-/** Decode the selected transfer curve, adapt white, then encode for canvas. */
-export function rgbToCanvas(
-  rgb: Float32Array, width: number, height: number, sourceLabel: string,
-  target: PredefinedColorSpace = 'srgb',
+/**
+ * How a rendered frame becomes canvas pixels: a plain 8-bit quantize when the
+ * output already is the canvas space, otherwise decode the transfer curve,
+ * adapt white and convert (`m`, row-major), then encode sRGB. The iOS host
+ * applies the same transform natively (`applyDisplayTransform` is the reference).
+ */
+export type DisplayTransform =
+  | { kind: 'quantize' }
+  | { kind: 'matrix'; m: number[]; encoding: 'linear' | 'srgb' | 'romm' | 'gamma'; gamma: number };
+
+export function displayTransform(
+  sourceLabel: string, target: PredefinedColorSpace = 'srgb',
   specs = outputColorSpaces as unknown as Record<string, OutputColorSpaceSpec>,
-): Uint8ClampedArray {
+): DisplayTransform {
   const targetLabel = target === 'display-p3' ? 'Display P3' : 'sRGB';
-  if (sourceLabel === targetLabel) return rgbToRgba8(rgb, width, height);
+  if (sourceLabel === targetLabel) return { kind: 'quantize' };
   const source = sourceLabel === 'Linear Rec.709' ? { ...specs.sRGB!, encoding: 'linear' as const } : specs[sourceLabel];
   const destination = specs[targetLabel];
   if (!source || !destination) throw new RangeError(`Unsupported display color space: ${sourceLabel}`);
   const adapt = bradford(source.whitepointXyz, destination.whitepointXyz);
   const mul = (a: readonly number[], b: readonly number[]) => Array.from({ length: 9 }, (_, i) =>
     [0, 1, 2].reduce((sum, k) => sum + a[Math.floor(i / 3) * 3 + k]! * b[k * 3 + i % 3]!, 0));
-  const m = mul(destination.xyzToRgb, mul(adapt.flat(), source.rgbToXyz));
+  const encoding = source.encoding === 'linear' || source.encoding === 'srgb' || source.encoding === 'romm' ? source.encoding : 'gamma';
+  return { kind: 'matrix', m: mul(destination.xyzToRgb, mul(adapt.flat(), source.rgbToXyz)), encoding, gamma: source.gamma ?? 1 };
+}
+
+/** Decode the selected transfer curve, adapt white, then encode for canvas. */
+export function rgbToCanvas(
+  rgb: Float32Array, width: number, height: number, sourceLabel: string,
+  target: PredefinedColorSpace = 'srgb',
+  specs = outputColorSpaces as unknown as Record<string, OutputColorSpaceSpec>,
+): Uint8ClampedArray {
+  return applyDisplayTransform(rgb, width, height, displayTransform(sourceLabel, target, specs));
+}
+
+export function applyDisplayTransform(rgb: Float32Array, width: number, height: number, transform: DisplayTransform): Uint8ClampedArray {
+  if (transform.kind === 'quantize') return rgbToRgba8(rgb, width, height);
+  const { m, encoding, gamma } = transform;
   const decode = (v: number): number => {
-    if (source.encoding === 'linear') return v;
-    if (source.encoding === 'srgb') return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    if (source.encoding === 'romm') return v < 1 / 32 ? v / 16 : v ** 1.8;
-    return Math.max(0, v) ** (source.gamma ?? 1);
+    if (encoding === 'linear') return v;
+    if (encoding === 'srgb') return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    if (encoding === 'romm') return v < 1 / 32 ? v / 16 : v ** 1.8;
+    return Math.max(0, v) ** gamma;
   };
   const pixels = new Uint8ClampedArray(width * height * 4);
   for (let i = 0; i < width * height; i += 1) {

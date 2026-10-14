@@ -10,7 +10,7 @@ import { buildIccProfile } from '../io/icc';
 import { prepareFocusOverlay } from '../ui/engine/focusCheck';
 import { diffusionRenderLongEdge, previewRenderLongEdge } from '../session/renderSize';
 import { NativeSource, type NativeSourceHost } from './source';
-import { sourceToDisplay, rgbToCanvas, canvasColorSpaceFor } from '../io/display';
+import { sourceToDisplay, rgbToCanvas, canvasColorSpaceFor, displayTransform } from '../io/display';
 import { dcrawGammaCurve, invertDcrawCurve } from '../io/dcrawGamma';
 import { iccDescription, colorSpaceForIcc } from '../io/metadata';
 import { accumulateScope, shadeScope } from '../ui/model/vectorscope';
@@ -31,6 +31,11 @@ export interface NativeRuntimeHost extends NativeRenderHost, NativeSourceHost, P
   depthProgress?(phase: string, loaded: number, total: number): void;
   /** Refine Edge matte view: RGBA (grey matte inside the band, clear outside) of the crop in `json` (rect, width, height). */
   publishMatte?(rgba: Uint8ClampedArray, json: string): void;
+  /**
+   * Applies a `DisplayTransform` (JSON) natively: JavaScriptCore has no JIT
+   * in apps, and this per-pixel step runs on every developed frame.
+   */
+  convertDisplay?(rgb: Float32Array, width: number, height: number, transform: string): ArrayBuffer;
   previewInput(): Float32Array;
   publish(rgba: Uint8ClampedArray, width: number, height: number, gamut: PredefinedColorSpace): void;
   complete(id: number, json: string): void;
@@ -53,6 +58,12 @@ function base64(bytes: Uint8ClampedArray): string {
       + (i + 2 < bytes.length ? BASE64[c & 63]! : '=');
   }
   return out;
+}
+
+/** Frame pixels for the screen; natively when the host can (same math as `rgbToCanvas`). */
+function toCanvas(host: NativeRuntimeHost, rgb: Float32Array, width: number, height: number, label: string, gamut: PredefinedColorSpace): Uint8ClampedArray {
+  if (!host.convertDisplay) return rgbToCanvas(rgb, width, height, label, gamut);
+  return new Uint8ClampedArray(host.convertDisplay(rgb, width, height, JSON.stringify(displayTransform(label, gamut))));
 }
 
 function nativeDisplay(values: Float32Array, width: number, height: number, meta: Parameters<typeof sourceToDisplay>[3]) {
@@ -397,7 +408,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
               const original = source.region(request.width, request.height, region.x, region.y, region.width, region.height, undefined, false, true);
               const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
               const before = nativeDisplay(original, region.width, region.height, source.meta);
-              host.publishDetail?.(rgbToCanvas(rgb, region.width, region.height, request.params.outputColorSpace, gamut),
+              host.publishDetail?.(toCanvas(host, rgb, region.width, region.height, request.params.outputColorSpace, gamut),
                 before.pixels, JSON.stringify({ ...region, fullWidth: request.width, fullHeight: request.height }), gamut, before.colorSpace);
             }
             host.complete(id, '{"result":null}'); return;
@@ -413,7 +424,7 @@ export function createNativeRuntime(host: NativeRuntimeHost) {
           if (request.operation === 'preview') {
             const rgb = await renderer.preview(request.params, input, request.width, request.height);
             const gamut = canvasColorSpaceFor(request.params.outputColorSpace);
-            const pixels = rgbToCanvas(rgb, request.width, request.height, request.params.outputColorSpace, gamut);
+            const pixels = toCanvas(host, rgb, request.width, request.height, request.params.outputColorSpace, gamut);
             host.publish(pixels, request.width, request.height, gamut);
             display = { pixels, width: request.width, height: request.height };
             if (depth) {

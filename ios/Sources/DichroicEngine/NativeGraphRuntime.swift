@@ -580,6 +580,18 @@ final class NativeGraphRuntime {
             } catch { self.fail(error); return nil }
         }
         let ortClose: @convention(block) (Int) -> Void = { [weak self] id in self?.onnx.close(id) }
+        let convertDisplay: @convention(block) (JSValue, Int, Int, String) -> JSValue? = { [weak self] value, width, height, json in
+            guard let self else { return nil }
+            do {
+                guard width > 0, height > 0 else { throw GraphRuntimeError.message("Invalid display frame") }
+                let rgb = try self.typedBytes(value)
+                // No JavaScriptCore call happens between reading `rgb` and filling the result.
+                return try self.arrayBuffer(count: width * height * 4) { output in
+                    try NativeDisplay.convert(UnsafeBufferPointer(rgb.bindMemory(to: Float.self)), width: width, height: height,
+                                              transform: json, into: output)
+                }
+            } catch { self.fail(error); return nil }
+        }
         let depthProgress: @convention(block) (String, Double, Double) -> Void = { [weak self] phase, loaded, total in
             self?.onDepthProgress?(phase, Int(loaded), Int(total))
         }
@@ -605,7 +617,7 @@ final class NativeGraphRuntime {
             "nativeDetail": detail as Any,
             "nativeOrtOpen": ortOpen as Any, "nativeOrtNames": ortNames as Any, "nativeOrtRun": ortRun as Any,
             "nativeOrtOutput": ortOutput as Any, "nativeOrtClose": ortClose as Any,
-            "nativeDepthProgress": depthProgress as Any, "nativeMatte": matte as Any,
+            "nativeDepthProgress": depthProgress as Any, "nativeMatte": matte as Any, "nativeConvertDisplay": convertDisplay as Any,
             "setTimeout": timer as Any] { context.setObject(block, forKeyedSubscript: name as NSString) }
         context.evaluateScript("""
             var nativeReadStrip = new Float32Array(1024 * 1024);
@@ -619,7 +631,7 @@ final class NativeGraphRuntime {
                 saveRemoval: v => { const id = nativeSavePatch(v); if (id < 0) throw new Error('Could not save removal history'); return id; },
                 loadRemoval: id => new Float32Array(nativeLoadPatch(id)), isCancelled: nativeCancelled,
                 ortOpen: nativeOrtOpen, ortNames: nativeOrtNames, ortRun: nativeOrtRun, ortOutput: nativeOrtOutput, ortClose: nativeOrtClose,
-                depthProgress: nativeDepthProgress, publishMatte: nativeMatte };
+                depthProgress: nativeDepthProgress, publishMatte: nativeMatte, convertDisplay: nativeConvertDisplay };
             """)
     }
 

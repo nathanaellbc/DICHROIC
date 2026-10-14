@@ -79,6 +79,10 @@ private struct ScopeTrace: ViewModifier {
         let key = "\(model.frames)|\(pixelWidth)x\(pixelHeight)|" + ["kind", "zoom", "colorize", "range", "waveMode", "paradeMode", "waveColorize", "lowPass", "extents"]
             .map { "\(prefs.values[$0] ?? "")" }.joined(separator: ",") + "\(prefs.waveChannels)"
         content.task(id: key) {
+            // Tracing runs in JavaScriptCore (no JIT in apps, 0.2-0.4 s) on the
+            // render queue: wait for the frames to pause so a drag stays fluid.
+            if trace != nil { try? await Task.sleep(for: .milliseconds(120)) }
+            guard !Task.isCancelled else { return }
             trace = try? await model.engine.scope(prefs.values, width: pixelWidth, height: pixelHeight)
         }
     }
