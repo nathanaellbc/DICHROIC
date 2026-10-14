@@ -22,3 +22,6 @@ test/fixtures/**/*.json text eol=lf
 public/data/**/*.json text eol=lf
 public/data/**/*.f32 binary
 public/data/**/*.f16 binary
+
+# Shell scripts run in WSL/macOS; CRLF breaks bash.
+*.sh text eol=lf
