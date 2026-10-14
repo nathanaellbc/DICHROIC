@@ -58,7 +58,7 @@ expires after 7 days; run `xtool dev` again to refresh it.
    ```bash
    chmod +x xtool-x86_64.AppImage && mkdir -p ~/.local/bin
    mv xtool-x86_64.AppImage ~/.local/bin/xtool
-   sudo apt install -y libfuse2 usbmuxd
+   sudo apt install -y libfuse2 usbmuxd zip
    ```
 
 4. **Darwin SDK and Apple Account**: download `Xcode.xip` from
@@ -66,24 +66,34 @@ expires after 7 days; run `xtool dev` again to refresh it.
    with your Apple Account, then run `xtool setup` and follow its prompts
    (path to `Xcode.xip`, sign in).
 
-5. **iPhone over USB**: in PowerShell as administrator:
+5. **iPhone over USB**: plug the phone into Windows (Apple Mobile Device
+   Service from iTunes or the Apple Devices app must be running), unlock it and
+   tap Trust. Then, in PowerShell as administrator, once per boot of WSL:
 
    ```powershell
-   winget install usbipd
-   usbipd list
-   usbipd bind --busid <BUSID>
-   usbipd attach --wsl --busid <BUSID>
+   powershell -ExecutionPolicy Bypass -File ios\scripts\wsl_usbmux_bridge.ps1
    ```
 
-   On the phone, unlock it and tap Trust. Enable Developer Mode when iOS asks.
+   This lets xtool in WSL use Apple's own usbmuxd on Windows. Don't pass the
+   phone through usbipd: the upload then fails at `[Connecting] 100%` with
+   "message was too large (65536 bytes, max = 65535)" in the usbmuxd log
+   ([libimobiledevice/usbmuxd#247](https://github.com/libimobiledevice/usbmuxd/issues/247)).
+   Enable Developer Mode when iOS asks.
 
 6. **Build and install**: clone the repository inside WSL (building on
    `/mnt/f` works but is slow). Put the two generated inputs in place, then:
 
    ```bash
    cd DICHROIC/ios
-   xtool dev
+   bash scripts/xtool_install.sh
    ```
+
+   Don't use plain `xtool dev`. SwiftPM embeds the static
+   `onnxruntime.framework` in the app, and xtool's signer fails on it with
+   "Invalid arch file in fat mach-o file". The script builds, removes static
+   frameworks from the bundle (their code is already linked in), then signs
+   and installs with `xtool install`. Run it again every 7 days to refresh a
+   free-account install.
 
 ### Notes from the first setup (2026-10-14)
 
@@ -94,9 +104,15 @@ expires after 7 days; run `xtool dev` again to refresh it.
 - SDK: `xtool sdk install /mnt/c/Users/<you>/Downloads/Xcode_<ver>.xip`.
 - From Git Bash, prefix WSL commands with `MSYS_NO_PATHCONV=1` (otherwise
   `/root/...` is rewritten to a Windows path) and call xtool by full path.
-- If `usbipd attach` says the device is busy (Windows' Apple service holds
-  it), run `usbipd bind --force --busid <BUSID>` as admin, replug the phone,
-  then attach again. Keep a WSL window open while attaching.
+- usbipd lists and attaches the phone, but installs hang after
+  `[Connecting]`. Use `wsl_usbmux_bridge.ps1` instead (step 5); it also
+  unbinds a phone that usbipd still holds.
+- On first launch iOS may say "Untrusted Developer": Settings → General →
+  VPN & Device Management → your Apple Account → Trust.
+- A free Apple Account holds two development certificates. Signing on a new
+  machine asks to revoke the old ones; apps signed with them stop launching.
+- WSL's disk grows on C:. If C: fills up, the distro turns read-only; move it
+  with `wsl --manage Ubuntu-24.04 --move D:\WSL\Ubuntu-24.04`.
 
 ### Continuing on another machine
 
