@@ -46,6 +46,7 @@ struct PhotoViewport: View {
     @State private var sweep: CGFloat = 1
     @State private var zoomPill = false
     @State private var painting = false
+    @State private var resolutionTask: Task<Void, Never>?
 
     private var photoSize: CGSize {
         CGSize(width: max(1, model.photo?.width ?? 1), height: max(1, model.photo?.height ?? 1))
@@ -103,7 +104,9 @@ struct PhotoViewport: View {
             .onLongPressGesture(minimumDuration: peekDelay, maximumDistance: 10, perform: {
                 if brush == nil && !compare { peek = true }
             }, onPressingChanged: { pressing in if !pressing { peek = false } })
-            .overlay(alignment: .top) { pills }
+            .overlay(alignment: .topTrailing) { statusPills(size: size) }
+            .overlay(alignment: .topLeading) { originalPill }
+            .overlay(alignment: .top) { focusHint }
             .overlay(alignment: .bottomLeading) {
                 if mode == .editor && compareButton && brush == nil {
                     GlassIconButton(symbol: "rectangle.split.2x1", label: "Compare with original", selected: compare) {
@@ -113,6 +116,9 @@ struct PhotoViewport: View {
                 }
             }
             .onChange(of: model.photo) { _, _ in resetZoom(animated: false) }
+            // Full screen develops as sharp as the screen at once.
+            .onAppear { if mode == .lightbox { requestDetail(size: size) } }
+            .onDisappear { if mode == .lightbox { model.requestPreviewEdge(0) } }
         }
         .task(id: model.rendering) {
             if model.rendering {
@@ -204,25 +210,48 @@ struct PhotoViewport: View {
             .allowsHitTesting(false)
     }
 
-    @ViewBuilder private var pills: some View {
-        HStack(spacing: 8) {
+    /// Status at the top right (web `.photo-status`): Developing beside the
+    /// zoom pill, which fits the photo again when tapped.
+    private func statusPills(size: CGSize) -> some View {
+        HStack(spacing: 6) {
             if developingPill && mode == .editor {
-                HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("Developing") }
-                    .font(.system(size: 13, weight: .semibold)).padding(.horizontal, 12).frame(height: 30).glass(15)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Developing") }
+                    .padding(.leading, 7).padding(.trailing, 10)
+                    .modifier(StatusPill())
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
-            if zoomPill {
-                Text(String(format: "%.1f×", liveScale)).font(.system(size: 13, weight: .semibold)).monospacedDigit()
-                    .padding(.horizontal, 12).frame(height: 30).glass(15)
-                    .transition(.opacity)
-            }
-            if peek || showOriginal {
-                Text("Original").font(.system(size: 13, weight: .semibold)).padding(.horizontal, 12).frame(height: 30).glass(15)
-                    .transition(.opacity)
+            if liveScale > 1.001 {
+                Button {
+                    resetZoom(animated: true)
+                    requestDetail(size: size, scale: 1)
+                } label: {
+                    (Text("\(Int((liveScale * 100).rounded()))% ") + Text("· Fit").foregroundColor(Color.secondaryText))
+                        .monospacedDigit().padding(.horizontal, 10)
+                        .modifier(StatusPill())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityHint("Fit to view")
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
         }
-        .padding(.top, 10)
-        .allowsHitTesting(false)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: developingPill)
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: liveScale > 1.001)
+        .padding(10)
+    }
+
+    /// "Original" while holding to peek (top left), and the focus hint while
+    /// dragging the pin (top centre).
+    @ViewBuilder private var originalPill: some View {
+        if (peek && !compare && focusDrag == nil) || showOriginal {
+            Text("Original").padding(.horizontal, 10).modifier(StatusPill()).padding(10).transition(.opacity).allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder private var focusHint: some View {
+        if focusDrag != nil {
+            Text("Hold & drag to focus · grey is outside focus").padding(.horizontal, 12).modifier(StatusPill()).padding(.top, 10)
+                .allowsHitTesting(false)
+        }
     }
 
     /// Split divider with a round handle (web compare slider).
@@ -337,7 +366,7 @@ struct PhotoViewport: View {
     /// Double-tap: fit ↔ 2.5× about the tapped point.
     private func doubleTap(_ point: CGPoint, size: CGSize) {
         guard brush == nil || !(brush?.painting ?? false) else { return }
-        if scale > 1.01 { resetZoom(animated: true); return }
+        if scale > 1.01 { resetZoom(animated: true); requestDetail(size: size, scale: 1); return }
         let target: CGFloat = 2.5
         let cx = point.x - size.width / 2, cy = point.y - size.height / 2
         withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
@@ -361,17 +390,26 @@ struct PhotoViewport: View {
         }
     }
 
-    /// Full resolution for the visible part once the zoom settles.
-    private func requestDetail(size: CGSize, scale target: CGFloat? = nil, offset to: CGSize? = nil) {
-        let s = target ?? scale, o = clamped(to ?? offset, scale: s, in: size), fit = fitted(size)
-        guard s > 1.05 else { return }
-        let w = fit.width * s, h = fit.height * s
-        let x0 = (size.width / 2 + o.width - w / 2), y0 = (size.height / 2 + o.height - h / 2)
-        let rect = CGRect(x: max(0, -x0 / w), y: max(0, -y0 / h), width: 0, height: 0)
-        let maxX = min(1, (size.width - x0) / w), maxY = min(1, (size.height - y0) / h)
-        let visible = CGRect(x: rect.minX, y: rect.minY, width: max(0, maxX - rect.minX), height: max(0, maxY - rect.minY))
-        let longEdge = Int((max(w, h) * displayScale).rounded())
-        model.requestDetail(visible, longEdge: longEdge)
+    /// Once the zoom settles, the preview is developed again as sharp as it is
+    /// shown (web PhotoView: 180 ms; full screen 520 ms after opening/zooming).
+    private func requestDetail(size: CGSize, scale target: CGFloat? = nil, offset _: CGSize? = nil) {
+        let s = target ?? scale, fit = fitted(size)
+        let longEdge = Int((max(fit.width, fit.height) * s * displayScale).rounded(.up))
+        resolutionTask?.cancel()
+        resolutionTask = Task {
+            try? await Task.sleep(for: .milliseconds(mode == .lightbox ? 520 : 180))
+            if !Task.isCancelled { model.requestPreviewEdge(longEdge) }
+        }
+    }
+}
+
+/// Web `.photo-status-pill`: 28 px clear glass, footnote semibold.
+private struct StatusPill: ViewModifier {
+    func body(content: Content) -> some View {
+        content.font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            .frame(height: 28)
+            .glass(10)
+            .environment(\.colorScheme, .dark)
     }
 }
 

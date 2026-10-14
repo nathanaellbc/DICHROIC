@@ -5,31 +5,36 @@ import UniformTypeIdentifiers
 /// The editor (web Editor.tsx, phone layout): toolbar, photo, and the glass
 /// panel with the selected tool, the group's tool strip and the group tabs.
 struct EditorView: View {
-    @State private var model = EditorModel()
-    @State private var brush = RemovalBrush()
-    @State private var refineBrush = RemovalBrush(diameter: 40)
-    @State private var compactScopes = ScopePrefs("compact")
-    @State private var wideScopes = ScopePrefs("wide")
-    @AppStorage("DichroicAppearance") private var appearance = "system"
+    @State var model = EditorModel()
+    @State var brush = RemovalBrush()
+    @State var refineBrush = RemovalBrush(diameter: 40)
+    @State var compactScopes = ScopePrefs("compact")
+    @State var wideScopes = ScopePrefs("wide")
+    @AppStorage("DichroicAppearance") var appearance = "system"
 
     /// The web editor opens on Film, with these tools first in each group.
-    @State private var groupId = "film"
-    @State private var selections: [String: String] = [
+    @State var groupId = "film"
+    @State var selections: [String: String] = [
         "camera": "cameraWhiteBalanceK", "lens": "lensBlur", "film": "printExposureEv",
         "color": "filterC", "darkroom": "dirCouplersAmount", "texture": "halationAmount",
     ]
-    @State private var compare = false
-    @State private var beforeRemoval = false
-    @State private var reveal = 0
+    @State var compare = false
+    /// Sidebar list (Film or Paper) and the recipe path's reveal (wide layout).
+    @State var sidebarTab = "film"
+    @State var sidebarReveal = 0
+    /// The regular (wide) layout is showing; scopes are kept per layout.
+    @State var regularLayout = false
+    @State var beforeRemoval = false
+    @State var reveal = 0
 
     // Sheets and dialogs
-    @State private var chooser = false
-    @State private var photoPicker = false
-    @State private var fileImporter = false
-    @State private var stockSheet = false
-    @State private var exportSheet = false
-    @State private var lightbox = false
-    @State private var discardDialog = false
+    @State var chooser = false
+    @State var photoPicker = false
+    @State var fileImporter = false
+    @State var stockSheet = false
+    @State var exportSheet = false
+    @State var lightbox = false
+    @State var discardDialog = false
 
     var body: some View {
         GeometryReader { geo in
@@ -40,7 +45,8 @@ struct EditorView: View {
             let scopes = regular ? wideScopes : compactScopes
             Group {
                 if regular && model.photo != nil {
-                    wideLayout(scopes: scopes, landscape: phoneLandscape)
+
+                    wideLayout(scopes: scopes, landscape: phoneLandscape, size: geo.size)
                 } else {
                     VStack(spacing: 0) {
                         topBar(wide: false)
@@ -55,6 +61,8 @@ struct EditorView: View {
                     }
                 }
             }
+            .onAppear { regularLayout = regular }
+            .onChange(of: regular) { _, now in regularLayout = now }
         }
         .background(Color(uiColor: .systemBackground).ignoresSafeArea())
         .overlay { if model.openingName != nil { openingCard } }
@@ -94,14 +102,14 @@ struct EditorView: View {
 
     // MARK: - Opening
 
-    private func importProvider(_ provider: NSItemProvider) {
+    func importProvider(_ provider: NSItemProvider) {
         Task {
             do { open(try await PhotoImport.copy(provider)) }
             catch { model.fail("Can’t Open This File", error) }
         }
     }
 
-    private func open(_ url: URL) {
+    func open(_ url: URL) {
         Task {
             await model.open(url)
             if model.photo != nil, model.error == nil { PhotoImport.purge(keeping: url) }
@@ -109,20 +117,20 @@ struct EditorView: View {
     }
 
     /// "Open Photo…": the same choice iOS gives a web page's file input.
-    private func openPhoto() { if !model.busy { chooser = true } }
+    func openPhoto() { if !model.busy { chooser = true } }
 
     /// "Close Photo": asks first when anything is edited.
-    private func closePhoto() {
+    func closePhoto() {
         if model.edited { discardDialog = true } else { Task { await model.closePhoto() } }
     }
 
-    private func startRemoval() {
+    func startRemoval() {
         brush.clear()
         Task { await model.beginRemoval() }
     }
 
     /// "Done": leaves Remove Object; the photo sweeps from original to film.
-    private func doneRemoval() {
+    func doneRemoval() {
         Task {
             await model.finishRemoval(apply: false)
             reveal += 1
@@ -130,17 +138,17 @@ struct EditorView: View {
         }
     }
 
-    private func cycleAppearance() {
+    func cycleAppearance() {
         let modes = ["system", "light", "dark"]
         appearance = modes[((modes.firstIndex(of: appearance) ?? 0) + 1) % modes.count]
     }
 
     // MARK: - Toolbar
 
-    private var stocks: Stocks { Stocks(catalog: model.catalog, params: model.params) }
+    var stocks: Stocks { Stocks(catalog: model.catalog, params: model.params) }
 
     /// "DICHROIC" with a second line, in place of the toolbar buttons.
-    private func brand(_ line: String) -> some View {
+    func brand(_ line: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("DICHROIC").font(.system(size: 15, weight: .bold)).tracking(1.8)
             Text(line).font(.system(size: 12)).foregroundStyle(Color.secondaryText)
@@ -150,7 +158,7 @@ struct EditorView: View {
 
     /// The web "⋯" menu, in its order: Remove, Open, Redo and Reset when they
     /// apply, Appearance, Close.
-    private var moreMenu: some View {
+    var moreMenu: some View {
         Menu {
             Button { startRemoval() } label: { Label("Remove Object…", systemImage: "eraser") }
             Button { openPhoto() } label: { Label("Open Photo…", systemImage: "folder") }
@@ -172,7 +180,7 @@ struct EditorView: View {
 
     /// Phone toolbar (web `.mobile-toolbar`): More, the stock capsule, Undo
     /// and Export; the brand alone with no photo or in Remove Object.
-    @ViewBuilder private func topBar(wide: Bool) -> some View {
+    @ViewBuilder func topBar(wide: Bool) -> some View {
         if model.photo == nil || model.erasing || model.refining {
             HStack {
                 brand(model.erasing ? "Original · grading paused" : model.refining ? "Original · Refine Edge" : "Your pocket darkroom")
@@ -213,7 +221,7 @@ struct EditorView: View {
 
     // MARK: - Photo
 
-    @ViewBuilder private func viewport(scopes: ScopePrefs, landscape: Bool) -> some View {
+    @ViewBuilder func viewport(scopes: ScopePrefs, landscape: Bool) -> some View {
         if model.photo == nil {
             StartView(regular: false, enabled: !model.loading, onChoose: openPhoto, onDrop: importProvider)
         } else {
@@ -237,7 +245,9 @@ struct EditorView: View {
         }
     }
 
-    private var photoView: some View {
+    var photoView: some View { photoView(compareButton: true) }
+
+    func photoView(compareButton: Bool) -> some View {
         let focusActive = !model.erasing && !model.refining && !model.rendering && groupId == "lens"
             && model.params.bool("lensBlurEnabled") && model.depthState == "ready"
         return PhotoViewport(
@@ -250,7 +260,8 @@ struct EditorView: View {
             showOriginal: (model.erasing && beforeRemoval) || model.refining,
             focus: focusActive ? CGPoint(x: model.params.double("lensFocusX") ?? 0.5, y: model.params.double("lensFocusY") ?? 0.5) : nil,
             reveal: reveal,
-            compare: $compare
+            compare: $compare,
+            compareButton: compareButton
         ) {
             if !model.erasing && !model.refining { lightbox = true }
         }
@@ -260,7 +271,7 @@ struct EditorView: View {
 
     /// Tools of the current group, and the one shown: the remembered tool,
     /// else its namesake in this process mode, else the first (Editor.tsx).
-    private var currentTools: (tools: [JSON], selected: JSON?) {
+    var currentTools: (tools: [JSON], selected: JSON?) {
         let tools = model.groups.first { $0.string("id") == groupId }?.list("tools") ?? []
         let wanted = selections[groupId]
         var selected = tools.first { $0.string("id") == wanted }
@@ -272,11 +283,11 @@ struct EditorView: View {
         return (tools, selected ?? tools.first)
     }
 
-    @ViewBuilder private var panel: some View {
+    @ViewBuilder var panel: some View {
         if model.erasing { removalControls } else if model.refining { refineControls } else { adjustments }
     }
 
-    private var adjustments: some View {
+    var adjustments: some View {
         let current = currentTools
         return VStack(spacing: 0) {
             if let tool = current.selected {
@@ -297,7 +308,7 @@ struct EditorView: View {
     }
 
     /// Remove Object panel (web RemoveContent controls).
-    private var removalControls: some View {
+    var removalControls: some View {
         let busy = model.busy, result = model.removalReady, strokes = !brush.isEmpty
         let status = model.removing && !(model.status ?? "").isEmpty ? model.status ?? "" : model.removalStatus
         return VStack(alignment: .leading, spacing: 8) {
@@ -361,7 +372,7 @@ struct EditorView: View {
 
     /// Refine Edge panel (web RefineEdge.tsx): brush the hair edge, ViTMatte
     /// works out the matte, Matte shows it black and white.
-    private var refineControls: some View {
+    var refineControls: some View {
         let busy = model.refineBusy, strokes = !refineBrush.isEmpty
         let mode = !refineBrush.painting ? "move" : refineBrush.erase ? "erase" : "brush"
         return VStack(alignment: .leading, spacing: 8) {
@@ -438,7 +449,7 @@ struct EditorView: View {
         .accessibilityHint("Cover the whole soft edge with the brush: inside the stroke the edge is worked out from the photo, outside it nothing changes. Pinch to zoom.")
     }
 
-    private func runRefine(allowDownload: Bool) {
+    func runRefine(allowDownload: Bool) {
         guard let photo = model.photo else { return }
         // The brush at the preview's resolution, 1 where painted (web canvas, alpha > 32).
         let mask = refineBrush.mask(width: photo.width, height: photo.height, maxEdge: max(photo.width, photo.height), threshold: 32, value: 1)
@@ -449,55 +460,39 @@ struct EditorView: View {
         }
     }
 
-    // MARK: - Wide layout (iPad, phone held sideways)
-
-    /// Photo on the left, the inspector on the right (web regular layout).
-    private func wideLayout(scopes: ScopePrefs, landscape: Bool) -> some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                topBar(wide: true)
-                viewport(scopes: scopes, landscape: landscape)
-            }
-            VStack(spacing: 0) {
-                ScrollView {
-                    if model.erasing { removalControls } else if model.refining { refineControls } else {
-                        let current = currentTools
-                        VStack(spacing: 0) {
-                            GroupTabs(groups: model.groups, selected: $groupId)
-                            ToolStrip(tools: current.tools, selected: current.selected?.string("id"), params: model.params) { id in
-                                selections[groupId] = id
-                            }
-                            if let tool = current.selected { ToolPanel(tool: tool, model: model).id(tool.string("id")) }
-                        }
-                    }
-                }
-            }
-            .frame(width: landscape ? 320 : 360)
-            .glass(24)
-            .padding(8)
-        }
-    }
-
     // MARK: - Overlays
 
     /// "Opening …" card with the decoder stage (web OpeningCard).
-    private var openingCard: some View {
+    var openingCard: some View {
         ZStack {
             Color.black.opacity(0.28).ignoresSafeArea()
-            VStack(spacing: 4) {
-                ProgressView().padding(.bottom, 8)
-                Text("Opening \(model.openingName ?? "photo")").font(.system(size: 17, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
-                Text(model.status ?? "Reading…").font(.system(size: 13)).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
+            // Web OpeningCard: blue spinner, name, stage, Cancel.
+            VStack(spacing: 14) {
+                ProgressView().controlSize(.large).tint(.signal)
+                VStack(spacing: 2) {
+                    Text("Opening \(model.openingName ?? "photo")").font(.system(size: 17, weight: .semibold)).lineLimit(1).truncationMode(.tail)
+                        .frame(maxWidth: 230)
+                    Text(model.status ?? "Reading…").font(.system(size: 15)).foregroundStyle(Color.secondaryText).multilineTextAlignment(.center)
+                }
+                Button { model.cancelOpening() } label: {
+                    Text("Cancel").font(.system(size: 17, weight: .medium)).frame(maxWidth: .infinity).frame(height: 44)
+                        .background(Capsule().fill(Color.chip))
+                }
+                .buttonStyle(PressStyle())
+                .keyboardShortcut(.cancelAction)
             }
-            .padding(20)
+            .padding(EdgeInsets(top: 24, leading: 16, bottom: 16, trailing: 16))
             .frame(width: 270)
             .glass(14)
+            .transition(.scale(scale: 1.1).combined(with: .opacity))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Opening photo")
         }
         .transition(.opacity)
     }
 
     /// Top-centre toast pill with a green check (web Toast).
-    private var toastView: some View {
+    var toastView: some View {
         Group {
             if let toast = model.toast {
                 HStack(spacing: 8) {
@@ -517,7 +512,7 @@ struct EditorView: View {
 
     /// Keyboard shortcuts of the web editor (iPad keyboards): ⌘Z, ⇧⌘Z, O,
     /// \, E and V. Ignored in Remove Object.
-    private var shortcuts: some View {
+    var shortcuts: some View {
         let free = !model.erasing && !model.refining && !stockSheet && !exportSheet
         let photo = model.photo != nil
         return Group {
@@ -527,7 +522,7 @@ struct EditorView: View {
             Button("") { if free && photo { compare.toggle() } }.keyboardShortcut("\\", modifiers: [])
             Button("") { if free && photo && !model.busy { exportSheet = true } }.keyboardShortcut("e", modifiers: [])
             Button("") {
-                if free && photo { let scopes = compactScopes; scopes.update(["open": !scopes.open]) }
+                if free && photo { let scopes = regularLayout ? wideScopes : compactScopes; scopes.update(["open": !scopes.open]) }
             }
             .keyboardShortcut("v", modifiers: [])
         }

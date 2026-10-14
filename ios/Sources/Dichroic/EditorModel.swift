@@ -95,6 +95,9 @@ final class EditorModel {
     private var detailWish: DetailRequest?
     private var detailAttempt: DetailRequest?
     private var detailHighWater = 0
+    /// Preview long edge the screen needs (web `setPreviewLongEdge`), and the edge last developed.
+    private var previewEdge = 1600
+    private var renderedEdge = 0
 
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
@@ -308,6 +311,19 @@ final class EditorModel {
         let before = gestureBefore
         gestureBefore = nil
         if let before, !jsonEqual(before, snapshot()) { pushUndo(before) }
+        // Light frames while dragging; full detail once the finger lifts.
+        if renderedEdge < previewEdge { rendered = -1; scheduleRender() }
+    }
+
+    /// The long edge the photo is shown at (zoom, full screen) x screen scale,
+    /// rounded up to 256 px and capped at the source (web PhotoView).
+    func requestPreviewEdge(_ edge: Int) {
+        guard let photo else { return }
+        let native = max(photo.sourceWidth, photo.sourceHeight)
+        let next = min(native, max(1600, Int((Double(edge) / 256).rounded(.up)) * 256))
+        guard next != previewEdge else { return }
+        previewEdge = next
+        if renderedEdge != min(next, native) { rendered = -1; scheduleRender() }
     }
 
     private func refreshControls() async throws {
@@ -356,18 +372,26 @@ final class EditorModel {
             undoStack.removeAll(); redoStack.removeAll(); gestureBefore = nil
             removalCursor = 0
             resetDetail()
+            previewEdge = 1600; renderedEdge = 0
             erasing = false; removalReady = false
             revision += 1
             rendered = -1
             try await refreshControls()
+        } catch let error where PhotoEngine.isCancelled(error) {
+            // Cancel in the Opening card: the open photo stays and develops again.
+            loading = false
+            if photo != nil { rendered = -1; scheduleRender() }
+            return
         } catch {
             fail("Can’t Open “\(stemOf(url))”", error)
             return
         }
         loading = false
-
         scheduleRender()
     }
+
+    /// Cancel in the "Opening …" card.
+    func cancelOpening() { engine.cancelOpen() }
 
     /// Closes the photo and releases the renderer (web "Close Photo"). The
     /// look stays for the next photo.
@@ -480,8 +504,11 @@ final class EditorModel {
             // Lens blur first measures depth (as the web engine); until then
             // the photo develops without it.
             if params.bool("lensBlurEnabled") && depthState == "idle" { _ = await measureDepth() }
+            // During a slider gesture: light frames (web interaction preview).
+            let edge = gestureBefore != nil ? min(previewEdge, 1600) : previewEdge
             do {
-                try await engine.develop(renderParams)
+                try await engine.develop(renderParams, longEdge: edge)
+                renderedEdge = edge
             } catch {
                 self.error = message(error)
                 return

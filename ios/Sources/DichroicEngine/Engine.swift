@@ -34,7 +34,13 @@ public struct DepthResult: Sendable {
 
 public enum EngineError: LocalizedError {
     case message(String)
-    public var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
+    case cancelled
+    public var errorDescription: String? {
+        switch self {
+        case .message(let text): return text
+        case .cancelled: return "Cancelled"
+        }
+    }
 }
 
 /// Native editor engine: the canonical web host (renderer.js) in
@@ -57,6 +63,7 @@ public final class PhotoEngine: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "dichroic.render", qos: .userInitiated)
     private let cancellation = NativeCancellation()
+    private let openCancel = NativeCancellation()
     private var graph: NativeGraphRuntime?
     private var photoURL: URL?
     private var preview: PhotoFrame?
@@ -224,8 +231,18 @@ public final class PhotoEngine: @unchecked Sendable {
 
     // MARK: - Photo
 
+    /// Cancel in the "Opening …" card: the open photo stays (web `cancelOpening`).
+    public func cancelOpen() { openCancel.set(true) }
+
+    /// The photo open was cancelled.
+    public static func isCancelled(_ error: Error) -> Bool {
+        if case EngineError.cancelled = error { return true }
+        return false
+    }
+
     public func open(_ url: URL) async throws -> OpenedPhoto {
-        try await run { [self] in
+        openCancel.set(false)
+        return try await run { [self] in
             let graph = try graphRuntime()
             guard !graph.isBusy else { throw EngineError.message("Finish development before opening another photo") }
             graph.hibernate()
@@ -238,15 +255,25 @@ public final class PhotoEngine: @unchecked Sendable {
             } else {
                 source = try NativeRasterSource.decode(url, profileSpace: graph.profileSpace)
             }
+            if openCancel.value { throw EngineError.cancelled }
+            let previous = graph.sourceStore
             do {
                 try graph.attachSource(source)
                 let size = try graph.originalPreview(edge: 1280)
+                if openCancel.value {
+                    // The staged photo is discarded; the open one shows again.
+                    graph.rollbackSource()
+                    if previous != nil { _ = try? graph.originalPreview(edge: 1280) }
+                    throw EngineError.cancelled
+                }
                 graph.commitSource()
                 graph.clearDepth(); clearFocus()
                 detailImages = nil
                 photoURL = url
                 return OpenedPhoto(width: size.width, height: size.height, sourceWidth: source.width, sourceHeight: source.height,
                                    inputColorSpace: source.colorSpace, encoding: source.encoding)
+            } catch EngineError.cancelled {
+                throw EngineError.cancelled
             } catch {
                 graph.rollbackSource(); throw error
             }
@@ -264,20 +291,22 @@ public final class PhotoEngine: @unchecked Sendable {
 
     // MARK: - Develop
 
-    /// Develops the preview; the image arrives through `onPreview`.
-    public func develop(_ params: [String: Any]) async throws {
+    /// Develops the preview at `longEdge` (the web `setPreviewLongEdge`: what
+    /// the screen shows, within the preview memory budget); the image arrives
+    /// through `onPreview`.
+    public func develop(_ params: [String: Any], longEdge: Int = 1600) async throws {
         try await runAsync { [self] (finish: @escaping (Result<Void, Error>) -> Void) in
             let graph = try graphRuntime()
             guard let url = photoURL else { throw EngineError.message("Open a photo first") }
             guard !graph.isBusy else { throw EngineError.message("Native renderer is busy") }
-            let frame = try previewFrame(graph, url: url, params: params)
+            let frame = try previewFrame(graph, url: url, params: params, longEdge: longEdge)
             // UIKit composites the separately tagged sRGB/P3 image; preserve
             // the selected output profile through the graph.
             try graph.request(operation: "preview", params: params, width: frame.width, height: frame.height) { finish($0) }
         }
     }
 
-    private func previewFrame(_ graph: NativeGraphRuntime, url: URL, params: [String: Any]) throws -> PhotoFrame {
+    private func previewFrame(_ graph: NativeGraphRuntime, url: URL, params: [String: Any], longEdge: Int = 1600) throws -> PhotoFrame {
         let measured: PhotoFrame
         if let preview { measured = preview }
         else if let source = graph.sourceStore {
@@ -285,7 +314,10 @@ public final class PhotoEngine: @unchecked Sendable {
             measured = PhotoFrame(width: size.width, height: size.height, rgba: Data())
         } else { measured = try Self.decode(url, longEdge: 1600) }
         preview = measured
-        let edge = try graph.renderSize(params, width: measured.width, height: measured.height, requested: 1600, preview: true)
+        // File-backed sources render any size up to the source (the host caps it
+        // to the preview memory budget, as the web).
+        let base = graph.sourceStore.map { (width: $0.width, height: $0.height) } ?? (width: measured.width, height: measured.height)
+        let edge = try graph.renderSize(params, width: base.width, height: base.height, requested: longEdge, preview: true)
         let frame: PhotoFrame
         if let source = graph.sourceStore {
             let size = Self.scaled(source.width, source.height, edge: edge)

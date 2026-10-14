@@ -200,20 +200,8 @@ struct ExportSheet: View {
                 if let error = model.exportError { Text(error).font(.system(size: 12)).foregroundStyle(Color.secondaryText) }
             }
             if !p.lut && hasDeveloped && !needsDevelop && failure == nil {
-                ForEach(0..<2, id: \.self) { i in
-                    let done = ready || (i == 0 && working && !rendering && model.progressTotal > 0)
-                    let active = working && (i == 0 ? rendering || model.progressTotal == 0 : !rendering && model.progressTotal > 0)
-                    HStack(spacing: 6) {
-                        Group {
-                            if done { Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(Color.success) }
-                            else if active { ProgressView().controlSize(.mini) }
-                            else { Color.clear }
-                        }
-                        .frame(width: 16, height: 16)
-                        Text(steps[i]).font(.system(size: 13)).monospacedDigit()
-                            .foregroundStyle(active ? Color.primary : Color.secondaryText)
-                    }
-                }
+                // Web ThoughtLine (hideHead): Developing, then Encoding; folds away when done.
+                ThoughtLine(working: working, steps: steps, activeStep: rendering || model.progressTotal == 0 ? 0 : 1)
             }
             if !p.lut && needsDevelop && failure == nil {
                 Text(hasDeveloped ? "The export settings changed. Press Develop to prepare this size." : "Press Develop to prepare your file.")
@@ -242,8 +230,10 @@ struct ExportSheet: View {
                         Text(formatElapsed(context.date.timeIntervalSince(started))).font(.system(size: 15)).monospacedDigit()
                             .foregroundStyle(.white.opacity(0.7))
                     }
-                } else {
+                } else if needsDevelop {
                     Text(label)
+                } else {
+                    DecryptedText(text: label)
                 }
             }
             .font(.system(size: 17, weight: .semibold))
