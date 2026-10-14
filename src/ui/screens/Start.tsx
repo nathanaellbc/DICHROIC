@@ -126,7 +126,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
       <div className="intro-sky" aria-hidden="true" />
       <div className="start-dropframe" aria-hidden="true" />
-      <ChromeWordmark visible={phase === 'splash' || phase === 'lift'} />
+      <ChromeWordmark visible={phase === "splash" || phase === "lift"} reduce={reduce} />
       <StickerBurst show={ready && !over} origin={orbCenter} box={box} compact={compact} reduce={reduce} />
       {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} />}
 
