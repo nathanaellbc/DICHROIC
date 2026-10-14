@@ -573,9 +573,6 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
   position: absolute; left: 50%; top: 32%; width: min(600px, 86%); transform: translate(-50%, -50%);
   pointer-events: none; z-index: 1;
 }
-/* Selama intro hanya wordmark besar yang tampil (tanpa merek kecil toolbar). */
-.mobile-brand { transition: opacity 0.4s; }
-body:has(.intro-stage:not([data-phase="ready"])) .mobile-brand { opacity: 0; }
 .intro-wordmark svg { display: block; width: 100%; height: auto; overflow: visible; }
 .intro-wordmark-text { font-family: var(--font-display); font-weight: 700; font-size: 128px; letter-spacing: -0.02em; }
 

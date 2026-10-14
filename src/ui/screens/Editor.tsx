@@ -538,9 +538,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
           right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
-        {removing ? <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? <>
-          <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Your pocket darkroom</span></div>
-        </> : <>
+        {removing ? <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? null : <>
         <PressButton className="icon-btn plain" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
           <Icon name="more" size={20} strokeWidth={2.4} />
         </PressButton>
