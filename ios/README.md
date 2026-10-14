@@ -85,6 +85,32 @@ expires after 7 days; run `xtool dev` again to refresh it.
    xtool dev
    ```
 
+### Notes from the first setup (2026-10-14)
+
+- Use **xtool 1.22.2 or newer**. Older versions fail to log in with
+  `-80045` (Apple now refuses Mac client-info; fixed in xtool #337).
+- Login: `wsl -d Ubuntu-24.04 -u root -- /root/.local/bin/xtool auth login`,
+  choose `1` (password, free Apple ID), then the 2FA code.
+- SDK: `xtool sdk install /mnt/c/Users/<you>/Downloads/Xcode_<ver>.xip`.
+- From Git Bash, prefix WSL commands with `MSYS_NO_PATHCONV=1` (otherwise
+  `/root/...` is rewritten to a Windows path) and call xtool by full path.
+- If `usbipd attach` says the device is busy (Windows' Apple service holds
+  it), run `usbipd bind --force --busid <BUSID>` as admin, replug the phone,
+  then attach again. Keep a WSL window open while attaching.
+
+### Continuing on another machine
+
+`git clone`, then put the two generated inputs back:
+
+```bash
+npm ci
+node ios/scripts/build_host.mjs
+gh run download --repo nathanaellbc/DICHROIC --name dichroic-native-xcframework --dir ios/Frameworks/DichroicNative.xcframework
+```
+
+(The xcframework is the artifact of the latest green *Native iOS build*
+run; `gh run download` picks the newest one.)
+
 ## Xcode (macOS)
 
 Open `ios/Package.swift` in Xcode and run the `Dichroic` scheme.
