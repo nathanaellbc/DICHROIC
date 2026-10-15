@@ -547,7 +547,10 @@ export default function HoloCard({
     wakeRef.current = wake;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Sampai 3x (layar iPhone) plus cadangan 1,25x: kartu diperbesar lagi oleh
+      // CSS (rotasi 3D, terangkat saat dipegang, skala stiker). Dulu 2x -- tepi
+      // dan teks bergerigi di layar 3x. Kartunya kecil, jadi murah.
+      const dpr = Math.min(window.devicePixelRatio || 1, 3) * 1.25;
       const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
       const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
       if (canvas.width !== w || canvas.height !== h) {

@@ -94,7 +94,8 @@ function StickerFace({ s, index }: { s: Sticker; index: number }): ReactNode {
     : s.kind === 'frame' ? <span className="sticker sticker-frame" style={{ ['--hue' as string]: (s as { hue: number }).hue }} /> : null;
 }
 
-const ART_SCALE = 3;
+// Gambar kartu 4x: kanvas HoloCard sampai 3,75x (3x layar + cadangan pembesaran CSS).
+const ART_SCALE = 4;
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", system-ui, sans-serif';
 const artCache = new Map<string, { src: string; width: number; height: number; radius: number; frame: number }>();
 
