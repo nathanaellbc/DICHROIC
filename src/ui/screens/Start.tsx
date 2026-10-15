@@ -9,6 +9,7 @@ import { ChromeWordmark, GlassOrb } from '../components/WelcomeIntro';
 import { StickerBurst } from '../components/StickerField';
 import { StarField } from '../components/StarField';
 import { IntroBackdrop } from '../components/IntroBackdrop';
+import { RingBloom } from '../components/RingBloom';
 import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
@@ -135,6 +136,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <ChromeWordmark visible={phase === "splash" || phase === "lift"} reduce={reduce} />
       <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
       {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or click to continue'} />}
+      {box.width > 0 && <RingBloom backdrop={backdrop} />}
 
       {ready && (
         <motion.div

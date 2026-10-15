@@ -11,8 +11,8 @@ import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { STARS } from './StarField';
 
-/** Jarak di luar kaca yang ikut digambar (px), untuk sampel pembiasan di tepi. */
-const MARGIN = 24;
+/** Jarak di luar kaca yang ikut digambar (px): sampel pembiasan di tepi dan jangkauan bloom cincin (RingBloom). */
+const MARGIN = 64;
 
 /** Area kanvas dalam koordinat panggung (px CSS). */
 export interface BackdropArea { x0: number; y0: number; x1: number; y1: number }
