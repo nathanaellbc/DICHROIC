@@ -58,7 +58,7 @@
   --chrome-1: #f4f7fb; --chrome-2: #9aa6b4; --chrome-3: #3d4652; --chrome-4: #e3e9f1;
   --intro-glass-rim: rgba(255, 255, 255, 0.28);
   --intro-tint: rgba(255, 255, 255, 0.1);
-  --intro-ring: rgba(255, 255, 255, 0.85);
+  --intro-ring: #fff;
   --intro-shock: rgba(255, 255, 255, 0.8);
   --intro-ring-glow: rgba(255, 255, 255, 0.22);
   --blue-wash: rgba(0, 145, 255, 0.16);
@@ -617,7 +617,8 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-ring-line { fill: none; stroke: var(--intro-ring); stroke-width: calc(0.75px * var(--orb-px, 1)); }
 /* Mode gelap: cincin + bloom digambar RingBloom (WebGL), ditumpuk aditif. */
 .intro-bloom { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; mix-blend-mode: plus-lighter; }
-.intro-stage[data-bloom] .intro-ring { display: none; }
+/* Bloom aktif: glow dari RingBloom, garis tetap SVG (vektor) -- hanya gradien glow SVG yang disembunyikan. */
+.intro-stage[data-bloom] .intro-ring-glow { display: none; }
 /* Cahaya tepi: gradien radial yang ukurannya diatur GlassOrb tiap frame. */
 .intro-ring-glow-peak { stop-color: var(--intro-ring-glow); }
 .intro-ring-glow-clear { stop-color: var(--intro-ring-glow); stop-opacity: 0; }

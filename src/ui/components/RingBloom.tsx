@@ -20,6 +20,9 @@
  * mengeluarkan selisih cahaya (C_out - C_in) -- isi halaman di bawahnya tetap.
  * Dihitung ulang hanya bila latar, posisi kaca, atau tema berubah.
  *
+ * Garis cincin tipisnya digambar SVG (`.intro-ring-line`, vektor) supaya tajam di
+ * layar 3x; kanvas ini hanya menambahkan glow-nya (garis tetap jadi sumber H).
+ *
  * Mode terang: cahaya aditif tidak terlihat di latar terang, jadi cincin SVG
  * (`.intro-ring`) dipakai; begitu juga bila WebGL2 tidak tersedia.
  */
@@ -186,7 +189,8 @@ void main() {
   vec3 base = sceneSRGB(p, d, uPx);
   // Target render (FBO) baris 0 = bawah panggung.
   vec3 bloom = texture(uBloom, vec2(p.x, uSize.y - p.y) / uSize).rgb * uDecode;
-  vec3 c = decodeSRGB(base) + lineCoverage(d, uPx) * uLineIntensity + uGain * bloom;
+  // Garis cincin sendiri digambar SVG (vektor, tajam di DPR berapa pun); di sini hanya cahayanya.
+  vec3 c = decodeSRGB(base) + uGain * bloom;
   vec3 delta = max(encodeSRGB(clamp(c, 0.0, 1.0)) - base, 0.0);
   outColor = vec4(delta, max(delta.r, max(delta.g, delta.b)));
 }`;
