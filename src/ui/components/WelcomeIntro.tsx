@@ -9,6 +9,7 @@
  */
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { useRef } from 'react';
+import type { RefObject } from 'react';
 import { Icon } from './Icon';
 import GlassSurface from './reactbits/GlassSurface';
 
@@ -33,8 +34,10 @@ function orbGeometry(phase: IntroPhase, box: StageBox) {
   return phase === 'bubble' ? { cx: w / 2, cy, d: Math.min(176, w * 0.42) } : { cx: w / 2, cy, d: 64 };
 }
 
-export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint }: {
+export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop }: {
   phase: IntroPhase; box: StageBox; onEnter: () => void; onChoose: () => void; reduce: boolean; hint: string;
+  /** Kanvas latar (IntroBackdrop) yang dibiaskan kaca. */
+  backdrop: RefObject<HTMLCanvasElement | null>;
 }) {
   const { cx, cy, d } = orbGeometry(phase, box);
   // Petunjuk di dalam kubah: di tengah bagian kubah yang terlihat.
@@ -132,15 +135,16 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint }: {
           onPointerLeave={onLeave}
           style={{ transform }}
         >
-          {/* Kaca: GlassSurface (React Bits) -- pembiasan SVG di Chromium, frosted di Safari. */}
+          {/* Kaca: GlassSurface (React Bits) mode WebGL di semua browser, membiaskan kanvas
+              latar IntroBackdrop -- tampil sama di Chrome dan Safari/iOS. */}
           <GlassSurface
             className="intro-glass"
             width={ORB}
             height={ORB}
             borderRadius={ORB / 2}
-            // Props contoh asli React Bits; kubah (lebih lebar dari layar) pembiasannya dilemahkan
-            // supaya tepi layar tidak ikut terpantul.
-            distortionScale={dome ? -40 : -180}
+            renderer="webgl"
+            backdrop={backdrop}
+            distortionScale={-180}
             displace={0.5}
             backgroundOpacity={0.1}
           />

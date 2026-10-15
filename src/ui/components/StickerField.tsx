@@ -11,6 +11,7 @@ import { Icon } from './Icon';
 import type { UiIconName } from './Icon';
 import type { StageBox } from './WelcomeIntro';
 import HoloCard from './reactbits/HoloCard';
+import { addBackdropLayer } from './IntroBackdrop';
 import type { HoloPreset } from './reactbits/HoloCard';
 
 type Sticker =
@@ -151,6 +152,78 @@ function stickerArt(s: Extract<Sticker, { kind: 'stock' | 'frame' }>) {
   return art;
 }
 
+const imageCache = new Map<string, HTMLImageElement>();
+/** Bertambah tiap gambar selesai dimuat: bagian kunci lapisan, supaya kanvas digambar ulang. */
+let imagesLoaded = 0;
+function cachedImage(src: string) {
+  let image = imageCache.get(src);
+  if (!image) {
+    image = new Image();
+    image.onload = () => { imagesLoaded++; };
+    image.src = src;
+    imageCache.set(src, image);
+  }
+  return image.complete && image.naturalWidth ? image : undefined;
+}
+
+/** Ikon SVG stiker sebagai gambar (warna isi ikon); disusun sekali per elemen. */
+const iconSources = new WeakMap<HTMLElement, { src: string; size: number }>();
+function iconImage(face: HTMLElement) {
+  let icon = iconSources.get(face);
+  if (!icon) {
+    const svg = face.querySelector('svg');
+    if (!svg) return undefined;
+    const copy = svg.cloneNode(true) as SVGSVGElement;
+    copy.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    copy.setAttribute('color', getComputedStyle(face).color);
+    const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(copy))}`;
+    icon = { src, size: parseFloat(svg.getAttribute('width') ?? '') || 20 };
+    iconSources.set(face, icon);
+  }
+  return { image: cachedImage(icon.src), size: icon.size };
+}
+
+/**
+ * Muka stiker di kanvas latar, berpusat di (0, 0) dengan ukuran CSS-nya:
+ * gambar foil (tanpa efek holo), ikon, atau gelembung kutipan, beserta bayangannya.
+ * `ratio` = px kanvas per px CSS stiker (bayangan kanvas tidak ikut transform).
+ */
+function paintSticker(ctx: CanvasRenderingContext2D, s: Sticker, face: HTMLElement, ratio: number) {
+  const w = face.offsetWidth, h = face.offsetHeight;
+  const shadow = (blur: number, y: number, alpha: number) => {
+    ctx.shadowColor = `rgba(0, 0, 0, ${alpha})`;
+    ctx.shadowBlur = blur * ratio;
+    ctx.shadowOffsetY = y * ratio;
+  };
+  if (s.kind === 'stock' || s.kind === 'frame') {
+    const art = stickerArt(s), image = art && cachedImage(art.src);
+    if (!image) return;
+    shadow(12, 6, 0.28);
+    ctx.drawImage(image, -w / 2, -h / 2, w, h);
+    return;
+  }
+  shadow(18, 6, 0.35);
+  if (s.kind === 'icon') {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(0, 0, w / 2, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#f5f5f7';
+    ctx.beginPath(); ctx.arc(0, 0, w / 2 - 2, 0, Math.PI * 2); ctx.fill();
+    const icon = iconImage(face);
+    if (icon?.image) ctx.drawImage(icon.image, -icon.size / 2, -icon.size / 2, icon.size, icon.size);
+    return;
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, [16, 16, 16, 4]); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  const cs = getComputedStyle(face);
+  ctx.fillStyle = cs.color;
+  ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(s.text, 0, 0.5);
+}
+
 /** Satu stiker dalam simulasi (px panggung, kecepatan px/s, rotasi derajat). */
 interface Body {
   x: number; y: number; vx: number; vy: number; r: number; vr: number;
@@ -224,7 +297,40 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
         el.style.opacity = String(Math.max(0, Math.min(1, (t - b.born) / 160)));
       });
     };
-    if (reduce) { paint(start); return undefined; }
+    // Salinan stiker di kanvas latar kaca (dilihat lewat kaca WebGL): hanya
+    // stiker yang menyentuh area kaca, dengan transform dan opacity saat ini.
+    let shown: { b: Body; face: HTMLElement; s: Sticker; alpha: number }[] = [];
+    const unpaint = addBackdropLayer({
+      key: (area) => {
+        const now = performance.now();
+        const layer = els.current[0]?.parentElement;
+        const fade = layer ? parseFloat(layer.style.opacity || '1') : 1;
+        shown = [];
+        bodies.current.forEach((b, i) => {
+          const face = els.current[i]?.firstElementChild as HTMLElement | null | undefined;
+          const item = items[i];
+          if (!face || !item || now < b.born) return;
+          const alpha = Math.max(0, Math.min(1, (now - b.born) / 160)) * fade;
+          // Jangkauan: setengah diagonal + bayangan.
+          const reach = (Math.hypot(face.offsetWidth, face.offsetHeight) / 2) * b.scale + 24;
+          if (!(alpha > 0) || b.x + reach < area.x0 || b.x - reach > area.x1 || b.y + reach < area.y0 || b.y - reach > area.y1) return;
+          shown.push({ b, face, s: item.s, alpha });
+        });
+        return `${imagesLoaded}:` + shown.map(({ b, alpha }) => `${b.x.toFixed(1)},${b.y.toFixed(1)},${b.r.toFixed(1)},${b.scale.toFixed(3)},${alpha.toFixed(2)}`).join(';');
+      },
+      paint: (ctx, ratio) => {
+        shown.forEach(({ b, face, s: sticker, alpha }) => {
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate((b.r * Math.PI) / 180);
+          ctx.scale(b.scale, b.scale);
+          ctx.globalAlpha = alpha;
+          paintSticker(ctx, sticker, face, ratio * b.scale);
+          ctx.restore();
+        });
+      },
+    });
+    if (reduce) { paint(start); return unpaint; }
 
     // Arah melayang = arah letusannya (tetap di dalam kerucut V).
     const drift = cone.map((c) => ({ x: c.dx, y: c.dy }));
@@ -319,7 +425,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    return () => { cancelAnimationFrame(raf); unpaint(); };
     // Simulasi dimulai sekali per kemunculan; ukuran/posisi terbaru dibaca dari `live`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce, compact]);

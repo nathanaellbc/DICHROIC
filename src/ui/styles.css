@@ -552,6 +552,8 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
    yang berubah dari kubah ke gelembung ke tombol "+", stiker film. */
 .intro-stage { touch-action: pan-x; user-select: none; -webkit-user-select: none; }
 .intro-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+/* Salinan latar untuk kaca WebGL: hanya tekstur, tidak terlihat; posisi/ukuran mengikuti kaca (JS). */
+.intro-backdrop { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; }
 /* Gelap: cahaya biru di bawah kubah; bintang kecil di StarField. */
 .intro-sky { --intro-star: 255, 255, 255; background: radial-gradient(ellipse 70% 38% at 50% 104%, rgba(0, 120, 255, 0.34), transparent 70%); }
 .intro-stars { position: absolute; inset: 0; overflow: hidden; }

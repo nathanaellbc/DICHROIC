@@ -600,7 +600,8 @@ export default function GlassSurface({
       let key = '';
       if (node instanceof HTMLImageElement) key = node.complete && node.naturalWidth ? node.currentSrc || node.src : '';
       else if (node instanceof HTMLVideoElement) key = node.readyState >= 2 ? `${node.currentSrc}|${node.currentTime}` : '';
-      else key = `${node.width}x${node.height}|${performance.now()}`;
+      // Kanvas: unggah ulang hanya bila versinya (`data-frame`) berubah; tanpa versi, tiap frame.
+      else key = `${node.width}x${node.height}|${node.dataset.frame ?? performance.now()}`;
       if (key && (node !== picture.node || key !== picture.key)) {
         try {
           upload(node);
@@ -621,12 +622,14 @@ export default function GlassSurface({
       const content = contentBox(node);
       if (!content.width || !content.height) return;
       const ratio = Math.min(2, window.devicePixelRatio || 1);
-      const width = Math.max(1, Math.round(layoutWidth * ratio));
-      const height = Math.max(1, Math.round(layoutHeight * ratio));
+      // Resolusi mengikuti ukuran di layar (elemen yang diperkecil transform tidak
+      // dirender pada ukuran layout penuhnya).
+      const width = Math.max(1, Math.round(Math.min(layoutWidth, box.width) * ratio));
+      const height = Math.max(1, Math.round(Math.min(layoutHeight, box.height) * ratio));
       const signature = [
         box.left, box.top, box.width, box.height, content.x, content.y, content.width, content.height, width, height,
         picture.key, map.url, s.displace, s.saturation, s.distortionScale, s.redOffset, s.greenOffset, s.blueOffset,
-        s.xChannel, s.yChannel,
+        s.xChannel, s.yChannel, window.innerWidth, window.innerHeight,
       ].join('|');
       if (signature === drawn) return;
       drawn = signature;
@@ -641,6 +644,13 @@ export default function GlassSurface({
       const spreadTexels = (picture.width / content.width) * scaleX * Math.max(0, s.displace);
       const lod = picture.mipmapped ? Math.max(0, Math.log2(Math.max(texelsPerPixel, spreadTexels * 0.5, 0.000001))) : 0;
       gl.viewport(0, 0, width, height);
+      // Bagian di luar layar (mis. kubah yang lebih besar dari layar) tidak dishade.
+      const sx = width / box.width, sy = height / box.height;
+      const vx0 = Math.max(0, Math.floor((0 - box.left) * sx)), vx1 = Math.min(width, Math.ceil((window.innerWidth - box.left) * sx));
+      const vy0 = Math.max(0, Math.floor((0 - box.top) * sy)), vy1 = Math.min(height, Math.ceil((window.innerHeight - box.top) * sy));
+      if (vx1 <= vx0 || vy1 <= vy0) return;
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(vx0, height - vy1, vx1 - vx0, vy1 - vy0);
       gl.useProgram(program);
       gl.bindVertexArray(vao);
       gl.activeTexture(gl.TEXTURE0);
