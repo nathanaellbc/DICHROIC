@@ -140,9 +140,9 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
       if (!g) m.fresh = true;
       else {
         if (m.fresh) {
-          // Awal tekan: mulai dari keadaan sekarang; remas sedikit (regang mendatar).
+          // Awal tekan: mulai dari keadaan sekarang, tetap bulat.
           const x = dx.get(), y = dy.get(), p = progress.get();
-          Object.assign(m, { x1: x, y1: y, x2: x, y2: y, x, y, p1: p, p2: p, p, vx: 0, vy: 0, px: g.fx, py: g.fy, sx: 0.12, sy: 0, fresh: false });
+          Object.assign(m, { x1: x, y1: y, x2: x, y2: y, x, y, p1: p, p2: p, p, vx: 0, vy: 0, px: g.fx, py: g.fy, sx: 0, sy: 0, fresh: false });
         }
         const follow = 1 - Math.exp(-dt / DOME_SMOOTHING);
         const stage = 1 - Math.exp(-dt / (DOME_SMOOTHING / 3));
@@ -155,9 +155,10 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
         m.vy += ((g.fy - m.py) / dt - m.vy) * blend;
         m.px = g.fx; m.py = g.fy;
         const speed = Math.hypot(m.vx, m.vy);
-        const k = Math.min(0.08, speed / 9000), theta = Math.atan2(m.vy, m.vx);
-        // Target regang = remas tekan (0.12 mendatar) + regang searah gerak, dalam sudut ganda.
-        m.sx += (0.12 + k * Math.cos(2 * theta) - m.sx) * follow;
+        // Regang tipis searah gerak saja (sudut ganda), maksimum 3 %: dulu remas
+        // tekan 0.12 mendatar bertahan sepanjang tarikan dan kubah tampak gepeng.
+        const k = Math.min(0.03, speed / 24000), theta = Math.atan2(m.vy, m.vx);
+        m.sx += (k * Math.cos(2 * theta) - m.sx) * follow;
         m.sy += (k * Math.sin(2 * theta) - m.sy) * follow;
         const amount = Math.hypot(m.sx, m.sy);
         dxRaw.set(m.x); dx.jump(m.x);
