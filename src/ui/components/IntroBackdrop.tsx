@@ -63,7 +63,8 @@ export function IntroBackdrop({ canvasRef }: { canvasRef: RefObject<HTMLCanvasEl
         star = (sky && getComputedStyle(sky).getPropertyValue('--intro-star').trim()) || '255, 255, 255';
         dark = star.startsWith('255');
       }
-      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      // 3x: latar yang dibiaskan kaca setajam layar Retina 3x (GlassSurface juga 3x).
+      const ratio = Math.min(3, window.devicePixelRatio || 1);
       const texts = textStates(stage, origin, area);
       const keys = [...layers].map((layer) => layer.key(area));
       const signature = [x0, y0, x1, y1, w, h, ratio, background, star, ...texts.map((text) => text.key), ...keys].join('|');

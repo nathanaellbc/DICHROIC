@@ -99,6 +99,9 @@ const compileGlass = (gl: WebGL2RenderingContext) => {
   return null;
 };
 
+/** Resolusi kanvas kaca: sampai 3x supaya refraksi tajam di layar Retina 3x. */
+const MAX_RATIO = 3;
+
 const resolveBackdrop = (backdrop: GlassSurfaceProps['backdrop']): BackdropNode | null => {
   if (typeof window === 'undefined' || !backdrop) return null;
   const node = typeof backdrop === 'object' && 'current' in backdrop ? backdrop.current : backdrop;
@@ -472,7 +475,9 @@ export default function GlassSurface({
     let map = '';
     let trace: Trace | null = null;
     if (shapeImage && w && h) {
-      const ratio = Math.min(2, window.devicePixelRatio || 1, Math.sqrt(400000 / (w * h)));
+      // Peta tekukan sampai 3x (layar iPhone) dan 2,5 MP: dihitung sekali per
+      // bentuk. Dulu 2x dan 0,4 MP -- di kubah besar tepi refraksi bergerigi.
+      const ratio = Math.min(MAX_RATIO, window.devicePixelRatio || 1, Math.sqrt(2_500_000 / (w * h)));
       trace = traceRef.current;
       try {
         if (!trace || trace.image !== shapeImage || trace.width !== w || trace.height !== h || trace.ratio !== ratio) {
@@ -564,7 +569,7 @@ export default function GlassSurface({
       const image = new Image();
       image.onload = () => {
         if (map.url !== url || !mapContext) return;
-        const ratio = Math.min(2, window.devicePixelRatio || 1);
+        const ratio = Math.min(MAX_RATIO, window.devicePixelRatio || 1);
         mapCanvas.width = Math.max(1, Math.round(element.offsetWidth * ratio));
         mapCanvas.height = Math.max(1, Math.round(element.offsetHeight * ratio));
         mapContext.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
@@ -621,7 +626,7 @@ export default function GlassSurface({
       const box = element.getBoundingClientRect();
       const content = contentBox(node);
       if (!content.width || !content.height) return;
-      const ratio = Math.min(2, window.devicePixelRatio || 1);
+      const ratio = Math.min(MAX_RATIO, window.devicePixelRatio || 1);
       // Resolusi mengikuti ukuran di layar (elemen yang diperkecil transform tidak
       // dirender pada ukuran layout penuhnya).
       const width = Math.max(1, Math.round(Math.min(layoutWidth, box.width) * ratio));
