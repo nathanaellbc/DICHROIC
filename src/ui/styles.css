@@ -686,7 +686,9 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-title { font-size: clamp(28px, 7.4vw, 44px); }
 html[data-size="regular"] .intro-title { font-size: 40px; }
 /* Kata yang dicoret: garis tergambar dari kiri setelah judul muncul. */
-.intro-strike { position: relative; display: inline-block; text-decoration: none; color: var(--start-sub); }
+.intro-strike { position: relative; display: inline-block; text-decoration: none; color: inherit; }
+/* Judul intro satu warna (putih di mode gelap): baris kedua dan kata yang dicoret tidak lagi abu. */
+.intro-title .start-title-tail { color: inherit; }
 .intro-strike::after {
   content: ""; position: absolute; left: -2%; right: -2%; top: 54%; height: 0.07em; border-radius: 1em;
   background: currentColor; transform-origin: left; animation: intro-strike 0.5s 0.55s cubic-bezier(0.23, 1, 0.32, 1) both;
