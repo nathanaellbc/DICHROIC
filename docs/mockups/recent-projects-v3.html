@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gammā · Mockup Recent v3</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000; --label: #fff; --label-2: #aaaab3; --label-3: #6e6e76;
+    --blue: #0091ff; --cta: #0071e3; --red: #ff453a; --orange: #ff9f0a;
+    --hair: rgba(255,255,255,.09); --hair-2: rgba(255,255,255,.16); --fill: rgba(120,120,128,.18);
+    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Geist Mono', ui-monospace, monospace;
+    --spring: cubic-bezier(.32, 1.24, .42, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0b0c; color: var(--label); font-family: var(--sf); padding: 48px 32px 80px; }
+  header.page { max-width: 1400px; margin: 0 auto 40px; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--label-2); }
+  h1 { font: 400 34px 'Instrument Serif', serif; margin: 6px 0 8px; }
+  .lede { color: var(--label-2); font-size: 14px; max-width: 780px; line-height: 1.55; }
+  .lede a { color: var(--blue); }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; max-width: 1400px; margin: 0 auto 56px; align-items: flex-start; }
+  .shot { display: flex; flex-direction: column; gap: 12px; }
+  .shot h2 { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); }
+  .shot h2 em { font-style: normal; color: var(--blue); }
+  p.note { color: var(--label-3); font-size: 12px; line-height: 1.5; max-width: 320px; }
+
+  .phone { width: 375px; height: 812px; border-radius: 48px; border: 1px solid #2a2a2e; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 0 0 10px #151517; }
+  .stars { position: absolute; inset: 0; pointer-events: none; background-image:
+    radial-gradient(1px 1px at 20% 12%, #fff8 50%, transparent), radial-gradient(1px 1px at 70% 8%, #fff6 50%, transparent),
+    radial-gradient(1px 1px at 85% 30%, #fff5 50%, transparent), radial-gradient(1px 1px at 12% 44%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 55% 52%, #fff5 50%, transparent), radial-gradient(1px 1px at 33% 70%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 90% 64%, #fff6 50%, transparent), radial-gradient(1px 1px at 8% 86%, #fff4 50%, transparent); }
+  .glow { position: absolute; left: 50%; bottom: -140px; width: 520px; height: 260px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0,113,224,.32), transparent); filter: blur(30px); pointer-events: none; }
+  .status { height: 52px; display: flex; justify-content: space-between; align-items: center; padding: 14px 30px 0; font-weight: 600; font-size: 15px; position: relative; z-index: 3; }
+  .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; border-radius: 20px; background: #000; transform: translateX(-50%); border: 1px solid #1a1a1a; }
+  .cta { position: absolute; left: 24px; right: 24px; height: 50px; border-radius: 999px; background: var(--cta); display: grid; place-items: center; font-weight: 600; font-size: 17px; }
+  .link { position: absolute; left: 0; right: 0; text-align: center; font-size: 15px; color: var(--blue); }
+  .counter { font: 500 11px var(--mono); letter-spacing: .12em; color: var(--label-2); text-transform: uppercase; }
+  .title { position: absolute; left: 24px; right: 24px; text-align: center; font-weight: 600; letter-spacing: -.03em; font-size: 26px; line-height: 1.12; }
+  .title s { color: var(--label-2); text-decoration-thickness: 2px; }
+
+  .t1 { background: linear-gradient(160deg, #e8b07a, #b35a3c 45%, #2b1d2a); }
+  .t2 { background: linear-gradient(200deg, #9fc6d8, #4f7d8f 50%, #1b2a33); }
+  .t3 { background: linear-gradient(170deg, #f1d9a6, #c48b4f 50%, #3a2a1a); }
+  .t4 { background: linear-gradient(190deg, #b9b6c9, #6a6a86 55%, #1d1d2a); }
+  .t5 { background: linear-gradient(150deg, #d6e3b0, #7d9455 50%, #222b17); }
+  .t6 { background: linear-gradient(210deg, #f5b8b8, #a75c6b 50%, #2a1a22); }
+  .t7 { background: linear-gradient(180deg, #8fb3ff, #3a58a8 55%, #10162b); }
+  .t8 { background: linear-gradient(165deg, #e9e2d0, #a59a83 50%, #2a2622); }
+
+  /* Image accordion (bencho.dev "Image accordion") */
+  .acc { display: flex; gap: 6px; touch-action: pan-y; outline: none; }
+  .acc:focus-visible { outline: 2px solid var(--blue); outline-offset: 6px; border-radius: 16px; }
+  .slat { position: relative; flex: 1 1 0; min-width: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--hair-2); cursor: pointer;
+    transition: flex-grow .55s var(--spring), filter .3s ease; filter: saturate(.75) brightness(.75); }
+  .slat.open { flex-grow: 5.2; filter: none; }
+  .slat .edge { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%) rotate(-90deg); transform-origin: center; white-space: nowrap;
+    font: 500 9px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: rgba(255,255,255,.75); transition: opacity .2s; translate: 0 -40px; }
+  .slat.open .edge { opacity: 0; }
+  .slat .info { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 14px 13px; background: linear-gradient(180deg, transparent, rgba(0,0,0,.72));
+    opacity: 0; transform: translateY(8px); transition: opacity .25s ease, transform .35s var(--spring); white-space: nowrap; }
+  .slat.open .info { opacity: 1; transform: none; transition-delay: .12s; }
+  .slat .info b { display: block; font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin: 3px 0 2px; overflow: hidden; text-overflow: ellipsis; }
+  .slat .info span { font-size: 12px; color: rgba(255,255,255,.75); }
+  .slat .num { position: absolute; top: 10px; left: 0; right: 0; text-align: center; font: 500 9px var(--mono); color: rgba(255,255,255,.6); transition: opacity .2s; }
+  .slat.open .num { opacity: 0; }
+  .slat.missing { filter: none; background: repeating-linear-gradient(135deg, rgba(255,159,10,.06) 0 6px, transparent 6px 12px); border: 1.5px dashed rgba(255,159,10,.6); }
+  .slat.missing .info { background: none; }
+  .slat .relink { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; opacity: 0; transition: opacity .25s; }
+  .slat.open .relink { opacity: 1; transition-delay: .12s; }
+  .relink b { display: block; font-size: 14px; margin: 8px 0 4px; }
+  .relink span { font-size: 12px; color: var(--label-2); line-height: 1.4; display: block; }
+  .relink .pill { display: inline-block; margin-top: 10px; padding: 6px 13px; border-radius: 999px; background: var(--fill); color: var(--label); font-size: 13px; font-weight: 600; }
+  .warn { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--orange); color: var(--orange); display: grid; place-items: center; font-weight: 700; margin: 0 auto; }
+  .slat .warnmini { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; border-radius: 50%; background: var(--orange); color: #000; font: 700 9px var(--sf); display: grid; place-items: center; }
+  .slat.open .warnmini { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { .slat, .slat .info, .slat .edge, .slat .relink { transition: none !important; } }
+
+  .opening { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .2s; display: grid; place-items: center; }
+  .opening.on { opacity: 1; }
+  .opening div { padding: 10px 16px; border-radius: 14px; background: rgba(28,28,30,.9); border: 1px solid var(--hair-2); font-size: 14px; }
+
+  /* All projects */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 60px; border-radius: 24px 24px 0 0; background: #111113; border-top: 1px solid var(--hair-2); }
+  .grabber { width: 36px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.28); margin: 7px auto 0; }
+  .sheet-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px 10px; }
+  .search { flex: 1; height: 36px; border-radius: 10px; border: 1px solid var(--hair-2); color: var(--label-3); font-size: 15px; display: flex; align-items: center; padding: 0 10px; }
+  .sq { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--hair-2); display: grid; place-items: center; font-size: 18px; }
+  .group { padding: 14px 16px 4px; font-size: 12px; font-weight: 600; color: var(--label-2); }
+  .prow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; position: relative; background: #111113; }
+  .prow .th { width: 30px; height: 46px; border-radius: 7px; flex-shrink: 0; border: .5px solid var(--hair-2); }
+  .prow .tx { flex: 1; min-width: 0; }
+  .prow .tx b { display: block; font-size: 15px; font-weight: 500; }
+  .prow .tx span { font-size: 12px; color: var(--label-2); }
+  .prow time { font: 12px var(--mono); color: var(--label-3); }
+  .prow + .prow::before { content: ''; position: absolute; left: 58px; right: 0; top: 0; border-top: 1px solid var(--hair); }
+  .swipe { position: relative; height: 64px; overflow: hidden; }
+  .swipe .acts { position: absolute; right: 0; top: 0; bottom: 0; display: flex; }
+  .swipe .acts div { width: 76px; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .swipe .acts .ren { background: #3a3a3e; } .swipe .acts .del { background: var(--red); }
+  .swipe .prow { position: absolute; inset: 0; transform: translateX(-152px); }
+  .receipt { position: absolute; left: 16px; right: 16px; bottom: 34px; height: 48px; border-radius: 14px; border: 1px solid var(--hair-2); background: rgba(30,30,32,.92); display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 14px; }
+  .receipt .ring { width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--label-2) 0 62%, transparent 62% 100%); -webkit-mask: radial-gradient(circle, transparent 6px, #000 6.5px); mask: radial-gradient(circle, transparent 6px, #000 6.5px); }
+  .receipt b { margin-left: auto; color: var(--blue); font-weight: 600; }
+  .storage { padding: 10px 16px 0; font: 11px var(--mono); color: var(--label-3); letter-spacing: .04em; }
+  .meter { height: 3px; border-radius: 2px; background: var(--fill); margin-top: 6px; overflow: hidden; }
+  .meter i { display: block; width: 38%; height: 100%; background: var(--label-2); }
+
+  /* Open transition */
+  .strip { display: flex; gap: 18px; align-items: flex-end; }
+  .mini { width: 186px; height: 404px; border-radius: 28px; border: 1px solid #2a2a2e; background: #000; position: relative; overflow: hidden; box-shadow: 0 0 0 6px #151517; }
+  .mini .ph { position: absolute; border-radius: 10px; border: 1px solid var(--hair-2); }
+  .mini .tb { position: absolute; left: 10px; right: 10px; top: 30px; height: 26px; border-radius: 13px; background: rgba(28,28,30,.7); border: 1px solid var(--hair); }
+  .mini .panel { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; border-radius: 16px 16px 0 0; background: rgba(28,28,30,.85); border-top: 1px solid var(--hair); }
+  .mini .panel i { position: absolute; left: 14px; right: 14px; height: 4px; border-radius: 2px; background: var(--fill); }
+  .stepcap { font: 11px var(--mono); color: var(--label-3); text-align: center; margin-top: 10px; letter-spacing: .06em; }
+  .arrow { color: var(--label-3); font-size: 18px; align-self: center; margin-bottom: 30px; }
+
+  /* Desktop */
+  .desk { width: 1180px; height: 700px; border-radius: 12px; border: 1px solid #2a2a2e; background: #000; overflow: hidden; display: grid; grid-template-columns: 220px 1fr 260px; grid-template-rows: 44px 1fr 26px; font-size: 12px; }
+  .tbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--hair); background: #0e0e10; }
+  .tbar b { font-size: 14px; } .tbar > span { color: var(--label-3); }
+  .tbar .exp { margin-left: auto; padding: 5px 12px; border-radius: 7px; background: var(--fill); color: var(--label-3); }
+  .side, .insp { background: #0e0e10; opacity: .55; padding: 10px; }
+  .side { border-right: 1px solid var(--hair); } .insp { border-left: 1px solid var(--hair); }
+  .side div { height: 18px; border-radius: 4px; background: rgba(255,255,255,.05); margin-bottom: 8px; }
+  .insp div { height: 40px; border-radius: 6px; background: rgba(255,255,255,.04); margin-bottom: 10px; }
+  .center { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+  .center .hd { width: 560px; display: flex; justify-content: space-between; align-items: baseline; }
+  .center .hd h4 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+  .center .hd a { color: var(--blue); font-size: 13px; }
+  .center .acts2 { display: flex; gap: 14px; align-items: center; }
+  .center .cta-sm { padding: 9px 18px; border-radius: 999px; background: var(--cta); font-weight: 600; font-size: 13px; }
+  .center .hint { color: var(--label-3); font-size: 12px; }
+  .sb { grid-column: 1 / -1; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--label-3); font-size: 11px; background: #0e0e10; }
+  .sb .r { margin-left: auto; }
+
+  .refs { max-width: 1400px; margin: 0 auto; border-top: 1px solid var(--hair); }
+  .refs div { display: grid; grid-template-columns: 200px 1fr 1.2fr; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--hair); font-size: 13px; line-height: 1.5; }
+  .refs b { font-weight: 600; } .refs a { color: var(--blue); text-decoration: none; }
+  .refs span { color: var(--label-2); } .refs p { color: #d2d2d7; }
+</style>
+</head>
+<body>
+<header class="page">
+  <p class="eyebrow">Mockup v3 · fitur Recent · image accordion</p>
+  <h1>Proyek terakhir, sebagai potongan film</h1>
+  <p class="lede">Recent di Start memakai pola <a href="https://bencho.dev/?c=image-accordion&amp;theme=dark">Image accordion</a>: tiap proyek satu bilah seperti potongan negatif, satu terbuka dan tetangganya memberi ruang. <strong>Bisa dicoba:</strong> arahkan kursor atau geser jari di atas bilah, klik bilah yang terbuka untuk membukanya, atau fokuskan lalu pakai panah kiri/kanan dan Enter.</p>
+</header>
+
+<div class="row">
+  <div class="shot">
+    <h2>01 · Start · <em>Image accordion</em></h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="title" style="top:84px">Develop your <s>filter</s> photo<br>on real film.</div>
+      <div style="position:absolute;left:24px;right:24px;top:178px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span class="counter">Recent</span><span class="counter" data-count>01 / 05</span></div>
+        <div class="acc" data-acc tabindex="0" role="listbox" aria-label="Recent projects" style="height:360px">
+          <div class="slat t1 open" role="option" data-name="IMG_2041" data-sub="Portra 400 → Endura · 2 jam lalu"><span class="num">01</span><span class="edge">Portra 400</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Portra 400</span><b>IMG_2041</b><span>→ Endura · 2 jam lalu</span></div></div>
+          <div class="slat t2" role="option"><span class="num">02</span><span class="edge">Velvia 50</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Velvia 50</span><b>DSCF0182</b><span>Scanned · Kemarin</span></div></div>
+          <div class="slat t3" role="option"><span class="num">03</span><span class="edge">Gold 200</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Gold 200</span><b>Pantai sore</b><span>→ 2383 · 12 Okt</span></div></div>
+          <div class="slat t7" role="option"><span class="num">04</span><span class="edge">Vision3 500T</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Vision3 500T</span><b>malam</b><span>→ 2383 · 10 Okt</span></div></div>
+          <div class="slat t5" role="option"><span class="num">05</span><span class="edge">Ektar 100</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Ektar 100</span><b>kebun</b><span>→ Endura · 8 Okt</span></div></div>
+        </div>
+      </div>
+      <div class="cta" style="bottom:96px">Choose Photo</div>
+      <div class="link" style="bottom:56px">All Projects</div>
+      <div class="opening"><div>Opening <b data-opening>IMG_2041</b>…</div></div>
+    </div>
+    <p class="note">Bilah tertutup memperlihatkan irisan warna dan nama film di tepinya, seperti kode di tepi negatif. Di HP, geser jari menyamping untuk berpindah bilah (dengan haptic), ketuk bilah yang terbuka untuk membukanya.</p>
+  </div>
+
+  <div class="shot">
+    <h2>02 · All Projects · <em>Chat history</em></h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-bar"><div class="search">⌕&nbsp; Search projects</div><div class="sq">+</div></div>
+        <div class="group">Today</div>
+        <div class="prow"><div class="th t1"></div><div class="tx"><b>IMG_2041</b><span>Portra 400 → Endura</span></div><time>14:20</time></div>
+        <div class="prow"><div class="th t3"></div><div class="tx"><b>Pantai sore</b><span>Gold 200 → 2383</span></div><time>09:05</time></div>
+        <div class="group">Yesterday</div>
+        <div class="swipe">
+          <div class="acts"><div class="ren">Rename</div><div class="del">Delete</div></div>
+          <div class="prow"><div class="th t2"></div><div class="tx"><b>DSCF0182</b><span>Velvia 50, scanned</span></div><time>Kmr</time></div>
+        </div>
+        <div class="group">This Week</div>
+        <div class="prow"><div class="th t7"></div><div class="tx"><b>malam</b><span>Vision3 500T → 2383</span></div><time>Sen</time></div>
+        <div class="prow"><div class="th t5"></div><div class="tx"><b>kebun</b><span>Ektar 100 → Endura</span></div><time>Min</time></div>
+        <div class="storage">14 PROJECTS · 1.2 GB OF 3.2 GB<div class="meter"><i></i></div></div>
+        <div class="receipt"><span class="ring"></span>Deleted “potret”<b>Undo</b></div>
+      </div>
+    </div>
+    <p class="note">Sama seperti v2, tapi thumbnail-nya ikut berbentuk bilah tegak supaya terasa satu keluarga dengan Start.</p>
+  </div>
+
+  <div class="shot">
+    <h2>03 · Foto asli hilang · di dalam bilah</h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="title" style="top:84px">Develop your <s>filter</s> photo<br>on real film.</div>
+      <div style="position:absolute;left:24px;right:24px;top:178px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span class="counter">Recent</span><span class="counter" data-count>01 / 05</span></div>
+        <div class="acc" data-acc tabindex="0" role="listbox" aria-label="Recent projects" style="height:360px">
+          <div class="slat missing open" role="option"><span class="warnmini">!</span><span class="edge" style="color:var(--orange)">Missing</span>
+            <div class="relink"><div><div class="warn">!</div><b>Original photo missing</b><span>The browser cleared<br>“IMG_2041.HEIC”.<br>Your edits are kept.</span><span class="pill">Choose Again</span></div></div></div>
+          <div class="slat t2" role="option"><span class="num">02</span><span class="edge">Velvia 50</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Velvia 50</span><b>DSCF0182</b><span>Scanned · Kemarin</span></div></div>
+          <div class="slat t3" role="option"><span class="num">03</span><span class="edge">Gold 200</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Gold 200</span><b>Pantai sore</b><span>→ 2383 · 12 Okt</span></div></div>
+          <div class="slat t7" role="option"><span class="num">04</span><span class="edge">Vision3 500T</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Vision3 500T</span><b>malam</b><span>→ 2383 · 10 Okt</span></div></div>
+          <div class="slat t5" role="option"><span class="num">05</span><span class="edge">Ektar 100</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Ektar 100</span><b>kebun</b><span>→ Endura · 8 Okt</span></div></div>
+        </div>
+      </div>
+      <div class="cta" style="bottom:96px">Choose Photo</div>
+      <div class="link" style="bottom:56px">All Projects</div>
+    </div>
+    <p class="note">Bilah yang fotonya hilang bergaris oranye dan tetap bisa dibuka; isinya jadi tempat memilih ulang foto. Tanpa alert.</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="shot">
+    <h2>04 · Membuka proyek · bilah melebar jadi editor</h2>
+    <div class="strip">
+      <div><div class="mini"><div class="stars"></div>
+        <div class="ph t2" style="left:14px;width:16px;top:92px;height:180px"></div>
+        <div class="ph t1" style="left:34px;width:96px;top:92px;height:180px"></div>
+        <div class="ph t3" style="left:134px;width:16px;top:92px;height:180px"></div>
+        <div class="ph t7" style="left:154px;width:16px;top:92px;height:180px"></div></div><p class="stepcap">0 MS · BILAH TERBUKA</p></div>
+      <span class="arrow">→</span>
+      <div><div class="mini"><div class="ph t1" style="left:8px;right:8px;top:62px;height:210px"></div><div class="tb" style="opacity:.4"></div><div class="panel" style="transform:translateY(60px);opacity:.4"></div></div><p class="stepcap">250 MS · MELEBAR</p></div>
+      <span class="arrow">→</span>
+      <div><div class="mini"><div class="tb"></div><div class="ph t1" style="left:0;right:0;top:64px;height:216px;border-radius:0;border:0"></div><div class="panel"><i style="top:22px"></i><i style="top:40px;right:60px"></i><i style="top:76px;left:24px;right:24px;height:28px;border-radius:9px"></i></div></div><p class="stepcap">500 MS · EDITOR</p></div>
+    </div>
+    <p class="note" style="max-width:640px">Bilah yang terbuka menjadi foto di editor; bilah lain memudar. Saat Close, foto menyempit kembali menjadi bilahnya.</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="shot">
+    <h2>05 · Desktop / iPad landscape · accordion di area foto</h2>
+    <div class="desk">
+      <div class="tbar"><b>gammā</b><span>No photo</span><span class="exp">Export</span></div>
+      <div class="side"><div></div><div></div><div></div><div style="width:70%"></div><div></div><div style="width:80%"></div><div></div><div style="width:60%"></div></div>
+      <div class="center">
+        <div class="hd"><div><span class="counter" data-count>01 / 07</span><h4>Recent</h4></div><a>All Projects</a></div>
+        <div class="acc" data-acc tabindex="0" role="listbox" aria-label="Recent projects" style="width:560px;height:380px;gap:8px">
+          <div class="slat t1 open" role="option"><span class="num">01</span><span class="edge">Portra 400</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Portra 400 → Endura</span><b>IMG_2041.HEIC</b><span>2 jam lalu · 6000 × 4000</span></div></div>
+          <div class="slat t2" role="option"><span class="num">02</span><span class="edge">Velvia 50</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Velvia 50, scanned</span><b>DSCF0182.RAF</b><span>Kemarin · 6240 × 4160</span></div></div>
+          <div class="slat t3" role="option"><span class="num">03</span><span class="edge">Gold 200</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Gold 200 → 2383</span><b>pantai.jpg</b><span>12 Okt · 4032 × 3024</span></div></div>
+          <div class="slat t4" role="option"><span class="num">04</span><span class="edge">Film Off</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Film Off</span><b>studio-03.tif</b><span>10 Okt · 5472 × 3648</span></div></div>
+          <div class="slat t7" role="option"><span class="num">05</span><span class="edge">Vision3 500T</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Vision3 500T → 2383</span><b>malam.dng</b><span>9 Okt · 8064 × 6048</span></div></div>
+          <div class="slat t5" role="option"><span class="num">06</span><span class="edge">Ektar 100</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Ektar 100 → Endura</span><b>kebun.ARW</b><span>8 Okt · 7008 × 4672</span></div></div>
+          <div class="slat t6" role="option"><span class="num">07</span><span class="edge">Portra 160</span><div class="info"><span class="counter" style="color:rgba(255,255,255,.7)">Portra 160 → Supra</span><b>IMG_1988.HEIC</b><span>2 Okt · 4032 × 3024</span></div></div>
+        </div>
+        <div class="acts2"><span class="cta-sm">Choose Photo</span><span class="hint">or drop a file anywhere</span></div>
+        <div class="opening"><div>Opening <b data-opening>IMG_2041.HEIC</b>…</div></div>
+      </div>
+      <div class="insp"><div></div><div></div><div></div><div></div><div></div></div>
+      <div class="sb"><span>No photo open</span><span>·</span><span>7 projects · 1.2 GB</span><span class="r">Developed on this device</span></div>
+    </div>
+    <p class="note" style="max-width:640px">Hover membuka bilah; klik membukanya di editor; klik kanan untuk Rename / Duplicate / Delete. Panah kiri/kanan berpindah, Enter membuka.</p>
+  </div>
+</div>
+
+<section class="refs">
+  <div><b>Image accordion</b><span>Start · Recent</span><p>Satu bilah terbuka, tetangganya memberi ruang. <a href="https://bencho.dev/?c=image-accordion&amp;theme=dark">bencho.dev · image-accordion</a></p></div>
+  <div><b>Chat history</b><span>All Projects</span><p>Dikelompokkan per hari, cari, rename di tempat, delete dengan Undo. <a href="https://hairlineui.com/ui/chat-history">hairlineui.com/ui/chat-history</a></p></div>
+  <div><b>Swipe actions</b><span>Baris di All Projects</span><p>Geser untuk Rename / Delete. <a href="https://hairlineui.com/ui/swipe-actions">hairlineui.com/ui/swipe-actions</a></p></div>
+  <div><b>Action receipts</b><span>Undo hapus</span><p>Satu baris dengan Undo selama cincin berkurang. <a href="https://hairlineui.com/ui/action-receipts">hairlineui.com/ui/action-receipts</a></p></div>
+  <div><b>Expanding gallery</b><span>Membuka proyek</span><p>Gambar membesar dari posisinya lalu kembali. <a href="https://hairlineui.com/ui/expanding-gallery">hairlineui.com/ui/expanding-gallery</a></p></div>
+</section>
+
+<script>
+  // Accordion demo: pointer (hover or drag) opens the slat under it; a click
+  // on the open slat "opens" the project; arrows and Enter from the keyboard.
+  for (const acc of document.querySelectorAll('[data-acc]')) {
+    const slats = [...acc.querySelectorAll('.slat')];
+    const scope = acc.closest('.phone, .center');
+    const count = scope.querySelector('[data-count]');
+    const opening = scope.querySelector('.opening');
+    let at = slats.findIndex((s) => s.classList.contains('open'));
+    const show = (i) => {
+      if (i === at || i < 0 || i >= slats.length) return;
+      slats[at].classList.remove('open');
+      slats[i].classList.add('open');
+      at = i;
+      if (count) count.textContent = String(i + 1).padStart(2, '0') + ' / ' + String(slats.length).padStart(2, '0');
+      if (navigator.vibrate) navigator.vibrate(4);
+    };
+    const under = (x) => slats.findIndex((s) => { const r = s.getBoundingClientRect(); return x >= r.left - 3 && x <= r.right + 3; });
+    acc.addEventListener('pointermove', (e) => show(under(e.clientX)));
+    acc.addEventListener('pointerdown', (e) => show(under(e.clientX)));
+    const open = () => {
+      if (!opening || slats[at].classList.contains('missing')) return;
+      const name = slats[at].querySelector('.info b');
+      opening.querySelector('[data-opening]').textContent = name ? name.textContent : '';
+      opening.classList.add('on');
+      setTimeout(() => opening.classList.remove('on'), 900);
+    };
+    acc.addEventListener('click', (e) => { if (e.target.closest('.slat') === slats[at]) open(); });
+    acc.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { show(at + 1); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { show(at - 1); e.preventDefault(); }
+      if (e.key === 'Enter') open();
+    });
+  }
+</script>
+</body>
+</html>

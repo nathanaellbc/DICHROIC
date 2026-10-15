@@ -80,6 +80,24 @@ export interface EngineState {
   depthGpuOption: boolean;
   /** Langkah undo/redo yang tersedia untuk foto terbuka. */
   history: { canUndo: boolean; canRedo: boolean };
+  /** Penghapusan objek yang terpasang di foto terbuka (disimpan bersama proyek). */
+  retouches: number;
+}
+
+/** Satu Remove Object yang di-Apply: cukup untuk memasangnya lagi saat proyek dibuka. */
+export interface SavedRemoval {
+  crop: RemovalCrop;
+  output: Float32Array;
+}
+
+/** Proyek yang dibuka lagi: resep dan penghapusan objeknya. */
+export interface OpenRestore {
+  params: RenderParams;
+  removals: readonly SavedRemoval[];
+}
+
+function copyRemoval({ crop, output }: SavedRemoval): SavedRemoval {
+  return { crop: { ...crop, rgb: crop.rgb.slice(), mask: crop.mask.slice() }, output: output.slice() };
 }
 
 /**
@@ -246,6 +264,7 @@ export class Engine {
     depthGpuOption: false,
     ...(STORED_DEPTH.notice ? { notice: STORED_DEPTH.notice } : {}),
     history: { canUndo: false, canRedo: false },
+    retouches: 0,
   };
   readonly #listeners = new Set<Listener>();
   #past: RenderParams[] = [];
@@ -263,6 +282,9 @@ export class Engine {
   #imageSize: { width: number; height: number } | undefined;
   #canUndoRemoval = false;
   get canUndoRemoval(): boolean { return this.#canUndoRemoval; }
+  /** Salinan penghapusan objek yang terpasang, urut; worker memegang aslinya. */
+  #removals: SavedRemoval[] = [];
+  get removals(): readonly SavedRemoval[] { return this.#removals; }
   /** Ekspor terakhir lebih kecil dari aslinya (difusi, Fase 2D). */
   lastExportLimited: { width: number; height: number } | undefined;
   #inFlight: number | undefined;
@@ -379,17 +401,11 @@ export class Engine {
   #lastDeviceLoss = 0;
 
   /** Buka ulang foto yang sama setelah GPU hilang dan kembalikan semua parameternya. */
-  async #reopenAfterDeviceLoss(file: File, params: RenderParams, hadRetouch: boolean): Promise<void> {
-    await this.openFile(file);
-    if (this.#currentFile !== file || this.#state.phase !== 'editing') return;
-    // openFile memakai saran colour space input dan titik fokus berkas; pulihkan pilihan pengguna.
-    const current = this.#confirmedParams;
-    const patch: Partial<RenderParams> = {};
-    for (const key of Object.keys(params) as Array<keyof RenderParams>) {
-      if (params[key] !== current[key]) (patch as Record<string, unknown>)[key] = params[key];
-    }
-    if (Object.keys(patch).length > 0) this.setParams(patch, false);
-    this.#set({ notice: hadRetouch ? 'GPU reset by the system. Photo reopened; the object removal was lost.' : 'GPU reset by the system. Photo reopened.' });
+  async #reopenAfterDeviceLoss(file: File, params: RenderParams, removals: readonly SavedRemoval[]): Promise<void> {
+    // Seperti membuka proyek: pengaturan dan penghapusan objek dipasang lagi.
+    if (!(await this.openFile(file, { params, removals }))) return;
+    const lost = removals.length - this.#removals.length;
+    this.#set({ notice: lost > 0 ? 'GPU reset by the system. Photo reopened; an object removal was lost.' : 'GPU reset by the system. Photo reopened.' });
   }
 
   dismissNotice(): void {
@@ -434,11 +450,12 @@ export class Engine {
     const client = SessionClient.attach(worker, (error) => {
       if (this.#client !== client) return;
       // Diambil sebelum state direset: untuk membuka ulang foto yang sama.
-      const lostFile = this.#currentFile, lostParams = this.#confirmedParams, lostRetouch = this.#canUndoRemoval;
+      const lostFile = this.#currentFile, lostParams = this.#confirmedParams, lostRemovals = this.#removals;
       const recover = isDeviceLoss(error) && Date.now() - this.#lastDeviceLoss > DEVICE_LOSS_RETRY_MS;
       if (isDeviceLoss(error)) this.#lastDeviceLoss = Date.now();
       this.#currentFile = undefined;
       this.#canUndoRemoval = false;
+      this.#removals = [];
       this.#client = undefined;
       this.#ready = undefined;
       this.#openToken += 1;
@@ -454,7 +471,7 @@ export class Engine {
         this.#clearHistory();
         this.#set({ engine: 'paused', phase: 'idle', frame: undefined, original: undefined, before: undefined,
           fileName: undefined, opening: undefined, rendering: false, interacting: false, error: undefined });
-        if (lostFile) void this.#reopenAfterDeviceLoss(lostFile, lostParams, lostRetouch);
+        if (lostFile) void this.#reopenAfterDeviceLoss(lostFile, lostParams, lostRemovals);
         else if (typeof document === 'undefined' || document.visibilityState === 'visible') this.start();
         return;
       }
@@ -490,12 +507,17 @@ export class Engine {
     this.#ready.catch(() => {});
   }
 
-  async openFile(file: File): Promise<void> {
+  /**
+   * Buka berkas. `restore`: proyek yang dibuka lagi -- resepnya menggantikan
+   * tampilan yang dibawa, lalu penghapusan objeknya dipasang ulang.
+   * `true` bila foto terbuka.
+   */
+  async openFile(file: File, restore?: OpenRestore): Promise<boolean> {
     this.#formatPreview = false;
     this.#cancelRefinement();
     if (!this.#client) this.start();
     const client = this.#client;
-    if (!client) return;
+    if (!client) return false;
     const token = ++this.#openToken;
     const stillCurrent = () => token === this.#openToken;
     const previousPhase = this.#state.fileName && this.#state.frame ? 'editing' : 'idle';
@@ -504,28 +526,28 @@ export class Engine {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const format = detectFormat(bytes);
-      if (!stillCurrent()) return;
+      if (!stillCurrent()) return false;
       const viaBrowser = format === 'unknown' && isBrowserImage(bytes);
       this.#set({ opening: { name: file.name, stage: format === 'raw' || (format === 'unknown' && !viaBrowser) ? 'Decoding RAW…' : 'Decoding…' } });
       // HEIC lewat decoder browser: EXIF (kamera, lensa, GPS) diambil dari
       // berkas aslinya supaya tetap ikut ke ekspor.
       const image: DecodedImage = viaBrowser ? withExif(await decodeWithBrowser(file, file.name), bytes) : await decodeInWorker(client, bytes, file);
-      if (!stillCurrent()) return;
+      if (!stillCurrent()) return false;
       const input = suggestedInput(image);
       const profile = await this.#profile();
-      if (!stillCurrent()) return;
+      if (!stillCurrent()) return false;
 
       if (this.#state.engine !== 'ready') this.#set({ opening: { name: file.name, stage: 'Preparing the darkroom…' } });
       await this.#ready;
-      if (!stillCurrent()) return;
+      if (!stillCurrent()) return false;
       // Tampilan (film, kertas, penyesuaian, lensa) dibawa ke foto berikutnya;
       // colour space input, auto exposure, dan titik fokus milik berkas.
       const fileParams = { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
       this.#set({ opening: { name: file.name, stage: 'Developing…' } });
       const prepared = await client.stageOpen(token, image, fileParams, profile.guideMaxEdge);
-      if (!stillCurrent()) { await client.discardOpen(token); return; }
+      if (!stillCurrent()) { await client.discardOpen(token); return false; }
       await client.commitOpen(token);
-      if (!stillCurrent()) { await client.discardOpen(token); return; }
+      if (!stillCurrent()) { await client.discardOpen(token); return false; }
       const { params, original, guide, preview } = prepared;
       this.#photoGeneration += 1;
       this.#photoId = token;
@@ -534,6 +556,7 @@ export class Engine {
       this.#pendingPatches.clear();
       this.#imageSize = { width: prepared.width, height: prepared.height };
       this.#canUndoRemoval = false;
+      this.#removals = [];
       this.#previewLongEdge = 1024;
       this.#interactionChanged = false;
       this.#depth.reset(guide);
@@ -551,15 +574,47 @@ export class Engine {
           pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
         phase: 'editing', opening: undefined,
         interacting: false,
+        retouches: 0,
       });
       void client.finishOpen(token).catch(() => {});
-      if (params.lensBlurEnabled) this.#depth.ensure();
+      if (restore) await this.#restore(restore, token);
+      else if (params.lensBlurEnabled) this.#depth.ensure();
+      return stillCurrent();
     } catch (error) {
       void client.discardOpen(token).catch(() => {});
-      if (!stillCurrent()) return;
+      if (!stillCurrent()) return false;
       this.#set({ phase: previousPhase, opening: undefined, error: describeError(error, file.name) });
       if (previousPhase === 'editing') this.requestRender();
+      return false;
     }
+  }
+
+  /** Resep dan penghapusan objek proyek di atas foto yang baru terbuka. */
+  async #restore({ params, removals }: OpenRestore, token: number): Promise<void> {
+    const client = this.#client;
+    if (!client) return;
+    const patch = diffParams(this.#state.params, { ...this.#state.params, ...params });
+    if (Object.keys(patch).length > 0) this.setParams(patch, false);
+    let changed: Awaited<ReturnType<SessionClient['applyRemoval']>> | undefined;
+    for (const removal of removals) {
+      if (token !== this.#openToken) return;
+      const copy = copyRemoval(removal);
+      try {
+        changed = await client.applyRemoval(copy.crop, copy.output, true);
+      } catch {
+        // Foto berubah (mis. dipilih ulang berkas lain): sisanya tidak berlaku.
+        break;
+      }
+      this.#removals.push(copyRemoval(removal));
+    }
+    if (token !== this.#openToken) return;
+    if (changed) {
+      this.#paramsRevision += 1;
+      this.#depth.reset(changed.guide);
+      this.#set({ original: changed.original, frame: changed.original, retouches: this.#removals.length });
+      await this.#renderOnce();
+    }
+    if (this.#state.params.lensBlurEnabled) this.#depth.ensure();
   }
 
   cancelOpening(): void {
@@ -577,8 +632,12 @@ export class Engine {
   async applyRemoval(crop?: RemovalCrop, output?: Float32Array): Promise<void> {
     const client = this.#client, generation = this.#photoGeneration;
     if (!client || this.#state.phase !== 'editing') throw new Error('Open a photo first.');
+    // Salinan untuk proyek: buffer aslinya ditransfer ke worker.
+    const saved = crop && output ? copyRemoval({ crop, output }) : undefined;
     const changed = crop && output ? await client.applyRemoval(crop, output) : await client.undoRemoval();
     if (generation !== this.#photoGeneration || client !== this.#client) return;
+    if (saved) this.#removals.push(saved);
+    else this.#removals.pop();
     this.#paramsRevision += 1;
     this.#depthMap = undefined;
     this.#refine = undefined;
@@ -588,7 +647,7 @@ export class Engine {
     // catches up. Apply stays pending until a new graded preview is available.
     this.#formatPreview = false;
     this.#cancelRefinement();
-    this.#set({ original: changed.original, frame: changed.original });
+    this.#set({ original: changed.original, frame: changed.original, retouches: this.#removals.length });
     await this.#renderOnce();
     if (this.#state.params.lensBlurEnabled) this.#depth.ensure();
   }
@@ -596,6 +655,7 @@ export class Engine {
   closePhoto(): void {
     this.#currentFile = undefined;
     this.#canUndoRemoval = false;
+    this.#removals = [];
     this.#formatPreview = false;
     this.#cancelRefinement();
     this.#openToken += 1;
@@ -617,7 +677,7 @@ export class Engine {
     if (client) void client.close().then(() => client.dispose()).catch((error: unknown) =>
       client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
     this.#interactionChanged = false;
-    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, before: undefined, fileName: undefined, opening: undefined });
+    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, before: undefined, fileName: undefined, opening: undefined, retouches: 0 });
   }
 
   #clearHistory(): void {

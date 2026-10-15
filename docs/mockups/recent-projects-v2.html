@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gammā · Mockup Recent v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000; --label: #fff; --label-2: #aaaab3; --label-3: #6e6e76;
+    --blue: #0091ff; --cta: #0071e3; --red: #ff453a; --green: #30d158; --orange: #ff9f0a;
+    --hair: rgba(255,255,255,.09); --hair-2: rgba(255,255,255,.16); --fill: rgba(120,120,128,.18);
+    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Geist Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0b0c; color: var(--label); font-family: var(--sf); padding: 48px 32px 80px; }
+  header.page { max-width: 1400px; margin: 0 auto 40px; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--label-2); }
+  h1 { font: 400 34px 'Instrument Serif', serif; margin: 6px 0 8px; }
+  .lede { color: var(--label-2); font-size: 14px; max-width: 780px; line-height: 1.55; }
+  .lede a { color: var(--blue); }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; max-width: 1400px; margin: 0 auto 56px; align-items: flex-start; }
+  .shot { display: flex; flex-direction: column; gap: 12px; }
+  .shot h2 { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); }
+  .shot h2 em { font-style: normal; color: var(--blue); }
+  p.note { color: var(--label-3); font-size: 12px; line-height: 1.5; max-width: 320px; }
+
+  .phone { width: 375px; height: 812px; border-radius: 48px; border: 1px solid #2a2a2e; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 0 0 10px #151517; }
+  .stars { position: absolute; inset: 0; pointer-events: none; background-image:
+    radial-gradient(1px 1px at 20% 12%, #fff8 50%, transparent), radial-gradient(1px 1px at 70% 8%, #fff6 50%, transparent),
+    radial-gradient(1px 1px at 85% 30%, #fff5 50%, transparent), radial-gradient(1px 1px at 12% 44%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 55% 52%, #fff5 50%, transparent), radial-gradient(1px 1px at 33% 70%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 90% 64%, #fff6 50%, transparent), radial-gradient(1px 1px at 8% 86%, #fff4 50%, transparent); }
+  .glow { position: absolute; left: 50%; bottom: -140px; width: 520px; height: 260px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0,113,224,.32), transparent); filter: blur(30px); }
+  .status { height: 52px; display: flex; justify-content: space-between; align-items: center; padding: 14px 30px 0; font-weight: 600; font-size: 15px; position: relative; z-index: 3; }
+  .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; border-radius: 20px; background: #000; transform: translateX(-50%); border: 1px solid #1a1a1a; }
+  .cta { position: absolute; left: 24px; right: 24px; height: 50px; border-radius: 999px; background: var(--cta); display: grid; place-items: center; font-weight: 600; font-size: 17px; }
+  .link { position: absolute; left: 0; right: 0; text-align: center; font-size: 15px; color: var(--blue); }
+  .counter { font: 500 11px var(--mono); letter-spacing: .12em; color: var(--label-2); text-transform: uppercase; }
+
+  .t1 { background: linear-gradient(160deg, #e8b07a, #b35a3c 45%, #2b1d2a); }
+  .t2 { background: linear-gradient(200deg, #9fc6d8, #4f7d8f 50%, #1b2a33); }
+  .t3 { background: linear-gradient(170deg, #f1d9a6, #c48b4f 50%, #3a2a1a); }
+  .t4 { background: linear-gradient(190deg, #b9b6c9, #6a6a86 55%, #1d1d2a); }
+  .t5 { background: linear-gradient(150deg, #d6e3b0, #7d9455 50%, #222b17); }
+  .t6 { background: linear-gradient(210deg, #f5b8b8, #a75c6b 50%, #2a1a22); }
+  .t7 { background: linear-gradient(180deg, #8fb3ff, #3a58a8 55%, #10162b); }
+  .t8 { background: linear-gradient(165deg, #e9e2d0, #a59a83 50%, #2a2622); }
+
+  /* Card deck */
+  .deck { position: absolute; left: 50%; top: 96px; width: 268px; height: 372px; transform: translateX(-50%); }
+  .dcard { position: absolute; inset: 0; border-radius: 22px; border: 1px solid var(--hair-2); background: #121214; overflow: hidden; }
+  .dcard.b2 { transform: translate(14px, 10px) rotate(4deg); opacity: .55; }
+  .dcard.b3 { transform: translate(-14px, 16px) rotate(-5deg); opacity: .35; }
+  .dcard .photo { position: absolute; left: 10px; right: 10px; top: 10px; height: 250px; border-radius: 14px; }
+  .dcard .film { position: absolute; left: 20px; top: 222px; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 7px; background: rgba(0,0,0,.5); backdrop-filter: blur(10px); }
+  .dcard .head { position: absolute; left: 18px; right: 18px; top: 272px; display: flex; justify-content: space-between; }
+  .dcard .name { position: absolute; left: 18px; right: 18px; top: 292px; font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+  .dcard .sub { position: absolute; left: 18px; right: 18px; top: 322px; font-size: 13px; color: var(--label-2); }
+  .pager { position: absolute; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 14px; }
+  .pager .round { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--hair-2); display: grid; place-items: center; color: var(--label-2); font-size: 14px; }
+  .hint { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--label-3); }
+
+  /* All projects */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 60px; border-radius: 24px 24px 0 0; background: #111113; border-top: 1px solid var(--hair-2); }
+  .grabber { width: 36px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.28); margin: 7px auto 0; }
+  .sheet-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px 10px; }
+  .search { flex: 1; height: 36px; border-radius: 10px; border: 1px solid var(--hair-2); color: var(--label-3); font-size: 15px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+  .sq { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--hair-2); display: grid; place-items: center; font-size: 18px; color: var(--label); }
+  .group { padding: 14px 16px 4px; font-size: 12px; font-weight: 600; color: var(--label-2); }
+  .prow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; position: relative; background: #111113; }
+  .prow .th { width: 46px; height: 46px; border-radius: 9px; flex-shrink: 0; border: .5px solid var(--hair-2); }
+  .prow .tx { flex: 1; min-width: 0; }
+  .prow .tx b { display: block; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .tx span { font-size: 12px; color: var(--label-2); }
+  .prow time { font: 12px var(--mono); color: var(--label-3); }
+  .prow + .prow::before { content: ''; position: absolute; left: 74px; right: 0; top: 0; border-top: 1px solid var(--hair); }
+  .swipe { position: relative; height: 64px; overflow: hidden; }
+  .swipe .acts { position: absolute; right: 0; top: 0; bottom: 0; display: flex; }
+  .swipe .acts div { width: 76px; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .swipe .acts .ren { background: #3a3a3e; } .swipe .acts .del { background: var(--red); }
+  .swipe .prow { position: absolute; inset: 0; transform: translateX(-152px); }
+  .renaming .tx b { border: 1px solid var(--blue); border-radius: 6px; padding: 2px 6px; margin: -3px -7px; background: #000; }
+  .renaming .tx b i { display: inline-block; width: 1.5px; height: 15px; background: var(--blue); vertical-align: -2px; margin-left: 1px; }
+  .receipt { position: absolute; left: 16px; right: 16px; bottom: 34px; height: 48px; border-radius: 14px; border: 1px solid var(--hair-2); background: rgba(30,30,32,.92); backdrop-filter: blur(20px); display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 14px; }
+  .receipt .ring { width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--label-2) 0 62%, transparent 62% 100%); -webkit-mask: radial-gradient(circle, transparent 6px, #000 6.5px); mask: radial-gradient(circle, transparent 6px, #000 6.5px); }
+  .receipt b { margin-left: auto; color: var(--blue); font-weight: 600; }
+  .storage { padding: 10px 16px 0; font: 11px var(--mono); color: var(--label-3); letter-spacing: .04em; }
+  .meter { height: 3px; border-radius: 2px; background: var(--fill); margin-top: 6px; overflow: hidden; }
+  .meter i { display: block; width: 38%; height: 100%; background: var(--label-2); }
+
+  /* Open transition */
+  .strip { display: flex; gap: 18px; align-items: flex-end; }
+  .mini { width: 186px; height: 404px; border-radius: 28px; border: 1px solid #2a2a2e; background: #000; position: relative; overflow: hidden; box-shadow: 0 0 0 6px #151517; }
+  .mini .ph { position: absolute; border-radius: 12px; border: 1px solid var(--hair-2); }
+  .mini .tb { position: absolute; left: 10px; right: 10px; top: 30px; height: 26px; border-radius: 13px; background: rgba(28,28,30,.7); border: 1px solid var(--hair); }
+  .mini .panel { position: absolute; left: 0; right: 0; bottom: 0; height: 120px; border-radius: 16px 16px 0 0; background: rgba(28,28,30,.85); border-top: 1px solid var(--hair); }
+  .mini .panel i { position: absolute; left: 14px; right: 14px; height: 4px; border-radius: 2px; background: var(--fill); }
+  .stepcap { font: 11px var(--mono); color: var(--label-3); text-align: center; margin-top: 10px; letter-spacing: .06em; }
+  .arrow { color: var(--label-3); font-size: 18px; align-self: center; margin-bottom: 30px; }
+
+  /* Missing */
+  .relink { position: absolute; left: 10px; right: 10px; top: 10px; height: 250px; border-radius: 14px; border: 1.5px dashed rgba(255,159,10,.55); background: rgba(255,159,10,.06); display: grid; place-items: center; text-align: center; }
+  .relink b { display: block; font-size: 15px; margin: 8px 0 4px; }
+  .relink span { font-size: 12px; color: var(--label-2); line-height: 1.4; display: block; max-width: 190px; margin: 0 auto; }
+  .relink .pill { display: inline-block; margin-top: 12px; padding: 7px 14px; border-radius: 999px; background: var(--fill); color: var(--label); font-size: 13px; font-weight: 600; max-width: none; }
+  .warn { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--orange); color: var(--orange); display: grid; place-items: center; font-weight: 700; margin: 0 auto; }
+
+  /* Desktop */
+  .desk { width: 1180px; height: 700px; border-radius: 12px; border: 1px solid #2a2a2e; background: #000; overflow: hidden; display: grid; grid-template-columns: 220px 1fr 260px; grid-template-rows: 44px 1fr 26px; font-size: 12px; }
+  .tbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--hair); background: #0e0e10; }
+  .tbar b { font-size: 14px; } .tbar > span { color: var(--label-3); }
+  .saved { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--hair-2); font-size: 12px; }
+  .tbar .saved { color: var(--label-2); }
+  .saved i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--green); position: relative; }
+  .saved i::after { content: ''; position: absolute; left: 3px; top: 1px; width: 3px; height: 5px; border: solid var(--green); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .tbar .exp { margin-left: auto; padding: 5px 12px; border-radius: 7px; background: var(--cta); color: #fff; font-weight: 600; }
+  .side, .insp { background: #0e0e10; opacity: .55; padding: 10px; }
+  .side { border-right: 1px solid var(--hair); } .insp { border-left: 1px solid var(--hair); }
+  .side div { height: 18px; border-radius: 4px; background: rgba(255,255,255,.05); margin-bottom: 8px; }
+  .insp div { height: 40px; border-radius: 6px; background: rgba(255,255,255,.04); margin-bottom: 10px; }
+  .center { position: relative; overflow: hidden; padding: 26px 30px; }
+  .center .top { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--hair); }
+  .center h4 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; }
+  .center .cta-sm { padding: 8px 16px; border-radius: 999px; background: var(--cta); font-weight: 600; font-size: 13px; }
+  .dgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px 16px; }
+  .dgrid .ph { aspect-ratio: 4/3; border-radius: 10px; border: 1px solid var(--hair-2); }
+  .dgrid .mt { display: flex; justify-content: space-between; margin-top: 8px; }
+  .dgrid .mt b { font-size: 13px; font-weight: 500; }
+  .dgrid .mt span { font: 11px var(--mono); color: var(--label-3); }
+  .dgrid .rc { font-size: 12px; color: var(--label-2); margin-top: 2px; }
+  .dgrid .hover .ph { outline: 1px solid var(--blue); outline-offset: 3px; transform: translateY(-2px); }
+  .sb { grid-column: 1 / -1; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--label-3); font-size: 11px; background: #0e0e10; }
+  .sb .r { margin-left: auto; }
+
+  .refs { max-width: 1400px; margin: 0 auto; border-top: 1px solid var(--hair); }
+  .refs div { display: grid; grid-template-columns: 200px 1fr 1.2fr; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--hair); font-size: 13px; line-height: 1.5; }
+  .refs b { font-weight: 600; } .refs a { color: var(--blue); text-decoration: none; }
+  .refs span { color: var(--label-2); } .refs p { color: #d2d2d7; }
+</style>
+</head>
+<body>
+<header class="page">
+  <p class="eyebrow">Mockup v2 · fitur Recent · referensi Hairline UI</p>
+  <h1>Proyek terakhir, sebagai tumpukan film</h1>
+  <p class="lede">Dibangun dari pola <a href="https://hairlineui.com/ui">Hairline UI</a> yang paling dekat dengan gammā: garis rambut tipis, angka mono kecil, gerak yang taktil. Recent menggantikan awan stiker di Start sebagai tumpukan kartu; daftar lengkap mengikuti Chat history. Thumbnail memakai gradasi sebagai pengganti foto.</p>
+</header>
+
+<div class="row">
+  <div class="shot">
+    <h2>01 · Start · <em>Card deck</em></h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="deck">
+        <div class="dcard b3 t5"></div>
+        <div class="dcard b2"><div class="photo t2"></div></div>
+        <div class="dcard">
+          <div class="photo t1"></div>
+          <span class="film">Portra 400</span>
+          <div class="head"><span class="counter">Recent</span><span class="counter">01 / 05</span></div>
+          <div class="name">IMG_2041</div>
+          <div class="sub">Portra 400 → Endura · 2 jam lalu</div>
+        </div>
+      </div>
+      <div class="pager" style="top:500px"><span class="round">←</span><span class="counter">01 / 05</span><span class="round">→</span></div>
+      <div class="hint" style="top:550px">Ketuk untuk membuka · geser untuk kartu berikutnya</div>
+      <div class="cta" style="bottom:96px">Choose Photo</div>
+      <div class="link" style="bottom:56px">All Projects</div>
+    </div>
+    <p class="note">Tumpukan menggantikan awan stiker dan terasa seperti setumpuk cetakan. Pengguna baru tetap melihat Start yang sekarang.</p>
+  </div>
+
+  <div class="shot">
+    <h2>02 · All Projects · <em>Chat history</em></h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-bar"><div class="search">⌕&nbsp; Search projects</div><div class="sq">+</div></div>
+        <div class="group">Today</div>
+        <div class="prow"><div class="th t1"></div><div class="tx"><b>IMG_2041</b><span>Portra 400 → Endura</span></div><time>14:20</time></div>
+        <div class="prow renaming"><div class="th t3"></div><div class="tx"><b>Pantai sore<i></i></b><span>Gold 200 → 2383</span></div><time>09:05</time></div>
+        <div class="group">Yesterday</div>
+        <div class="swipe">
+          <div class="acts"><div class="ren">Rename</div><div class="del">Delete</div></div>
+          <div class="prow"><div class="th t2"></div><div class="tx"><b>DSCF0182</b><span>Velvia 50, scanned</span></div><time>Kmr</time></div>
+        </div>
+        <div class="group">This Week</div>
+        <div class="prow"><div class="th t4"></div><div class="tx"><b>studio-03</b><span>Film Off · Neutral negative</span></div><time>Sen</time></div>
+        <div class="prow"><div class="th t7"></div><div class="tx"><b>malam</b><span>Vision3 500T → 2383</span></div><time>Min</time></div>
+        <div class="storage">14 PROJECTS · 1.2 GB OF 3.2 GB<div class="meter"><i></i></div></div>
+        <div class="receipt"><span class="ring"></span>Deleted “potret”<b>Undo</b></div>
+      </div>
+    </div>
+    <p class="note">Dikelompokkan per hari, rename langsung di baris (baris kedua), geser untuk Rename / Delete (baris ketiga), dan hapus memunculkan Undo dengan cincin waktu.</p>
+  </div>
+
+  <div class="shot">
+    <h2>03 · Foto asli hilang · tenang, di tempat</h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="deck">
+        <div class="dcard b2"><div class="photo t2"></div></div>
+        <div class="dcard">
+          <div class="relink"><div><div class="warn">!</div><b>Original photo missing</b><span>The browser cleared “IMG_2041.HEIC”. Your edits are kept.</span><span class="pill">Choose Again</span></div></div>
+          <div class="head"><span class="counter">Recent</span><span class="counter">01 / 05</span></div>
+          <div class="name">IMG_2041</div>
+          <div class="sub">Portra 400 → Endura · 2 jam lalu</div>
+        </div>
+      </div>
+      <div class="pager" style="top:500px"><span class="round">←</span><span class="counter">01 / 05</span><span class="round">→</span></div>
+      <div class="cta" style="bottom:96px">Choose Photo</div>
+      <div class="link" style="bottom:56px">All Projects</div>
+    </div>
+    <p class="note">Tanpa alert: kartunya sendiri menjadi drop zone untuk memilih ulang foto. Delete tetap ada di tekan lama.</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="shot">
+    <h2>04 · Membuka proyek · <em>Expanding gallery</em></h2>
+    <div class="strip">
+      <div><div class="mini"><div class="stars"></div><div class="ph t1" style="left:30px;right:30px;top:70px;height:130px"></div></div><p class="stepcap">0 MS · KARTU</p></div>
+      <span class="arrow">→</span>
+      <div><div class="mini"><div class="ph t1" style="left:12px;right:12px;top:60px;height:200px"></div><div class="tb" style="opacity:.4"></div><div class="panel" style="transform:translateY(60px);opacity:.4"></div></div><p class="stepcap">250 MS · MEMBESAR</p></div>
+      <span class="arrow">→</span>
+      <div><div class="mini"><div class="tb"></div><div class="ph t1" style="left:0;right:0;top:64px;height:216px;border-radius:0;border:0"></div><div class="panel"><i style="top:22px"></i><i style="top:40px;right:60px"></i><i style="top:76px;left:24px;right:24px;height:28px;border-radius:9px"></i></div></div><p class="stepcap">500 MS · EDITOR</p></div>
+    </div>
+    <p class="note" style="max-width:640px">Foto di kartu tumbuh ke tempatnya di editor (pola yang sama dengan full-screen viewer gammā), lalu toolbar dan panel muncul. Saat Close, foto mengecil kembali ke tumpukan.</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="shot">
+    <h2>05 · Desktop / iPad landscape · grid bernomor</h2>
+    <div class="desk">
+      <div class="tbar"><b>gammā</b><span>No photo</span><span class="exp">Export</span></div>
+      <div class="side"><div></div><div></div><div></div><div style="width:70%"></div><div></div><div style="width:80%"></div><div></div><div style="width:60%"></div></div>
+      <div class="center">
+        <div class="top"><div><span class="counter">08 Projects</span><h4>Recent</h4></div><span class="cta-sm">Choose Photo</span></div>
+        <div class="dgrid">
+          <div><div class="ph t1"></div><div class="mt"><b>IMG_2041.HEIC</b><span>01</span></div><div class="rc">Portra 400 → Endura</div></div>
+          <div class="hover"><div class="ph t2"></div><div class="mt"><b>DSCF0182.RAF</b><span>02</span></div><div class="rc">Velvia 50, scanned</div></div>
+          <div><div class="ph t3"></div><div class="mt"><b>pantai.jpg</b><span>03</span></div><div class="rc">Gold 200 → 2383</div></div>
+          <div><div class="ph t4"></div><div class="mt"><b>studio-03.tif</b><span>04</span></div><div class="rc">Film Off</div></div>
+          <div><div class="ph t5"></div><div class="mt"><b>kebun.ARW</b><span>05</span></div><div class="rc">Ektar 100 → Endura</div></div>
+          <div><div class="ph t6"></div><div class="mt"><b>IMG_1988.HEIC</b><span>06</span></div><div class="rc">Portra 160 → Supra</div></div>
+          <div><div class="ph t7"></div><div class="mt"><b>malam.dng</b><span>07</span></div><div class="rc">Vision3 500T → 2383</div></div>
+          <div><div class="ph t8"></div><div class="mt"><b>potret.jpg</b><span>08</span></div><div class="rc">Pro 400H → Endura</div></div>
+        </div>
+      </div>
+      <div class="insp"><div></div><div></div><div></div><div></div><div></div></div>
+      <div class="sb"><span>No photo open</span><span>·</span><span>8 projects · 1.2 GB</span><span class="r">Developed on this device</span></div>
+    </div>
+    <p class="note" style="max-width:640px">Grid bernomor mono seperti contoh Stillform di Expanding gallery. Saat foto terbuka, toolbar editor menampilkan pil <span class="saved" style="color:var(--label-2)"><i></i>Saved</span> mengikuti Status button: Saving… dengan spinner, lalu centang tergambar saat tersimpan.</p>
+  </div>
+</div>
+
+<section class="refs">
+  <div><b>Card deck</b><span>Start · Recent</span><p>Tumpukan yang bisa dikipas dan digeser. <a href="https://hairlineui.com/ui/card-deck">hairlineui.com/ui/card-deck</a></p></div>
+  <div><b>Expanding gallery</b><span>Membuka proyek</span><p>Gambar membesar dari posisi persisnya, lalu kembali. <a href="https://hairlineui.com/ui/expanding-gallery">hairlineui.com/ui/expanding-gallery</a></p></div>
+  <div><b>Chat history</b><span>All Projects</span><p>Dikelompokkan per hari, bisa dicari, rename di tempat, delete dengan Undo. <a href="https://hairlineui.com/ui/chat-history">hairlineui.com/ui/chat-history</a></p></div>
+  <div><b>Swipe actions</b><span>Baris di All Projects</span><p>Geser penuh menjalankan aksi pertama; baris terlipat saat dihapus. <a href="https://hairlineui.com/ui/swipe-actions">hairlineui.com/ui/swipe-actions</a></p></div>
+  <div><b>Action receipts</b><span>Undo hapus</span><p>Satu baris tenang dengan Undo selama cincin berkurang. <a href="https://hairlineui.com/ui/action-receipts">hairlineui.com/ui/action-receipts</a></p></div>
+  <div><b>Status button</b><span>Indikator autosave</span><p>Saving → Saved: spinner, centang yang tergambar, label yang berubah. <a href="https://hairlineui.com/ui/status-button">hairlineui.com/ui/status-button</a></p></div>
+  <div><b>Drop zone · Membrane</b><span>Foto asli hilang</span><p>Batas yang “meraih” berkas; dipakai untuk memilih ulang foto di kartu. <a href="https://hairlineui.com/ui/drop-zone-membrane">hairlineui.com/ui/drop-zone-membrane</a></p></div>
+</section>
+</body>
+</html>

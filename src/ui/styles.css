@@ -1506,3 +1506,77 @@ html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px;
   :root[data-theme="light"] .toast { background: #fff !important; }
   :root[data-theme="light"] .icon-btn.glass[aria-pressed="true"] { background: #000; }
 }
+
+/*
+ * Recent di layar Start (pola "Image accordion"): proyek sebagai bilah
+ * seperti potongan negatif. Teks di atas foto selalu putih (fotonya gelap
+ * di bawah), jadi tidak ikut token tema.
+ */
+.intro-orb-slot { transition: opacity 0.3s ease; }
+.intro-orb-slot[data-hidden] { opacity: 0; pointer-events: none; }
+.recent-slot { width: min(560px, 100%); margin-top: 20px; flex: 1 1 auto; min-height: 220px; max-height: 460px; display: flex; flex-direction: column; }
+html[data-size="regular"] .recent-slot { max-height: 420px; margin-top: 24px; }
+.recent { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
+.recent-head { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px; }
+.recent-label, .recent-count { font: 500 11px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--label-2); }
+.recent-strip { flex: 1 1 auto; min-height: 0; display: flex; gap: 6px; touch-action: pan-y; outline: none; border-radius: 14px; }
+html[data-size="regular"] .recent-strip { gap: 8px; }
+.recent-strip:focus-visible { outline: 2px solid var(--blue); outline-offset: 6px; }
+.recent-slat {
+  position: relative; flex: 1 1 0; min-width: 0; border-radius: 12px; overflow: hidden; cursor: pointer;
+  background: var(--fill-soft); border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: flex-grow 0.55s cubic-bezier(0.32, 1.24, 0.42, 1), filter 0.3s ease;
+  filter: saturate(0.75) brightness(0.72);
+  -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.recent-slat[data-open] { flex-grow: 5.2; filter: none; }
+.recent-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.recent-num, .recent-edge { position: absolute; color: rgba(255, 255, 255, 0.78); font: 500 9px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.16em; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); transition: opacity 0.2s; pointer-events: none; }
+.recent-num { top: 10px; left: 0; right: 0; text-align: center; }
+.recent-edge { left: 50%; bottom: 56px; white-space: nowrap; transform: translateX(-50%) rotate(-90deg); }
+.recent-slat[data-open] .recent-num, .recent-slat[data-open] .recent-edge { opacity: 0; }
+.recent-info, .recent-relink { position: absolute; opacity: 0; transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.32, 1.24, 0.42, 1); pointer-events: none; }
+.recent-slat[data-open] .recent-info, .recent-slat[data-open] .recent-relink { opacity: 1; transform: none; transition-delay: 0.12s; }
+.recent-info {
+  left: 0; right: 0; bottom: 0; padding: 44px 14px 13px; transform: translateY(8px); text-align: left;
+  display: flex; flex-direction: column; gap: 2px; color: #fff; white-space: nowrap;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.72));
+}
+.recent-film { font: 500 11px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.72); }
+.recent-info strong { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; }
+.recent-info > span:last-child { font-size: 12px; color: rgba(255, 255, 255, 0.75); overflow: hidden; text-overflow: ellipsis; }
+.recent-slat[data-missing] { filter: none; border: 1.5px dashed color-mix(in srgb, var(--orange) 60%, transparent); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--orange) 7%, transparent) 0 6px, transparent 6px 12px); }
+.recent-slat[data-missing] .recent-num, .recent-slat[data-missing] .recent-edge { color: var(--orange); text-shadow: none; }
+.recent-relink { inset: 0; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; color: var(--label); }
+.recent-relink strong { font-size: 15px; }
+.recent-relink > span { font-size: 12px; line-height: 1.4; color: var(--label-2); }
+.recent-warn { color: var(--orange); }
+.recent-pill { margin-top: 6px; padding: 7px 14px; border-radius: 999px; background: var(--fill-soft); color: var(--label) !important; font-size: 13px !important; font-weight: 600; }
+.recent-all { align-self: center; border: 0; background: none; color: var(--blue-text, var(--blue)); font: inherit; font-size: 15px; padding: 8px 12px; cursor: pointer; }
+html[data-size="regular"] .recent-all { font-size: 13px; }
+.intro-content[data-recent] .recent-slot { margin-bottom: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .recent-slat, .recent-info, .recent-relink, .recent-num, .recent-edge, .intro-orb-slot { transition: none; }
+}
+
+/* All Projects */
+.project-row { cursor: default; }
+.project-thumb { width: 30px; height: 44px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: var(--fill-soft); border: 0.5px solid var(--hairline); display: grid; place-items: center; color: var(--orange); }
+.project-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.project-thumb[data-missing] { border: 1px dashed color-mix(in srgb, var(--orange) 60%, transparent); }
+.project-open { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.project-rename { font: inherit; color: var(--label); background: var(--bg); border: 1px solid var(--blue); border-radius: 6px; padding: 2px 6px; margin: -3px -7px 0; outline: none; }
+
+/* Struk Undo setelah menghapus proyek */
+.undo-receipt {
+  position: fixed; left: 50%; bottom: calc(var(--safe-bottom, 0px) + 24px); z-index: 60;
+  display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 8px 0 14px; border-radius: 14px;
+  max-width: min(420px, calc(100vw - 32px)); font-size: 15px;
+}
+.undo-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.undo-action { margin-left: 8px; border: 0; background: none; color: var(--blue-text, var(--blue)); font: inherit; font-weight: 600; padding: 8px 10px; cursor: pointer; }
+.undo-ring { width: 18px; height: 18px; flex-shrink: 0; transform: rotate(-90deg); }
+.undo-ring circle { fill: none; stroke: var(--hairline); stroke-width: 2.4; }
+.undo-ring .undo-ring-time { stroke: var(--label-2); stroke-dasharray: 50.27; stroke-dashoffset: 0; animation: undo-ring linear forwards; }
+@keyframes undo-ring { to { stroke-dashoffset: 50.27; } }
+@media (prefers-reduced-motion: reduce) { .undo-ring .undo-ring-time { animation: none; } }

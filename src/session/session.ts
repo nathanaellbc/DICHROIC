@@ -414,9 +414,11 @@ export class Session {
     return prepareRemoval(this.editableImage(), selection, this.#imageId);
   }
 
-  async applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }> {
+  /** `replay`: a removal saved with a project, re-applied to the reopened photo. */
+  async applyRemoval(crop: RemovalCrop, output: Float32Array, replay = false): Promise<{ original: Frame; guide: Guide }> {
     while (this.#busy) await new Promise<void>(resolve => this.idleWaiters.add(resolve));
     this.assertAlive();
+    if (replay && this.#image) crop = { ...crop, revision: this.#imageId };
     if (!this.#image || crop.revision !== this.#imageId) throw new RenderSupersededError();
     this.#removalUndo = { crop, backup: applyRemoval(this.editableImage(), crop, output) };
     return this.removalChanged();

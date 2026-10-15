@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { engine } from './engine/engine';
 import type { EngineState } from './engine/engine';
+import { projects } from './projects/projects';
+import type { ProjectsState } from './projects/projects';
 
 export function useEngineState(): EngineState {
   return useSyncExternalStore(engine.subscribe, engine.getState);
+}
+
+export function useProjects(): ProjectsState {
+  return useSyncExternalStore(projects.subscribe, projects.getState);
 }
 
 export interface SizeClass {

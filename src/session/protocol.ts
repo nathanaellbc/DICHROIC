@@ -18,7 +18,7 @@ export interface SessionLike {
   open(image: DecodedImage): void;
   prepareRemoval(selection: RemovalMask): RemovalCrop;
   refineSource(rect: { x: number; y: number; w: number; h: number }, maxEdge: number): Guide;
-  applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }>;
+  applyRemoval(crop: RemovalCrop, output: Float32Array, replay?: boolean): Promise<{ original: Frame; guide: Guide }>;
   undoRemoval(): Promise<{ original: Frame; guide: Guide }>;
   close(): void | Promise<void>;
   stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto>;

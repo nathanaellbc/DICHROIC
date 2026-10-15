@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installSquircleGeometry } from './squircle';
 import { Alert, Toast } from './components/Overlays';
+import { UndoReceipt } from './components/UndoReceipt';
+import { projects } from './projects/projects';
 import { describeError, engine } from './engine/engine';
-import { ACCEPTED_FILES, useEngineState, useFilePicker, useSizeClass } from './hooks';
+import { ACCEPTED_FILES, useEngineState, useFilePicker, useProjects, useSizeClass } from './hooks';
 import { Editor } from './screens/Editor';
 import { OpeningCard, UnsupportedScreen } from './screens/Start';
 
 export function App() {
   const state = useEngineState();
+  const project = useProjects();
   const size = useSizeClass();
   const wide = size.width === 'regular';
   const [toast, setToast] = useState<string | null>(null);
@@ -15,6 +18,7 @@ export function App() {
   const toastTimer = useRef(0);
 
   useEffect(() => engine.start(), []);
+  useEffect(() => void projects.load(), []);
   useLayoutEffect(() => installSquircleGeometry(), []);
 
   // Kepadatan (styles.css): ukuran iOS di compact, kepadatan macOS di regular.
@@ -25,7 +29,8 @@ export function App() {
     else delete document.documentElement.dataset.phone;
   }, [wide, size.phone]);
 
-  const openFile = useCallback((file: File) => void engine.openFile(file), []);
+  // Tiap foto menjadi proyek yang tersimpan otomatis (Recent di layar Start).
+  const openFile = useCallback((file: File) => void projects.openFile(file), []);
   const picker = useFilePicker(openFile);
 
   // Seret-lepas berkas di mana saja (desktop, iPad).
@@ -53,6 +58,12 @@ export function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), ms);
   }, []);
 
+  useEffect(() => {
+    if (!project.notice) return;
+    showToast(project.notice, 4000);
+    projects.dismissNotice();
+  }, [project.notice, showToast]);
+
   // Pesan engine tak memblokir (mis. pulih dari GPU yang ditarik sistem).
   useEffect(() => {
     if (!state.notice) return;
@@ -62,7 +73,12 @@ export function App() {
 
   // Ke latar tanpa foto: lepas GPU lebih dulu (iOS menariknya juga), siapkan lagi saat kembali.
   useEffect(() => {
-    const onVisibility = () => engine.setBackground(document.visibilityState === 'hidden');
+    const onVisibility = () => {
+      const hidden = document.visibilityState === 'hidden';
+      // iOS bisa mematikan tab di latar: simpan proyek dulu.
+      if (hidden) void projects.flush();
+      engine.setBackground(hidden);
+    };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
@@ -95,6 +111,7 @@ export function App() {
         }}
       />
       <Toast message={toast} icon="check" />
+      <UndoReceipt deleted={project.deleted} onUndo={() => projects.undoRemove()} />
     </>
   );
 }

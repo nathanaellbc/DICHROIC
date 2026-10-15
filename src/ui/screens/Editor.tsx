@@ -43,6 +43,7 @@ import { ExportContent, ListPickerContent } from './Export';
 import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
+import { projects } from '../projects/projects';
 import { RemoveContent } from './Remove';
 import { RefineEdgeContent } from './RefineEdge';
 import { InspectorTool, ResetButton, ToolChips, ToolControl, ToolSwitch } from './ToolControls';
@@ -131,7 +132,6 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const removing = removingObject || refining;
   const modeTitle = refining ? 'Refine Edge' : 'Remove Object';
   const [sidebarKind, setSidebarKind] = useState<StockKind>('film');
-  const [discardAnchor, setDiscardAnchor] = useState<DOMRect | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
   const [theme, setTheme] = useTheme();
   const [pickingFocus, setPickingFocus] = useState(false);
@@ -174,9 +174,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     setSheet({ kind: 'stocks', stockKind, before: current, swap: current });
   };
 
-  const onClose = (anchor: DOMRect) => {
-    if (engine.isEdited()) setDiscardAnchor(anchor);
-    else engine.closePhoto();
+  // Proyek tersimpan otomatis: menutup foto tidak membuang apa pun.
+  const onClose = () => {
+    void projects.close();
   };
 
   const onProcess = (process: string) => engine.setParams(choicePatch(findTool('process') as ChoiceTool, process, state.params));
@@ -293,7 +293,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     ...(engine.isEdited() ? [{ label: 'Reset All Adjustments', icon: 'reset' as const, onSelect: () => { setMenuAnchor(null); engine.resetAll(); } }] : []),
     // Satu ketukan berpindah Sistem -> Terang -> Gelap; label menyebut pilihan sekarang.
     { label: `Appearance: ${THEME_LABEL[theme]}`, icon: THEME_ICON[theme], onSelect: () => setTheme(nextTheme(theme)) },
-    { label: 'Close Photo', icon: 'close', onSelect: () => { const anchor = menuAnchor; setMenuAnchor(null); if (anchor) onClose(anchor); } },
+    { label: 'Close Photo', icon: 'close', onSelect: () => { setMenuAnchor(null); onClose(); } },
   ];
 
   const current = stocksOf(state.params);
@@ -404,14 +404,6 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       </Sheet>
 
       <ActionSheet open={menuAnchor !== null} anchor={menuAnchor} label="Photo" actions={menuActions} onCancel={() => setMenuAnchor(null)} />
-
-      <ActionSheet
-        open={discardAnchor !== null}
-        anchor={discardAnchor}
-        message="Discard your edits to this photo?"
-        actions={[{ label: 'Discard Edits', destructive: true, onSelect: () => { setDiscardAnchor(null); engine.closePhoto(); } }]}
-        onCancel={() => setDiscardAnchor(null)}
-      />
     </>
   );
 }
@@ -435,7 +427,7 @@ interface LayoutProps {
   compare: boolean;
   setCompare: (v: boolean) => void;
   openStocks: (kind?: StockKind) => void;
-  onClose: (anchor: DOMRect) => void;
+  onClose: () => void;
   photo: React.ReactNode;
   onOpenFile: () => void;
   setSheet: (s: SheetState) => void;
@@ -840,7 +832,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
         <PressButton className="icon-btn plain" aria-label="Open Photo" aria-keyshortcuts="O" title="Open Photo (O)" onClick={onOpenFile}>
           <Icon name="open" size={17} />
         </PressButton>
-        <PressButton className="icon-btn plain" aria-label="Close Photo" title="Close Photo" disabled={!hasPhoto} onClick={(e) => onClose(e.currentTarget.getBoundingClientRect())}>
+        <PressButton className="icon-btn plain" aria-label="Close Photo" title="Close Photo" disabled={!hasPhoto} onClick={onClose}>
           <Icon name="close" size={15} strokeWidth={2.4} />
         </PressButton>
 

@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { engine } from './engine/engine';
+import { projects } from './projects/projects';
 import { preventPageZoom } from './noZoom';
 import { startPwa } from './pwa';
 import { applyTheme, loadTheme } from './theme';
@@ -18,7 +19,7 @@ applyTheme(loadTheme());
 startPwa();
 preventPageZoom();
 // Hanya mode dev: probe Playwright membaca state engine yang sama dengan UI.
-if (import.meta.env.DEV) Object.assign(window, { __dichroicEngine: engine });
+if (import.meta.env.DEV) Object.assign(window, { __dichroicEngine: engine, __dichroicProjects: projects });
 
 // Layar boot (index.html) dilepas oleh intro (terbang ke wordmark); cadangan
 // untuk layar lain atau bila intro tidak tampil.

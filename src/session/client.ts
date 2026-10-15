@@ -84,7 +84,7 @@ export class SessionClient {
   }
   refineSource(rect: { x: number; y: number; w: number; h: number }, maxEdge: number): Promise<Guide> { return this.call('refineSource', [rect, maxEdge], []) as Promise<Guide>; }
   prepareRemoval(mask: RemovalMask): Promise<RemovalCrop> { return this.call('prepareRemoval', [mask], transferablesOf(mask)) as Promise<RemovalCrop>; }
-  applyRemoval(crop: RemovalCrop, output: Float32Array): Promise<{ original: Frame; guide: Guide }> { return this.call('applyRemoval', [crop, output], transferablesOf([crop, output])) as Promise<{ original: Frame; guide: Guide }>; }
+  applyRemoval(crop: RemovalCrop, output: Float32Array, replay = false): Promise<{ original: Frame; guide: Guide }> { return this.call('applyRemoval', [crop, output, replay], transferablesOf([crop, output])) as Promise<{ original: Frame; guide: Guide }>; }
   undoRemoval(): Promise<{ original: Frame; guide: Guide }> { return this.call('undoRemoval', []) as Promise<{ original: Frame; guide: Guide }>; }
 
   stageOpen(id: number, image: DecodedImage, patch: Partial<RenderParams>, guideMaxEdge: number): Promise<PreparedPhoto> {

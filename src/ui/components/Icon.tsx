@@ -8,6 +8,7 @@ import {
   Columns2, RotateCcw, Minus, Plus, Search, Lock, Image, Mountain, Camera,
   FolderOpen, Upload, TriangleAlert, Info, Shuffle, Undo2, Redo2, Ellipsis,
   ChevronRight, ChevronUp, LoaderCircle, Eraser, Move, Crosshair, SunMoon, Moon,
+  Trash2, PencilLine, Copy, GalleryVerticalEnd,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { IconName } from '../model/tools';
@@ -16,7 +17,7 @@ export type UiIconName =
   | IconName | 'erase' | 'move'
   | 'close' | 'check' | 'chevronDown' | 'upDown' | 'compare' | 'reset' | 'minus' | 'plus'
   | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'chevronUp' | 'loader' | 'scope'
-  | 'themeSystem' | 'themeLight' | 'themeDark';
+  | 'themeSystem' | 'themeLight' | 'themeDark' | 'trash' | 'rename' | 'duplicate' | 'projects';
 
 const ICONS: Record<UiIconName, LucideIcon> = {
   exposure: Sun, auto: CircleDashed, print: Printer, negative: Contrast,
@@ -36,6 +37,7 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   warning: TriangleAlert, info: Info, undo: Undo2, redo: Redo2,
   more: Ellipsis, shuffle: Shuffle, loader: LoaderCircle, erase: Eraser, move: Move, scope: Crosshair,
   themeSystem: SunMoon, themeLight: Sun, themeDark: Moon,
+  trash: Trash2, rename: PencilLine, duplicate: Copy, projects: GalleryVerticalEnd,
 };
 
 export function Icon({ name, size = 22, strokeWidth = 2, color = 'currentColor', className }: {

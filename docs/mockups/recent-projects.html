@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gammā · Mockup Recent</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000; --label: #fff; --label-2: #aaaab3; --label-3: #6e6e76;
+    --blue: #0091ff; --cta: #0071e3; --red: #ff453a;
+    --glass: rgba(28,28,30,.62); --hair: rgba(255,255,255,.1); --fill: rgba(120,120,128,.18);
+    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0b0c; color: var(--label); font-family: var(--sf); padding: 48px 32px 80px; }
+  header.page { max-width: 1400px; margin: 0 auto 40px; }
+  .eyebrow { font: 500 11px 'Geist Mono', monospace; letter-spacing: .18em; text-transform: uppercase; color: var(--label-2); }
+  h1 { font: 400 34px 'Instrument Serif', serif; margin: 6px 0 8px; }
+  .lede { color: var(--label-2); font-size: 14px; max-width: 760px; line-height: 1.5; }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; max-width: 1400px; margin: 0 auto 56px; align-items: flex-start; }
+  .shot { display: flex; flex-direction: column; gap: 12px; }
+  .shot h2 { font: 500 11px 'Geist Mono', monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); }
+  .shot p.note { color: var(--label-3); font-size: 12px; line-height: 1.45; max-width: 300px; }
+
+  /* Phone frame 375 x 812 */
+  .phone { width: 375px; height: 812px; border-radius: 48px; border: 1px solid #2a2a2e; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 0 0 10px #151517; }
+  .stars { position: absolute; inset: 0; background-image:
+    radial-gradient(1px 1px at 20% 12%, #fff8 50%, transparent), radial-gradient(1px 1px at 70% 8%, #fff6 50%, transparent),
+    radial-gradient(1px 1px at 85% 30%, #fff5 50%, transparent), radial-gradient(1px 1px at 12% 44%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 55% 52%, #fff5 50%, transparent), radial-gradient(1px 1px at 33% 70%, #fff4 50%, transparent),
+    radial-gradient(1px 1px at 90% 64%, #fff6 50%, transparent), radial-gradient(1px 1px at 8% 86%, #fff4 50%, transparent);
+    pointer-events: none; }
+  .glow { position: absolute; left: 50%; bottom: -140px; width: 520px; height: 260px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0,113,224,.32), transparent); filter: blur(30px); }
+  .status { height: 52px; display: flex; justify-content: space-between; align-items: center; padding: 14px 30px 0; font-weight: 600; font-size: 15px; position: relative; }
+  .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; border-radius: 20px; background: #000; transform: translateX(-50%); border: 1px solid #1a1a1a; }
+  .brand { position: absolute; top: 64px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .brand b { font-size: 20px; letter-spacing: -.02em; }
+  .icon-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--label); }
+  .cta { position: absolute; left: 24px; right: 24px; height: 50px; border-radius: 999px; background: var(--cta); display: grid; place-items: center; font-weight: 600; font-size: 17px; }
+  .foot { position: absolute; left: 24px; right: 24px; text-align: center; font-size: 12px; color: var(--label-3); }
+  .headline { position: absolute; left: 24px; right: 24px; text-align: center; font-weight: 600; letter-spacing: -.03em; }
+  .headline s { color: var(--label-2); text-decoration-thickness: 2px; }
+  .orb { position: absolute; left: 50%; width: 64px; height: 64px; margin-left: -32px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.75); box-shadow: 0 0 30px rgba(255,255,255,.15), inset 0 0 18px rgba(255,255,255,.08); display: grid; place-items: center; font-size: 28px; font-weight: 200; }
+  .stickers { position: absolute; left: 0; right: 0; top: 70px; height: 210px; }
+  .stk { position: absolute; padding: 6px 12px; border-radius: 9px; border: 2.5px solid #fff; font-weight: 700; font-size: 13px; line-height: 1.1; text-align: center; box-shadow: 0 3px 8px #0008; }
+  .stk small { display: block; font-size: 8px; letter-spacing: .08em; opacity: .85; }
+
+  /* Section header */
+  .sec { display: flex; justify-content: space-between; align-items: baseline; padding: 0 20px; }
+  .sec h3 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+  .sec a { color: var(--blue); font-size: 15px; text-decoration: none; }
+
+  /* Project card */
+  .thumb { border-radius: 12px; position: relative; overflow: hidden; border: .5px solid var(--hair); }
+  .thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55)); }
+  .t1 { background: linear-gradient(160deg, #e8b07a, #b35a3c 45%, #2b1d2a); }
+  .t2 { background: linear-gradient(200deg, #9fc6d8, #4f7d8f 50%, #1b2a33); }
+  .t3 { background: linear-gradient(170deg, #f1d9a6, #c48b4f 50%, #3a2a1a); }
+  .t4 { background: linear-gradient(190deg, #b9b6c9, #6a6a86 55%, #1d1d2a); }
+  .t5 { background: linear-gradient(150deg, #d6e3b0, #7d9455 50%, #222b17); }
+  .t6 { background: linear-gradient(210deg, #f5b8b8, #a75c6b 50%, #2a1a22); }
+  .t7 { background: linear-gradient(180deg, #8fb3ff, #3a58a8 55%, #10162b); }
+  .t8 { background: linear-gradient(165deg, #e9e2d0, #a59a83 50%, #2a2622); }
+  .t9 { background: linear-gradient(175deg, #ffcf8a, #d97a2e 50%, #3a1c0e); }
+  .film-chip { position: absolute; left: 8px; bottom: 8px; z-index: 1; font-size: 10px; font-weight: 600; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,.45); backdrop-filter: blur(8px); }
+  .meta b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta span { font-size: 12px; color: var(--label-2); }
+
+  /* Variant A: rail */
+  .rail { display: flex; gap: 12px; overflow: hidden; padding: 12px 20px 0; }
+  .rail .card { width: 132px; flex-shrink: 0; }
+  .rail .thumb { width: 132px; height: 168px; }
+  .rail .meta { margin-top: 8px; }
+
+  /* Variant B: grid */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; padding: 12px 20px; }
+  .grid .thumb { aspect-ratio: 1; }
+  .grid .meta { margin-top: 7px; }
+  .new-tile { border-radius: 12px; border: 1.5px dashed rgba(255,255,255,.22); display: grid; place-items: center; aspect-ratio: 1; color: var(--label-2); font-size: 13px; text-align: center; }
+  .new-tile i { display: block; font-style: normal; font-size: 30px; font-weight: 200; color: var(--label); margin-bottom: 4px; }
+
+  /* Context menu */
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); backdrop-filter: blur(12px); }
+  .lifted { position: absolute; left: 50%; transform: translateX(-50%); width: 220px; }
+  .lifted .thumb { width: 220px; height: 276px; box-shadow: 0 20px 50px #000a; }
+  .menu { position: absolute; left: 50%; transform: translateX(-50%); width: 250px; border-radius: 14px; background: rgba(40,40,44,.86); backdrop-filter: blur(30px); overflow: hidden; }
+  .menu div { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; font-size: 16px; border-top: .5px solid var(--hair); }
+  .menu div:first-child { border-top: 0; }
+  .menu .danger { color: var(--red); }
+  .menu .sep { height: 8px; padding: 0; background: rgba(0,0,0,.25); }
+  .menu svg { width: 18px; height: 18px; }
+
+  /* Sheet */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 64px; border-radius: 22px 22px 0 0; background: #1c1c1e; }
+  .grabber { width: 36px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.3); margin: 6px auto 0; }
+  .sheet-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 6px; }
+  .sheet-bar b { font-size: 17px; }
+  .search { margin: 6px 16px 8px; height: 36px; border-radius: 10px; background: var(--fill); color: var(--label-2); font-size: 15px; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+  .seg { display: flex; margin: 0 16px 10px; background: var(--fill); border-radius: 9px; padding: 2px; font-size: 13px; font-weight: 600; }
+  .seg span { flex: 1; text-align: center; padding: 6px 0; border-radius: 7px; color: var(--label-2); }
+  .seg .on { background: #636366; color: var(--label); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 0 16px; }
+  .grid3 .thumb { aspect-ratio: 1; border-radius: 4px; }
+  .usage { position: absolute; left: 16px; right: 16px; bottom: 34px; font-size: 12px; color: var(--label-2); }
+  .bar { height: 6px; border-radius: 3px; background: var(--fill); margin-top: 6px; overflow: hidden; }
+  .bar i { display: block; width: 38%; height: 100%; background: var(--blue); }
+
+  /* Missing source state */
+  .missing { isolation: isolate; }
+  .missing .thumb { filter: grayscale(.7) brightness(.55); }
+  .badge-warn { position: absolute; z-index: 2; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%; background: #ff9f0a; color: #000; font-weight: 800; font-size: 13px; display: grid; place-items: center; }
+  .alert { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 270px; border-radius: 14px; background: rgba(40,40,44,.92); backdrop-filter: blur(30px); text-align: center; overflow: hidden; }
+  .alert .body { padding: 18px 16px 14px; }
+  .alert b { font-size: 17px; display: block; margin-bottom: 4px; }
+  .alert p { font-size: 13px; color: var(--label-2); line-height: 1.35; }
+  .alert .act { border-top: .5px solid var(--hair); padding: 11px; font-size: 17px; color: var(--blue); }
+  .alert .act.bold { font-weight: 600; }
+  .alert .act.danger { color: var(--red); }
+
+  /* Desktop frame */
+  .desk { width: 1180px; height: 700px; border-radius: 12px; border: 1px solid #2a2a2e; background: #000; overflow: hidden; display: grid; grid-template-columns: 220px 1fr 260px; grid-template-rows: 44px 1fr 26px; font-size: 12px; }
+  .tb { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--hair); background: #0e0e10; }
+  .tb b { font-size: 14px; } .tb span { color: var(--label-3); }
+  .tb .exp { margin-left: auto; padding: 5px 12px; border-radius: 7px; background: var(--fill); color: var(--label-3); }
+  .side { border-right: 1px solid var(--hair); background: #0e0e10; opacity: .6; padding: 10px; }
+  .side div { height: 18px; border-radius: 4px; background: rgba(255,255,255,.05); margin-bottom: 8px; }
+  .insp { border-left: 1px solid var(--hair); background: #0e0e10; opacity: .6; padding: 10px; }
+  .insp div { height: 40px; border-radius: 6px; background: rgba(255,255,255,.04); margin-bottom: 10px; }
+  .center { position: relative; overflow: hidden; padding: 28px 32px; }
+  .center .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; position: relative; }
+  .center h4 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+  .center .hint { color: var(--label-3); margin-top: 3px; font-size: 12px; }
+  .center .cta-sm { padding: 8px 16px; border-radius: 999px; background: var(--cta); font-weight: 600; font-size: 13px; }
+  .dgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 16px; position: relative; }
+  .dgrid .thumb { aspect-ratio: 3/2; border-radius: 8px; }
+  .dgrid .meta { margin-top: 6px; }
+  .dgrid .sel .thumb { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .drop { position: absolute; inset: 14px; border: 1.5px dashed rgba(0,145,255,.0); border-radius: 14px; pointer-events: none; }
+  .sb { grid-column: 1 / -1; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--label-3); font-size: 11px; background: #0e0e10; }
+  .sb .r { margin-left: auto; }
+  .ctx { position: absolute; width: 210px; border-radius: 9px; background: rgba(44,44,48,.95); border: .5px solid rgba(255,255,255,.12); padding: 4px; font-size: 13px; box-shadow: 0 12px 30px #000a; }
+  .ctx div { padding: 5px 10px; border-radius: 5px; display: flex; justify-content: space-between; }
+  .ctx div.hl { background: var(--cta); }
+  .ctx div kbd { font: inherit; color: var(--label-2); }
+  .ctx hr { border: 0; border-top: .5px solid var(--hair); margin: 4px 6px; }
+  .ctx .danger { color: var(--red); }
+
+  .legend { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 1fr .9fr; gap: 14px; }
+  .legend div { border: 1px solid var(--hair); border-radius: 8px; padding: 14px 16px; }
+  .legend b { display: block; font: 500 11px 'Geist Mono', monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); margin-bottom: 8px; }
+  .legend p { font-size: 13px; line-height: 1.5; color: #d2d2d7; }
+</style>
+</head>
+<body>
+<header class="page">
+  <p class="eyebrow">Mockup · fitur Recent</p>
+  <h1>Proyek terakhir di layar Start</h1>
+  <p class="lede">Gambar statis untuk dibandingkan dengan referensi. Thumbnail memakai gradasi sebagai pengganti foto. A dan B adalah dua pilihan tata letak di HP; sisanya interaksi yang sama untuk keduanya.</p>
+</header>
+
+<!-- Row 1: empty vs variants -->
+<div class="row">
+  <div class="shot">
+    <h2>0 · Belum ada proyek</h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="stickers">
+        <div class="stk" style="left:40px;top:30px;background:#d94a3d;transform:rotate(-3deg)">Vision3 500T<small>KODAK</small></div>
+        <div class="stk" style="left:190px;top:55px;background:#3fae5c;transform:rotate(3deg)">Velvia 50<small>FUJIFILM</small></div>
+        <div class="stk" style="left:70px;top:110px;background:#e39a3a;transform:rotate(-2deg)">Gold 200<small>KODAK</small></div>
+        <div class="stk" style="left:210px;top:130px;background:#5e5e66;transform:rotate(2deg)">HP5 Plus<small>ILFORD</small></div>
+      </div>
+      <div class="orb" style="top:330px">+</div>
+      <div class="headline" style="top:420px;font-size:30px">Develop your <s>filter</s> photo on real film.</div>
+      <div class="cta" style="bottom:72px">Choose Photo</div>
+      <div class="foot" style="bottom:40px">RAW, JPEG, PNG, TIFF and OpenEXR. Nothing is uploaded.</div>
+    </div>
+    <p class="note">Tidak berubah dari sekarang. Recent baru muncul setelah ada proyek pertama.</p>
+  </div>
+
+  <div class="shot">
+    <h2>A · Rail di atas tombol</h2>
+    <div class="phone">
+      <div class="stars"></div><div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="orb" style="top:150px">+</div>
+      <div class="headline" style="top:236px;font-size:28px">Develop your <s>filter</s> photo on real film.</div>
+      <div style="position:absolute;left:0;right:0;top:400px">
+        <div class="sec"><h3>Recent</h3><a>See All</a></div>
+        <div class="rail">
+          <div class="card"><div class="thumb t1"><span class="film-chip">Portra 400</span></div><div class="meta"><b>IMG_2041</b><span>2 jam lalu</span></div></div>
+          <div class="card"><div class="thumb t2"><span class="film-chip">Velvia 50</span></div><div class="meta"><b>DSCF0182</b><span>Kemarin</span></div></div>
+          <div class="card"><div class="thumb t3"><span class="film-chip">Gold 200</span></div><div class="meta"><b>pantai</b><span>12 Okt</span></div></div>
+        </div>
+      </div>
+      <div class="cta" style="bottom:72px">Choose Photo</div>
+      <div class="foot" style="bottom:40px">RAW, JPEG, PNG, TIFF and OpenEXR. Nothing is uploaded.</div>
+    </div>
+    <p class="note">Hero tetap, stiker hilang untuk memberi ruang. Rail digeser ke samping; cocok kalau proyek biasanya sedikit.</p>
+  </div>
+
+  <div class="shot">
+    <h2>B · Grid jadi isi utama</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="brand"><b>gammā</b><div class="icon-btn">⋯</div></div>
+      <div style="position:absolute;left:0;right:0;top:118px">
+        <div class="sec"><h3>Recent</h3><a>Select</a></div>
+        <div class="grid">
+          <div><div class="thumb t1"><span class="film-chip">Portra 400</span></div><div class="meta"><b>IMG_2041</b><span>2 jam lalu</span></div></div>
+          <div><div class="thumb t2"><span class="film-chip">Velvia 50</span></div><div class="meta"><b>DSCF0182</b><span>Kemarin</span></div></div>
+          <div><div class="thumb t3"><span class="film-chip">Gold 200</span></div><div class="meta"><b>pantai</b><span>12 Okt</span></div></div>
+          <div><div class="thumb t4"><span class="film-chip">Film Off</span></div><div class="meta"><b>studio-03</b><span>10 Okt</span></div></div>
+        </div>
+      </div>
+      <div class="cta" style="bottom:40px">Choose Photo</div>
+    </div>
+    <p class="note">Seperti Photos / Lightroom: begitu ada proyek, Start jadi galeri. Hero dan stiker hanya untuk pengguna baru.</p>
+  </div>
+</div>
+
+<!-- Row 2: interactions -->
+<div class="row">
+  <div class="shot">
+    <h2>Tekan lama pada kartu</h2>
+    <div class="phone">
+      <div class="stars"></div>
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="dim"></div>
+      <div class="lifted" style="top:150px"><div class="thumb t1"><span class="film-chip">Portra 400 → Endura</span></div></div>
+      <div class="menu" style="top:446px">
+        <div>Open</div>
+        <div>Rename</div>
+        <div>Duplicate</div>
+        <div>Export…</div>
+        <div class="sep"></div>
+        <div class="danger">Delete</div>
+      </div>
+    </div>
+    <p class="note">Menu konteks bawaan iOS (preview + aksi). Di desktop jadi klik kanan.</p>
+  </div>
+
+  <div class="shot">
+    <h2>See All · sheet</h2>
+    <div class="phone">
+      <div class="stars"></div><div class="dim" style="background:rgba(0,0,0,.4);backdrop-filter:none"></div>
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="sheet-bar"><span style="color:var(--blue)">Select</span><b>Projects</b><span class="icon-btn" style="width:30px;height:30px">✕</span></div>
+        <div class="search">⌕ Search projects</div>
+        <div class="seg"><span class="on">Recent</span><span>Name</span><span>Film</span></div>
+        <div class="grid3">
+          <div class="thumb t1"></div><div class="thumb t2"></div><div class="thumb t3"></div>
+          <div class="thumb t4"></div><div class="thumb t5"></div><div class="thumb t6"></div>
+          <div class="thumb t7"></div><div class="thumb t8"></div><div class="thumb t9"></div>
+          <div class="thumb t2"></div><div class="thumb t1"></div><div class="thumb t5"></div>
+        </div>
+        <div class="usage">14 projects · 1,2 GB of 3,2 GB on this device<div class="bar"><i></i></div></div>
+      </div>
+    </div>
+    <p class="note">Grid rapat seperti Photos, urut Recent / Name / Film. Pemakaian storage di bawah karena foto asli ikut disimpan.</p>
+  </div>
+
+  <div class="shot">
+    <h2>Foto asli hilang</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><div class="island"></div></div>
+      <div class="brand"><b>gammā</b><div class="icon-btn">⋯</div></div>
+      <div style="position:absolute;left:0;right:0;top:118px">
+        <div class="sec"><h3>Recent</h3><a>Select</a></div>
+        <div class="grid">
+          <div class="new-tile"><div><i>+</i>New Photo</div></div>
+          <div class="missing" style="position:relative"><span class="badge-warn">!</span><div class="thumb t1"></div><div class="meta"><b>IMG_2041</b><span>Foto asli hilang</span></div></div>
+        </div>
+      </div>
+      <div class="dim"></div>
+      <div class="alert">
+        <div class="body"><b>Original Photo Missing</b><p>The browser cleared “IMG_2041.HEIC”. Choose it again to keep your edits.</p></div>
+        <div class="act bold">Choose Photo Again</div>
+        <div class="act danger">Delete Project</div>
+        <div class="act">Cancel</div>
+      </div>
+    </div>
+    <p class="note">Kartu redup dengan tanda oranye. Resep tetap ada; pengguna cukup memilih ulang fotonya.</p>
+  </div>
+</div>
+
+<!-- Row 3: desktop -->
+<div class="row">
+  <div class="shot">
+    <h2>Desktop / iPad landscape</h2>
+    <div class="desk">
+      <div class="tb"><b>gammā</b><span>No photo</span><span class="exp">Export</span></div>
+      <div class="side"><div></div><div></div><div></div><div style="width:70%"></div><div></div><div style="width:80%"></div><div></div><div style="width:60%"></div><div></div></div>
+      <div class="center">
+        <div class="top"><div><h4>Recent</h4><p class="hint">Double-click to open · drop a file anywhere for a new project</p></div><span class="cta-sm">Choose Photo</span></div>
+        <div class="dgrid">
+          <div><div class="thumb t1"></div><div class="meta"><b>IMG_2041.HEIC</b><span>Portra 400 → Endura · 2 jam lalu</span></div></div>
+          <div class="sel"><div class="thumb t2"></div><div class="meta"><b>DSCF0182.RAF</b><span>Velvia 50, scanned · Kemarin</span></div></div>
+          <div><div class="thumb t3"></div><div class="meta"><b>pantai.jpg</b><span>Gold 200 → 2383 · 12 Okt</span></div></div>
+          <div><div class="thumb t4"></div><div class="meta"><b>studio-03.tif</b><span>Film Off · 10 Okt</span></div></div>
+          <div><div class="thumb t5"></div><div class="meta"><b>kebun.ARW</b><span>Ektar 100 → Endura · 8 Okt</span></div></div>
+          <div><div class="thumb t6"></div><div class="meta"><b>IMG_1988.HEIC</b><span>Portra 160 → Supra · 2 Okt</span></div></div>
+          <div><div class="thumb t7"></div><div class="meta"><b>malam.dng</b><span>Vision3 500T → 2383 · 28 Sep</span></div></div>
+          <div><div class="thumb t8"></div><div class="meta"><b>potret.jpg</b><span>Pro 400H → Endura · 21 Sep</span></div></div>
+        </div>
+        <div class="ctx" style="left:420px;top:150px">
+          <div class="hl">Open <kbd>↩</kbd></div>
+          <div>Rename</div>
+          <div>Duplicate <kbd>⌘D</kbd></div>
+          <div>Show Recipe</div>
+          <hr>
+          <div class="danger">Delete <kbd>⌫</kbd></div>
+        </div>
+      </div>
+      <div class="insp"><div></div><div></div><div></div><div></div><div></div></div>
+      <div class="sb"><span>No photo open</span><span>·</span><span>14 projects · 1,2 GB</span><span class="r">Developed on this device</span></div>
+    </div>
+    <p class="note" style="max-width:600px">Area foto berisi grid Recent; sidebar dan inspector tetap redup seperti sekarang. Klik kanan membuka menu konteks; ⌫ menghapus kartu terpilih.</p>
+  </div>
+</div>
+
+<div class="legend">
+  <div><b>Pilihan utama</b><p>A mempertahankan intro dan terasa ringan; B lebih cepat untuk pengguna yang sering kembali. Bisa juga gabungan: A untuk 1–3 proyek, B mulai 4 proyek.</p></div>
+  <div><b>Isi kartu</b><p>Thumbnail hasil edit, nama file, chip film, dan waktu. Resep lengkap ("Portra 400 → Endura") ada di desktop dan di menu tekan lama.</p></div>
+  <div><b>Kata kunci referensi</b><p>Photos “Recents”, Lightroom “Recent”, VSCO Studio, Darkroom library, Procreate gallery, Halide.</p></div>
+</div>
+</body>
+</html>

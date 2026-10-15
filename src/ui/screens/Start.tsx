@@ -13,19 +13,45 @@ import { IntroBackdrop } from '../components/IntroBackdrop';
 import { RingBloom } from '../components/RingBloom';
 import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
-import { Spinner } from '../components/Overlays';
+import { ActionSheet, Spinner } from '../components/Overlays';
+import { RecentStrip } from '../components/RecentStrip';
+import { Sheet } from '../components/Sheet';
+import { PressButton } from '../components/controls';
+import { projects } from '../projects/projects';
+import type { ProjectCard } from '../projects/projects';
+import { ProjectsContent } from './Projects';
 import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
 import { useEffect } from 'react';
 import { activateModal } from '../modalFocus';
-import { useDialogKeys } from '../hooks';
+import { useDialogKeys, useProjects } from '../hooks';
 
 /**
  * Area foto kosong di editor (belum ada foto): wadah seret-lepas yang juga
  * membuka pemilih berkas bila diketuk. Lepasnya ditangani pendengar `drop`
  * di jendela (App); di sini hanya sorotan saat berkas diseret di atasnya.
  */
-export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: { onChoose: () => void; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
+export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePaused }: { onChoose: () => void; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
   const [over, setOver] = useState(false);
+  const proj = useProjects();
+  // Pemilih berkas biasa: bukan memilih ulang foto proyek.
+  const onChoose = useCallback(() => {
+    projects.requestRelink(undefined);
+    choose();
+  }, [choose]);
+  const [menu, setMenu] = useState<{ card: ProjectCard; anchor: DOMRect } | null>(null);
+  const [allOpen, setAllOpen] = useState(false);
+  const [renaming, setRenaming] = useState<string | undefined>();
+  const relink = (card: ProjectCard) => {
+    projects.requestRelink(card.id);
+    choose();
+  };
+  const openProject = (card: ProjectCard) => {
+    setAllOpen(false);
+    // Pemilih berkas harus dibuka langsung dari ketukan (Safari iOS), bukan setelah await.
+    if (card.missing) { relink(card); return; }
+    // Berkas ternyata hilang: kartunya berubah menjadi "Original photo missing".
+    void projects.open(card.id);
+  };
   const touch = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches, []);
   const reduce = !!useReducedMotion();
   const stage = useRef<HTMLDivElement>(null);
@@ -107,6 +133,10 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
   // Narrow or short stages: fewer, smaller stickers.
   const compact = box.width < 560 || box.height < 600;
   const orbCenter = { x: box.width / 2, y: box.height * 0.42 };
+  // Ada proyek: Recent menggantikan stiker dan tombol "+" (intro tetap untuk pengguna baru).
+  const recent = proj.list.slice(0, compact ? 5 : 7);
+  const showRecent = ready && !over && recent.length > 0;
+  const regular = typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular';
 
   return (
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
@@ -114,14 +144,19 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <div className="intro-sky" aria-hidden="true"><StarField /></div>
       <div className="start-dropframe" aria-hidden="true" />
       <ChromeWordmark visible={phase === 'splash'} progress={progress} />
-      <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
-      {box.width > 0 && <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or drag up to continue'} />}
+      <StickerBurst show={ready && !over && !showRecent} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
+      {box.width > 0 && (
+        <div className="intro-orb-slot" data-hidden={showRecent || undefined} aria-hidden={showRecent || undefined}>
+          <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or drag up to continue'} />
+        </div>
+      )}
       {box.width > 0 && <RingBloom backdrop={backdrop} />}
 
       {ready && (
         <motion.div
           className="photo-dropzone intro-content"
-          style={{ paddingTop: orbCenter.y + (compact ? 48 : 56) }}
+          data-recent={showRecent || undefined}
+          style={{ paddingTop: showRecent ? (regular ? 40 : 'calc(max(var(--safe-top, 0px), 12px) + 64px)') : orbCenter.y + (compact ? 48 : 56) }}
           data-drag-over={over}
           initial="hidden"
           animate="shown"
@@ -140,6 +175,18 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
               <span className="start-title-tail" aria-hidden="true"><BlurWords key={line} text={TAIL_LINES[line]!} delay={line === 0 ? 0.3 : 0} /></span>
             </h1>
           )}
+          {showRecent && (
+            <motion.div className="recent-slot" variants={rise}>
+              <RecentStrip
+                cards={recent}
+                total={proj.list.length}
+                onOpen={openProject}
+                onRelink={relink}
+                onMenu={(card, anchor) => setMenu({ card, anchor })}
+                onShowAll={() => setAllOpen(true)}
+              />
+            </motion.div>
+          )}
           <motion.div className="start-actions intro-actions" variants={rise}>
             <motion.button type="button" className="start-cta intro-cta" onClick={onChoose} whileTap={{ scale: pressScale }} transition={pressRelease}>
               Choose Photo
@@ -151,6 +198,43 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
           </motion.div>
         </motion.div>
       )}
+
+      <ActionSheet
+        open={menu !== null}
+        anchor={menu?.anchor ?? null}
+        label={menu ? `${menu.card.name} options` : 'Project options'}
+        actions={menu ? [
+          { label: menu.card.missing ? 'Choose Photo Again…' : 'Open', icon: menu.card.missing ? 'warning' : 'open', onSelect: () => { const c = menu.card; setMenu(null); if (c.missing) relink(c); else openProject(c); } },
+          { label: 'Rename', icon: 'rename', onSelect: () => { const c = menu.card; setMenu(null); setRenaming(c.id); setAllOpen(true); } },
+          { label: 'Duplicate', icon: 'duplicate', onSelect: () => { const c = menu.card; setMenu(null); void projects.duplicate(c.id); } },
+          { label: 'Delete', icon: 'trash', destructive: true, onSelect: () => { const c = menu.card; setMenu(null); projects.remove(c.id); } },
+        ] : []}
+        onCancel={() => setMenu(null)}
+      />
+
+      <Sheet
+        open={allOpen}
+        centered={regular}
+        title="All Projects"
+        detents={['large']}
+        onClose={() => { setAllOpen(false); setRenaming(undefined); }}
+        trailing={
+          <PressButton className="icon-btn" aria-label="Done" onClick={() => { setAllOpen(false); setRenaming(undefined); }}>
+            <Icon name="check" size={18} strokeWidth={2.8} />
+          </PressButton>
+        }
+      >
+        <ProjectsContent
+          cards={proj.list}
+          renaming={renaming}
+          onOpen={openProject}
+          onRelink={(c) => { setAllOpen(false); relink(c); }}
+          onMenu={(card, anchor) => setMenu({ card, anchor })}
+          onRename={(card, name) => { setRenaming(undefined); void projects.rename(card.id, name); }}
+          onCancelRename={() => setRenaming(undefined)}
+          usage={`${proj.list.length} ${proj.list.length === 1 ? 'project' : 'projects'} · saved on this device`}
+        />
+      </Sheet>
     </div>
   );
 }
