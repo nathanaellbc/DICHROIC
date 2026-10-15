@@ -13,6 +13,7 @@ import type { RefObject } from 'react';
 import { Icon } from './Icon';
 import GlassSurface from './reactbits/GlassSurface';
 import { provideOrbShape } from './RingBloom';
+import { FRAME_ORDER, onFrame } from '../frameLoop';
 
 export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
@@ -20,6 +21,8 @@ export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 const ORB = 720;
 /** Lebar cahaya tepi kaca (px layar). */
 const GLOW = 14;
+/** Stabilisasi tarikan kubah (s): posisi/regang mengejar jari dengan konstanta waktu ini. */
+const DOME_SMOOTHING = 0.14;
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export interface StageBox { width: number; height: number }
@@ -93,6 +96,23 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
       rx: r * (1 + k), ry: r / Math.max(0.5, 1 + k), angle: angle.get(),
     };
   }), [dx, dy, stretch, angle]);
+  // Stabilisasi tarikan kubah (seperti smooth scroll): selama ditekan, sumber pegas
+  // mengejar target jari secara eksponensial, jadi kubah mengikuti sedikit tertunda
+  // dan halus, bukan 1:1. Dilepas: kembali ke pegas goyang seperti biasa.
+  const goal = useRef<{ x: number; y: number; k: number } | undefined>(undefined);
+  useEffect(() => {
+    let last = performance.now();
+    return onFrame((now) => {
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      const g = goal.current;
+      if (!g) return;
+      const a = 1 - Math.exp(-dt / DOME_SMOOTHING);
+      dxRaw.set(dxRaw.get() + (g.x - dxRaw.get()) * a);
+      dyRaw.set(dyRaw.get() + (g.y - dyRaw.get()) * a);
+      stretchRaw.set(stretchRaw.get() + (g.k - stretchRaw.get()) * a);
+    }, FRAME_ORDER.orb);
+  }, [dxRaw, dyRaw, stretchRaw]);
   const press = useRef<{ x: number; y: number; t: number; lx: number; ly: number; lt: number; moved: number; id: number } | undefined>(undefined);
   /** Gesekan karet: makin jauh makin berat (seperti tarikan berlebih iOS). */
   const band = (v: number, r: number) => Math.sign(v) * r * (1 - 1 / (Math.abs(v) / r + 1));
@@ -104,7 +124,8 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     press.current = { x: e.clientX, y: e.clientY, t: now, lx: e.clientX, ly: e.clientY, lt: now, moved: 0, id: e.pointerId };
     // Tekan = remas sedikit.
     angle.set(Math.PI / 2);
-    stretchRaw.set(-0.12);
+    if (dome) goal.current = { x: dxRaw.get(), y: dyRaw.get(), k: -0.12 };
+    else stretchRaw.set(-0.12);
   };
   const onMove = (e: React.PointerEvent) => {
     const p = press.current;
@@ -119,8 +140,9 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     const now = performance.now();
     const ox = e.clientX - p.x, oy = e.clientY - p.y;
     const reach = dome ? 200 : 90;
-    dxRaw.set(band(ox, reach * (dome ? 0.4 : 1)));
-    dyRaw.set(band(oy, reach));
+    const g = goal.current;
+    if (g) { g.x = band(ox, reach * 0.4); g.y = band(oy, reach); }
+    else { dxRaw.set(band(ox, reach)); dyRaw.set(band(oy, reach)); }
     p.moved = Math.max(p.moved, Math.hypot(ox, oy));
     // Regang searah gerak, sebanding kecepatan.
     const dt = Math.max(1, now - p.lt);
@@ -128,7 +150,8 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     const speed = Math.hypot(vx, vy);
     if (speed > 40) {
       angle.set(Math.atan2(vy, vx));
-      stretchRaw.set(Math.min(dome ? 0.08 : 0.32, speed / (dome ? 9000 : 2600)));
+      const k = Math.min(dome ? 0.08 : 0.32, speed / (dome ? 9000 : 2600));
+      if (g) g.k = k; else stretchRaw.set(k);
     }
     p.lx = e.clientX; p.ly = e.clientY; p.lt = now;
   };
@@ -136,6 +159,7 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     const p = press.current;
     if (!p) return;
     press.current = undefined;
+    goal.current = undefined;
     // Lepas: kembali ke tempat dengan goyangan (pegas redaman rendah).
     dxRaw.set(0); dyRaw.set(0); stretchRaw.set(0);
     if (cancelled) return;
