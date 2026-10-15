@@ -41,25 +41,29 @@ const GLOW = {
   /** k (intensitas glow umum). */
   strength: 0.125,
   /**
-   * Horizon bloom: tiap skala diberi tint (linear RGB) -- skala kecil putih-pink
-   * (inti terang di tepi), skala besar ungu sampai ungu tua (hamburan atmosfer).
+   * Horizon bloom: tiap skala diberi tint (linear RGB) -- skala kecil putih
+   * kebiruan (inti terang di tepi), skala besar biru sampai biru tua
+   * (hamburan atmosfer).
    */
   scales: [
-    { radius: 8, weight: 1.0, tint: [0.96, 0.78, 1.0] },
-    { radius: 32, weight: 0.7, tint: [0.82, 0.52, 1.0] },
-    { radius: 128, weight: 0.45, tint: [0.55, 0.26, 1.0] },
-    { radius: 400, weight: 0.25, tint: [0.42, 0.17, 0.9] },
-    { radius: 800, weight: 0.12, tint: [0.32, 0.12, 0.72] },
+    { radius: 8, weight: 1.0, tint: [0.82, 0.92, 1.0] },
+    { radius: 32, weight: 0.7, tint: [0.42, 0.7, 1.0] },
+    { radius: 128, weight: 0.45, tint: [0.16, 0.46, 1.0] },
+    { radius: 400, weight: 0.25, tint: [0.1, 0.32, 0.95] },
+    { radius: 800, weight: 0.12, tint: [0.06, 0.22, 0.8] },
   ],
 } as const;
 
 /**
- * Matahari terbit di puncak kubah: emisi cincin = dasar + puncak gaussian di
- * sekitar titik teratas (lebar SUN.spread px), inti terang kecil, dan flare
- * mendatar tipis. Kekuatannya dari GlassOrb (1 di kubah, 0 di tombol +).
+ * Matahari terbit di puncak kubah, membungkus tepi seperti cincin cahaya black
+ * hole (bukan bulatan): emisi garis memuncak di puncak (lebar SUN.spread px),
+ * ditambah pita cahaya tipis yang menempel mengikuti lengkung tepi -- terutama di
+ * luar (wrapOut px), tipis di dalam (wrapIn px) -- meluruh sepanjang busur
+ * (wrapSpread px). Di-blur jadi sabit yang menyusuri tepi. Kekuatannya dari
+ * GlassOrb (1 di kubah, 0 di tombol +).
  */
-const SUN = { rim: 1.0, peak: 3.0, spread: 130, core: 6, coreRadius: 16, streak: 1.6, streakLength: 170, streakHeight: 3 } as const;
-/** Penguat hamburan atmosfer di luar k: pendar lavender sepanjang tepi (32 px) dan kabut ungu di atas cakrawala (>= 128 px). */
+const SUN = { rim: 1.0, peak: 3.0, spread: 150, wrap: 2.4, wrapOut: 7, wrapIn: 2, wrapSpread: 230 } as const;
+/** Penguat hamburan atmosfer di luar k: pendar sepanjang tepi (32 px) dan kabut biru di atas cakrawala (>= 128 px). */
 const ATMOSPHERE = { rim: 2.5, sky: 4 } as const;
 /** Bagian glow yang masih terlihat di dalam planet (kaca menutupi cahaya di belakangnya). */
 const OCCLUSION = 0.35;
@@ -159,14 +163,15 @@ uniform float uThreshold, uKnee, uEncode;
 void main() {
   vec2 p = stagePoint();
   float d = edgeDistance(p);
-  // Emisi cincin: dasar redup di sepanjang tepi, memuncak di titik matahari; plus inti
-  // matahari dan flare mendatar tipis (horizon bloom).
+  // Emisi cincin: dasar di sepanjang tepi, memuncak di titik matahari; plus pita cahaya
+  // yang membungkus lengkung tepi (cincin cahaya ala black hole), bukan bulatan.
   vec2 toSun = p - uSun;
   float near = exp(-dot(toSun, toSun) / (${SUN.spread.toFixed(1)} * ${SUN.spread.toFixed(1)}));
   float rim = mix(1.0, ${SUN.rim.toFixed(2)} + ${SUN.peak.toFixed(2)} * near, uSunAmount);
-  float core = exp(-dot(toSun, toSun) / (${SUN.coreRadius.toFixed(1)} * ${SUN.coreRadius.toFixed(1)})) * ${SUN.core.toFixed(1)};
-  float streak = exp(-pow(toSun.x / ${SUN.streakLength.toFixed(1)}, 2.0) - pow(toSun.y / ${SUN.streakHeight.toFixed(1)}, 2.0)) * ${SUN.streak.toFixed(2)};
-  vec3 c = decodeSRGB(lightSRGB(d, 1.0)) + lineCoverage(d, 1.0) * uLineIntensity * rim + (core + streak) * uSunAmount;
+  float along = exp(-dot(toSun, toSun) / (${SUN.wrapSpread.toFixed(1)} * ${SUN.wrapSpread.toFixed(1)}));
+  float band = d > 0.0 ? d / ${SUN.wrapOut.toFixed(1)} : -d / ${SUN.wrapIn.toFixed(1)};
+  float wrap = exp(-band * band) * along * ${SUN.wrap.toFixed(2)};
+  vec3 c = decodeSRGB(lightSRGB(d, 1.0)) + lineCoverage(d, 1.0) * uLineIntensity * rim + wrap * uSunAmount;
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float soft = clamp(l - uThreshold + uKnee, 0.0, 2.0 * uKnee);
   soft = soft * soft / (4.0 * uKnee + 1e-5);
