@@ -133,7 +133,8 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
           onPointerUp={(e) => release(e)}
           onPointerCancel={(e) => release(e, true)}
           onPointerLeave={onLeave}
-          style={{ transform }}
+          // 1 px layar dalam satuan elemen (elemen 720 px diperkecil `s`), untuk cincin gelembung.
+          style={{ transform, ['--orb-px' as string]: 1 / Math.max(s, 0.001) }}
         >
           {/* Kaca: GlassSurface (React Bits) mode WebGL di semua browser, membiaskan kanvas
               latar IntroBackdrop -- tampil sama di Chrome dan Safari/iOS. */}
