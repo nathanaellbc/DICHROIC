@@ -178,7 +178,11 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
   const impact = () => {
     angle.set(Math.PI / 2);
     stretchRaw.set(0);
+    // Gencet seketika lalu pegas memantul kembali ke bulat. `stretchRaw`
+    // sudah 0, jadi pegas harus diarahkan eksplisit -- dulu tidak ada yang
+    // memicunya dan tombol + tetap gepeng (x1.32, y0.76).
     stretch.jump(-0.24);
+    stretch.set(0);
     setShock((n) => n + 1);
     flareGlow();
     live.current.onCommit();
