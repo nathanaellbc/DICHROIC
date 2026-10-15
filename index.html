@@ -36,30 +36,29 @@
         #boot path { fill: #000; }
       }
     </style>
+    <script>
+      // App terpasang (Home Screen): viewport elemen fixed bisa lebih pendek dari
+      // layar fisik (iOS 26 mengurangi status bar), sedangkan gambar layar
+      // pembuka iOS memakai layar fisik. Motif ditaruh di pusat layar fisik
+      // lewat aturan CSS yang ditulis DI HEAD -- berlaku sejak frame pertama
+      // body. (Dulu skrip di body setelah #boot: WebKit sempat menggambar satu
+      // frame dengan motif di posisi lama -- kedip 1 frame di layar 120 Hz.)
+      (function () {
+        var standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+        if (!standalone || !screen.width || !screen.height) return;
+        var portrait = !window.matchMedia || matchMedia('(orientation: portrait)').matches;
+        var a = Math.min(screen.width, screen.height), b = Math.max(screen.width, screen.height);
+        var w = portrait ? a : b, h = portrait ? b : a, size = w * 0.27;
+        var css = '#boot{display:block;height:' + h + 'px}' +
+          '#boot svg{position:absolute;width:' + size + 'px;height:' + size + 'px;left:' + (w - size) / 2 + 'px;top:' + (h - size) / 2 + 'px}';
+        var el = document.createElement('style');
+        el.textContent = css;
+        document.head.appendChild(el);
+      })();
+    </script>
   </head>
   <body>
     <div id="boot" aria-hidden="true"><svg viewBox="31 31 194 194"><path fill-rule="evenodd" d="M134.84,89H179.16C216.87,89 225,97.13 225,134.84V179.16C225,216.87 216.87,225 179.16,225H134.84C97.13,225 89,216.87 89,179.16V134.84C89,97.13 97.13,89 134.84,89ZM31,101A70,70 0 1 1 171,101A70,70 0 1 1 31,101Z"/></svg></div>
-    <script>
-      // App terpasang (Home Screen): viewport elemen fixed bisa lebih pendek dari
-      // layar fisik (iOS 26 mengurangi status bar). Gambar layar pembuka iOS
-      // memakai layar fisik, jadi motif ditaruh di pusat layar fisik dalam px --
-      // tanpa ini motif muncul ~30 pt lebih tinggi dan melompat saat halaman tampil.
-      (function () {
-        var boot = document.getElementById('boot'), mark = boot && boot.firstElementChild;
-        var standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
-        if (!mark || !standalone || !screen.width || !screen.height) return;
-        var portrait = innerHeight >= innerWidth;
-        var w = portrait ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
-        var h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-        var size = w * 0.27;
-        boot.style.height = h + 'px';
-        boot.style.display = 'block';
-        mark.style.position = 'absolute';
-        mark.style.width = mark.style.height = size + 'px';
-        mark.style.left = (w - size) / 2 + 'px';
-        mark.style.top = (h - size) / 2 + 'px';
-      })();
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/ui/main.tsx"></script>
   </body>
