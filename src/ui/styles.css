@@ -583,8 +583,10 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
   pointer-events: none; z-index: 1; text-align: center;
 }
 .intro-wordmark-text {
-  margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(56px, 18vw, 96px);
-  line-height: 1; letter-spacing: -0.03em; color: var(--label); white-space: nowrap; user-select: none;
+  margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(34px, 10.5vw, 56px);
+  line-height: 1; letter-spacing: -0.02em; color: var(--label); white-space: nowrap; user-select: none;
+  /* Tengah optis: ruang samping "g" dan "ā" tidak sama -- tinta terukur ~0,004 em ke kanan. */
+  position: relative; left: -0.004em;
 }
 
 /* Kaca: bola transparan dengan pinggiran terang dan kilap; pembiasan dari
