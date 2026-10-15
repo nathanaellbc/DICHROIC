@@ -1,4 +1,0 @@
-module ExposureNative {
-  header "exposure_native.h"
-  export *
-}

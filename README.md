@@ -291,7 +291,7 @@ The kernel footprint scales with render dimensions (sigma 1.5 px at a 4096 px lo
 
 Select Off at the top of the Film list, or disable Film Simulation in the Film controls. Off uses a neutral negative instead of a selected spectral stock, keeping exposure, development, film format and texture controls active. Cineon print LUTs can process this neutral negative; photographic papers require a film stock. Stock and paper selections are retained; choosing a film re-enables its stock response. Preview and image export share the same path; the graph cache includes the neutral-negative state.
 
-The native iOS editor (SwiftUI, built with xtool on Windows/WSL or Xcode) uses the same planner and WGSL on Metal. See [the iOS app](ios/README.md).
+The iOS app will be a Capacitor wrapper around this web app (planned).
 
 ## Squircle interface geometry
 

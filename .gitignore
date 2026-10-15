@@ -21,8 +21,4 @@ ios/xtool/
 ios/Package.resolved
 ios/Frameworks/
 ios/Sources/DichroicEngine/Resources/
-native/target/
-native/.cargo-local/
 .tools/
-ios/Fixtures/parity/*-native.*
-ios/Fixtures/parity/oriented-native-*.jpg
