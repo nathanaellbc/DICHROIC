@@ -262,9 +262,9 @@ const FLICK = 12;
 /** Batas kecepatan sudut lemparan putar (rad/s). */
 const SPIN_MAX = 14;
 const PERSPECTIVE = 700;
-/** Tebal stiker (px, ~0,2 cm di layar) dan jumlah irisan tepinya. */
-const THICK = 8;
-const EDGE_SLICES = 6;
+/** Tebal stiker (px) dan jumlah irisan tepinya: tipis seperti stiker kertas tebal. */
+const THICK = 2;
+const EDGE_SLICES = 3;
 /** Melayang 3D: kemiringan (rad) dan ayunan maju-mundur (px). */
 const FLOAT_TILT = 0.17;
 const FLOAT_DEPTH = 10;
