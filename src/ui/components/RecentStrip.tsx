@@ -2,7 +2,7 @@
  * Recent di layar Start (pola "Image accordion", arah "Light table"): tiap
  * proyek satu bilah; yang tertutup hitam-putih, yang terbuka berwarna dan
  * tetangganya memberi ruang. Arahkan kursor atau geser jari untuk berpindah,
- * ketuk bilah yang terbuka (atau Open) untuk membukanya, panah kiri/kanan
+ * ketuk bilah yang terbuka untuk membukanya, panah kiri/kanan
  * dan Enter dari keyboard. Klik kanan atau tekan lama membuka menu proyek.
  * Nama dan resep ada di bawah strip, bukan di atas foto: selalu utuh.
  */
@@ -152,11 +152,8 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink }: {
         <div className="recent-text">
           <span className="recent-film" data-missing={card.missing || undefined}>{card.missing ? 'Missing original' : film}</span>
           <strong>{card.name}</strong>
-          <span>{card.missing ? 'Choose the photo again to keep editing' : `${rest} · ${relativeTime(card.updatedAt)}`}</span>
+          <span>{card.missing ? 'Tap to choose the photo again' : `${rest} · ${relativeTime(card.updatedAt)}`}</span>
         </div>
-        <button type="button" className="recent-open" onClick={() => open(card)}>
-          {card.missing ? 'Choose Again' : 'Open'}
-        </button>
       </div>
       {cards.length > 1 && (
         <div className="recent-dots" aria-hidden="true">

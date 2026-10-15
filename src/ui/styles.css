@@ -1553,10 +1553,10 @@ html[data-size="regular"] .recent-slot { max-height: 460px; }
 .recent-slat[data-missing][data-open] .recent-warn { opacity: 1; }
 .recent-info { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-top: 14px; }
 .recent-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.recent-film { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #e0913f; }
+.recent-film { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--blue-text); }
+.recent-film[data-missing] { color: var(--orange); }
 .recent-text strong { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-text > span:last-child { font-size: 13px; color: var(--label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recent-open { flex-shrink: 0; height: 32px; padding: 0 15px; border: 0; border-radius: 999px; background: var(--cta, #0071e3); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .recent-dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
 .recent-dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(var(--ink), 0.22); transition: width 0.3s cubic-bezier(0.32, 1.2, 0.42, 1), background-color 0.3s; }
 .recent-dots i[data-on] { width: 18px; background: var(--label); }
