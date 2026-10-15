@@ -60,6 +60,14 @@ export function provideOrbShape(source: () => OrbShape | undefined) {
   return () => { if (orbShape === source) orbShape = undefined; };
 }
 
+/** Kilatan glow sesaat (impact): penguat k yang meluruh. */
+let flare: { start: number; amount: number; duration: number } | undefined;
+
+/** Nyalakan glow cincin sesaat: k dikali (1 + amount), meluruh kuadratik selama `duration` detik. */
+export function flareGlow(amount = 3, duration = 0.7) {
+  flare = { start: performance.now(), amount, duration };
+}
+
 /** Lebar garis cincin (px CSS). */
 const LINE_WIDTH = 0.75;
 /** Kecerahan garis cincin (linear, HDR: melewati ambang). */
@@ -288,7 +296,13 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
       const shape = orbShape?.() ?? { cx: box.left + box.width / 2, cy: box.top + box.height / 2, rx: box.width / 2, ry: box.height / 2, angle: 0 };
       const cx = shape.cx - origin.left, cy = shape.cy - origin.top;
       const ratio = Math.min(2, window.devicePixelRatio || 1);
-      const signature = [W, H, sx, sy, sw, sh, cx, cy, shape.rx, shape.ry, shape.angle, ratio, source.dataset.frame, fill.join(','), background.join(',')].join('|');
+      let boost = 0;
+      if (flare) {
+        const t = (performance.now() - flare.start) / 1000 / flare.duration;
+        if (t >= 1) flare = undefined;
+        else boost = flare.amount * (1 - t) ** 2;
+      }
+      const signature = [W, H, sx, sy, sw, sh, cx, cy, shape.rx, shape.ry, shape.angle, ratio, source.dataset.frame, fill.join(','), background.join(','), boost.toFixed(3)].join('|');
       if (signature === drawn) return;
       drawn = signature;
 
@@ -377,7 +391,7 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
       bind(0, scene);
       bind(1, sum.texture);
       gl.uniform1i(composite.u('uBloom'), 1);
-      gl.uniform1f(composite.u('uGain'), GLOW.exposureGain * GLOW.strength);
+      gl.uniform1f(composite.u('uGain'), GLOW.exposureGain * GLOW.strength * (1 + boost));
       gl.uniform1f(composite.u('uDecode'), 1 / ENCODE);
       gl.uniform1f(composite.u('uPx'), 1 / ratio);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

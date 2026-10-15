@@ -14,11 +14,12 @@
  */
 import { AnimatePresence, animate, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import type { MotionValue } from 'motion/react';
-import { useEffect, useId, useLayoutEffect, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { Icon } from './Icon';
 import GlassSurface from './reactbits/GlassSurface';
-import { provideOrbShape } from './RingBloom';
+import { flareGlow, provideOrbShape } from './RingBloom';
+import { haptic } from '../haptics';
 import type { OrbShape } from './RingBloom';
 import { FRAME_ORDER, onFrame } from '../frameLoop';
 
@@ -170,6 +171,18 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dx, dy, stretch, dxRaw, dyRaw, stretchRaw, angle, progress]);
 
+  // Impact saat kaca mendarat jadi "+": squash jelly, gelombang kejut, kilatan glow;
+  // isi (judul, stiker) langsung muncul di momen yang sama.
+  const [shock, setShock] = useState(0);
+  const impact = () => {
+    angle.set(Math.PI / 2);
+    stretchRaw.set(0);
+    stretch.jump(-0.24);
+    setShock((n) => n + 1);
+    flareGlow();
+    live.current.onCommit();
+  };
+
   /** Selesaikan transisi ke ujung `target` (1 = "+", 0 = kembali ke kubah). */
   const settle = (target: 0 | 1, velocity = 0) => {
     if (live.current.reduce) {
@@ -177,9 +190,13 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
       if (target === 1) live.current.onCommit();
       return;
     }
+    let landed = false;
     void animate(progress, target, {
-      type: 'spring', stiffness: 210, damping: 26, velocity,
-      onComplete: () => { if (target === 1) live.current.onCommit(); },
+      // Ke "+": pegas membal (sedikit kelewatan lalu memantul); kembali ke kubah: lembut.
+      ...(target === 1 ? { stiffness: 260, damping: 17 } : { stiffness: 210, damping: 26 }),
+      type: 'spring', velocity,
+      onUpdate: (v) => { if (target === 1 && !landed && v >= 0.97) { landed = true; impact(); } },
+      onComplete: () => { if (target === 1 && !landed) { landed = true; impact(); } },
     });
   };
   const settleRef = useRef(settle);
@@ -187,7 +204,7 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
 
   // Fase berubah dari luar (mis. berkas diseret ke layar): kaca ikut jadi "+".
   useEffect(() => {
-    if (phase === 'ready' && progress.get() < 1) settleRef.current(1);
+    if (phase === 'ready' && progress.get() < 1 && !progress.isAnimating()) settleRef.current(1);
   }, [phase, progress]);
 
   /** Gesekan karet: makin jauh makin berat (seperti tarikan berlebih iOS). */
@@ -228,6 +245,7 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
       dxRaw.set(0); dyRaw.set(0); stretchRaw.set(0);
       const p = progress.get();
       const target = tap || vy < -500 || (vy <= 500 && p > 0.5) ? 1 : 0;
+      if (target === 1) haptic();
       settleRef.current(target, (-vy / swipeLength(live.current.box)) || 0);
     };
     const cancel = (e: PointerEvent) => up(e, true);
@@ -238,7 +256,7 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
       window.clearTimeout(wheelEnd);
       wheelEnd = window.setTimeout(() => settleRef.current(progress.get() > 0.5 ? 1 : 0), 160);
     };
-    const key = (e: KeyboardEvent) => { if (['ArrowUp', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(e.key)) settleRef.current(1); };
+    const key = (e: KeyboardEvent) => { if (['ArrowUp', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(e.key)) { haptic(); settleRef.current(1); } };
     stage.addEventListener('pointerdown', down);
     stage.addEventListener('pointermove', move);
     stage.addEventListener('pointerup', up);
@@ -382,6 +400,13 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
           <circle className="intro-ring-line" cx={ORB / 2} cy={ORB / 2} r={ORB / 2} />
         </svg>
       </div>
+      {/* Gelombang kejut saat mendarat: dua cincin tipis memancar dari "+" (transform/opacity saja). */}
+      {shock > 0 && !reduce && (
+        <span className="intro-shock-anchor" style={{ left: button.cx, top: button.cy }} aria-hidden="true">
+          <motion.span key={`a${shock}`} className="intro-shock" initial={{ scale: 1, opacity: 0.9 }} animate={{ scale: 3.4, opacity: 0 }} transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }} />
+          <motion.span key={`b${shock}`} className="intro-shock" initial={{ scale: 1, opacity: 0.5 }} animate={{ scale: 2.2, opacity: 0 }} transition={{ duration: 0.6, delay: 0.07, ease: [0.16, 1, 0.3, 1] }} />
+        </span>
+      )}
     </>
   );
 }
