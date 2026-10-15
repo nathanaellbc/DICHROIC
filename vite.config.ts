@@ -64,8 +64,9 @@ export default defineConfig({
         scope: base,
         display: 'standalone',
         orientation: 'any',
-        // Latar layar pembuka Android = latar putih ikon app.
-        background_color: '#0091ff',
+        // Latar layar pembuka Android (tidak bisa mengikuti tema): hitam, sama dengan
+        // tema gelap app; iOS memakai layar pembuka per tema (tools/gen_icons.mjs).
+        background_color: '#000000',
         theme_color: '#000000',
         categories: ['photo'],
         icons: [
