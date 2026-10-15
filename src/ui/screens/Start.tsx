@@ -17,7 +17,7 @@ import { ActionSheet, Spinner } from '../components/Overlays';
 import { RecentStrip } from '../components/RecentStrip';
 import { Sheet } from '../components/Sheet';
 import { PressButton } from '../components/controls';
-import { projects } from '../projects/projects';
+import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
 import type { ProjectCard } from '../projects/projects';
 import { ProjectsContent } from './Projects';
 import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
@@ -59,7 +59,8 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
   const backdrop = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState<StageBox>({ width: 0, height: 0 });
   // Intro sekali per sesi; Reduce Motion langsung ke isi.
-  const [phase, setPhase] = useState<IntroPhase>(() => (reduce || storage('session')?.getItem(WELCOMED_KEY) ? 'ready' : 'splash'));
+  // Ada proyek tersimpan: langsung ke Recent, tanpa intro (penanda dibaca sinkron).
+  const [phase, setPhase] = useState<IntroPhase>(() => (reduce || storage('session')?.getItem(WELCOMED_KEY) || hasProjects() ? 'ready' : 'splash'));
   // Tanpa intro (sudah disambut, Reduce Motion): layar boot langsung memudar.
   // Dengan intro, ChromeWordmark menerbangkan logonya ke wordmark.
   useLayoutEffect(() => {
@@ -85,6 +86,14 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
     storage('session')?.setItem(WELCOMED_KEY, '1');
     setPhase('ready');
   }, []);
+
+  // Proyek baru selesai dimuat saat intro masih tampil (penanda belum ada): lewati intro.
+  useEffect(() => {
+    if (phase !== 'splash' || !proj.loaded || proj.list.length === 0) return;
+    progress.set(1);
+    commit();
+    void releaseBoot();
+  }, [phase, proj.loaded, proj.list.length, progress, commit]);
 
   // Berkas bisa dijatuhkan di mana saja di jendela (pendengar `drop` di App);
   // sorotan menyala selama berkas diseret di atas jendela mana pun.
@@ -137,6 +146,7 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
   const recent = proj.list.slice(0, compact ? 5 : 7);
   const showRecent = ready && !over && recent.length > 0;
   const regular = typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular';
+  const ctaPress = { whileTap: { scale: pressScale }, transition: pressRelease };
 
   return (
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
@@ -156,13 +166,28 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
         <motion.div
           className="photo-dropzone intro-content"
           data-recent={showRecent || undefined}
-          style={{ paddingTop: showRecent ? (regular ? 40 : 'calc(max(var(--safe-top, 0px), 12px) + 64px)') : orbCenter.y + (compact ? 48 : 56) }}
+          style={{ paddingTop: showRecent ? (regular ? 32 : 'calc(max(var(--safe-top, 0px), 12px) + 8px)') : orbCenter.y + (compact ? 48 : 56) }}
           data-drag-over={over}
           initial="hidden"
           animate="shown"
           variants={{ shown: { transition: { staggerChildren: 0.09, delayChildren: reduce ? 0 : 0.1 } } }}
         >
-          {over ? (
+          {showRecent ? (
+            <>
+              <motion.div className="welcome-bar" variants={rise}>
+                <span className="welcome-word">gammā</span>
+                {proj.list.length > 1 && (
+                  <motion.button type="button" className="welcome-chip" onClick={() => setAllOpen(true)} {...ctaPress}>
+                    All · {proj.list.length}
+                  </motion.button>
+                )}
+              </motion.div>
+              <motion.h1 className="welcome-title" variants={rise}>
+                Welcome back.
+                <span>Pick up a roll.</span>
+              </motion.h1>
+            </>
+          ) : over ? (
             <h1 className="start-title intro-title" key="drop">
               <BlurWords text="Drop to develop." />
               <span className="start-title-tail"><BlurWords text="Let go anywhere." delay={0.12} /></span>
@@ -179,17 +204,15 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
             <motion.div className="recent-slot" variants={rise}>
               <RecentStrip
                 cards={recent}
-                total={proj.list.length}
                 onOpen={openProject}
                 onRelink={relink}
                 onMenu={(card, anchor) => setMenu({ card, anchor })}
-                onShowAll={() => setAllOpen(true)}
               />
             </motion.div>
           )}
           <motion.div className="start-actions intro-actions" variants={rise}>
-            <motion.button type="button" className="start-cta intro-cta" onClick={onChoose} whileTap={{ scale: pressScale }} transition={pressRelease}>
-              Choose Photo
+            <motion.button type="button" className="start-cta intro-cta" data-secondary={showRecent || undefined} onClick={onChoose} {...ctaPress}>
+              {showRecent ? 'New Photo' : 'Choose Photo'}
             </motion.button>
             <p className="start-footnote intro-footnote">
               {touch ? 'RAW, JPEG, PNG, TIFF and OpenEXR.' : 'Or drop a file anywhere. RAW, JPEG, PNG, TIFF and OpenEXR.'} Nothing is uploaded.
@@ -240,6 +263,10 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
 }
 
 const WELCOMED_KEY = 'dichroic.welcomed';
+
+function hasProjects(): boolean {
+  try { return window.localStorage.getItem(HAS_PROJECTS_KEY) === '1'; } catch { return false; }
+}
 /** Baris kedua judul: film sungguhan, bukan filter. */
 const TAIL_LINES = ['on real film.', 'on Kodak Portra 400.', 'printed on Kodak 2383.', 'right on this device.'];
 

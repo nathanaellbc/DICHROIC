@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gammā · Mockup Recent v4</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #000; --label: #f5f5f7; --label-2: #a1a1a6; --label-3: #6e6e73;
+    --blue: #0091ff; --cta: #0071e3; --edge: #e0913f;
+    --hair: rgba(255,255,255,.08); --hair-2: rgba(255,255,255,.14); --fill: rgba(120,120,128,.2);
+    --sf: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Geist Mono', ui-monospace, monospace;
+    --ease: cubic-bezier(.32, 1.2, .42, 1);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0b0c; color: var(--label); font-family: var(--sf); padding: 48px 32px 80px; -webkit-font-smoothing: antialiased; }
+  header.page { max-width: 1400px; margin: 0 auto 40px; }
+  .eyebrow { font: 500 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--label-2); }
+  h1 { font: 400 36px 'Instrument Serif', serif; margin: 6px 0 10px; }
+  .lede { color: var(--label-2); font-size: 14px; max-width: 820px; line-height: 1.55; }
+  .row { display: flex; flex-wrap: wrap; gap: 44px; max-width: 1400px; margin: 0 auto 64px; align-items: flex-start; }
+  .shot { display: flex; flex-direction: column; gap: 12px; }
+  .shot h2 { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); }
+  .shot h2 b { color: var(--blue); font-weight: 500; }
+  p.note { color: var(--label-3); font-size: 12px; line-height: 1.55; max-width: 330px; }
+  .divider { max-width: 1400px; margin: 0 auto 28px; display: flex; align-items: baseline; gap: 14px; border-top: 1px solid var(--hair); padding-top: 22px; }
+  .divider h3 { font: italic 400 28px 'Instrument Serif', serif; }
+  .divider span { color: var(--label-3); font-size: 13px; }
+
+  /* Photos with a light film treatment per stock */
+  .ph { background-size: cover; background-position: center; }
+  .boston { background-image: url('img/boston.jpg'); }
+  .bay { background-image: url('img/bay_bridge.jpg'); }
+  .kal { background-image: url('img/kalimba.jpg'); }
+  .emb { background-image: url('img/embarcadero.jpg'); }
+  .air { background-image: url('img/airplane.jpg'); }
+  .portra { filter: sepia(.18) saturate(.92) contrast(.96) brightness(1.04); }
+  .gold { filter: sepia(.35) saturate(1.25) contrast(1.05) hue-rotate(-8deg); }
+  .velvia { filter: saturate(1.6) contrast(1.15); }
+  .tri { filter: grayscale(1) contrast(1.2); }
+  .cine { filter: sepia(.1) saturate(.85) contrast(1.1) hue-rotate(160deg) saturate(.6) hue-rotate(-160deg); }
+
+  .phone { width: 375px; height: 812px; border-radius: 50px; border: 1px solid #2a2a2e; background: var(--bg); position: relative; overflow: hidden; box-shadow: 0 0 0 10px #151517; }
+  .status { height: 50px; display: flex; justify-content: space-between; align-items: center; padding: 14px 32px 0; font-weight: 600; font-size: 15px; position: relative; z-index: 3; }
+  .island { position: absolute; left: 50%; top: 11px; width: 120px; height: 34px; border-radius: 20px; background: #000; transform: translateX(-50%); }
+  .glow { position: absolute; left: 50%; bottom: -150px; width: 520px; height: 260px; transform: translateX(-50%); background: radial-gradient(closest-side, rgba(0,113,224,.28), transparent); filter: blur(30px); pointer-events: none; }
+  .bar { position: absolute; left: 20px; right: 20px; top: 58px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+  .word { font-size: 21px; font-weight: 700; letter-spacing: -.03em; }
+  .chip { height: 32px; padding: 0 13px; border-radius: 999px; background: var(--fill); display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; }
+  .mono { font: 500 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); }
+  .pill { height: 50px; border-radius: 999px; display: grid; place-items: center; font-size: 17px; font-weight: 600; }
+  .pill.blue { background: var(--cta); color: #fff; }
+  .pill.ghost { background: var(--fill); color: var(--label); }
+
+  /* ---------- A · Contact sheet ---------- */
+  .hero { position: absolute; left: 20px; right: 20px; top: 110px; }
+  .hero .print { height: 300px; border-radius: 20px; overflow: hidden; position: relative; }
+  .hero .print .ph { position: absolute; inset: 0; transform: scale(1.02); }
+  .hero .print::after { content: ''; position: absolute; inset: 0; border-radius: 20px; box-shadow: inset 0 0 0 .5px rgba(255,255,255,.18); }
+  .hero .stamp { position: absolute; left: 14px; top: 14px; z-index: 1; display: inline-flex; gap: 6px; align-items: center; padding: 5px 9px; border-radius: 8px; background: rgba(0,0,0,.42); backdrop-filter: blur(14px); font: 500 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .hero .stamp i { width: 6px; height: 6px; border-radius: 50%; background: var(--edge); }
+  .hero .meta { margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+  .hero .meta h4 { font-size: 26px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+  .hero .meta p { font-size: 14px; color: var(--label-2); margin-top: 4px; }
+  .hero .cont { height: 40px; padding: 0 18px; border-radius: 999px; background: var(--cta); display: grid; place-items: center; font-size: 15px; font-weight: 600; flex-shrink: 0; }
+
+  .strip { position: absolute; left: 0; right: 0; top: 536px; height: 116px; background: #0e0d0c; border-top: 1px solid #1c1a18; border-bottom: 1px solid #1c1a18; overflow: hidden; }
+  .strip::before, .strip::after { content: ''; position: absolute; left: 0; right: 0; height: 7px; background: repeating-linear-gradient(90deg, transparent 0 6px, #2c2926 6px 13px, transparent 13px 20px); border-radius: 2px; }
+  .strip::before { top: 6px; } .strip::after { bottom: 6px; }
+  .frames { position: absolute; left: 0; top: 20px; display: flex; gap: 8px; padding: 0 20px; }
+  .frame { width: 98px; flex-shrink: 0; }
+  .frame .ph { width: 98px; height: 66px; border-radius: 3px; }
+  .frame .code { margin-top: 4px; display: flex; justify-content: space-between; font: 500 8px var(--mono); letter-spacing: .1em; color: var(--edge); opacity: .85; white-space: nowrap; }
+  .frame.missing .ph { background: repeating-linear-gradient(135deg, rgba(224,145,63,.12) 0 5px, transparent 5px 10px); border: 1px dashed rgba(224,145,63,.6); }
+  .frame.sel .ph { outline: 1.5px solid #fff; outline-offset: 2px; }
+  .strip-head { position: absolute; left: 20px; right: 20px; top: 506px; display: flex; justify-content: space-between; }
+  .strip-head a { color: var(--blue); font-size: 14px; }
+  .actions { position: absolute; left: 20px; right: 20px; bottom: 34px; display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .foot { text-align: center; font-size: 12px; color: var(--label-3); }
+
+  /* A · contact sheet grid (All Projects) */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 54px; border-radius: 26px 26px 0 0; background: #0e0d0c; border-top: 1px solid #24211e; }
+  .grab { width: 36px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.25); margin: 7px auto 0; }
+  .sheet-top { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px 6px; }
+  .sheet-top b { font-size: 17px; }
+  .sheet-top span { color: var(--blue); font-size: 15px; }
+  .seg { display: flex; margin: 6px 18px 12px; padding: 2px; border-radius: 10px; background: var(--fill); font-size: 13px; font-weight: 600; }
+  .seg span { flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; color: var(--label-2); }
+  .seg .on { background: #3a3a3c; color: var(--label); }
+  .roll { margin: 0 12px 14px; padding: 14px 8px 10px; background: #151311; border-radius: 6px; position: relative; }
+  .roll::before, .roll::after { content: ''; position: absolute; left: 8px; right: 8px; height: 5px; background: repeating-linear-gradient(90deg, transparent 0 5px, #2c2926 5px 10px, transparent 10px 15px); }
+  .roll::before { top: 4px; } .roll::after { bottom: 3px; }
+  .roll .title { display: flex; justify-content: space-between; padding: 0 4px 8px; }
+  .roll .title b { font-size: 13px; font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .grid .ph { aspect-ratio: 4/3; border-radius: 2px; }
+  .grid .cap { font: 500 8px var(--mono); color: var(--edge); letter-spacing: .08em; margin: 3px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .85; }
+  .grid .sel .ph { outline: 1.5px solid #fff; outline-offset: 1px; }
+  .loupe { position: absolute; left: 18px; right: 18px; bottom: 34px; display: flex; gap: 8px; }
+  .loupe .pill { flex: 1; height: 44px; font-size: 15px; }
+
+  /* ---------- B · Light table ---------- */
+  .lt-head { position: absolute; left: 20px; right: 20px; top: 112px; }
+  .lt-head h4 { font-size: 30px; line-height: 1.08; font-weight: 700; letter-spacing: -.035em; }
+  .lt-head h4 em { font-style: normal; color: var(--label-3); }
+  .lt-head p { margin-top: 8px; font-size: 14px; color: var(--label-2); }
+  .acc { position: absolute; left: 20px; right: 20px; top: 222px; height: 376px; display: flex; gap: 4px; touch-action: pan-y; }
+  .slat { position: relative; flex: 1 1 0; min-width: 0; border-radius: 14px; overflow: hidden; cursor: pointer; transition: flex-grow .6s var(--ease); }
+  .slat .ph { position: absolute; inset: 0; transition: filter .4s ease, transform .6s var(--ease); }
+  .slat:not(.open) .ph { filter: grayscale(1) brightness(.55) contrast(1.1); transform: scale(1.06); }
+  .slat.open { flex-grow: 6; }
+  .slat .n { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font: 500 10px var(--mono); color: rgba(255,255,255,.7); transition: opacity .2s; }
+  .slat.open .n { opacity: 0; }
+  .slat.new { flex: 0 0 52px; background: transparent; border: 1px dashed rgba(255,255,255,.22); display: grid; place-items: center; font-size: 26px; font-weight: 200; color: var(--label-2); }
+  .slat.missing .ph { background: repeating-linear-gradient(135deg, rgba(224,145,63,.14) 0 6px, transparent 6px 12px) !important; filter: none !important; }
+  .lt-info { position: absolute; left: 20px; right: 20px; top: 612px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .lt-info h5 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  .lt-info p { font-size: 13px; color: var(--label-2); margin-top: 3px; }
+  .lt-info .film { font: 500 10px var(--mono); letter-spacing: .14em; color: var(--edge); text-transform: uppercase; }
+  .dots { position: absolute; left: 0; right: 0; top: 684px; display: flex; justify-content: center; gap: 6px; }
+  .dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.22); transition: width .3s var(--ease), background .3s; }
+  .dots i.on { width: 18px; background: var(--label); }
+  @media (prefers-reduced-motion: reduce) { .slat, .slat .ph, .dots i { transition: none; } }
+
+  /* Desktop (A) */
+  .desk { width: 1180px; height: 700px; border-radius: 12px; border: 1px solid #2a2a2e; background: #000; overflow: hidden; display: grid; grid-template-columns: 220px 1fr 260px; grid-template-rows: 44px 1fr 26px; font-size: 12px; }
+  .tbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--hair); background: #0e0e10; }
+  .tbar b { font-size: 14px; } .tbar span { color: var(--label-3); }
+  .side, .insp { background: #0e0e10; opacity: .5; padding: 10px; }
+  .side { border-right: 1px solid var(--hair); } .insp { border-left: 1px solid var(--hair); }
+  .side div { height: 18px; border-radius: 4px; background: rgba(255,255,255,.05); margin-bottom: 8px; }
+  .insp div { height: 40px; border-radius: 6px; background: rgba(255,255,255,.04); margin-bottom: 10px; }
+  .center { position: relative; overflow: hidden; padding: 30px 34px; display: grid; grid-template-columns: 1.25fr 1fr; gap: 28px; align-content: center; }
+  .center .big { border-radius: 14px; overflow: hidden; height: 330px; position: relative; }
+  .center .big .ph { position: absolute; inset: 0; }
+  .center .right { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+  .center .right h4 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+  .center .right p { font-size: 14px; color: var(--label-2); }
+  .center .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .center .btns span { height: 34px; padding: 0 16px; border-radius: 999px; display: grid; place-items: center; font-size: 13px; font-weight: 600; }
+  .dstrip { grid-column: 1 / -1; position: relative; height: 104px; background: #0e0d0c; border-radius: 6px; overflow: hidden; }
+  .dstrip::before, .dstrip::after { content: ''; position: absolute; left: 0; right: 0; height: 6px; background: repeating-linear-gradient(90deg, transparent 0 6px, #2c2926 6px 12px, transparent 12px 18px); }
+  .dstrip::before { top: 5px; } .dstrip::after { bottom: 5px; }
+  .dstrip .frames { top: 18px; padding: 0 12px; gap: 10px; }
+  .sb { grid-column: 1 / -1; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 12px; padding: 0 12px; color: var(--label-3); font-size: 11px; background: #0e0e10; }
+  .sb .r { margin-left: auto; }
+
+  .compare { max-width: 1400px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare div { border: 1px solid var(--hair); border-radius: 10px; padding: 16px 18px; }
+  .compare b { display: block; font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--label-2); margin-bottom: 8px; }
+  .compare p, .compare li { font-size: 13px; line-height: 1.6; color: #d2d2d7; }
+  .compare ul { list-style: none; }
+  .compare li::before { content: '— '; color: var(--label-3); }
+</style>
+</head>
+<body>
+<header class="page">
+  <p class="eyebrow">Mockup v4 · Start untuk pengguna yang kembali</p>
+  <h1>Dua arah baru untuk Recent</h1>
+  <p class="lede">Masalah di versi sekarang: judul promosi masih memakan tempat untuk orang yang sudah kenal app ini, bilah terasa seperti kartu biasa, teks terpotong, dan ada ruang kosong besar sebelum tombol. Keduanya di bawah memakai foto sungguhan dan mengganti judul promosi dengan sapaan kecil; intro dan stiker tetap hanya untuk pengguna baru.</p>
+</header>
+
+<!-- ================= A ================= -->
+<div class="divider"><h3>A · Contact sheet</h3><span>Satu foto terakhir sebagai "cetakan", sisanya potongan negatif bergaris sprocket dengan kode tepi film.</span></div>
+<div class="row">
+  <div class="shot">
+    <h2>A1 · Start</h2>
+    <div class="phone">
+      <div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="bar"><span class="word">gammā</span><span class="chip">All · 5</span></div>
+      <div class="hero">
+        <div class="print"><div class="ph emb gold"></div><span class="stamp"><i></i>Gold 200</span></div>
+        <div class="meta">
+          <div><h4>embarcadero</h4><p>→ Portra Endura · 11 min ago</p></div>
+          <span class="cont">Continue</span>
+        </div>
+      </div>
+      <div class="strip-head"><span class="mono">Recent</span><a>See All</a></div>
+      <div class="strip">
+        <div class="frames">
+          <div class="frame sel"><div class="ph emb gold"></div><div class="code"><span>GOLD 200</span><span>01</span></div></div>
+          <div class="frame missing"><div class="ph"></div><div class="code"><span>MISSING</span><span>02</span></div></div>
+          <div class="frame"><div class="ph bay portra"></div><div class="code"><span>PORTRA 400</span><span>03</span></div></div>
+          <div class="frame"><div class="ph boston velvia"></div><div class="code"><span>VELVIA 50</span><span>04</span></div></div>
+        </div>
+      </div>
+      <div class="actions"><div class="pill ghost">New Photo</div><p class="foot">RAW, JPEG, PNG, TIFF and OpenEXR. Nothing is uploaded.</p></div>
+    </div>
+    <p class="note">Aksi utama untuk orang yang kembali adalah <b>Continue</b>; foto baru jadi tombol sekunder. Ketuk bingkai di strip untuk menjadikannya cetakan besar; geser strip untuk proyek lain.</p>
+  </div>
+
+  <div class="shot">
+    <h2>A2 · All Projects · contact sheet</h2>
+    <div class="phone">
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheet-top"><span>Select</span><b>All Projects</b><span>Done</span></div>
+        <div class="seg"><span class="on">Recent</span><span>Film</span><span>Name</span></div>
+        <div class="roll">
+          <div class="title"><b>Today</b><span class="mono">03 frames</span></div>
+          <div class="grid">
+            <div class="sel"><div class="ph emb gold"></div><div class="cap">GOLD 200 · EMBARCADERO</div></div>
+            <div><div class="ph kal portra"></div><div class="cap">PORTRA 400 · KALIMBA</div></div>
+            <div><div class="ph bay portra"></div><div class="cap">PORTRA 400 · BAY_BRIDGE</div></div>
+          </div>
+        </div>
+        <div class="roll">
+          <div class="title"><b>Yesterday</b><span class="mono">02 frames</span></div>
+          <div class="grid">
+            <div><div class="ph boston velvia"></div><div class="cap">VELVIA 50 · BOSTON</div></div>
+            <div><div class="ph air tri"></div><div class="cap">TRI-X 400 · AIRPLANE</div></div>
+          </div>
+        </div>
+        <div class="loupe"><span class="pill ghost">Rename</span><span class="pill ghost">Duplicate</span><span class="pill ghost" style="color:#ff453a">Delete</span></div>
+      </div>
+    </div>
+    <p class="note">Daftar lengkap sebagai lembar kontak per hari, dengan kode tepi berisi film dan nama. Pilih bingkai, lalu aksinya muncul di bawah (tanpa menu tersembunyi).</p>
+  </div>
+</div>
+
+<!-- ================= B ================= -->
+<div class="divider"><h3>B · Light table</h3><span>Accordion yang dirapikan: tanpa border, bilah tertutup hitam-putih, info di luar foto supaya tidak terpotong.</span></div>
+<div class="row">
+  <div class="shot">
+    <h2>B1 · Start · <b>bisa dicoba</b></h2>
+    <div class="phone">
+      <div class="glow"></div>
+      <div class="status"><span>9:41</span><div class="island"></div><span></span></div>
+      <div class="bar"><span class="word">gammā</span><span class="chip">All · 5</span></div>
+      <div class="lt-head"><h4>Welcome back.<br><em>Pick up a roll.</em></h4></div>
+      <div class="acc" data-acc>
+        <div class="slat open" data-name="embarcadero" data-film="Gold 200" data-sub="→ Portra Endura · 11 min ago"><div class="ph emb gold"></div><span class="n">01</span></div>
+        <div class="slat missing" data-name="kalimba" data-film="Missing original" data-sub="Choose the photo again to keep editing"><div class="ph"></div><span class="n" style="color:#e0913f">!</span></div>
+        <div class="slat" data-name="bay_bridge" data-film="Portra 400" data-sub="→ Portra Endura · 1 h ago"><div class="ph bay portra"></div><span class="n">03</span></div>
+        <div class="slat" data-name="boston" data-film="Velvia 50" data-sub="Scanned · Yesterday"><div class="ph boston velvia"></div><span class="n">04</span></div>
+        <div class="slat" data-name="airplane" data-film="Tri-X 400" data-sub="→ Ilford MG · Yesterday"><div class="ph air tri"></div><span class="n">05</span></div>
+      </div>
+      <div class="lt-info"><div><p class="film" data-f>Gold 200</p><h5 data-n>embarcadero</h5><p data-s>→ Portra Endura · 11 min ago</p></div><span class="chip" style="background:#0071e3">Open</span></div>
+      <div class="dots" data-dots><i class="on"></i><i></i><i></i><i></i><i></i></div>
+      <div class="actions"><div class="pill ghost">New Photo</div></div>
+    </div>
+    <p class="note">Arahkan kursor / geser jari di atas bilah. Bilah tertutup hitam-putih supaya yang terbuka benar-benar menonjol; nama dan resep di bawah strip, selalu utuh.</p>
+  </div>
+
+  <div class="shot">
+    <h2>A3 · Desktop / iPad landscape</h2>
+    <div class="desk">
+      <div class="tbar"><b>gammā</b><span>No photo</span></div>
+      <div class="side"><div></div><div></div><div></div><div style="width:70%"></div><div></div><div style="width:80%"></div></div>
+      <div class="center">
+        <div class="big"><div class="ph emb gold"></div><span class="stamp" style="position:absolute;left:12px;top:12px;padding:5px 9px;border-radius:8px;background:rgba(0,0,0,.42);font:500 10px var(--mono);letter-spacing:.12em">GOLD 200</span></div>
+        <div class="right">
+          <span class="mono">Last edited · 11 min ago</span>
+          <h4>embarcadero</h4>
+          <p>Gold 200 → Portra Endura · 6000 × 4000</p>
+          <div class="btns"><span style="background:#0071e3">Continue</span><span style="background:var(--fill)">New Photo</span><span style="background:var(--fill)">All Projects</span></div>
+        </div>
+        <div class="dstrip"><div class="frames">
+          <div class="frame sel"><div class="ph emb gold"></div><div class="code"><span>GOLD 200</span><span>01</span></div></div>
+          <div class="frame missing"><div class="ph"></div><div class="code"><span>MISSING</span><span>02</span></div></div>
+          <div class="frame"><div class="ph bay portra"></div><div class="code"><span>PORTRA 400</span><span>03</span></div></div>
+          <div class="frame"><div class="ph boston velvia"></div><div class="code"><span>VELVIA 50</span><span>04</span></div></div>
+          <div class="frame"><div class="ph air tri"></div><div class="code"><span>TRI-X 400</span><span>05</span></div></div>
+          <div class="frame"><div class="ph kal portra"></div><div class="code"><span>PORTRA 400</span><span>06</span></div></div>
+        </div></div>
+      </div>
+      <div class="insp"><div></div><div></div><div></div><div></div></div>
+      <div class="sb"><span>No photo open</span><span>·</span><span>6 projects</span><span class="r">Developed on this device</span></div>
+    </div>
+    <p class="note" style="max-width:640px">Arah A di layar lebar: cetakan dan detailnya berdampingan, strip negatif di bawah. Area foto terisi penuh, tidak ada ruang kosong.</p>
+  </div>
+</div>
+
+<section class="compare">
+  <div><b>A · Contact sheet</b><ul><li>Paling "film": strip negatif, sprocket, kode tepi oranye.</li><li>Satu aksi jelas: Continue ke proyek terakhir.</li><li>Strip bisa menampung banyak proyek tanpa jadi tipis.</li><li>Lebih banyak pekerjaan dari versi sekarang.</li></ul></div>
+  <div><b>B · Light table</b><ul><li>Penyempurnaan dari accordion yang sudah ada (cepat dibuat).</li><li>Teks tidak terpotong, tidak ada border kartu.</li><li>Tetap terbatas ~5 proyek di strip.</li><li>Lebih "galeri", kurang "film" dibanding A.</li></ul></div>
+</section>
+
+<script>
+  for (const acc of document.querySelectorAll('[data-acc]')) {
+    const slats = [...acc.querySelectorAll('.slat')];
+    const phone = acc.closest('.phone');
+    const dots = [...phone.querySelectorAll('[data-dots] i')];
+    let at = 0;
+    const show = (i) => {
+      if (i < 0 || i === at) return;
+      slats[at].classList.remove('open'); slats[i].classList.add('open'); at = i;
+      dots.forEach((d, k) => d.classList.toggle('on', k === i));
+      phone.querySelector('[data-f]').textContent = slats[i].dataset.film;
+      phone.querySelector('[data-f]').style.color = slats[i].classList.contains('missing') ? '#e0913f' : '';
+      phone.querySelector('[data-n]').textContent = slats[i].dataset.name;
+      phone.querySelector('[data-s]').textContent = slats[i].dataset.sub;
+    };
+    const under = (x) => slats.findIndex((s) => { const r = s.getBoundingClientRect(); return x >= r.left - 2 && x <= r.right + 2; });
+    acc.addEventListener('pointermove', (e) => show(under(e.clientX)));
+    acc.addEventListener('pointerdown', (e) => show(under(e.clientX)));
+  }
+</script>
+</body>
+</html>

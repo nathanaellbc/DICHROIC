@@ -45,6 +45,12 @@ export interface ProjectEngine {
   readonly removals: readonly SavedRemoval[];
 }
 
+/**
+ * Penanda di localStorage bahwa perangkat ini punya proyek: Start membacanya
+ * sinkron untuk langsung ke Recent tanpa intro (IndexedDB asinkron).
+ */
+export const HAS_PROJECTS_KEY = 'gamma.hasProjects';
+
 /** Jeda autosave setelah perubahan terakhir. */
 export const SAVE_DELAY_MS = 800;
 /** Lama Undo setelah menghapus proyek. */
@@ -129,6 +135,12 @@ export class Projects {
       .filter((r) => r.id !== this.#pendingDelete?.id)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((r) => this.#card(r));
+    try {
+      if (list.length > 0) globalThis.localStorage?.setItem(HAS_PROJECTS_KEY, '1');
+      else if (this.#state.loaded) globalThis.localStorage?.removeItem(HAS_PROJECTS_KEY);
+    } catch {
+      // Penyimpanan diblokir: intro tetap tampil, Recent menyusul setelah dimuat.
+    }
     this.#set({ list });
   }
 
