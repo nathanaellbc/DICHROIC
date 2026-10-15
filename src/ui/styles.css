@@ -615,8 +615,14 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-fill { z-index: 1; fill: var(--intro-tint); }
 .intro-ring { overflow: visible; will-change: transform; transform-origin: 50% 50%; }
 .intro-ring-line { fill: none; stroke: var(--intro-ring); stroke-width: calc(0.75px * var(--orb-px, 1)); }
-/* Mode gelap: cincin + bloom digambar RingBloom (WebGL), ditumpuk aditif. */
-.intro-bloom { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; mix-blend-mode: plus-lighter; }
+/*
+ * Mode gelap: cincin + bloom digambar RingBloom (WebGL), ditumpuk dengan
+ * `screen`. Bukan `plus-lighter`: penjumlahan yang boleh melampaui putih
+ * membuat iOS mengkomposit lapisan ini dalam rentang extended dan menaikkan
+ * headroom EDR layar -- seluruh layar berubah terang sesaat saat app dibuka
+ * (tidak terekam rekaman layar). Di latar gelap intro `screen` ~ penjumlahan.
+ */
+.intro-bloom { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; mix-blend-mode: screen; }
 /* Bloom aktif: glow dari RingBloom, garis tetap SVG (vektor) -- hanya gradien glow SVG yang disembunyikan. */
 .intro-stage[data-bloom] .intro-ring-glow { display: none; }
 /* Cahaya tepi: gradien radial yang ukurannya diatur GlassOrb tiap frame. */

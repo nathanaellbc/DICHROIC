@@ -16,8 +16,9 @@
  * Skala glow sampai ratusan px, jadi blur dihitung pada piramida mip: H
  * diperkecil bertahap 2x, tiap skala di-blur di level yang membuat sigma-nya
  * beberapa texel, lalu dijumlah kembali ke resolusi px CSS. Kanvas menutupi
- * seluruh panggung, ditumpuk `mix-blend-mode: plus-lighter`, dan hanya
- * mengeluarkan selisih cahaya (C_out - C_in) -- isi halaman di bawahnya tetap.
+ * seluruh panggung, ditumpuk `mix-blend-mode: screen` (SDR; `plus-lighter`
+ * memicu EDR di iOS), dan hanya mengeluarkan selisih cahaya (C_out - C_in) --
+ * isi halaman di bawahnya tetap.
  * Dihitung ulang hanya bila latar, posisi kaca, atau tema berubah.
  *
  * Garis cincin tipisnya digambar SVG (`.intro-ring-line`, vektor) supaya tajam di
