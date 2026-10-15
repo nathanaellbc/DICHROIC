@@ -6,6 +6,7 @@
 import { AnimatePresence, motion, useMotionValue, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChromeWordmark, GlassOrb } from '../components/WelcomeIntro';
+import { releaseBoot } from '../boot';
 import { StickerBurst } from '../components/StickerField';
 import { StarField } from '../components/StarField';
 import { IntroBackdrop } from '../components/IntroBackdrop';
@@ -33,6 +34,13 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
   const [box, setBox] = useState<StageBox>({ width: 0, height: 0 });
   // Intro sekali per sesi; Reduce Motion langsung ke isi.
   const [phase, setPhase] = useState<IntroPhase>(() => (reduce || storage('session')?.getItem(WELCOMED_KEY) ? 'ready' : 'splash'));
+  // Tanpa intro (sudah disambut, Reduce Motion): layar boot langsung memudar.
+  // Dengan intro, ChromeWordmark menerbangkan logonya ke wordmark.
+  useLayoutEffect(() => {
+    if (phase === 'ready') releaseBoot();
+    // Hanya keadaan awal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useLayoutEffect(() => {
     const el = stage.current;

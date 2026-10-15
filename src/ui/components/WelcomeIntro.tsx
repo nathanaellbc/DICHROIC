@@ -22,6 +22,7 @@ import { flareGlow, provideOrbShape } from './RingBloom';
 import { haptic } from '../haptics';
 import type { OrbShape } from './RingBloom';
 import { FRAME_ORDER, onFrame } from '../frameLoop';
+import { BOOT_FLIGHT_MS, releaseBoot } from '../boot';
 
 export type IntroPhase = 'splash' | 'ready';
 
@@ -415,6 +416,16 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
 export function ChromeWordmark({ visible, progress }: { visible: boolean; progress: MotionValue<number> }) {
   const opacity = useTransform(progress, [0, 0.45], [1, 0]);
   const y = useTransform(progress, [0, 1], [0, -40]);
+  const text = useRef<HTMLDivElement>(null);
+  // Layar boot: motif logo terbang ke sini dan larut; huruf muncul saat ia tiba.
+  // Hasil pertama disimpan: StrictMode menjalankan effect dua kali.
+  const flew = useRef<boolean | undefined>(undefined);
+  const [delay, setDelay] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!visible) return;
+    flew.current ??= releaseBoot(text.current);
+    setDelay(flew.current ? (BOOT_FLIGHT_MS * 0.32) / 1000 : 0);
+  }, [visible]);
   return (
     <div className="intro-wordmark">
       <motion.div style={{ opacity, y }}>
@@ -422,13 +433,24 @@ export function ChromeWordmark({ visible, progress }: { visible: boolean; progre
           {visible && (
             <motion.div
               key="wordmark"
+              ref={text}
               className="intro-wordmark-text"
-              initial={{ opacity: 0, filter: 'blur(10px)', y: 10, scale: 0.96 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', y: 0, scale: 1, transitionEnd: { filter: 'none' } }}
+              aria-label="gammā"
               exit={{ opacity: 0, transition: { duration: 0.2 } }}
-              transition={{ duration: 0.9, ease: EASE }}
             >
-              gammā
+              {/* Huruf demi huruf naik dari blur (seperti Text morph Hairline UI). */}
+              {[...'gammā'].map((ch, k) => (
+                <motion.span
+                  key={k}
+                  aria-hidden="true"
+                  style={{ display: 'inline-block' }}
+                  initial={{ opacity: 0, filter: 'blur(12px)', y: 14 }}
+                  animate={delay === undefined ? false : { opacity: 1, filter: 'blur(0px)', y: 0, transitionEnd: { filter: 'none' } }}
+                  transition={{ duration: 0.8, ease: EASE, delay: (delay ?? 0) + k * 0.06 }}
+                >
+                  {ch}
+                </motion.span>
+              ))}
             </motion.div>
           )}
         </AnimatePresence>

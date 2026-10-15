@@ -6,6 +6,7 @@ import { engine } from './engine/engine';
 import { preventPageZoom } from './noZoom';
 import { startPwa } from './pwa';
 import { applyTheme, loadTheme } from './theme';
+import { releaseBootSoon } from './boot';
 // Cadangan SF di luar perangkat Apple (Windows, Android): Inter, self-host dan ikut precache PWA.
 import '@fontsource-variable/inter/wght.css';
 // SF Pro (berkas di public/fonts/sf-pro/) untuk platform tanpa SF bawaan.
@@ -18,6 +19,10 @@ startPwa();
 preventPageZoom();
 // Hanya mode dev: probe Playwright membaca state engine yang sama dengan UI.
 if (import.meta.env.DEV) Object.assign(window, { __dichroicEngine: engine });
+
+// Layar boot (index.html) dilepas oleh intro (terbang ke wordmark); cadangan
+// untuk layar lain atau bila intro tidak tampil.
+releaseBootSoon();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
