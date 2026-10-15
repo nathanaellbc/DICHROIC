@@ -35,8 +35,8 @@ const GLOW = {
   radius: 1000,
   exposure: 0.1,
   exposureGain: Math.pow(2, 0.1),
-  /** k. */
-  strength: 1,
+  /** k (intensitas glow umum). */
+  strength: 0.5,
   scales: [
     { radius: 8, weight: 1.0 },
     { radius: 32, weight: 0.7 },
@@ -45,6 +45,20 @@ const GLOW = {
     { radius: 800, weight: 0.12 },
   ],
 } as const;
+
+/** Bentuk kaca saat ini (px viewport): elips berpusat (cx, cy), jari-jari rx sepanjang `angle`, ry tegak lurus. */
+export interface OrbShape { cx: number; cy: number; rx: number; ry: number; angle: number }
+let orbShape: (() => OrbShape | undefined) | undefined;
+
+/**
+ * GlassOrb mendaftarkan bentuk kacanya (termasuk geser, regang, dan sudut
+ * benda lunaknya) supaya cincin glow menempel persis di tepi kaca -- kotak
+ * pembatas DOM tidak bisa menggambarkan elips yang miring.
+ */
+export function provideOrbShape(source: () => OrbShape | undefined) {
+  orbShape = source;
+  return () => { if (orbShape === source) orbShape = undefined; };
+}
 
 /** Lebar garis cincin (px CSS). */
 const LINE_WIDTH = 0.75;
@@ -64,7 +78,8 @@ uniform vec2 uSize;      // ukuran panggung (px CSS)
 uniform vec4 uSceneRect; // area kanvas latar di panggung (x, y, w, h; px CSS)
 uniform vec3 uBackground;// warna latar panggung (sRGB)
 uniform vec2 uCenter;    // pusat kaca (px CSS)
-uniform vec2 uRadius;    // jari-jari kaca (px CSS)
+uniform vec2 uRadius;    // jari-jari kaca (px CSS): sepanjang uAngle, tegak lurus
+uniform float uAngle;    // arah regang kaca (radian)
 uniform vec4 uFill;      // isi kaca (sRGB, alpha)
 uniform float uLineWidth, uLineIntensity;
 out vec4 outColor;
@@ -77,7 +92,9 @@ vec2 stagePoint() { return vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes 
 
 /** Jarak bertanda ke tepi elips kaca (px CSS; negatif = di dalam). */
 float edgeDistance(vec2 p) {
-  vec2 q = (p - uCenter) / uRadius;
+  vec2 v = p - uCenter;
+  float c = cos(uAngle), s = sin(uAngle);
+  vec2 q = vec2(c * v.x + s * v.y, -s * v.x + c * v.y) / uRadius;
   float r = max(length(q), 1e-4);
   vec2 grad = q / (r * uRadius);
   return (r - 1.0) / max(length(grad), 1e-4);
@@ -268,9 +285,10 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
       const sx = source.offsetLeft, sy = source.offsetTop, sw = source.offsetWidth, sh = source.offsetHeight;
       if (!W || !H || !sw || !sh) return;
       const origin = stage.getBoundingClientRect(), box = glass.getBoundingClientRect();
-      const cx = box.left - origin.left + box.width / 2, cy = box.top - origin.top + box.height / 2;
+      const shape = orbShape?.() ?? { cx: box.left + box.width / 2, cy: box.top + box.height / 2, rx: box.width / 2, ry: box.height / 2, angle: 0 };
+      const cx = shape.cx - origin.left, cy = shape.cy - origin.top;
       const ratio = Math.min(2, window.devicePixelRatio || 1);
-      const signature = [W, H, sx, sy, sw, sh, cx, cy, box.width, box.height, ratio, source.dataset.frame, fill.join(','), background.join(',')].join('|');
+      const signature = [W, H, sx, sy, sw, sh, cx, cy, shape.rx, shape.ry, shape.angle, ratio, source.dataset.frame, fill.join(','), background.join(',')].join('|');
       if (signature === drawn) return;
       drawn = signature;
 
@@ -295,7 +313,8 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
         gl.uniform4f(p.u('uSceneRect'), sx, sy, sw, sh);
         gl.uniform3f(p.u('uBackground'), ...background);
         gl.uniform2f(p.u('uCenter'), cx, cy);
-        gl.uniform2f(p.u('uRadius'), box.width / 2, box.height / 2);
+        gl.uniform2f(p.u('uRadius'), shape.rx, shape.ry);
+        gl.uniform1f(p.u('uAngle'), shape.angle);
         gl.uniform4f(p.u('uFill'), ...fill);
         gl.uniform1f(p.u('uLineWidth'), LINE_WIDTH);
         gl.uniform1f(p.u('uLineIntensity'), LINE_INTENSITY);

@@ -8,10 +8,11 @@
  * ada animasi lebar/tinggi, jadi tetap 60 fps.
  */
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
-import { useId, useLayoutEffect, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { Icon } from './Icon';
 import GlassSurface from './reactbits/GlassSurface';
+import { provideOrbShape } from './RingBloom';
 
 export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
@@ -81,6 +82,17 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => { if (!anchor.current?.style.getPropertyValue('--orb-px')) setPx(s); }, []);
+  // Bentuk kaca untuk cincin glow: lingkaran dari jangkar (geser + skala saja),
+  // lalu geser, regang, dan sudut benda lunaknya -- sama dengan transform tombol.
+  useEffect(() => provideOrbShape(() => {
+    const box = anchor.current?.getBoundingClientRect();
+    if (!box) return undefined;
+    const k = stretch.get(), r = box.width / 2;
+    return {
+      cx: box.left + r + dx.get(), cy: box.top + box.height / 2 + dy.get(),
+      rx: r * (1 + k), ry: r / Math.max(0.5, 1 + k), angle: angle.get(),
+    };
+  }), [dx, dy, stretch, angle]);
   const press = useRef<{ x: number; y: number; t: number; lx: number; ly: number; lt: number; moved: number; id: number } | undefined>(undefined);
   /** Gesekan karet: makin jauh makin berat (seperti tarikan berlebih iOS). */
   const band = (v: number, r: number) => Math.sign(v) * r * (1 - 1 / (Math.abs(v) / r + 1));
