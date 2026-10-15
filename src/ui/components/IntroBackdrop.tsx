@@ -1,7 +1,7 @@
 /**
  * Kanvas latar untuk kaca intro (GlassSurface mode WebGL). WebGL tidak bisa
  * membaca isi halaman, jadi semua yang ada di belakang kaca -- warna latar,
- * cahaya langit, bintang, wordmark, dan stiker -- digambar ulang di sini
+ * cahaya langit, bintang, wordmark, judul, dan stiker -- digambar ulang di sini
  * dari data yang sama dengan DOM-nya, hanya bila isinya di area kaca berubah. Kanvas tidak terlihat
  * (`visibility: hidden`); hanya dipakai sebagai tekstur, jadi kaca tampil
  * sama di Chrome dan Safari/iOS. Kanvas hanya menutupi area di sekitar kaca
@@ -63,9 +63,9 @@ export function IntroBackdrop({ canvasRef }: { canvasRef: RefObject<HTMLCanvasEl
         dark = star.startsWith('255');
       }
       const ratio = Math.min(2, window.devicePixelRatio || 1);
-      const word = wordmarkState(stage, origin, area);
+      const texts = textStates(stage, origin, area);
       const keys = [...layers].map((layer) => layer.key(area));
-      const signature = [x0, y0, x1, y1, w, h, ratio, background, star, word?.key ?? '', ...keys].join('|');
+      const signature = [x0, y0, x1, y1, w, h, ratio, background, star, ...texts.map((text) => text.key), ...keys].join('|');
       if (signature === drawn) return;
       drawn = signature;
 
@@ -95,7 +95,7 @@ export function IntroBackdrop({ canvasRef }: { canvasRef: RefObject<HTMLCanvasEl
       }
       ctx.globalAlpha = 1;
 
-      if (word) paintWordmark(ctx, word);
+      texts.forEach((text) => paintText(ctx, text));
       layers.forEach((layer) => { ctx.save(); layer.paint(ctx, ratio, area); ctx.restore(); });
       // Versi baru -> GlassSurface mengunggah tekstur dan menggambar kaca ulang.
       canvas.dataset.frame = String(++version);
@@ -121,39 +121,47 @@ function paintSky(ctx: CanvasRenderingContext2D, w: number, h: number, dark: boo
   ctx.restore();
 }
 
-/** Keadaan wordmark "gammā" saat ini (posisi, skala, opacity, blur animasinya), bila masuk area. */
-function wordmarkState(stage: HTMLElement, origin: DOMRect, area: BackdropArea) {
-  const el = stage.querySelector<HTMLElement>('.intro-wordmark-text');
-  if (!el || !el.offsetWidth) return undefined;
-  const box = el.getBoundingClientRect();
-  const left = box.left - origin.left, top = box.top - origin.top;
-  if (left > area.x1 || top > area.y1 || left + box.width < area.x0 || top + box.height < area.y0) return undefined;
-  const cs = getComputedStyle(el);
-  const opacity = parseFloat(cs.opacity);
-  if (!(opacity > 0)) return undefined;
-  return {
-    el, cs, opacity, cx: left + box.width / 2, cy: top + box.height / 2, scale: box.width / el.offsetWidth,
-    key: `${left.toFixed(1)},${top.toFixed(1)},${box.width.toFixed(1)},${opacity.toFixed(3)},${cs.filter},${cs.color}`,
-  };
+/** Teks DOM yang ikut digambar: wordmark, kata-kata judul, dan kata yang dicoret. */
+const TEXT_SELECTOR = '.intro-wordmark-text, .intro-title .start-word, .intro-title .intro-strike';
+
+/** Keadaan teks saat ini (posisi, skala, opacity, blur animasinya) yang masuk area. */
+function textStates(stage: HTMLElement, origin: DOMRect, area: BackdropArea) {
+  return Array.from(stage.querySelectorAll<HTMLElement>(TEXT_SELECTOR)).flatMap((el) => {
+    if (!el.offsetWidth) return [];
+    const box = el.getBoundingClientRect();
+    const left = box.left - origin.left, top = box.top - origin.top;
+    if (left > area.x1 || top > area.y1 || left + box.width < area.x0 || top + box.height < area.y0) return [];
+    const cs = getComputedStyle(el);
+    const opacity = parseFloat(cs.opacity);
+    if (!(opacity > 0)) return [];
+    const text = el.textContent ?? '';
+    return [{
+      el, cs, text, opacity, cx: left + box.width / 2, cy: top + box.height / 2, scale: box.width / el.offsetWidth,
+      strike: el.classList.contains('intro-strike'),
+      key: `${text}@${left.toFixed(1)},${top.toFixed(1)},${box.width.toFixed(1)},${opacity.toFixed(3)},${cs.filter},${cs.color}`,
+    }];
+  });
 }
 
-function paintWordmark(ctx: CanvasRenderingContext2D, word: NonNullable<ReturnType<typeof wordmarkState>>) {
-  const { el, cs } = word;
+function paintText(ctx: CanvasRenderingContext2D, item: ReturnType<typeof textStates>[number]) {
+  const { el, cs } = item;
   ctx.save();
-  ctx.translate(word.cx, word.cy);
-  ctx.scale(word.scale, word.scale);
-  ctx.globalAlpha = word.opacity;
+  ctx.translate(item.cx, item.cy);
+  ctx.scale(item.scale, item.scale);
+  ctx.globalAlpha = item.opacity;
   ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
   if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = cs.letterSpacing;
   if ('filter' in ctx && cs.filter !== 'none') ctx.filter = cs.filter;
   ctx.fillStyle = cs.color;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  const text = el.textContent ?? '';
-  const m = ctx.measureText(text);
-  const ascent = m.fontBoundingBoxAscent || parseFloat(cs.fontSize) * 0.8;
-  const descent = m.fontBoundingBoxDescent || parseFloat(cs.fontSize) * 0.2;
-  const lineHeight = el.offsetHeight;
-  ctx.fillText(text, 0, -lineHeight / 2 + (lineHeight - (ascent + descent)) / 2 + ascent);
+  const size = parseFloat(cs.fontSize);
+  const m = ctx.measureText(item.text);
+  const ascent = m.fontBoundingBoxAscent || size * 0.8;
+  const descent = m.fontBoundingBoxDescent || size * 0.2;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  ctx.fillText(item.text, 0, -h / 2 + (h - (ascent + descent)) / 2 + ascent);
+  // Garis coret (`.intro-strike::after`: 54% tinggi, tebal 0.07em, sedikit melebihi kata).
+  if (item.strike) ctx.fillRect(-w * 0.52, -h / 2 + h * 0.54, w * 1.04, size * 0.07);
   ctx.restore();
 }

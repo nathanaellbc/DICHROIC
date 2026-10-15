@@ -57,6 +57,7 @@
   /* Wordmark krom intro (atas terang, pita gelap, bawah terang). */
   --chrome-1: #f4f7fb; --chrome-2: #9aa6b4; --chrome-3: #3d4652; --chrome-4: #e3e9f1;
   --intro-glass-rim: rgba(255, 255, 255, 0.28);
+  --intro-tint: rgba(0, 145, 255, 0.42);
   --blue-wash: rgba(0, 145, 255, 0.16);
   --green: #30d158;
   --red: #ff4245;
@@ -594,6 +595,16 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 /* Kaca: GlassSurface (React Bits) memenuhi tombol; isi (halo, petunjuk, "+") di atasnya. */
 .intro-glass { position: absolute; inset: 0; }
 .intro-glass > .glass-surface__content { padding: 0; }
+/* Gelembung "+" berwarna (tinted glass): biru brand di lapisan frame, di bawah kilap
+   dan rim kaca, jadi pembiasan dan pinggirannya tetap terlihat. */
+.intro-glass > .glass-surface__frame { transition: background-color 0.5s cubic-bezier(0.23, 1, 0.32, 1); }
+.intro-orb[data-phase="bubble"] .glass-surface__frame,
+.intro-orb[data-phase="ready"] .glass-surface__frame {
+  background-color: var(--intro-tint);
+  background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 55%);
+}
+.intro-orb[data-phase="bubble"] .intro-plus,
+.intro-orb[data-phase="ready"] .intro-plus { color: #fff; }
 .intro-orb:focus-visible { outline: none; box-shadow: inset 0 0 0 8px rgba(0, 145, 255, 0.7); }
 /* Halo dikroik: elips biru dengan inti putih yang menyapu kubah. */
 .intro-halo {
@@ -1328,6 +1339,7 @@ html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px;
     --scrollbar-thumb: rgba(0, 0, 0, 0.25);
     --blue-text: #0071e3;
     --blue-wash: rgba(0, 145, 255, 0.12);
+    --intro-tint: rgba(0, 136, 255, 0.58);
     --red-text: #d70015;
     --glass-bg: rgba(255, 255, 255, 0.62);
     --glass-border: rgba(0, 0, 0, 0.08);
@@ -1369,6 +1381,7 @@ html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px;
   --scrollbar-thumb: rgba(0, 0, 0, 0.25);
   --blue-text: #0071e3;
   --blue-wash: rgba(0, 145, 255, 0.12);
+  --intro-tint: rgba(0, 136, 255, 0.58);
   --red-text: #d70015;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(0, 0, 0, 0.08);
