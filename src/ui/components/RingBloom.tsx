@@ -36,7 +36,7 @@ const GLOW = {
   exposure: 0.1,
   exposureGain: Math.pow(2, 0.1),
   /** k (intensitas glow umum). */
-  strength: 0.25,
+  strength: 0.125,
   scales: [
     { radius: 8, weight: 1.0 },
     { radius: 32, weight: 0.7 },

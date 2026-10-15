@@ -629,15 +629,26 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
   position: absolute; left: 50%; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 4px;
   transform-origin: 50% 0; pointer-events: none; white-space: nowrap; color: var(--start-sub);
 }
-.intro-hint-chevron { display: grid; place-items: center; }
-.intro-hint-text {
-  font-size: 13px; font-weight: 300; letter-spacing: 0.04em;
-  background: linear-gradient(90deg, var(--start-sub) 0%, var(--start-sub) 35%, var(--label) 50%, var(--start-sub) 65%, var(--start-sub) 100%);
-  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: intro-hint-shine 3.2s ease-in-out infinite;
+.intro-hint-chevron { display: grid; place-items: center; animation: intro-hint-bob 2.2s ease-in-out infinite; will-change: transform, opacity; }
+@keyframes intro-hint-bob {
+  0%, 100% { transform: translateY(3px); opacity: 0.35; }
+  50% { transform: translateY(-5px); opacity: 1; }
 }
-@keyframes intro-hint-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-@media (prefers-reduced-motion: reduce) { .intro-hint-text { animation: none; color: var(--start-sub); background: none; } }
+.intro-hint-text { position: relative; display: inline-block; font-size: 13px; font-weight: 300; letter-spacing: 0.04em; color: var(--start-sub); }
+/* Kilau: jendela bergradien (mask) berisi salinan teks terang yang menyapu dari kiri ke
+   kanan; jendela dan isinya bergerak berlawanan lewat transform, jadi teks tetap di tempat
+   dan semuanya dikomposisi GPU (dulu background-position + background-clip: repaint tiap frame). */
+.intro-hint-shine {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 40%; overflow: hidden; pointer-events: none;
+  color: var(--label); will-change: transform;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 50%, transparent); mask-image: linear-gradient(90deg, transparent, #000 50%, transparent);
+  animation: intro-shine-window 3.2s ease-in-out infinite;
+}
+.intro-hint-shine > span { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; animation: intro-shine-text 3.2s ease-in-out infinite; }
+/* Lebar jendela 40% teks: -100% -> 250% jendela = dari kiri luar sampai kanan luar; isinya kebalikannya (dalam % lebar teks). */
+@keyframes intro-shine-window { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@keyframes intro-shine-text { from { transform: translateX(40%); } to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) { .intro-hint-chevron { animation: none; opacity: 0.6; } .intro-hint-shine { display: none; } }
 
 .intro-stickers { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .intro-sticker {
