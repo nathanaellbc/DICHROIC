@@ -35,6 +35,17 @@ export function relativeTime(then: number, now = Date.now()): string {
   return new Date(then).toLocaleDateString('en', { day: 'numeric', month: 'short' });
 }
 
+/** Versi ringkas untuk kolom daftar: "Now", "28m", "3h", "Yesterday", "Mon", "12 Oct". */
+export function shortTime(then: number, now = Date.now()): string {
+  const diff = Math.max(0, now - then);
+  if (diff < 60_000) return 'Now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`;
+  if (diff < 2 * 86_400_000) return 'Yesterday';
+  if (diff < 7 * 86_400_000) return new Date(then).toLocaleDateString('en', { weekday: 'short' });
+  return new Date(then).toLocaleDateString('en', { day: 'numeric', month: 'short' });
+}
+
 /** Kelompok daftar All Projects. */
 export function dayGroup(then: number, now = Date.now()): 'Today' | 'Yesterday' | 'This Week' | 'Earlier' {
   const start = new Date(now);

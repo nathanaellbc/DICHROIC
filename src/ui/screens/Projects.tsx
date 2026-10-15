@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../components/Icon';
 import { PressButton } from '../components/controls';
 import type { ProjectCard } from '../projects/projects';
-import { dayGroup, recipeText, relativeTime } from '../projects/format';
+import { dayGroup, recipeText, relativeTime, shortTime } from '../projects/format';
 
 const GROUPS = ['Today', 'Yesterday', 'This Week', 'Earlier'] as const;
 
@@ -112,7 +112,7 @@ function ProjectRow({ card, renaming, onOpen, onMenu, onRename, onCancelRename }
             <span className="t-subhead secondary" style={{ color: card.missing ? 'var(--orange)' : undefined }}>{meta}</span>
           </button>
         )}
-        <span className="t-footnote tertiary tabular" style={{ whiteSpace: 'nowrap' }}>{relativeTime(card.updatedAt)}</span>
+        <span className="t-footnote tertiary tabular" style={{ whiteSpace: 'nowrap' }} title={relativeTime(card.updatedAt)}>{shortTime(card.updatedAt)}</span>
         <PressButton className="icon-btn plain" aria-label={`More for ${card.name}`} onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
           <Icon name="more" size={18} />
         </PressButton>

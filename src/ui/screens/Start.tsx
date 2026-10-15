@@ -20,6 +20,7 @@ import { PressButton } from '../components/controls';
 import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
 import type { ProjectCard } from '../projects/projects';
 import { ProjectsContent } from './Projects';
+import { dayGroup } from '../projects/format';
 import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
 import { useEffect } from 'react';
 import { activateModal } from '../modalFocus';
@@ -147,6 +148,10 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
   const showRecent = ready && !over && recent.length > 0;
   const regular = typeof document !== 'undefined' && document.documentElement.dataset.size === 'regular';
   const ctaPress = { whileTap: { scale: pressScale }, transition: pressRelease };
+  // All Projects setinggi isinya (bar, cari, judul grup, baris, catatan); banyak proyek = penuh.
+  const allGroups = new Set(proj.list.map((c) => dayGroup(c.updatedAt))).size;
+  const allFraction = typeof window === 'undefined' ? 0.9
+    : Math.min(0.9, Math.max(0.36, (170 + allGroups * 46 + proj.list.length * 61) / window.innerHeight));
 
   return (
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
@@ -240,7 +245,9 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
         open={allOpen}
         centered={regular}
         title="All Projects"
-        detents={['large']}
+        detents={allFraction < 0.9 ? ['medium', 'large'] : ['large']}
+        mediumFraction={allFraction}
+        dimAtMedium
         onClose={() => { setAllOpen(false); setRenaming(undefined); }}
         trailing={
           <PressButton className="icon-btn" aria-label="Done" onClick={() => { setAllOpen(false); setRenaming(undefined); }}>
