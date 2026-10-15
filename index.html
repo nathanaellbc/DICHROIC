@@ -16,10 +16,11 @@
     <title>gammā</title>
     <style>
       /*
-       * Layar boot = salinan persis layar pembuka iOS (tools/gen_icons.mjs): motif
-       * selebar 27% layar, di tengah, putih di atas hitam (terang: hitam di atas
-       * #f2f2f7). Tampil sebelum JS termuat, jadi tidak ada lompatan saat gambar
-       * iOS hilang; src/ui/boot.ts lalu menerbangkan motif ke wordmark intro.
+       * Layar boot = layar pembuka iOS (tools/gen_icons.mjs): polos hitam
+       * (terang: #f2f2f7), tanpa motif -- iOS menukar gambarnya dengan halaman
+       * pada saat layar polos, jadi pertukaran tidak bisa terlihat berkedip.
+       * Motif (selebar 27% layar, di tengah) tersembunyi dulu; src/ui/boot.ts
+       * memunculkannya halus lalu menerbangkannya ke wordmark intro.
        */
       html, html.booting body { background: #000 !important; }
       /*
@@ -29,7 +30,7 @@
        * motif melompat saat halaman tampil. 100lvh = tinggi layar fisik.
        */
       #boot { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; height: 100lvh; z-index: 2147483000; display: grid; place-items: center; background: #000; pointer-events: none; }
-      #boot svg { width: 27vw; height: 27vw; display: block; transform-origin: 50% 50%; }
+      #boot svg { width: 27vw; height: 27vw; display: block; transform-origin: 50% 50%; opacity: 0; }
       #boot path { fill: #fff; }
       @media (prefers-color-scheme: light) {
         html, html.booting body, #boot { background: #f2f2f7 !important; }

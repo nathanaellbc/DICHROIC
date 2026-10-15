@@ -49,6 +49,9 @@ const swipeLength = (box: StageBox) => Math.min(360, box.height * 0.45);
  * Pusat dan diameter kaca pada progres p (0 = kubah, 1 = "+"): puncak kaca naik
  * lurus, diameter menyusut eksponensial (kubah besar -> gelembung -> "+").
  */
+/** Bagian swipe yang harus ditempuh jari sebelum kubah melanjutkan jadi "+". */
+const SWIPE_COMMIT = 0.9;
+
 function orbGeometry(p: number, box: StageBox) {
   const { width: w, height: h } = box;
   const t = Math.min(1.1, Math.max(-0.1, p));
@@ -248,13 +251,15 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
     };
     const up = (e: PointerEvent, cancelled = false) => {
       if (!press || e.pointerId !== press.id) return;
-      const tap = press.moved < 8 && press.onOrb && !cancelled;
       press = undefined;
       const vy = drag.current.vy;
+      // Harus swipe penuh: posisi JARI (bukan progres yang dihaluskan dan
+      // tertinggal) sampai SWIPE_COMMIT. Ketuk dan sentilan pendek tidak lagi
+      // melanjutkan -- kubah kembali turun.
+      const finger = goal.current?.p ?? progress.get();
       goal.current = undefined;
       dxRaw.set(0); dyRaw.set(0); stretchRaw.set(0);
-      const p = progress.get();
-      const target = tap || vy < -500 || (vy <= 500 && p > 0.5) ? 1 : 0;
+      const target = !cancelled && finger >= SWIPE_COMMIT ? 1 : 0;
       if (target === 1) haptic();
       settleRef.current(target, (-vy / swipeLength(live.current.box)) || 0);
     };
@@ -264,7 +269,7 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
       progress.stop();
       progress.set(Math.min(1, Math.max(0, progress.get() + e.deltaY / (swipeLength(live.current.box) * 1.5))));
       window.clearTimeout(wheelEnd);
-      wheelEnd = window.setTimeout(() => settleRef.current(progress.get() > 0.5 ? 1 : 0), 160);
+      wheelEnd = window.setTimeout(() => settleRef.current(progress.get() >= SWIPE_COMMIT ? 1 : 0), 160);
     };
     const key = (e: KeyboardEvent) => { if (['ArrowUp', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(e.key)) { haptic(); settleRef.current(1); } };
     stage.addEventListener('pointerdown', down);

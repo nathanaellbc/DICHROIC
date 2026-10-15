@@ -85,7 +85,7 @@ function drawMark(pixels, width, height, cx, cy, markWidth, fg, bg) {
 function png(width, height, markWidth, fg = WHITE, bg = BLUE) {
   const pixels = new Uint8Array(width * height * 3);
   for (let i = 0; i < pixels.length; i += 3) pixels.set(bg, i);
-  drawMark(pixels, width, height, width / 2, height / 2, markWidth, fg, bg);
+  if (markWidth > 0) drawMark(pixels, width, height, width / 2, height / 2, markWidth, fg, bg);
   return encode({ width, height, data: pixels, channels: 3, depth: 8 });
 }
 
@@ -123,7 +123,10 @@ for (const [w, h, scale] of SCREENS) {
   const height = h * scale;
   for (const [theme, fg, bg] of [['dark', WHITE, BLACK], ['light', BLACK, LIGHT_BG]]) {
     const file = `splash-${theme}-${width}x${height}.png`;
-    writeFileSync(join(OUT, file), png(width, height, Math.round(width * 0.27), fg, bg));
+    // Polos tanpa motif: iOS menukar gambar ini dengan WebView pada saat layar
+    // polos (hitam/terang), jadi pertukarannya tidak bisa terlihat berkedip;
+    // motif baru muncul halus di halaman (src/ui/boot.ts).
+    writeFileSync(join(OUT, file), png(width, height, 0, fg, bg));
     splash.push({
       file,
       media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait) and (prefers-color-scheme: ${theme})`,

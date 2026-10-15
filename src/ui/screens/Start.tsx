@@ -115,7 +115,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <div className="start-dropframe" aria-hidden="true" />
       <ChromeWordmark visible={phase === 'splash'} progress={progress} />
       <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
-      {box.width > 0 && <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or click to continue'} />}
+      {box.width > 0 && <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or drag up to continue'} />}
       {box.width > 0 && <RingBloom backdrop={backdrop} />}
 
       {ready && (

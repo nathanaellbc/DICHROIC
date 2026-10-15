@@ -2,9 +2,10 @@
  * Layar boot (`#boot` di index.html, salinan persis layar pembuka iOS) ke
  * aplikasi tanpa lompatan atau kedip.
  *
- * Intro pertama: setelah CSS app termuat, font siap, dan tata letak stabil
- * (semua di balik layar boot, jadi pergeseran awal tidak terlihat), motif
- * terbang ke wordmark "gammā" sambil mengecil dan larut ke dalam blur, latar
+ * Layar boot polos (seperti gambar layar pembuka iOS, tanpa motif). Intro
+ * pertama: setelah CSS app termuat, font siap, dan tata letak stabil (semua
+ * di balik layar boot, jadi pergeseran awal tidak terlihat), motif muncul halus
+ * di tengah, lalu terbang ke wordmark "gammā" sambil mengecil dan larut ke dalam blur, latar
  * memudar memperlihatkan langit dan kubah, dan huruf wordmark muncul dari blur
  * di tempat yang sama (`ChromeWordmark`). Selain intro (sudah disambut, Reduce
  * Motion, atau layar lain): cukup memudar setelah tenang.
@@ -13,6 +14,9 @@
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 /** Durasi terbang motif ke wordmark (ms); huruf wordmark mulai muncul di sekitar sepertiganya. */
 export const BOOT_FLIGHT_MS = 950;
+/** Motif muncul (ms) dan diam sejenak (ms) sebelum terbang. */
+const APPEAR_MS = 520;
+const HOLD_MS = 160;
 
 let pending: Promise<boolean> | undefined;
 
@@ -82,6 +86,16 @@ async function run(target: Element | null | undefined): Promise<boolean> {
     else remove(boot);
     return false;
   }
+  // Motif muncul halus dulu di layar polos (fade, sedikit membesar, blur
+  // berkurang), sejenak diam, baru terbang.
+  await mark.animate(
+    [
+      { opacity: 0, transform: 'scale(0.92)', filter: 'blur(10px)' },
+      { opacity: 1, transform: 'scale(1)', filter: 'blur(0px)' },
+    ],
+    { duration: APPEAR_MS, easing: EASE, fill: 'forwards' },
+  ).finished.catch(() => undefined);
+  await wait(HOLD_MS);
   const from = mark.getBoundingClientRect();
   const to = target.getBoundingClientRect();
   if (!(from.width > 0 && to.width > 0)) {
