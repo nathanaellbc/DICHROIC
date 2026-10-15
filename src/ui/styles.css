@@ -623,20 +623,9 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-ring-glow-peak { stop-color: var(--intro-ring-glow); }
 .intro-ring-glow-clear { stop-color: var(--intro-ring-glow); stop-opacity: 0; }
 .intro-orb:focus-visible { outline: none; box-shadow: inset 0 0 0 8px rgba(0, 145, 255, 0.7); }
-/*
- * Halo yang menyapu kubah: cahaya putih yang meluruh halus seperti Gauss
- * (tanpa cincin warna atau tepi bertingkat, yang terlihat seperti stiker).
- */
-.intro-halo {
-  position: absolute; left: 50%; top: 0; width: 420px; height: 300px; margin-left: -210px; border-radius: 50%;
-  background: radial-gradient(closest-side,
-    rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.78) 15%, rgba(255, 255, 255, 0.6) 32%,
-    rgba(255, 255, 255, 0.38) 50%, rgba(255, 255, 255, 0.18) 68%, rgba(255, 255, 255, 0.06) 84%, transparent 100%);
-  filter: blur(16px); pointer-events: none;
-}
 .intro-plus { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 
-.intro-halo, .intro-plus { z-index: 2; }
+.intro-plus { z-index: 2; }
 /* Petunjuk di dalam kubah: tipis dan kecil, chevron mengambang, kilau lewat teks. */
 .intro-hint {
   position: absolute; left: 50%; z-index: 2;

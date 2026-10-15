@@ -80,12 +80,10 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
   const dy = useSpring(dyRaw, { stiffness: 320, damping: 13, mass: 0.8 });
   const stretch = useSpring(stretchRaw, { stiffness: 340, damping: 8, mass: 0.6 });
   const angle = useMotionValue(0);
-  // Wordmark, petunjuk, halo, dan "+" mengikuti progres.
+  // Wordmark, petunjuk, dan "+" mengikuti progres; "+" muncul bertahap
+  // sepanjang swipe, bukan baru di ujung.
   const hintOpacity = useTransform(progress, [0, 0.2], [1, 0]);
-  const haloOpacity = useTransform(progress, [0.05, 0.35, 0.8, 1], [0, 1, 1, 0]);
-  const haloY = useTransform(progress, [0, 1], [260, 150]);
-  const haloScale = useTransform(progress, [0, 1], [0.7, 1.25]);
-  const plusOpacity = useTransform(progress, [0.75, 1], [0, 1]);
+  const plusOpacity = useTransform(progress, [0.1, 0.85], [0, 1]);
 
   const anchor = useRef<HTMLDivElement>(null);
   const orb = useRef<HTMLButtonElement>(null);
@@ -356,8 +354,6 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
           <svg className="intro-fill" viewBox={`0 0 ${ORB} ${ORB}`} aria-hidden="true">
             <circle cx={ORB / 2} cy={ORB / 2} r={ORB / 2} />
           </svg>
-          {/* Halo dikroik yang menyapu kaca selama transisi (cincin biru, inti putih). */}
-          {!reduce && <motion.span className="intro-halo" style={{ opacity: haloOpacity, y: haloY, scale: haloScale }} />}
           <AnimatePresence>
             {phase === 'splash' && (
               <motion.span
