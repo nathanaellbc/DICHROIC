@@ -160,7 +160,8 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
           <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or drag up to continue'} />
         </div>
       )}
-      {box.width > 0 && <RingBloom backdrop={backdrop} />}
+      {/* Glow cincin kaca: ikut bola "+", jadi tidak tampil di atas Recent. */}
+      {box.width > 0 && !showRecent && <RingBloom backdrop={backdrop} />}
 
       {ready && (
         <motion.div
