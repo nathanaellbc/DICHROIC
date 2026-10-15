@@ -93,13 +93,14 @@ export function integrate(q: Quat, w: Vec3, dt: number): Quat {
 }
 
 /**
- * Langkah bebas setelah dilepas. Selagi berputar kencang, pegas ke muka depan
- * melemah (k / (1 + (|w| / 4)^2)) dan hanya gesekan ringan yang bekerja --
- * sentilan berputar beberapa kali; setelah melambat pegas kurang teredam
- * (zeta ~0,4) membawanya bergoyang kembali menghadap depan.
+ * Langkah bebas setelah dilepas, menuju orientasi `target` (muka depan, atau
+ * kemiringan melayang). Selagi berputar kencang, pegas melemah
+ * (k / (1 + (|w| / 4)^2)) dan hanya gesekan ringan yang bekerja -- sentilan
+ * masih berputar; setelah melambat pegas yang cukup teredam (zeta 0,6)
+ * membawanya kembali dengan goyangan kecil, tidak membal keras.
  */
-export function settleStep(q: Quat, w: Vec3, dt: number, stiffness = 30, zeta = 0.4, drag = 0.45): { q: Quat; w: Vec3 } {
-  const e = toRotationVector(q);
+export function settleStep(q: Quat, w: Vec3, dt: number, target: Quat = IDENTITY, stiffness = 16, zeta = 0.6, drag = 0.6): { q: Quat; w: Vec3 } {
+  const e = toRotationVector(qmul(q, qconj(target)));
   const speed = Math.hypot(...w);
   const k = stiffness / (1 + (speed / 4) ** 2);
   const c = 2 * Math.sqrt(k) * zeta + drag;

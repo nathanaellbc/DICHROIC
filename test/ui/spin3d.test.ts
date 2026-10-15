@@ -22,14 +22,25 @@ describe('spin3d', () => {
     close(toRotationVector(q), toRotationVector(fromAxisAngle([0, 1, 0], Math.PI / 2)), 1e-4);
   });
 
-  it('dilepas berputar kencang -> berputar beberapa kali lalu kembali menghadap depan', () => {
-    let q = IDENTITY, w: [number, number, number] = [14, 4, 2], travelled = 0;
+  it('disentil (12 rad/s) -> sempat terbalik, lalu kembali menghadap depan tanpa membal keras', () => {
+    let q = IDENTITY, w: [number, number, number] = [12, 0, 0], travelled = 0, maxAfter = 0, reached = false;
     for (let t = 0; t < 8; t += 1 / 120) {
       ({ q, w } = settleStep(q, w, 1 / 120));
       travelled += Math.hypot(...w) / 120;
+      const angle = Math.hypot(...toRotationVector(q));
+      if (reached) maxAfter = Math.max(maxAfter, angle);
+      else if (t > 0.3 && angle < 0.05) reached = true;
     }
-    expect(travelled).toBeGreaterThan(2 * Math.PI); // paling sedikit satu putaran penuh
+    expect(travelled).toBeGreaterThan(Math.PI); // paling sedikit setengah putaran (punggung terlihat)
+    expect(maxAfter).toBeLessThan(0.35); // goyangan setelah kembali < 20 derajat
     expect(atRest(q, w)).toBe(true);
+  });
+
+  it('menuju orientasi target (melayang), bukan selalu datar', () => {
+    const target = fromAxisAngle([1, 0.5, 0], 0.2);
+    let q = IDENTITY, w: [number, number, number] = [0, 0, 0];
+    for (let t = 0; t < 6; t += 1 / 120) ({ q, w } = settleStep(q, w, 1 / 120, target));
+    close(toRotationVector(q), toRotationVector(target), 1e-3);
   });
 
   it('matrix3d identitas', () => {

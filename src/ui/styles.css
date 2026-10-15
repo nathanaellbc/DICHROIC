@@ -659,18 +659,24 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
   will-change: transform; -webkit-tap-highlight-color: transparent;
 }
 .intro-sticker[data-held] { cursor: grabbing; z-index: 1; }
-/* Ruang 3D: muka depan tersembunyi saat membelakangi; punggung kartu kertas polos. */
+/*
+ * Ruang 3D: stiker setebal --thick. Muka depan di +tebal/2 (tersembunyi saat
+ * membelakangi), punggung kertas polos di -tebal/2, dan irisan tepi kertas di
+ * antaranya -- saat miring, tebalnya terlihat.
+ */
 .intro-sticker { transform-style: preserve-3d; }
-.intro-sticker > :first-child { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.intro-sticker > :first-child { transform: translateZ(calc(var(--thick, 0px) / 2)); backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.intro-sticker-back, .intro-sticker-edge { position: absolute; inset: 0; pointer-events: none; border-radius: 12px; }
 .intro-sticker-back {
-  position: absolute; inset: 0; pointer-events: none;
-  transform: rotateY(180deg); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  transform: translateZ(calc(var(--thick, 0px) / -2)) rotateY(180deg); backface-visibility: hidden; -webkit-backface-visibility: hidden;
   background: linear-gradient(160deg, #f4f4f6, #dcdce1); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.9);
-  border-radius: 12px;
 }
-.intro-sticker-back[data-kind="frame"] { border-radius: 7px; }
-.intro-sticker-back[data-kind="icon"] { border-radius: 50%; }
+/* Tepi kertas: sedikit lebih gelap dari punggung supaya tebalnya terbaca. */
+.intro-sticker-edge { background: #c9c9cf; }
+:is(.intro-sticker-back, .intro-sticker-edge)[data-kind="frame"] { border-radius: 7px; }
+:is(.intro-sticker-back, .intro-sticker-edge)[data-kind="icon"] { border-radius: 50%; }
 .intro-sticker-back[data-kind="quote"] { border-radius: 16px 16px 4px 16px; }
+.intro-sticker-edge[data-kind="quote"] { border-radius: 16px 16px 16px 4px; }
 .intro-sticker > .sticker { transition: box-shadow 0.2s; }
 .sticker-holo { display: block; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.28)); transition: filter 0.2s; }
 .intro-sticker[data-held] > .sticker-holo { filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.4)); }

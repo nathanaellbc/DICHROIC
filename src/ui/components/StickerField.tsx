@@ -20,7 +20,7 @@ import HoloCard from './reactbits/HoloCard';
 import { addBackdropLayer } from './IntroBackdrop';
 import { FRAME_ORDER, onFrame } from '../frameLoop';
 import type { HoloPreset } from './reactbits/HoloCard';
-import { IDENTITY, angularVelocity, arcballDelta, arcballPoint, atRest, cssMatrix, qmul, rotate, settleStep, toMatrix } from './spin3d';
+import { IDENTITY, angularVelocity, arcballDelta, arcballPoint, cssMatrix, fromAxisAngle, qmul, rotate, settleStep, toMatrix } from './spin3d';
 import type { Quat, Vec3 } from './spin3d';
 
 /** Kemiringan cahaya foil per stiker (diisi loop, dibaca HoloCard). */
@@ -257,9 +257,24 @@ interface Body {
 
 /** Bagian luar stiker (relatif terhadap setengah lebar/tinggi) yang memutar alih-alih menggeser. */
 const EDGE = 0.55;
-/** Kecepatan sudut sentilan saat tepi diketuk (rad/s). */
-const FLICK = 20;
+/** Kecepatan sudut sentilan saat tepi diketuk (rad/s): cukup untuk terbalik sekali, tidak liar. */
+const FLICK = 12;
+/** Batas kecepatan sudut lemparan putar (rad/s). */
+const SPIN_MAX = 14;
 const PERSPECTIVE = 700;
+/** Tebal stiker (px, ~0,2 cm di layar) dan jumlah irisan tepinya. */
+const THICK = 8;
+const EDGE_SLICES = 6;
+/** Melayang 3D: kemiringan (rad) dan ayunan maju-mundur (px). */
+const FLOAT_TILT = 0.17;
+const FLOAT_DEPTH = 10;
+
+/** Orientasi melayang stiker ke-i pada waktu t (ms): miring pelan di x/y. */
+function floatPose(t: number, i: number): Quat {
+  const s = t / 1000;
+  const x = FLOAT_TILT * Math.sin(s * 0.55 + i * 1.3), y = FLOAT_TILT * 1.2 * Math.sin(s * 0.42 + i * 2.1);
+  return fromAxisAngle([x, y, 0], Math.hypot(x, y));
+}
 
 const WALL = 6;
 const BOUNCE = 0.82;
@@ -321,9 +336,11 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
         const el = els.current[i];
         if (!el) return;
         const flat = b.q === IDENTITY;
+        // Ayunan maju-mundur pelan (melayang 3D), kecuali saat dipegang.
+        const dz = reduce || b.held || b.spin ? 0 : FLOAT_DEPTH * Math.sin((t / 1000) * 0.5 + i * 0.9);
         el.style.transform = flat
           ? `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) rotate(${b.r}deg) scale(${b.scale})`
-          : `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) perspective(${PERSPECTIVE}px) ${cssMatrix(b.q)} rotate(${b.r}deg) scale(${b.scale})`;
+          : `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) perspective(${PERSPECTIVE}px) translateZ(${dz.toFixed(2)}px) ${cssMatrix(b.q)} rotate(${b.r}deg) scale(${b.scale})`;
         // Cahaya foil ikut kemiringan 3D (normal muka kartu).
         const light = lights.current[i]?.current;
         if (light) {
@@ -387,11 +404,11 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
 
       list.forEach((b, i) => {
         if (t < b.born) return;
-        // Putaran 3D bebas: inersia lalu kembali menghadap depan.
-        if (!b.spin && b.q !== IDENTITY) {
-          const next = settleStep(b.q, b.av, dt);
+        // Putaran 3D bebas: inersia, lalu pegas lembut ke pose melayang (miring
+        // pelan di x/y) -- melayangnya juga 3D, bukan datar.
+        if (!b.spin) {
+          const next = settleStep(b.q, b.av, dt, floatPose(t, i));
           b.q = next.q; b.av = next.w;
-          if (atRest(b.q, b.av)) { b.q = IDENTITY; b.av = [0, 0, 0]; }
         }
         // Skala: mendekat ke ukuran istirahat (membesar saat dipegang).
         b.scale += (b.rest * (b.held || b.spin ? 1.12 : 1) - b.scale) * (1 - Math.exp(-dt * 14));
@@ -546,7 +563,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
         spun.av = [0, 0, 0]; // jari diam sebelum dilepas: tidak berputar terus
       } else {
         const speed = Math.hypot(...spun.av);
-        if (speed > 25) spun.av = spun.av.map((v) => (v * 25) / speed) as Vec3;
+        if (speed > SPIN_MAX) spun.av = spun.av.map((v) => (v * SPIN_MAX) / speed) as Vec3;
       }
       spun.spin = undefined;
       delete e.currentTarget.dataset.held;
@@ -572,13 +589,18 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           key={i}
           ref={(el) => { els.current[i] = el; }}
           className="intro-sticker"
-          style={{ opacity: 0 }}
+          style={{ opacity: 0, ['--thick' as string]: `${THICK}px` }}
           onPointerDown={down(i)}
           onPointerMove={move(i)}
           onPointerUp={up(i)}
           onPointerCancel={up(i)}
         >
           <StickerFace s={item.s} index={i} light={lights.current[i]!} />
+          {/* Tebal: irisan tepi kertas di antara muka depan (+THICK/2) dan punggung (-THICK/2). */}
+          {Array.from({ length: EDGE_SLICES }, (_, k) => (
+            <span key={k} className="intro-sticker-edge" data-kind={item.s.kind} aria-hidden="true"
+              style={{ transform: `translateZ(${(-THICK / 2 + (THICK * (k + 0.5)) / EDGE_SLICES).toFixed(2)}px)` }} />
+          ))}
           <span className="intro-sticker-back" data-kind={item.s.kind} aria-hidden="true" />
         </div>
       ))}
