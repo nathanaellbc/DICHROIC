@@ -57,8 +57,8 @@ export default defineConfig({
       },
       manifest: {
         id: base,
-        name: 'DICHROIC',
-        short_name: 'DICHROIC',
+        name: 'gammā',
+        short_name: 'gammā',
         description: 'Spectral film simulation, on your device.',
         start_url: base,
         scope: base,

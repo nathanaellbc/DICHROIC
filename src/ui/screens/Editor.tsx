@@ -538,7 +538,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
           right: landscape && hasPhoto ? panelSize.width + 12 : 'calc(var(--safe-right) + 12px)',
         }}
       >
-        {removing ? <div className="mobile-brand"><span>DICHROIC</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? null : <>
+        {removing ? <div className="mobile-brand"><span>gammā</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? null : <>
         <PressButton className="icon-btn plain" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
           <Icon name="more" size={20} strokeWidth={2.4} />
         </PressButton>
@@ -834,7 +834,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
       <header className="window-toolbar editor-frost" style={{ gridColumn: '1 / -1' }}>
         {removing ? <><span className="t-headline">{modeTitle}</span><span className="t-footnote secondary">Original · grading paused</span></> : <>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 120, maxWidth: 380, flex: '0 1 auto' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.12em' }}>DICHROIC</span>
+          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.01em' }}>gammā</span>
           <span className="t-footnote secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={state.fileName}>{state.fileName ?? 'No photo'}</span>
         </span>
         <PressButton className="icon-btn plain" aria-label="Open Photo" aria-keyshortcuts="O" title="Open Photo (O)" onClick={onOpenFile}>
