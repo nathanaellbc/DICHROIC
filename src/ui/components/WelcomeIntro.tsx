@@ -119,7 +119,9 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
     const transform = `translate(${x * k}px, ${y * k}px) rotate(${a}rad) scale(${sx}, ${sy}) rotate(${-a}rad)`;
     if (orb.current) orb.current.style.transform = transform;
     if (ring.current) ring.current.style.transform = transform;
-    shape.current = { cx: origin.left + cx + x, cy: origin.top + cy + y, rx: (d / 2) * sx, ry: (d / 2) * sy, angle: a };
+    // Matahari terbit hanya di kubah; memudar saat kaca jadi tombol +.
+    const sun = Math.min(1, Math.max(0, 1 - progress.get() * 1.6));
+    shape.current = { cx: origin.left + cx + x, cy: origin.top + cy + y, rx: (d / 2) * sx, ry: (d / 2) * sy, angle: a, sun };
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(render, []);
