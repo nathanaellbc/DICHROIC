@@ -24,7 +24,7 @@ const viewSpring = { type: 'spring' as const, duration: 0.42, bounce: 0 };
 /** Pil status kanan atas. */
 const statusSpring = { type: 'spring' as const, duration: 0.3, bounce: 0.15 };
 import { Spinner } from './Overlays';
-import { Icon } from './Icon';
+import { ImageCompare, compareCut, useImageCompare } from './ImageCompare';
 import { PhotoLightbox } from './PhotoLightbox';
 import type { Box } from './PhotoLightbox';
 import { previewPixelBudget } from '../../io/budget';
@@ -153,7 +153,6 @@ export function PhotoView({
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 0, height: 0 });
-  const [split, setSplit] = useState(0.5);
   const [peek, setPeek] = useState(false);
   const [slow, setSlow] = useState(false);
   const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
@@ -389,10 +388,8 @@ export function PhotoView({
     setView((v) => latest.current.clampView(v));
   }, [area.width, area.height, rect.width, rect.height]);
 
-  const setSplitFrom = (clientX: number) => {
-    if (rect.width === 0) return;
-    setSplit(clamp01(toPhoto(local(clientX, 0).x, 0).x));
-  };
+  const split = useImageCompare(rect.width * view.s);
+  const splitAt = (clientX: number) => clamp01(toPhoto(local(clientX, 0).x, 0).x);
 
   const picking = focus?.picking === true;
   const cancelFocusUpdate = () => {
@@ -465,6 +462,7 @@ export function PhotoView({
       const [a, b] = twoPointers();
       window.clearTimeout(holdTimer.current);
       setPeek(false);
+      if (splitDrag.current) split.cancel();
       splitDrag.current = false;
       gesture.current = { kind: 'pinch', dist: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, view };
       return;
@@ -489,8 +487,9 @@ export function PhotoView({
       return;
     }
     if (compare) {
+      if (rect.width === 0) return;
       splitDrag.current = true;
-      setSplitFrom(e.clientX);
+      split.press(splitAt(e.clientX));
       return;
     }
     gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false, t: performance.now() };
@@ -521,7 +520,7 @@ export function PhotoView({
       return;
     }
     if (splitDrag.current) {
-      setSplitFrom(e.clientX);
+      split.move(splitAt(e.clientX));
       return;
     }
     if (g?.kind === 'pan' || g?.kind === 'tap') {
@@ -560,6 +559,10 @@ export function PhotoView({
     }
     // Pinch yang tinggal satu jari berhenti; gestur satu jari berakhir saat dilepas.
     if (g?.kind !== 'pinch' || pointers.current.size < 2) gesture.current = null;
+    if (tracked && splitDrag.current) {
+      if (e.type === 'pointerup') split.release();
+      else split.cancel();
+    }
     splitDrag.current = false;
     window.clearTimeout(holdTimer.current);
     setPeek(false);
@@ -567,7 +570,7 @@ export function PhotoView({
   };
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     window.clearTimeout(tapTimer.current);
-    if (picking || brush?.enabled || (e.target as HTMLElement).closest('button, [role=slider]')) return;
+    if (picking || brush?.enabled || (e.target as HTMLElement).closest('button, [role=slider]:not(.cmp)')) return;
     const p = local(e.clientX, e.clientY);
     animateView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
   };
@@ -584,7 +587,8 @@ export function PhotoView({
     if (!box || rect.width === 0) return null;
     return { left: box.left + rect.left + view.tx, top: box.top + rect.top + view.ty, width: rect.width * view.s, height: rect.height * view.s };
   };
-  const clip = compare ? `inset(0 ${(1 - split) * 100}% 0 0)` : 'inset(0 0 0 0)';
+  // Lapisan asli dipotong di dalam lapisan zoom, mengikuti lengkung garis.
+  const clip = compare ? compareCut(split, rect.width, rect.height, view.s) : 'inset(0 0 0 0)';
 
   return (
     <div
@@ -648,31 +652,11 @@ export function PhotoView({
               )}
             </div>
             {compare && !picking && (
-              <>
-                <div aria-hidden="true" style={{ position: 'absolute', top: sy(0), height: rect.height * view.s, left: sx(split), width: 2, marginLeft: -1, background: 'rgba(255,255,255,0.92)' }} />
-                <div
-                  className="glass-clear split-handle"
-                  role="slider"
-                  tabIndex={0}
-                  aria-label="Before and after divider"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(split * 100)}
-                  aria-valuetext={`${Math.round(split * 100)}% original`}
-                  onKeyDown={(e) => {
-                    const step = e.shiftKey ? 0.1 : 0.02;
-                    const next: Record<string, number> = { ArrowLeft: split - step, ArrowDown: split - step, ArrowRight: split + step, ArrowUp: split + step, Home: 0, End: 1 };
-                    if (!(e.key in next)) return;
-                    e.preventDefault();
-                    setSplit(clamp01(next[e.key]!));
-                  }}
-                  style={{ position: 'absolute', top: Math.min(Math.max(sy(0.5), 18), rect.height - 18), left: sx(split), width: 36, height: 36, marginLeft: -18, marginTop: -18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Icon name="compare" size={18} />
-                </div>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, right: rect.width - sx(split) + 8, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600, opacity: split > 0.12 ? 1 : 0 }}>Before</span>
-                <span className="glass-clear t-footnote" style={{ position: 'absolute', top: 10, left: sx(split) + 8, padding: '4px 10px', borderRadius: 'var(--r-control)', fontWeight: 600, opacity: split < 0.88 ? 1 : 0 }}>After</span>
-              </>
+              <ImageCompare
+                state={split}
+                photo={{ x: sx(0), y: sy(0), width: rect.width * view.s, height: rect.height * view.s }}
+                bounds={{ width: rect.width, height: rect.height }}
+              />
             )}
             {focus && (focus.show || picking) && (
               // Penanda fokus seperti EMULSION: lingkaran 30 px bertepi putih
