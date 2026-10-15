@@ -172,17 +172,14 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dx, dy, stretch, dxRaw, dyRaw, stretchRaw, angle, progress]);
 
-  // Impact saat kaca mendarat jadi "+": squash jelly, gelombang kejut, kilatan glow;
-  // isi (judul, stiker) langsung muncul di momen yang sama.
+  // Impact saat kaca mendarat jadi "+": gelombang kejut dan kilatan glow; isi
+  // (judul, stiker) langsung muncul di momen yang sama. Tanpa gencetan: elips
+  // gepeng yang memantul 1-2 s, diterangi kilatan glow, tampak seperti
+  // lingkaran gepeng di belakang tombol.
   const [shock, setShock] = useState(0);
   const impact = () => {
-    angle.set(Math.PI / 2);
     stretchRaw.set(0);
-    // Gencet seketika lalu pegas memantul kembali ke bulat. `stretchRaw`
-    // sudah 0, jadi pegas harus diarahkan eksplisit -- dulu tidak ada yang
-    // memicunya dan tombol + tetap gepeng (x1.32, y0.76).
-    stretch.jump(-0.24);
-    stretch.set(0);
+    stretch.jump(0);
     setShock((n) => n + 1);
     flareGlow();
     live.current.onCommit();
