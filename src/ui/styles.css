@@ -59,8 +59,7 @@
   --intro-glass-rim: rgba(255, 255, 255, 0.28);
   --intro-tint: rgba(255, 255, 255, 0.1);
   --intro-ring: rgba(255, 255, 255, 0.85);
-  --intro-ring-glow: rgba(255, 255, 255, 0.32);
-  --intro-orb-glow: rgba(255, 255, 255, 0.22);
+  --intro-ring-glow: rgba(255, 255, 255, 0.22);
   --blue-wash: rgba(0, 145, 255, 0.16);
   --green: #30d158;
   --red: #ff4245;
@@ -598,20 +597,20 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 /* Kaca: GlassSurface (React Bits) memenuhi tombol; isi (halo, petunjuk, "+") di atasnya. */
 .intro-glass { position: absolute; inset: 0; }
 .intro-glass > .glass-surface__content { padding: 0; }
-/* Gelembung "+": kaca putih tipis (isi ~10%) dengan cincin terang dan cahaya
-   lembut di tepi. Isi dan cincin di lapisan frame kaca (di bawah kilap/rim);
-   --orb-px = 1 px layar dalam satuan elemen yang diperkecil (diisi GlassOrb). */
-.intro-glass > .glass-surface__frame { transition: background-color 0.5s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.5s cubic-bezier(0.23, 1, 0.32, 1); }
-.intro-orb[data-phase="bubble"] .glass-surface__frame,
-.intro-orb[data-phase="ready"] .glass-surface__frame {
-  background-color: var(--intro-tint);
-  box-shadow:
-    inset 0 0 0 calc(1.5px * var(--orb-px, 1)) var(--intro-ring),
-    inset 0 0 calc(10px * var(--orb-px, 1)) calc(2px * var(--orb-px, 1)) var(--intro-ring-glow);
-}
-.intro-orb { transition: box-shadow 0.5s cubic-bezier(0.23, 1, 0.32, 1); }
-.intro-orb[data-phase="bubble"],
-.intro-orb[data-phase="ready"] { box-shadow: 0 0 calc(16px * var(--orb-px, 1)) calc(1px * var(--orb-px, 1)) var(--intro-orb-glow); }
+/* Kaca intro (kubah, transisi, gelembung "+"): isi putih tipis dan cincin terang
+   dengan cahaya lembut, digambar SVG; kaca dipotong clip-path lingkaran (bukan
+   border-radius, yang di Safari jadi bersudut pada elemen yang diperkecil jauh).
+   --orb-px = 1 px layar dalam satuan elemen (diisi GlassOrb tiap frame animasi). */
+.intro-orb { clip-path: circle(50% at 50% 50%); }
+.intro-glass > .glass-surface__frame { background: none; box-shadow: none; }
+.intro-glass > .glass-surface__rim { display: none; }
+.intro-fill, .intro-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.intro-fill { z-index: 1; fill: var(--intro-tint); }
+.intro-ring { overflow: visible; will-change: transform; transform-origin: 50% 50%; }
+.intro-ring-line { fill: none; stroke: var(--intro-ring); stroke-width: calc(1.5px * var(--orb-px, 1)); }
+/* Cahaya tepi: gradien radial yang ukurannya diatur GlassOrb tiap frame. */
+.intro-ring-glow-peak { stop-color: var(--intro-ring-glow); }
+.intro-ring-glow-clear { stop-color: var(--intro-ring-glow); stop-opacity: 0; }
 .intro-orb:focus-visible { outline: none; box-shadow: inset 0 0 0 8px rgba(0, 145, 255, 0.7); }
 /* Halo dikroik: elips biru dengan inti putih yang menyapu kubah. */
 .intro-halo {
@@ -1348,8 +1347,7 @@ html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px;
     --blue-wash: rgba(0, 145, 255, 0.12);
     --intro-tint: rgba(255, 255, 255, 0.55);
     --intro-ring: rgba(255, 255, 255, 1);
-    --intro-ring-glow: rgba(255, 255, 255, 0.7);
-    --intro-orb-glow: rgba(0, 0, 0, 0.16);
+    --intro-ring-glow: rgba(0, 0, 0, 0.07);
     --red-text: #d70015;
     --glass-bg: rgba(255, 255, 255, 0.62);
     --glass-border: rgba(0, 0, 0, 0.08);
@@ -1393,8 +1391,7 @@ html[data-size="compact"] .scope-tabs button { height: 30px; border-radius: 9px;
   --blue-wash: rgba(0, 145, 255, 0.12);
   --intro-tint: rgba(255, 255, 255, 0.55);
   --intro-ring: rgba(255, 255, 255, 1);
-  --intro-ring-glow: rgba(255, 255, 255, 0.7);
-  --intro-orb-glow: rgba(0, 0, 0, 0.16);
+  --intro-ring-glow: rgba(0, 0, 0, 0.07);
   --red-text: #d70015;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(0, 0, 0, 0.08);

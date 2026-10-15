@@ -8,7 +8,7 @@
  * ada animasi lebar/tinggi, jadi tetap 60 fps.
  */
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
-import { useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { Icon } from './Icon';
 import GlassSurface from './reactbits/GlassSurface';
@@ -17,6 +17,8 @@ export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
 /** Ukuran dasar elemen kaca (px); bentuk akhir didapat dari `scale`. */
 const ORB = 720;
+/** Lebar cahaya tepi kaca (px layar). */
+const GLOW = 14;
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export interface StageBox { width: number; height: number }
@@ -60,6 +62,25 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     const sx = 1 + k!, sy = 1 / Math.max(0.5, 1 + k!);
     return `translate(${x! / s}px, ${y! / s}px) rotate(${a}rad) scale(${sx}, ${sy}) rotate(${-a!}rad)`;
   });
+  // --orb-px = 1 px layar dalam satuan elemen (720 px diperkecil), dari skala
+  // animasi yang sedang berjalan: cincin tetap setipis 1.5 px di semua fase.
+  const anchor = useRef<HTMLDivElement>(null);
+  const glow = useRef<SVGRadialGradientElement>(null);
+  const glowDisc = useRef<SVGCircleElement>(null);
+  const glowId = useId();
+  const setPx = (scale: number) => {
+    const k = 1 / Math.max(scale, 0.001);
+    anchor.current?.style.setProperty('--orb-px', String(k));
+    // Cahaya tepi: gradien radial selebar GLOW px layar di kedua sisi tepi kaca.
+    const R = ORB / 2, outer = R + GLOW * k, inner = Math.max(0, R - GLOW * 0.6 * k);
+    glow.current?.setAttribute('r', String(outer));
+    glowDisc.current?.setAttribute('r', String(outer));
+    const stops = glow.current?.children;
+    stops?.[0]?.setAttribute('offset', String(inner / outer));
+    stops?.[1]?.setAttribute('offset', String(R / outer));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { if (!anchor.current?.style.getPropertyValue('--orb-px')) setPx(s); }, []);
   const press = useRef<{ x: number; y: number; t: number; lx: number; ly: number; lt: number; moved: number; id: number } | undefined>(undefined);
   /** Gesekan karet: makin jauh makin berat (seperti tarikan berlebih iOS). */
   const band = (v: number, r: number) => Math.sign(v) * r * (1 - 1 / (Math.abs(v) / r + 1));
@@ -115,11 +136,13 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
   return (
     <>
       <motion.div
+        ref={anchor}
         className="intro-orb-anchor"
         style={{ width: ORB, height: ORB, left: 0, top: 0 }}
         initial={false}
         animate={{ x: cx - ORB / 2, y: cy - ORB / 2, scale: s }}
         transition={spring}
+        onUpdate={(latest) => { if (typeof latest.scale === 'number') setPx(latest.scale); }}
       >
         <motion.button
           type="button"
@@ -133,8 +156,7 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
           onPointerUp={(e) => release(e)}
           onPointerCancel={(e) => release(e, true)}
           onPointerLeave={onLeave}
-          // 1 px layar dalam satuan elemen (elemen 720 px diperkecil `s`), untuk cincin gelembung.
-          style={{ transform, ['--orb-px' as string]: 1 / Math.max(s, 0.001) }}
+          style={{ transform }}
         >
           {/* Kaca: GlassSurface (React Bits) mode WebGL di semua browser, membiaskan kanvas
               latar IntroBackdrop -- tampil sama di Chrome dan Safari/iOS. */}
@@ -149,6 +171,11 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
             displace={0.5}
             backgroundOpacity={0.1}
           />
+          {/* Isi kaca (putih tipis): lingkaran SVG, bukan border-radius -- Safari menggambar
+              border-radius elemen yang diperkecil jauh jadi bersudut. */}
+          <svg className="intro-fill" viewBox={`0 0 ${ORB} ${ORB}`} aria-hidden="true">
+            <circle cx={ORB / 2} cy={ORB / 2} r={ORB / 2} />
+          </svg>
           {/* Halo dikroik yang menyapu kubah saat masuk (cincin biru, inti putih). */}
           <AnimatePresence>
             {(phase === 'lift' || phase === 'bubble') && !reduce && (
@@ -195,6 +222,18 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
             <Icon name="plus" size={22} strokeWidth={2.2} />
           </motion.span>
         </motion.button>
+        {/* Cincin terang + cahaya lembut di tepi, di atas kaca dan ikut bentuk lunaknya. */}
+        <motion.svg className="intro-ring" viewBox={`0 0 ${ORB} ${ORB}`} style={{ transform }} aria-hidden="true">
+          <defs>
+            <radialGradient ref={glow} id={glowId} gradientUnits="userSpaceOnUse" cx={ORB / 2} cy={ORB / 2} r={ORB / 2}>
+              <stop className="intro-ring-glow-clear" offset={0.9} />
+              <stop className="intro-ring-glow-peak" offset={1} />
+              <stop className="intro-ring-glow-clear" offset={1} />
+            </radialGradient>
+          </defs>
+          <circle ref={glowDisc} className="intro-ring-glow" cx={ORB / 2} cy={ORB / 2} r={ORB / 2} fill={`url(#${CSS.escape(glowId)})`} />
+          <circle className="intro-ring-line" cx={ORB / 2} cy={ORB / 2} r={ORB / 2} />
+        </motion.svg>
       </motion.div>
     </>
   );

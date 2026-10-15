@@ -21,6 +21,8 @@ import { encode } from 'fast-png';
 const OUT = join('public', 'icons');
 const WHITE = [255, 255, 255];
 const BLUE = [0, 145, 255]; // Signal Blue #0091FF
+const BLACK = [0, 0, 0];
+const LIGHT_BG = [242, 242, 247]; // latar terang app (#f2f2f7)
 
 // Geometri pada grid 256 (sama dengan docs/brand/*.svg).
 const DISC = { x: 101, y: 101, r: 70 };
@@ -48,15 +50,15 @@ function inSheet(x, y) {
  * Warna satu titik pada grid 256, versi ikon app: cakram dan kertas putih di
  * atas latar Signal Blue, tumpang tindihnya dilubangi ke latar biru.
  */
-function shade(x, y) {
-  return inSheet(x, y) !== inDisc(x, y) ? WHITE : BLUE;
+function shade(x, y, fg, bg) {
+  return inSheet(x, y) !== inDisc(x, y) ? fg : bg;
 }
 
 /**
  * Menggambar motif ke kanvas RGB `width` x `height` berlatar biru; lebar
  * kotak pembatas motif `markWidth` piksel, berpusat di (cx, cy).
  */
-function drawMark(pixels, width, height, cx, cy, markWidth) {
+function drawMark(pixels, width, height, cx, cy, markWidth, fg, bg) {
   const k = BBOX_W / markWidth; // piksel -> grid 256
   const half = markWidth / 2 + 2;
   const x0 = Math.max(0, Math.floor(cx - half));
@@ -70,7 +72,7 @@ function drawMark(pixels, width, height, cx, cy, markWidth) {
         for (let sx = 0; sx < SAMPLES; sx += 1) {
           const gx = BBOX_CX + (x + (sx + 0.5) / SAMPLES - cx) * k;
           const gy = BBOX_CY + (y + (sy + 0.5) / SAMPLES - cy) * k;
-          const c = shade(gx, gy);
+          const c = shade(gx, gy, fg, bg);
           for (let i = 0; i < 3; i += 1) rgb[i] += c[i] / (SAMPLES * SAMPLES);
         }
       }
@@ -80,10 +82,10 @@ function drawMark(pixels, width, height, cx, cy, markWidth) {
   }
 }
 
-function png(width, height, markWidth) {
+function png(width, height, markWidth, fg = WHITE, bg = BLUE) {
   const pixels = new Uint8Array(width * height * 3);
-  for (let i = 0; i < pixels.length; i += 3) pixels.set(BLUE, i);
-  drawMark(pixels, width, height, width / 2, height / 2, markWidth);
+  for (let i = 0; i < pixels.length; i += 3) pixels.set(bg, i);
+  drawMark(pixels, width, height, width / 2, height / 2, markWidth, fg, bg);
   return encode({ width, height, data: pixels, channels: 3, depth: 8 });
 }
 
@@ -97,7 +99,9 @@ for (const size of [180, 192, 512]) {
 
 /**
  * Layar pembuka iOS (potret) per ukuran layar dalam titik dan skala. iOS
- * hanya memakai gambar yang ukurannya persis cocok dengan media query.
+ * hanya memakai gambar yang ukurannya persis cocok dengan media query. Dua
+ * versi mengikuti tema HP: gelap (motif putih di atas hitam) dan terang
+ * (motif hitam di atas #f2f2f7), sama dengan warna latar dan wordmark intro.
  */
 const SCREENS = [
   [440, 956, 3], // iPhone 16/17 Pro Max
@@ -117,9 +121,14 @@ const splash = [];
 for (const [w, h, scale] of SCREENS) {
   const width = w * scale;
   const height = h * scale;
-  const file = `splash-${width}x${height}.png`;
-  writeFileSync(join(OUT, file), png(width, height, Math.round(width * 0.27)));
-  splash.push({ file, media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait)` });
+  for (const [theme, fg, bg] of [['dark', WHITE, BLACK], ['light', BLACK, LIGHT_BG]]) {
+    const file = `splash-${theme}-${width}x${height}.png`;
+    writeFileSync(join(OUT, file), png(width, height, Math.round(width * 0.27), fg, bg));
+    splash.push({
+      file,
+      media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${scale}) and (orientation: portrait) and (prefers-color-scheme: ${theme})`,
+    });
+  }
 }
 
 // favicon.svg: motif putih di atas petak Signal Blue membulat. Sudut kertas memakai kubik
