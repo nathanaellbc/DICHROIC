@@ -109,6 +109,28 @@
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
+.glass-surface__line,
+.glass-surface__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+.glass-surface--svg .glass-surface__line,
+.glass-surface--webgl .glass-surface__line {
+  background: light-dark(color-mix(in oklch, black, transparent 85%), color-mix(in oklch, white, transparent 65%));
+}
+.glass-surface--svg .glass-surface__glow,
+.glass-surface--webgl .glass-surface__glow {
+  background: light-dark(color-mix(in oklch, black, transparent 90%), color-mix(in oklch, white, transparent 85%));
+}
+.glass-surface--fallback .glass-surface__line {
+  background: light-dark(color-mix(in oklch, black, transparent 88%), color-mix(in oklch, white, transparent 72%));
+}
+.glass-surface--fallback .glass-surface__glow {
+  background: light-dark(color-mix(in oklch, white, transparent 72%), color-mix(in oklch, white, transparent 90%));
+}
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-surface--fallback { background: light-dark(hsl(0 0% 100% / 0.72), hsl(0 0% 12% / 0.72)); }
 }
