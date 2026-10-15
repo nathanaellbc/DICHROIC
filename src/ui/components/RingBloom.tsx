@@ -40,17 +40,36 @@ const GLOW = {
   exposureGain: Math.pow(2, 0.1),
   /** k (intensitas glow umum). */
   strength: 0.125,
+  /**
+   * Horizon bloom: tiap skala diberi tint (linear RGB) -- skala kecil putih-pink
+   * (inti terang di tepi), skala besar ungu sampai ungu tua (hamburan atmosfer).
+   */
   scales: [
-    { radius: 8, weight: 1.0 },
-    { radius: 32, weight: 0.7 },
-    { radius: 128, weight: 0.45 },
-    { radius: 400, weight: 0.25 },
-    { radius: 800, weight: 0.12 },
+    { radius: 8, weight: 1.0, tint: [0.96, 0.78, 1.0] },
+    { radius: 32, weight: 0.7, tint: [0.82, 0.52, 1.0] },
+    { radius: 128, weight: 0.45, tint: [0.55, 0.26, 1.0] },
+    { radius: 400, weight: 0.25, tint: [0.42, 0.17, 0.9] },
+    { radius: 800, weight: 0.12, tint: [0.32, 0.12, 0.72] },
   ],
 } as const;
 
+/**
+ * Matahari terbit di puncak kubah: emisi cincin = dasar + puncak gaussian di
+ * sekitar titik teratas (lebar SUN.spread px), inti terang kecil, dan flare
+ * mendatar tipis. Kekuatannya dari GlassOrb (1 di kubah, 0 di tombol +).
+ */
+const SUN = { rim: 1.0, peak: 3.0, spread: 130, core: 6, coreRadius: 16, streak: 1.6, streakLength: 170, streakHeight: 3 } as const;
+/** Penguat hamburan atmosfer di luar k: pendar lavender sepanjang tepi (32 px) dan kabut ungu di atas cakrawala (>= 128 px). */
+const ATMOSPHERE = { rim: 2.5, sky: 4 } as const;
+/** Bagian glow yang masih terlihat di dalam planet (kaca menutupi cahaya di belakangnya). */
+const OCCLUSION = 0.35;
+
 /** Bentuk kaca saat ini (px viewport): elips berpusat (cx, cy), jari-jari rx sepanjang `angle`, ry tegak lurus. */
-export interface OrbShape { cx: number; cy: number; rx: number; ry: number; angle: number }
+export interface OrbShape {
+  cx: number; cy: number; rx: number; ry: number; angle: number;
+  /** Kekuatan matahari terbit di puncak (0..1). */
+  sun?: number;
+}
 let orbShape: (() => OrbShape | undefined) | undefined;
 
 /**
@@ -93,6 +112,8 @@ uniform vec2 uRadius;    // jari-jari kaca (px CSS): sepanjang uAngle, tegak lur
 uniform float uAngle;    // arah regang kaca (radian)
 uniform vec4 uFill;      // isi kaca (sRGB, alpha)
 uniform float uLineWidth, uLineIntensity;
+uniform vec2 uSun;       // titik matahari (puncak kaca, px CSS)
+uniform float uSunAmount;
 out vec4 outColor;
 
 vec3 decodeSRGB(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
@@ -138,7 +159,14 @@ uniform float uThreshold, uKnee, uEncode;
 void main() {
   vec2 p = stagePoint();
   float d = edgeDistance(p);
-  vec3 c = decodeSRGB(lightSRGB(d, 1.0)) + lineCoverage(d, 1.0) * uLineIntensity;
+  // Emisi cincin: dasar redup di sepanjang tepi, memuncak di titik matahari; plus inti
+  // matahari dan flare mendatar tipis (horizon bloom).
+  vec2 toSun = p - uSun;
+  float near = exp(-dot(toSun, toSun) / (${SUN.spread.toFixed(1)} * ${SUN.spread.toFixed(1)}));
+  float rim = mix(1.0, ${SUN.rim.toFixed(2)} + ${SUN.peak.toFixed(2)} * near, uSunAmount);
+  float core = exp(-dot(toSun, toSun) / (${SUN.coreRadius.toFixed(1)} * ${SUN.coreRadius.toFixed(1)})) * ${SUN.core.toFixed(1)};
+  float streak = exp(-pow(toSun.x / ${SUN.streakLength.toFixed(1)}, 2.0) - pow(toSun.y / ${SUN.streakHeight.toFixed(1)}, 2.0)) * ${SUN.streak.toFixed(2)};
+  vec3 c = decodeSRGB(lightSRGB(d, 1.0)) + lineCoverage(d, 1.0) * uLineIntensity * rim + (core + streak) * uSunAmount;
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   float soft = clamp(l - uThreshold + uKnee, 0.0, 2.0 * uKnee);
   soft = soft * soft / (4.0 * uKnee + 1e-5);
@@ -151,7 +179,7 @@ const RESAMPLE = `#version 300 es
 precision highp float;
 uniform sampler2D uSource;
 uniform vec2 uRes;
-uniform float uGain;
+uniform vec3 uGain;
 out vec4 outColor;
 void main() { outColor = vec4(texture(uSource, gl_FragCoord.xy / uRes).rgb * uGain, 1.0); }`;
 
@@ -190,7 +218,9 @@ void main() {
   // Target render (FBO) baris 0 = bawah panggung.
   vec3 bloom = texture(uBloom, vec2(p.x, uSize.y - p.y) / uSize).rgb * uDecode;
   // Garis cincin sendiri digambar SVG (vektor, tajam di DPR berapa pun); di sini hanya cahayanya.
-  vec3 c = decodeSRGB(base) + uGain * bloom;
+  // Planet menutupi sebagian cahaya: glow di dalam kaca diredam (horizon bloom).
+  float inside = clamp(-d / 40.0, 0.0, 1.0);
+  vec3 c = decodeSRGB(base) + uGain * bloom * mix(1.0, ${OCCLUSION.toFixed(2)}, inside);
   vec3 delta = max(encodeSRGB(clamp(c, 0.0, 1.0)) - base, 0.0);
   outColor = vec4(delta, max(delta.r, max(delta.g, delta.b)));
 }`;
@@ -299,6 +329,10 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
       const origin = stage.getBoundingClientRect(), box = glass.getBoundingClientRect();
       const shape = orbShape?.() ?? { cx: box.left + box.width / 2, cy: box.top + box.height / 2, rx: box.width / 2, ry: box.height / 2, angle: 0 };
       const cx = shape.cx - origin.left, cy = shape.cy - origin.top;
+      // Titik matahari: puncak elips kaca (setengah tinggi vertikal elips yang diputar).
+      const sunAmount = shape.sun ?? 0;
+      const lift = Math.hypot(shape.rx * Math.sin(shape.angle), shape.ry * Math.cos(shape.angle));
+      const sunX = cx, sunY = cy - lift;
       const ratio = Math.min(2, window.devicePixelRatio || 1);
       let boost = 0;
       if (flare) {
@@ -306,7 +340,7 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
         if (t >= 1) flare = undefined;
         else boost = flare.amount * (1 - t) ** 2;
       }
-      const signature = [W, H, sx, sy, sw, sh, cx, cy, shape.rx, shape.ry, shape.angle, ratio, source.dataset.frame, fill.join(','), background.join(','), boost.toFixed(3)].join('|');
+      const signature = [W, H, sx, sy, sw, sh, cx, cy, shape.rx, shape.ry, shape.angle, ratio, source.dataset.frame, fill.join(','), background.join(','), boost.toFixed(3), sunAmount.toFixed(3)].join('|');
       if (signature === drawn) return;
       drawn = signature;
 
@@ -336,6 +370,8 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
         gl.uniform4f(p.u('uFill'), ...fill);
         gl.uniform1f(p.u('uLineWidth'), LINE_WIDTH);
         gl.uniform1f(p.u('uLineIntensity'), LINE_INTENSITY);
+        gl.uniform2f(p.u('uSun'), sunX, sunY);
+        gl.uniform1f(p.u('uSunAmount'), sunAmount);
       };
       gl.bindVertexArray(vao);
       gl.disable(gl.BLEND);
@@ -353,7 +389,7 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
         const l = levels[i]!;
         pass(resample, l.h, l.h.w, l.h.h);
         gl.uniform1i(resample.u('uSource'), 0);
-        gl.uniform1f(resample.u('uGain'), 1);
+        gl.uniform3f(resample.u('uGain'), 1, 1, 1);
         bind(0, levels[i - 1]!.h.texture);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
@@ -363,7 +399,7 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
       gl.viewport(0, 0, sum.w, sum.h);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      GLOW.scales.forEach(({ radius, weight }) => {
+      GLOW.scales.forEach(({ radius, weight, tint }) => {
         const sigma = Math.min(radius, GLOW.radius) / 3;
         const index = Math.max(0, Math.min(levels.length - 1, Math.floor(Math.log2(Math.max(1, sigma / 3)))));
         const l = levels[index]!;
@@ -383,7 +419,8 @@ export function RingBloom({ backdrop }: { backdrop: RefObject<HTMLCanvasElement 
         gl.blendFunc(gl.ONE, gl.ONE);
         pass(resample, sum, sum.w, sum.h);
         gl.uniform1i(resample.u('uSource'), 0);
-        gl.uniform1f(resample.u('uGain'), weight);
+        const gain = weight * (radius >= 128 ? ATMOSPHERE.sky : radius >= 32 ? ATMOSPHERE.rim : 1);
+        gl.uniform3f(resample.u('uGain'), gain * tint[0], gain * tint[1], gain * tint[2]);
         bind(0, l.out.texture);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       });

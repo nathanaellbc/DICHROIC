@@ -558,8 +558,8 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 /* Salinan latar untuk kaca WebGL: hanya tekstur, tidak terlihat; posisi/ukuran mengikuti kaca (JS). */
 .intro-backdrop { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; }
-/* Gelap: cahaya biru di bawah kubah; bintang kecil di StarField. */
-.intro-sky { --intro-star: 255, 255, 255; background: radial-gradient(ellipse 70% 38% at 50% 104%, rgba(0, 120, 255, 0.34), transparent 70%); }
+/* Gelap: cahaya ungu di bawah kubah (senada horizon bloom); bintang kecil di StarField. */
+.intro-sky { --intro-star: 255, 255, 255; background: radial-gradient(ellipse 70% 38% at 50% 104%, rgba(120, 60, 255, 0.3), transparent 70%); }
 .intro-stars { position: absolute; inset: 0; overflow: hidden; }
 /* Bintang: titik kecil berkelip pelan (redup -> terang -> redup), sedikit membesar saat terang. */
 .intro-star {
