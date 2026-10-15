@@ -208,19 +208,20 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
                 className="intro-hint"
                 style={{ top: hintTop, scale: 1 / Math.max(s, 0.001), x: '-50%' }}
                 initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                // Filter dilepas setelah masuk: blur(0px) yang menempel tetap memaksa lapisan offscreen.
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)', transitionEnd: { filter: 'none' } }}
                 exit={{ opacity: 0, y: -18, filter: 'blur(6px)', transition: { duration: 0.35, ease: EASE } }}
                 transition={{ duration: 0.8, delay: reduce ? 0 : 0.9, ease: EASE }}
               >
-                <motion.span
-                  className="intro-hint-chevron"
-                  aria-hidden="true"
-                  animate={reduce ? undefined : { y: [3, -5, 3], opacity: [0.35, 1, 0.35] }}
-                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
-                >
+                {/* Chevron dan kilau teks: animasi CSS transform/opacity saja (jalan di
+                    compositor, tanpa repaint, tetap 60 fps saat main thread sibuk). */}
+                <span className="intro-hint-chevron" aria-hidden="true">
                   <Icon name="chevronUp" size={16} strokeWidth={1.6} />
-                </motion.span>
-                <span className="intro-hint-text">{hint}</span>
+                </span>
+                <span className="intro-hint-text">
+                  {hint}
+                  <span className="intro-hint-shine" aria-hidden="true"><span>{hint}</span></span>
+                </span>
               </motion.span>
             )}
           </AnimatePresence>
@@ -261,7 +262,7 @@ export function ChromeWordmark({ visible }: { visible: boolean; reduce: boolean 
           key="wordmark"
           className="intro-wordmark-text"
           initial={{ opacity: 0, filter: 'blur(10px)', y: 10, scale: 0.96 }}
-          animate={{ opacity: 1, filter: 'blur(0px)', y: 0, scale: 1 }}
+          animate={{ opacity: 1, filter: 'blur(0px)', y: 0, scale: 1, transitionEnd: { filter: 'none' } }}
           exit={{ opacity: 0, filter: 'blur(12px)', y: -16, transition: { duration: 0.45, ease: EASE } }}
           transition={{ duration: 0.9, ease: EASE }}
         >
