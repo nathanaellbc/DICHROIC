@@ -659,6 +659,18 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
   will-change: transform; -webkit-tap-highlight-color: transparent;
 }
 .intro-sticker[data-held] { cursor: grabbing; z-index: 1; }
+/* Ruang 3D: muka depan tersembunyi saat membelakangi; punggung kartu kertas polos. */
+.intro-sticker { transform-style: preserve-3d; }
+.intro-sticker > :first-child { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.intro-sticker-back {
+  position: absolute; inset: 0; pointer-events: none;
+  transform: rotateY(180deg); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: linear-gradient(160deg, #f4f4f6, #dcdce1); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+}
+.intro-sticker-back[data-kind="frame"] { border-radius: 7px; }
+.intro-sticker-back[data-kind="icon"] { border-radius: 50%; }
+.intro-sticker-back[data-kind="quote"] { border-radius: 16px 16px 4px 16px; }
 .intro-sticker > .sticker { transition: box-shadow 0.2s; }
 .sticker-holo { display: block; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.28)); transition: filter 0.2s; }
 .intro-sticker[data-held] > .sticker-holo { filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.4)); }

@@ -330,6 +330,12 @@ export interface HoloCardProps {
   shadow?: boolean;
   className?: string;
   style?: CSSProperties;
+  /**
+   * Kemiringan dari luar (rad), mis. kartu yang diputar 3D oleh pemiliknya:
+   * hanya pencahayaan foil yang ikut, rotor tidak (supaya tidak berputar dua
+   * kali). Pemilik memanggil `wake` tiap frame selama nilainya berubah.
+   */
+  lightTilt?: { current: { x: number; y: number; wake?: (() => void) | null } };
 }
 
 export default function HoloCard({
@@ -351,7 +357,10 @@ export default function HoloCard({
   shadow = true,
   className = '',
   style,
+  lightTilt,
 }: HoloCardProps) {
+  const lightTiltRef = useRef(lightTilt);
+  lightTiltRef.current = lightTilt;
   const rootRef = useRef<HTMLDivElement>(null);
   const rotorRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<HTMLSpanElement>(null);
@@ -465,7 +474,8 @@ export default function HoloCard({
       gl.uniform1i(uniforms.uArt, 0);
       gl.uniform2f(uniforms.uSize, w, h);
       gl.uniform1f(uniforms.uAspect, h / w);
-      gl.uniform2f(uniforms.uTilt, (state.tiltX * Math.PI) / 180, ((state.tiltY + state.turn) * Math.PI) / 180);
+      const ext = lightTiltRef.current?.current;
+      gl.uniform2f(uniforms.uTilt, (state.tiltX * Math.PI) / 180 + (ext?.x ?? 0), ((state.tiltY + state.turn) * Math.PI) / 180 + (ext?.y ?? 0));
       gl.uniform2f(uniforms.uLight, state.lightX, state.lightY);
       gl.uniform1f(uniforms.uDistance, PERSPECTIVE / Math.max(1, canvas.clientWidth));
       gl.uniform1i(uniforms.uPreset, s.preset);
@@ -545,6 +555,7 @@ export default function HoloCard({
       raf = requestAnimationFrame(tick);
     };
     wakeRef.current = wake;
+    if (lightTiltRef.current) lightTiltRef.current.current.wake = wake;
 
     const resize = () => {
       // Sampai 3x (layar iPhone) plus cadangan 1,25x: kartu diperbesar lagi oleh

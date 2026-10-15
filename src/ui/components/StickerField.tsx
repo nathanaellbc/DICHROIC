@@ -3,6 +3,12 @@
  * gunung meletus) lalu melayang di sekitar titik mendaratnya -- memantul di tepi layar, saling bertabrakan, memantul dari
  * gelembung, dan bisa dipegang lalu dilempar. Satu loop rAF menulis transform
  * langsung ke DOM (tanpa render React per frame).
+ *
+ * Ruang 3D: pegang bagian tengah stiker untuk menggeser/melempar; pegang
+ * tepinya untuk memutarnya bebas (arcball, sumbu x/y/z) -- menyusuri tepi
+ * memutar di bidang, menarik ke/dari tengah membalik. Ketuk tepi = disentil
+ * berputar. Dilepas: putaran berlanjut lalu kembali menghadap depan
+ * (`spin3d.ts`); saat terbalik terlihat punggung kartu.
  */
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef } from 'react';
@@ -14,6 +20,11 @@ import HoloCard from './reactbits/HoloCard';
 import { addBackdropLayer } from './IntroBackdrop';
 import { FRAME_ORDER, onFrame } from '../frameLoop';
 import type { HoloPreset } from './reactbits/HoloCard';
+import { IDENTITY, angularVelocity, arcballDelta, arcballPoint, atRest, cssMatrix, qmul, rotate, settleStep, toMatrix } from './spin3d';
+import type { Quat, Vec3 } from './spin3d';
+
+/** Kemiringan cahaya foil per stiker (diisi loop, dibaca HoloCard). */
+type LightTilt = { current: { x: number; y: number; wake?: (() => void) | null } };
 
 type Sticker =
   | { kind: 'stock'; label: string; sub: string; tone: string }
@@ -54,7 +65,7 @@ const STICKERS: ReadonlyArray<{ s: Sticker; r: number; small?: boolean }> = [
 /** Pola foil HoloCard bergiliran per stiker. */
 const HOLO_PRESETS: readonly HoloPreset[] = ['bursts', 'stars', 'cosmos', 'shards', 'glitter', 'rainbow'];
 
-function StickerFace({ s, index }: { s: Sticker; index: number }): ReactNode {
+function StickerFace({ s, index, light }: { s: Sticker; index: number; light: LightTilt }): ReactNode {
   switch (s.kind) {
     case 'stock':
     case 'frame': {
@@ -77,6 +88,7 @@ function StickerFace({ s, index }: { s: Sticker; index: number }): ReactNode {
           hoverScale={1.06}
           shadow={false}
           className="sticker-holo"
+          lightTilt={light}
           // Rasio diketahui sejak awal (bukan rasio kartu bawaan sebelum gambar dimuat),
           // supaya ukuran tabrakan stiker benar.
           style={{ ['--hc-ratio' as string]: art.width / art.height }}
@@ -236,7 +248,18 @@ interface Body {
   /** Pernah dilempar pengguna: boleh berada di bawah gelembung. */
   thrown?: boolean;
   held?: { id: number; ox: number; oy: number; lx: number; ly: number; lt: number };
+  /** Orientasi 3D (di atas putaran bidang `r`) dan kecepatan sudutnya (rad/s, ruang layar). */
+  q: Quat;
+  av: Vec3;
+  /** Dipegang di tepi: diputar arcball, tidak digeser. */
+  spin?: { id: number; radius: number; p0: Vec3; q0: Quat; prev: Quat; lt: number; t0: number; x0: number; y0: number; moved: number; ax: number; ay: number };
 }
+
+/** Bagian luar stiker (relatif terhadap setengah lebar/tinggi) yang memutar alih-alih menggeser. */
+const EDGE = 0.55;
+/** Kecepatan sudut sentilan saat tepi diketuk (rad/s). */
+const FLICK = 20;
+const PERSPECTIVE = 700;
 
 const WALL = 6;
 const BOUNCE = 0.82;
@@ -269,6 +292,8 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
   const items = compact ? STICKERS.filter((item) => !item.small) : STICKERS;
   const els = useRef<(HTMLDivElement | null)[]>([]);
   const bodies = useRef<Body[]>([]);
+  const lights = useRef<LightTilt[]>([]);
+  if (lights.current.length !== items.length) lights.current = items.map(() => ({ current: { x: 0, y: 0, wake: null } }));
   // Nilai terbaru untuk loop tanpa memulai ulang simulasi.
   const live = useRef({ origin, orbRadius, box });
   live.current = { origin, orbRadius, box };
@@ -283,7 +308,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
       const rest = (item.small ? 0.86 : 1) * (compact ? 0.9 : 1);
       const w = (face?.offsetWidth ?? 60) * rest, h = (face?.offsetHeight ?? 40) * rest;
       const { tx, ty, dx, dy } = cone[i]!;
-      const base = { tx, ty, tr: item.r, rest, w, h, vr: 0 };
+      const base = { tx, ty, tr: item.r, rest, w, h, vr: 0, q: IDENTITY, av: [0, 0, 0] as Vec3 };
       // Dilontarkan keluar dari kawah dengan kecepatan awal searah kerucut.
       const kick = 900 + (i % 3) * 160;
       return reduce
@@ -295,7 +320,17 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
       bodies.current.forEach((b, i) => {
         const el = els.current[i];
         if (!el) return;
-        el.style.transform = `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) rotate(${b.r}deg) scale(${b.scale})`;
+        const flat = b.q === IDENTITY;
+        el.style.transform = flat
+          ? `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) rotate(${b.r}deg) scale(${b.scale})`
+          : `translate(${b.x}px, ${b.y}px) translate(-50%, -50%) perspective(${PERSPECTIVE}px) ${cssMatrix(b.q)} rotate(${b.r}deg) scale(${b.scale})`;
+        // Cahaya foil ikut kemiringan 3D (normal muka kartu).
+        const light = lights.current[i]?.current;
+        if (light) {
+          const n = flat ? ([0, 0, 1] as Vec3) : rotate(b.q, [0, 0, 1]);
+          const x = -Math.asin(Math.max(-1, Math.min(1, n[1]))), y = Math.asin(Math.max(-1, Math.min(1, n[0])));
+          if (Math.abs(x - light.x) + Math.abs(y - light.y) > 1e-4) { light.x = x; light.y = y; light.wake?.(); }
+        }
         el.style.opacity = String(Math.max(0, Math.min(1, (t - b.born) / 160)));
       });
     };
@@ -318,12 +353,17 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           if (!(alpha > 0) || b.x + reach < area.x0 || b.x - reach > area.x1 || b.y + reach < area.y0 || b.y - reach > area.y1) return;
           shown.push({ b, face, s: item.s, alpha });
         });
-        return `${imagesLoaded}:` + shown.map(({ b, alpha }) => `${b.x.toFixed(1)},${b.y.toFixed(1)},${b.r.toFixed(1)},${b.scale.toFixed(3)},${alpha.toFixed(2)}`).join(';');
+        return `${imagesLoaded}:` + shown.map(({ b, alpha }) => `${b.x.toFixed(1)},${b.y.toFixed(1)},${b.r.toFixed(1)},${b.scale.toFixed(3)},${alpha.toFixed(2)},${b.q.map((v) => v.toFixed(3)).join('/')}`).join(';');
       },
       paint: (ctx, ratio) => {
         shown.forEach(({ b, face, s: sticker, alpha }) => {
           ctx.save();
           ctx.translate(b.x, b.y);
+          if (b.q !== IDENTITY) {
+            // Proyeksi ortografis putaran 3D (salinan di balik kaca).
+            const m = toMatrix(b.q);
+            ctx.transform(m[0]!, m[3]!, m[1]!, m[4]!, 0, 0);
+          }
           ctx.rotate((b.r * Math.PI) / 180);
           ctx.scale(b.scale, b.scale);
           ctx.globalAlpha = alpha;
@@ -347,8 +387,15 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
 
       list.forEach((b, i) => {
         if (t < b.born) return;
+        // Putaran 3D bebas: inersia lalu kembali menghadap depan.
+        if (!b.spin && b.q !== IDENTITY) {
+          const next = settleStep(b.q, b.av, dt);
+          b.q = next.q; b.av = next.w;
+          if (atRest(b.q, b.av)) { b.q = IDENTITY; b.av = [0, 0, 0]; }
+        }
         // Skala: mendekat ke ukuran istirahat (membesar saat dipegang).
-        b.scale += (b.rest * (b.held ? 1.12 : 1) - b.scale) * (1 - Math.exp(-dt * 14));
+        b.scale += (b.rest * (b.held || b.spin ? 1.12 : 1) - b.scale) * (1 - Math.exp(-dt * 14));
+        if (b.spin) return;
         if (b.held) return;
         if (!b.free) {
           // Semburan: pegas kurang teredam ke posisi awal -> mendarat memantul.
@@ -438,15 +485,42 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
   };
   const down = (i: number) => (e: React.PointerEvent<HTMLDivElement>) => {
     const b = bodies.current[i];
-    if (!b || reduce || b.held) return;
+    if (!b || reduce || b.held || b.spin) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* event sintetis */ }
     const p = local(e);
+    // Tepi atau tengah? Titik pegang di bingkai stiker (tanpa putaran bidang).
+    const ax = p.x - b.x, ay = p.y - b.y, rad = (-b.r * Math.PI) / 180;
+    const lx = ax * Math.cos(rad) - ay * Math.sin(rad), ly = ax * Math.sin(rad) + ay * Math.cos(rad);
+    const g = b.scale / b.rest, hw = (b.w / 2) * g, hh = (b.h / 2) * g;
+    if (Math.max(Math.abs(lx) / hw, Math.abs(ly) / hh) > EDGE) {
+      // Tepi: putar arcball di tempat.
+      const radius = Math.max(hw, hh) * 1.4;
+      const now = performance.now();
+      b.spin = { id: e.pointerId, radius, p0: arcballPoint(ax / radius, ay / radius), q0: b.q, prev: b.q, lt: now, t0: now, x0: p.x, y0: p.y, moved: 0, ax, ay };
+      b.av = [0, 0, 0];
+      b.vx = 0; b.vy = 0;
+      b.free = true;
+      e.currentTarget.dataset.held = '';
+      return;
+    }
     b.free = true;
     b.held = { id: e.pointerId, ox: p.x - b.x, oy: p.y - b.y, lx: p.x, ly: p.y, lt: performance.now() };
     b.vx = 0; b.vy = 0; b.vr = 0;
     e.currentTarget.dataset.held = '';
   };
   const move = (i: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+    const sp = bodies.current[i]?.spin;
+    if (sp && sp.id === e.pointerId) {
+      const b = bodies.current[i]!;
+      const p = local(e), now = performance.now(), dt = Math.max(4, now - sp.lt) / 1000;
+      sp.moved = Math.max(sp.moved, Math.hypot(p.x - sp.x0, p.y - sp.y0));
+      const q = qmul(arcballDelta(sp.p0, arcballPoint((p.x - b.x) / sp.radius, (p.y - b.y) / sp.radius)), sp.q0);
+      // Kecepatan sudut dihaluskan untuk inersia saat dilepas.
+      const w = angularVelocity(sp.prev, q, dt);
+      b.av = [b.av[0] * 0.4 + w[0] * 0.6, b.av[1] * 0.4 + w[1] * 0.6, b.av[2] * 0.4 + w[2] * 0.6];
+      b.q = q; sp.prev = q; sp.lt = now;
+      return;
+    }
     const b = bodies.current[i], h = b?.held;
     if (!b || !h || h.id !== e.pointerId) return;
     const p = local(e), now = performance.now(), dt = Math.max(4, now - h.lt) / 1000;
@@ -459,6 +533,25 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
     h.lx = p.x; h.ly = p.y; h.lt = now;
   };
   const up = (i: number) => (e: React.PointerEvent<HTMLDivElement>) => {
+    const spun = bodies.current[i];
+    const hold = spun?.spin;
+    if (spun && hold && hold.id === e.pointerId) {
+      const now = performance.now();
+      if (hold.moved < 6 && now - hold.t0 < 300) {
+        // Ketuk tepi: disentil -- berputar di sumbu bidang tegak lurus lengan.
+        const n = Math.hypot(hold.ax, hold.ay) || 1;
+        spun.av = [(-hold.ay / n) * FLICK, (hold.ax / n) * FLICK, 0];
+        if (spun.q === IDENTITY) spun.q = [1, 0, 0, 0];
+      } else if (now - hold.lt > 80) {
+        spun.av = [0, 0, 0]; // jari diam sebelum dilepas: tidak berputar terus
+      } else {
+        const speed = Math.hypot(...spun.av);
+        if (speed > 25) spun.av = spun.av.map((v) => (v * 25) / speed) as Vec3;
+      }
+      spun.spin = undefined;
+      delete e.currentTarget.dataset.held;
+      return;
+    }
     const b = bodies.current[i];
     if (!b?.held || b.held.id !== e.pointerId) return;
     // Jari diam sebelum dilepas -> diletakkan, bukan dilempar.
@@ -485,7 +578,8 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           onPointerUp={up(i)}
           onPointerCancel={up(i)}
         >
-          <StickerFace s={item.s} index={i} />
+          <StickerFace s={item.s} index={i} light={lights.current[i]!} />
+          <span className="intro-sticker-back" data-kind={item.s.kind} aria-hidden="true" />
         </div>
       ))}
     </>
