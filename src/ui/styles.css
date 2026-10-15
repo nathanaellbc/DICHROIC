@@ -634,6 +634,20 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-plus { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 
 .intro-plus { z-index: 2; }
+/*
+ * Veil kubah saat "Swipe up to continue": pekat (warna latar) lalu menipis
+ * dan blur latarnya berkurang mengikuti swipe (WelcomeIntro). clip-path, bukan
+ * border-radius: Safari menggambar border-radius elemen yang diperkecil jauh
+ * jadi bersudut.
+ */
+.intro-veil {
+  --veil-rgb: 0 0 0;
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  clip-path: circle(50% at 50% 50%);
+  background: rgb(var(--veil-rgb) / var(--veil-a, 1));
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .intro-veil { --veil-rgb: 242 242 247; } }
+:root[data-theme="light"] .intro-veil { --veil-rgb: 242 242 247; }
 /* Petunjuk di dalam kubah: tipis dan kecil, chevron mengambang, kilau lewat teks. */
 .intro-hint {
   position: absolute; left: 50%; z-index: 2;

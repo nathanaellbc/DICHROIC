@@ -85,6 +85,13 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
   // sepanjang swipe, bukan baru di ujung.
   const hintOpacity = useTransform(progress, [0, 0.2], [1, 0]);
   const plusOpacity = useTransform(progress, [0.1, 0.85], [0, 1]);
+  // Veil kubah: pekat saat diam ("Swipe up to continue"); saat di-swipe kaca
+  // muncul bertahap -- warna menipis DAN blur latar berkurang (bukan cuma
+  // opasitas), jadi kaca berubah dari buram ke tajam.
+  const veilAlpha = useTransform(progress, [0, 0.75], [1, 0], { clamp: true });
+  const veilBlur = useTransform(progress, [0, 0.75], [22, 0], { clamp: true });
+  const veilFilter = useTransform(veilBlur, (b) => (b > 0.05 ? `blur(${b.toFixed(2)}px)` : 'none'));
+  const veilVisibility = useTransform(veilAlpha, (a) => (a > 0.001 ? 'visible' : 'hidden'));
 
   const anchor = useRef<HTMLDivElement>(null);
   const orb = useRef<HTMLButtonElement>(null);
@@ -357,6 +364,18 @@ export function GlassOrb({ phase, progress, box, onCommit, onChoose, reduce, hin
           <svg className="intro-fill" viewBox={`0 0 ${ORB} ${ORB}`} aria-hidden="true">
             <circle cx={ORB / 2} cy={ORB / 2} r={ORB / 2} />
           </svg>
+          {!reduce && (
+            <motion.span
+              className="intro-veil"
+              aria-hidden="true"
+              style={{
+                ['--veil-a' as string]: veilAlpha,
+                backdropFilter: veilFilter,
+                WebkitBackdropFilter: veilFilter,
+                visibility: veilVisibility,
+              }}
+            />
+          )}
           <AnimatePresence>
             {phase === 'splash' && (
               <motion.span
