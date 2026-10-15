@@ -7,7 +7,7 @@ import {
   BringToFront, Hexagon, Spline, Eye, X, Check, ChevronDown, ChevronsUpDown,
   Columns2, RotateCcw, Minus, Plus, Search, Lock, Image, Mountain, Camera,
   FolderOpen, Upload, TriangleAlert, Info, Shuffle, Undo2, Redo2, Ellipsis,
-  ChevronRight, LoaderCircle, Eraser, Move, Crosshair, SunMoon, Moon,
+  ChevronRight, ChevronUp, LoaderCircle, Eraser, Move, Crosshair, SunMoon, Moon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { IconName } from '../model/tools';
@@ -15,7 +15,7 @@ import type { IconName } from '../model/tools';
 export type UiIconName =
   | IconName | 'erase' | 'move'
   | 'close' | 'check' | 'chevronDown' | 'upDown' | 'compare' | 'reset' | 'minus' | 'plus'
-  | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'loader' | 'scope'
+  | 'search' | 'lock' | 'photo' | 'hdr' | 'camera' | 'open' | 'share' | 'warning' | 'info' | 'shuffle' | 'undo' | 'redo' | 'more' | 'chevronRight' | 'chevronUp' | 'loader' | 'scope'
   | 'themeSystem' | 'themeLight' | 'themeDark';
 
 const ICONS: Record<UiIconName, LucideIcon> = {
@@ -30,7 +30,7 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   aperture: Aperture, focalLength: Telescope, nearSharp: ArrowRightToLine,
   foreground: BringToFront, blades: Hexagon, curvature: Spline, catEye: Eye,
   lens: Aperture, close: X, check: Check, chevronDown: ChevronDown,
-  chevronRight: ChevronRight, upDown: ChevronsUpDown, compare: Columns2,
+  chevronRight: ChevronRight, chevronUp: ChevronUp, upDown: ChevronsUpDown, compare: Columns2,
   reset: RotateCcw, minus: Minus, plus: Plus, search: Search, lock: Lock,
   photo: Image, hdr: Mountain, camera: Camera, open: FolderOpen, share: Upload,
   warning: TriangleAlert, info: Info, undo: Undo2, redo: Redo2,

@@ -1,7 +1,7 @@
 /**
  * Intro layar mulai (referensi: onboarding "kaca cair" ala Wabi), dalam tema
  * gammā: wordmark teks SF Pro, kubah kaca dikroik di tepi bawah
- * ("Swipe up to enter"), lalu kubah naik menyusut jadi gelembung lalu tombol
+ * ("Swipe up to continue" di dalam kubah), lalu kubah naik menyusut jadi gelembung lalu tombol
  * "+" (buka foto); stiker film ada di StickerField.
  *
  * Satu elemen kaca berubah bentuk lewat transform (scale/translate) -- tidak
@@ -10,7 +10,7 @@
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { useRef } from 'react';
 import { Icon } from './Icon';
-import { useGlassFilter } from './LiquidGlass';
+import GlassSurface from './reactbits/GlassSurface';
 
 export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
@@ -33,11 +33,12 @@ function orbGeometry(phase: IntroPhase, box: StageBox) {
   return phase === 'bubble' ? { cx: w / 2, cy, d: Math.min(176, w * 0.42) } : { cx: w / 2, cy, d: 64 };
 }
 
-export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
-  phase: IntroPhase; box: StageBox; onEnter: () => void; onChoose: () => void; reduce: boolean;
+export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint }: {
+  phase: IntroPhase; box: StageBox; onEnter: () => void; onChoose: () => void; reduce: boolean; hint: string;
 }) {
-  const glass = useGlassFilter(ORB, { bezel: 0.14, strength: 0.16 });
   const { cx, cy, d } = orbGeometry(phase, box);
+  // Petunjuk di dalam kubah: di tengah bagian kubah yang terlihat.
+  const hintTop = (Math.min(box.height * 0.3, 280) * 0.4 * ORB) / d;
   const s = d / ORB;
   const ready = phase === 'ready';
   const dome = phase === 'splash' || phase === 'lift';
@@ -110,7 +111,6 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
 
   return (
     <>
-      {glass.svg}
       <motion.div
         className="intro-orb-anchor"
         style={{ width: ORB, height: ORB, left: 0, top: 0 }}
@@ -122,7 +122,6 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
           type="button"
           className="intro-orb"
           data-phase={phase}
-          data-refract={glass.refract || undefined}
           aria-label={ready ? 'Choose Photo' : 'Enter'}
           tabIndex={ready || phase === 'splash' ? 0 : -1}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (ready ? onChoose : onEnter)(); } }}
@@ -131,8 +130,21 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
           onPointerUp={(e) => release(e)}
           onPointerCancel={(e) => release(e, true)}
           onPointerLeave={onLeave}
-          style={{ ...glass.style, transform }}
+          style={{ transform }}
         >
+          {/* Kaca: GlassSurface (React Bits) -- pembiasan SVG di Chromium, frosted di Safari. */}
+          <GlassSurface
+            className="intro-glass"
+            width={ORB}
+            height={ORB}
+            borderRadius={ORB / 2}
+            borderWidth={0.09}
+            // Kubah lebih lebar dari layar: pembiasan lemah supaya tepi layar tidak ikut terpantul.
+            distortionScale={dome ? -40 : -150}
+            displace={0.6}
+            backgroundOpacity={0.06}
+            saturation={1.5}
+          />
           {/* Halo dikroik yang menyapu kubah saat masuk (cincin biru, inti putih). */}
           <AnimatePresence>
             {(phase === 'lift' || phase === 'bubble') && !reduce && (
@@ -144,6 +156,29 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
                 exit={{ opacity: 0, scale: 1.4, transition: { duration: 0.35 } }}
                 transition={{ duration: 0.6, ease: EASE }}
               />
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {phase === 'splash' && (
+              <motion.span
+                key="hint"
+                className="intro-hint"
+                style={{ top: hintTop, scale: 1 / Math.max(s, 0.001), x: '-50%' }}
+                initial={{ opacity: 0, y: 10, filter: 'blur(6px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, y: -18, filter: 'blur(6px)', transition: { duration: 0.35, ease: EASE } }}
+                transition={{ duration: 0.8, delay: reduce ? 0 : 0.9, ease: EASE }}
+              >
+                <motion.span
+                  className="intro-hint-chevron"
+                  aria-hidden="true"
+                  animate={reduce ? undefined : { y: [3, -5, 3], opacity: [0.35, 1, 0.35] }}
+                  transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <Icon name="chevronUp" size={16} strokeWidth={1.6} />
+                </motion.span>
+                <span className="intro-hint-text">{hint}</span>
+              </motion.span>
             )}
           </AnimatePresence>
           <motion.span

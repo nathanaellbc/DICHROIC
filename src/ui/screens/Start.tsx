@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChromeWordmark, GlassOrb } from '../components/WelcomeIntro';
 import { StickerBurst } from '../components/StickerField';
+import { StarField } from '../components/StarField';
 import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
 import { Spinner } from '../components/Overlays';
@@ -125,26 +126,11 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
 
   return (
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
-      <div className="intro-sky" aria-hidden="true" />
+      <div className="intro-sky" aria-hidden="true"><StarField /></div>
       <div className="start-dropframe" aria-hidden="true" />
       <ChromeWordmark visible={phase === "splash" || phase === "lift"} reduce={reduce} />
       <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
-      {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} />}
-
-      <AnimatePresence>
-        {phase === 'splash' && (
-          <motion.span
-            key="swipe"
-            className="intro-swipe"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, transition: { duration: 0.2 } }}
-            transition={{ duration: 0.6, delay: 0.7 }}
-          >
-            {touch ? 'Swipe up to enter' : 'Scroll or click to enter'}
-          </motion.span>
-        )}
-      </AnimatePresence>
+      {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} hint={touch ? 'Swipe up to continue' : 'Scroll or click to continue'} />}
 
       {ready && (
         <motion.div
