@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="booting">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -21,7 +21,7 @@
        * #f2f2f7). Tampil sebelum JS termuat, jadi tidak ada lompatan saat gambar
        * iOS hilang; src/ui/boot.ts lalu menerbangkan motif ke wordmark intro.
        */
-      html { background: #000; }
+      html, html.booting body { background: #000 !important; }
       /*
        * Tinggi = layar fisik: di app terpasang iOS 26 viewport elemen fixed
        * dilaporkan setinggi layar DIKURANGI status bar (lih. styles.css), jadi
@@ -32,13 +32,34 @@
       #boot svg { width: 27vw; height: 27vw; display: block; transform-origin: 50% 50%; }
       #boot path { fill: #fff; }
       @media (prefers-color-scheme: light) {
-        html, #boot { background: #f2f2f7; }
+        html, html.booting body, #boot { background: #f2f2f7 !important; }
         #boot path { fill: #000; }
       }
     </style>
   </head>
   <body>
     <div id="boot" aria-hidden="true"><svg viewBox="31 31 194 194"><path fill-rule="evenodd" d="M134.84,89H179.16C216.87,89 225,97.13 225,134.84V179.16C225,216.87 216.87,225 179.16,225H134.84C97.13,225 89,216.87 89,179.16V134.84C89,97.13 97.13,89 134.84,89ZM31,101A70,70 0 1 1 171,101A70,70 0 1 1 31,101Z"/></svg></div>
+    <script>
+      // App terpasang (Home Screen): viewport elemen fixed bisa lebih pendek dari
+      // layar fisik (iOS 26 mengurangi status bar). Gambar layar pembuka iOS
+      // memakai layar fisik, jadi motif ditaruh di pusat layar fisik dalam px --
+      // tanpa ini motif muncul ~30 pt lebih tinggi dan melompat saat halaman tampil.
+      (function () {
+        var boot = document.getElementById('boot'), mark = boot && boot.firstElementChild;
+        var standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+        if (!mark || !standalone || !screen.width || !screen.height) return;
+        var portrait = innerHeight >= innerWidth;
+        var w = portrait ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+        var h = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+        var size = w * 0.27;
+        boot.style.height = h + 'px';
+        boot.style.display = 'block';
+        mark.style.position = 'absolute';
+        mark.style.width = mark.style.height = size + 'px';
+        mark.style.left = (w - size) / 2 + 'px';
+        mark.style.top = (h - size) / 2 + 'px';
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/ui/main.tsx"></script>
   </body>

@@ -1,19 +1,20 @@
 /**
  * Layar boot (`#boot` di index.html, salinan persis layar pembuka iOS) ke
- * aplikasi tanpa lompatan.
+ * aplikasi tanpa lompatan atau kedip.
  *
- * Intro pertama: motif terbang ke wordmark "gammā" sambil mengecil dan larut
- * ke dalam blur, latar hitam memudar memperlihatkan langit dan kubah, dan
- * huruf wordmark muncul dari blur di tempat yang sama (`ChromeWordmark`) --
- * logo seakan menjadi namanya. Selain intro (sudah pernah disambut, Reduce
- * Motion, atau layar lain): cukup memudar.
+ * Intro pertama: setelah CSS app termuat, font siap, dan tata letak stabil
+ * (semua di balik layar boot, jadi pergeseran awal tidak terlihat), motif
+ * terbang ke wordmark "gammā" sambil mengecil dan larut ke dalam blur, latar
+ * memudar memperlihatkan langit dan kubah, dan huruf wordmark muncul dari blur
+ * di tempat yang sama (`ChromeWordmark`). Selain intro (sudah disambut, Reduce
+ * Motion, atau layar lain): cukup memudar setelah tenang.
  */
 
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)';
 /** Durasi terbang motif ke wordmark (ms); huruf wordmark mulai muncul di sekitar sepertiganya. */
 export const BOOT_FLIGHT_MS = 950;
 
-let released = false;
+let pending: Promise<boolean> | undefined;
 
 function reduced(): boolean {
   try {
@@ -23,29 +24,68 @@ function reduced(): boolean {
   }
 }
 
+const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+/** Satu frame, atau 50 ms bila rAF tidak berjalan (tab di latar): boot tidak boleh macet. */
+const frame = () => new Promise<void>((resolve) => {
+  const t = window.setTimeout(resolve, 50);
+  requestAnimationFrame(() => { window.clearTimeout(t); resolve(); });
+});
+
 /**
- * Lepas layar boot. `target`: elemen wordmark tujuan terbang motif; tanpa
- * target layar boot memudar saja. Hanya panggilan pertama yang berlaku.
- * Mengembalikan `true` bila motif benar-benar terbang ke `target` (pemanggil
- * lalu menunda munculnya huruf wordmark).
+ * Tunggu sampai halaman di balik layar boot tenang: stylesheet app termuat
+ * (dimuat tanpa memblokir render, lih. vite.config.ts), font siap, dan ukuran
+ * viewport serta #root sama selama 4 frame berturut-turut.
  */
-export function releaseBoot(target?: Element | null): boolean {
-  if (released) return false;
-  released = true;
+async function settled(): Promise<void> {
+  const sheets = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')).filter((l) => !l.closest('noscript'));
+  await Promise.all(
+    sheets.map((l) =>
+      l.sheet && l.media !== 'print'
+        ? undefined
+        : new Promise<void>((resolve) => {
+            l.addEventListener('load', () => resolve(), { once: true });
+            l.addEventListener('error', () => resolve(), { once: true });
+            window.setTimeout(resolve, 3000);
+          }),
+    ),
+  );
+  await Promise.race([document.fonts?.ready ?? Promise.resolve(), wait(1000)]);
+  const root = document.getElementById('root');
+  const start = performance.now();
+  let last = '';
+  let stable = 0;
+  while (stable < 4 && performance.now() - start < 1000) {
+    await frame();
+    const r = root?.getBoundingClientRect();
+    const sig = `${innerWidth}x${innerHeight}|${r?.width}x${r?.height}`;
+    stable = sig === last ? stable + 1 : 0;
+    last = sig;
+  }
+}
+
+function remove(boot: HTMLElement): void {
+  boot.remove();
+  document.documentElement.classList.remove('booting');
+}
+
+async function run(target: Element | null | undefined): Promise<boolean> {
   const boot = document.getElementById('boot');
-  if (!boot) return false;
+  if (!boot) {
+    document.documentElement.classList.remove('booting');
+    return false;
+  }
+  await settled();
   const mark = boot.querySelector('svg');
-  const done = () => boot.remove();
-  if (!target || !mark || reduced() || typeof mark.animate !== 'function') {
-    const fade = boot.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 260, easing: 'ease-out', fill: 'forwards' });
-    if (fade) fade.onfinish = done;
-    else done();
+  if (!target || !target.isConnected || !mark || reduced() || typeof mark.animate !== 'function') {
+    const fade = boot.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: 280, easing: 'ease-out', fill: 'forwards' });
+    if (fade) fade.onfinish = () => remove(boot);
+    else remove(boot);
     return false;
   }
   const from = mark.getBoundingClientRect();
   const to = target.getBoundingClientRect();
   if (!(from.width > 0 && to.width > 0)) {
-    done();
+    remove(boot);
     return false;
   }
   // Motif mengecil setinggi huruf kecil wordmark, pusatnya ke pusat wordmark.
@@ -66,11 +106,22 @@ export function releaseBoot(target?: Element | null): boolean {
     easing: 'ease-out',
     fill: 'forwards',
   });
-  veil.finished.then(() => window.setTimeout(done, BOOT_FLIGHT_MS * 0.35), done);
+  veil.finished.then(() => window.setTimeout(() => remove(boot), BOOT_FLIGHT_MS * 0.35), () => remove(boot));
   return true;
 }
 
+/**
+ * Lepas layar boot setelah halaman tenang. `target`: elemen wordmark tujuan
+ * terbang motif; tanpa target layar boot memudar saja. Panggilan berikutnya
+ * mendapat janji yang sama. Selesai saat motif mulai terbang: `true` bila
+ * terbang ke `target` (pemanggil lalu memunculkan huruf wordmark).
+ */
+export function releaseBoot(target?: Element | null): Promise<boolean> {
+  pending ??= run(target);
+  return pending;
+}
+
 /** Cadangan: layar mana pun yang tampil, boot tidak boleh menutupi app lebih lama dari ini. */
-export function releaseBootSoon(delay = 1200): void {
-  window.setTimeout(() => releaseBoot(), delay);
+export function releaseBootSoon(delay = 1500): void {
+  window.setTimeout(() => void releaseBoot(), delay);
 }

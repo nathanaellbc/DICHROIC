@@ -418,13 +418,14 @@ export function ChromeWordmark({ visible, progress }: { visible: boolean; progre
   const y = useTransform(progress, [0, 1], [0, -40]);
   const text = useRef<HTMLDivElement>(null);
   // Layar boot: motif logo terbang ke sini dan larut; huruf muncul saat ia tiba.
-  // Hasil pertama disimpan: StrictMode menjalankan effect dua kali.
-  const flew = useRef<boolean | undefined>(undefined);
+  // Huruf menunggu motif mulai terbang (layar boot dilepas setelah halaman
+  // tenang), lalu muncul saat ia tiba. StrictMode: janji yang sama.
   const [delay, setDelay] = useState<number | undefined>(undefined);
   useLayoutEffect(() => {
-    if (!visible) return;
-    flew.current ??= releaseBoot(text.current);
-    setDelay(flew.current ? (BOOT_FLIGHT_MS * 0.32) / 1000 : 0);
+    if (!visible) return undefined;
+    let alive = true;
+    void releaseBoot(text.current).then((flew) => { if (alive) setDelay(flew ? (BOOT_FLIGHT_MS * 0.32) / 1000 : 0); });
+    return () => { alive = false; };
   }, [visible]);
   return (
     <div className="intro-wordmark">
@@ -443,7 +444,9 @@ export function ChromeWordmark({ visible, progress }: { visible: boolean; progre
                 <motion.span
                   key={k}
                   aria-hidden="true"
-                  style={{ display: 'inline-block' }}
+                  // Ruang untuk blur: filter terpotong di kotak huruf, dan kaki "g"
+                  // menjulur di bawahnya. Margin negatif menjaga tata letak.
+                  style={{ display: 'inline-block', padding: '0.15em 0.04em 0.32em', margin: '-0.15em -0.04em -0.32em' }}
                   initial={{ opacity: 0, filter: 'blur(12px)', y: 14 }}
                   animate={delay === undefined ? false : { opacity: 1, filter: 'blur(0px)', y: 0, transitionEnd: { filter: 'none' } }}
                   transition={{ duration: 0.8, ease: EASE, delay: (delay ?? 0) + k * 0.06 }}

@@ -37,7 +37,7 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
   // Tanpa intro (sudah disambut, Reduce Motion): layar boot langsung memudar.
   // Dengan intro, ChromeWordmark menerbangkan logonya ke wordmark.
   useLayoutEffect(() => {
-    if (phase === 'ready') releaseBoot();
+    if (phase === 'ready') void releaseBoot();
     // Hanya keadaan awal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

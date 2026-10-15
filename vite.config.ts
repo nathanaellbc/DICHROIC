@@ -29,11 +29,32 @@ function iosSplashScreens(): Plugin {
   };
 }
 
+/**
+ * CSS app dimuat tanpa memblokir render: frame pertama halaman hanya layar boot
+ * inline (salinan layar pembuka iOS), jadi iOS tidak memperlihatkan WebView
+ * yang masih kosong (kilatan abu-abu) selagi CSS besar termuat. `src/ui/boot.ts`
+ * baru melepas layar boot setelah stylesheet ini termuat.
+ */
+function nonBlockingCss(): Plugin {
+  return {
+    name: 'dichroic-non-blocking-css',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler: (html) =>
+        html.replace(/<link rel="stylesheet"([^>]*?)href="([^"]+\.css)"([^>]*)>/g, (_m, a, href, b) =>
+          `<link rel="stylesheet"${a}href="${href}"${b} media="print" onload="this.media='all'">` +
+          `<noscript><link rel="stylesheet" href="${href}"></noscript>`),
+    },
+  };
+}
+
 export default defineConfig({
   base,
   plugins: [
     react(),
     iosSplashScreens(),
+    nonBlockingCss(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
