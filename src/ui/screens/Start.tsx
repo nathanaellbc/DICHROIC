@@ -3,7 +3,7 @@
  * WebGPU tidak tersedia. Aplikasi langsung membuka editor; selama belum ada
  * foto, area fotonya berisi `DropZone`.
  */
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useMotionValue, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChromeWordmark, GlassOrb } from '../components/WelcomeIntro';
 import { StickerBurst } from '../components/StickerField';
@@ -33,7 +33,6 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
   const [box, setBox] = useState<StageBox>({ width: 0, height: 0 });
   // Intro sekali per sesi; Reduce Motion langsung ke isi.
   const [phase, setPhase] = useState<IntroPhase>(() => (reduce || storage('session')?.getItem(WELCOMED_KEY) ? 'ready' : 'splash'));
-  const timers = useRef<number[]>([]);
 
   useLayoutEffect(() => {
     const el = stage.current;
@@ -45,40 +44,13 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
     return () => observer.disconnect();
   }, []);
 
-  const enter = useCallback(() => {
-    setPhase((current) => {
-      if (current !== 'splash') return current;
-      storage('session')?.setItem(WELCOMED_KEY, '1');
-      // Halo menyapu kubah, kubah naik jadi gelembung, gelembung jadi "+".
-      timers.current.push(window.setTimeout(() => setPhase('bubble'), 420));
-      timers.current.push(window.setTimeout(() => setPhase('ready'), 1150));
-      return 'lift';
-    });
+  // Kubah -> "+": sepenuhnya mengikuti gesture pengguna (GlassOrb), tanpa timer;
+  // selesai = fase ready.
+  const progress = useMotionValue(phase === 'ready' ? 1 : 0);
+  const commit = useCallback(() => {
+    storage('session')?.setItem(WELCOMED_KEY, '1');
+    setPhase('ready');
   }, []);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
-
-  // Masuk: geser ke atas, gulir, tombol panah/Enter/spasi, atau otomatis.
-  useEffect(() => {
-    if (phase !== 'splash') return undefined;
-    const el = stage.current;
-    let startY: number | undefined;
-    const down = (e: PointerEvent) => { startY = e.clientY; };
-    const up = (e: PointerEvent) => { if (startY !== undefined && startY - e.clientY > 36) enter(); startY = undefined; };
-    const wheel = (e: WheelEvent) => { if (e.deltaY > 12) enter(); };
-    const key = (e: KeyboardEvent) => { if (['ArrowUp', 'ArrowDown', 'PageDown', 'Enter', ' '].includes(e.key)) enter(); };
-    const auto = window.setTimeout(enter, 4200);
-    el?.addEventListener('pointerdown', down);
-    el?.addEventListener('pointerup', up);
-    el?.addEventListener('wheel', wheel, { passive: true });
-    window.addEventListener('keydown', key);
-    return () => {
-      window.clearTimeout(auto);
-      el?.removeEventListener('pointerdown', down);
-      el?.removeEventListener('pointerup', up);
-      el?.removeEventListener('wheel', wheel);
-      window.removeEventListener('keydown', key);
-    };
-  }, [phase, enter]);
 
   // Berkas bisa dijatuhkan di mana saja di jendela (pendengar `drop` di App);
   // sorotan menyala selama berkas diseret di atas jendela mana pun.
@@ -133,9 +105,9 @@ export function DropZone({ onChoose, engineReady, engineFailed, enginePaused }: 
       <IntroBackdrop canvasRef={backdrop} />
       <div className="intro-sky" aria-hidden="true"><StarField /></div>
       <div className="start-dropframe" aria-hidden="true" />
-      <ChromeWordmark visible={phase === "splash" || phase === "lift"} reduce={reduce} />
+      <ChromeWordmark visible={phase === 'splash'} progress={progress} />
       <StickerBurst show={ready && !over} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
-      {box.width > 0 && <GlassOrb phase={phase} box={box} onEnter={enter} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or click to continue'} />}
+      {box.width > 0 && <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or click to continue'} />}
       {box.width > 0 && <RingBloom backdrop={backdrop} />}
 
       {ready && (
