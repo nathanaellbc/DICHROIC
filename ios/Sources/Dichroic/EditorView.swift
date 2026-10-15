@@ -150,7 +150,7 @@ struct EditorView: View {
     /// "DICHROIC" with a second line, in place of the toolbar buttons.
     func brand(_ line: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("DICHROIC").font(.system(size: 15, weight: .bold)).tracking(1.8)
+            Text("gammā").font(.system(size: 17, weight: .bold)).tracking(0.2)
             Text(line).font(.system(size: 12)).foregroundStyle(Color.secondaryText)
         }
         .padding(.horizontal, 8)

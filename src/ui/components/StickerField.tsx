@@ -1,6 +1,6 @@
 /**
- * Stiker layar mulai: menyembur dari gelembung lalu melayang bebas di seluruh
- * layar -- memantul di tepi layar, saling bertabrakan, memantul dari
+ * Stiker layar mulai: menyembur dari gelembung ke atas membentuk V (seperti
+ * gunung meletus) lalu melayang di sekitar titik mendaratnya -- memantul di tepi layar, saling bertabrakan, memantul dari
  * gelembung, dan bisa dipegang lalu dilempar. Satu loop rAF menulis transform
  * langsung ke DOM (tanpa render React per frame).
  */
@@ -19,32 +19,32 @@ type Sticker =
 
 /**
  * Isi aplikasi: nama stok film (warna kotak filmnya -- isi, bukan aksen UI),
- * ikon kamar gelap, potongan bingkai film, dan kutipan pendek. Posisi awal
- * dalam pecahan panggung (fx, fy 0..1), berpasangan cermin kiri-kanan supaya
- * sebarannya seimbang; r = rotasi; small = disembunyikan di layar sempit.
+ * ikon kamar gelap, potongan bingkai film, dan kutipan pendek. Posisinya
+ * dari letusan berbentuk V di atas gelembung (`veeCone`); r = rotasi;
+ * small = disembunyikan di layar sempit.
  */
-const STICKERS: ReadonlyArray<{ s: Sticker; fx: number; fy: number; r: number; small?: boolean }> = [
-  { s: { kind: 'stock', label: 'Portra 400', sub: 'Kodak', tone: '#e8b04a' }, fx: 0.16, fy: 0.1, r: -8 },
-  { s: { kind: 'stock', label: 'Velvia 50', sub: 'Fujifilm', tone: '#2f9e5b' }, fx: 0.84, fy: 0.1, r: 8 },
-  { s: { kind: 'icon', icon: 'aperture' }, fx: 0.4, fy: 0.06, r: -12, small: true },
-  { s: { kind: 'icon', icon: 'print' }, fx: 0.6, fy: 0.06, r: 12, small: true },
-  { s: { kind: 'stock', label: 'Vision3 500T', sub: 'Kodak', tone: '#d1452f' }, fx: 0.5, fy: 0.18, r: -3 },
-  { s: { kind: 'frame', hue: 28 }, fx: 0.25, fy: 0.25, r: 7 },
-  { s: { kind: 'quote', text: 'Shot on real film' }, fx: 0.75, fy: 0.25, r: -6 },
-  { s: { kind: 'icon', icon: 'grain' }, fx: 0.08, fy: 0.36, r: -10 },
-  { s: { kind: 'icon', icon: 'halation' }, fx: 0.92, fy: 0.36, r: 10 },
-  { s: { kind: 'quote', text: 'Printed on 2383' }, fx: 0.3, fy: 0.37, r: -5, small: true },
-  { s: { kind: 'stock', label: 'CineStill 800T', sub: 'CineStill', tone: '#3d5fc4' }, fx: 0.7, fy: 0.37, r: 5, small: true },
-  { s: { kind: 'stock', label: 'Ektar 100', sub: 'Kodak', tone: '#c2328a' }, fx: 0.17, fy: 0.5, r: 6 },
-  { s: { kind: 'stock', label: 'Tri-X 400', sub: 'Kodak', tone: '#2a2a2e' }, fx: 0.83, fy: 0.5, r: -6 },
-  { s: { kind: 'icon', icon: 'camera' }, fx: 0.07, fy: 0.66, r: 9 },
-  { s: { kind: 'frame', hue: 205 }, fx: 0.93, fy: 0.66, r: -9 },
-  { s: { kind: 'icon', icon: 'lens' }, fx: 0.1, fy: 0.8, r: -8, small: true },
-  { s: { kind: 'icon', icon: 'flash' }, fx: 0.9, fy: 0.8, r: 8, small: true },
-  { s: { kind: 'stock', label: 'HP5 Plus', sub: 'Ilford', tone: '#55555c' }, fx: 0.13, fy: 0.93, r: 5 },
-  { s: { kind: 'stock', label: 'Gold 200', sub: 'Kodak', tone: '#e0902c' }, fx: 0.87, fy: 0.93, r: -5 },
-  { s: { kind: 'quote', text: 'Grain, not noise' }, fx: 0.33, fy: 0.97, r: -3, small: true },
-  { s: { kind: 'frame', hue: 330 }, fx: 0.67, fy: 0.97, r: 4, small: true },
+const STICKERS: ReadonlyArray<{ s: Sticker; r: number; small?: boolean }> = [
+  { s: { kind: 'stock', label: 'Portra 400', sub: 'Kodak', tone: '#e8b04a' }, r: -8 },
+  { s: { kind: 'stock', label: 'Velvia 50', sub: 'Fujifilm', tone: '#2f9e5b' }, r: 8 },
+  { s: { kind: 'icon', icon: 'aperture' }, r: -12, small: true },
+  { s: { kind: 'icon', icon: 'print' }, r: 12, small: true },
+  { s: { kind: 'stock', label: 'Vision3 500T', sub: 'Kodak', tone: '#d1452f' }, r: -3 },
+  { s: { kind: 'frame', hue: 28 }, r: 7 },
+  { s: { kind: 'quote', text: 'Shot on real film' }, r: -6 },
+  { s: { kind: 'icon', icon: 'grain' }, r: -10 },
+  { s: { kind: 'icon', icon: 'halation' }, r: 10 },
+  { s: { kind: 'quote', text: 'Printed on 2383' }, r: -5, small: true },
+  { s: { kind: 'stock', label: 'CineStill 800T', sub: 'CineStill', tone: '#3d5fc4' }, r: 5, small: true },
+  { s: { kind: 'stock', label: 'Ektar 100', sub: 'Kodak', tone: '#c2328a' }, r: 6 },
+  { s: { kind: 'stock', label: 'Tri-X 400', sub: 'Kodak', tone: '#2a2a2e' }, r: -6 },
+  { s: { kind: 'icon', icon: 'camera' }, r: 9 },
+  { s: { kind: 'frame', hue: 205 }, r: -9 },
+  { s: { kind: 'icon', icon: 'lens' }, r: -8, small: true },
+  { s: { kind: 'icon', icon: 'flash' }, r: 8, small: true },
+  { s: { kind: 'stock', label: 'HP5 Plus', sub: 'Ilford', tone: '#55555c' }, r: 5 },
+  { s: { kind: 'stock', label: 'Gold 200', sub: 'Kodak', tone: '#e0902c' }, r: -5 },
+  { s: { kind: 'quote', text: 'Grain, not noise' }, r: -3, small: true },
+  { s: { kind: 'frame', hue: 330 }, r: 4, small: true },
 ];
 
 function StickerFace({ s }: { s: Sticker }): ReactNode {
@@ -65,6 +65,8 @@ interface Body {
   x: number; y: number; vx: number; vy: number; r: number; vr: number;
   tx: number; ty: number; tr: number; rest: number; scale: number;
   w: number; h: number; born: number; free: boolean;
+  /** Baru dilempar: titik mendarat pindah ke tempat ia berhenti. */
+  rehome?: boolean;
   held?: { id: number; ox: number; oy: number; lx: number; ly: number; lt: number };
 }
 
@@ -105,16 +107,20 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
 
   useEffect(() => {
     const start = performance.now();
-    const { origin: O0, box: B0 } = live.current;
+    const { origin: O0, orbRadius: R0, box: B0 } = live.current;
+    // Letusan: tiap stiker punya arah di dalam kerucut V di atas gelembung.
+    const cone = veeCone(items.length, O0, R0, B0);
     bodies.current = items.map((item, i) => {
       const face = els.current[i]?.firstElementChild as HTMLElement | null | undefined;
       const rest = (item.small ? 0.86 : 1) * (compact ? 0.9 : 1);
       const w = (face?.offsetWidth ?? 60) * rest, h = (face?.offsetHeight ?? 40) * rest;
-      const tx = item.fx * B0.width, ty = item.fy * B0.height;
-      const base = { tx, ty, tr: item.r, rest, w, h, vx: 0, vy: 0, vr: 0 };
+      const { tx, ty, dx, dy } = cone[i]!;
+      const base = { tx, ty, tr: item.r, rest, w, h, vr: 0 };
+      // Dilontarkan keluar dari kawah dengan kecepatan awal searah kerucut.
+      const kick = 900 + (i % 3) * 160;
       return reduce
-        ? { ...base, x: tx, y: ty, r: item.r, scale: rest, born: start - 1e4, free: true }
-        : { ...base, x: O0.x, y: O0.y, r: 0, scale: 0.2, born: start + i * 35, free: false };
+        ? { ...base, x: tx, y: ty, vx: 0, vy: 0, r: item.r, scale: rest, born: start - 1e4, free: true }
+        : { ...base, x: O0.x, y: O0.y, vx: dx * kick, vy: dy * kick, r: 0, scale: 0.2, born: start + i * 45, free: false };
     });
 
     const paint = (t: number) => {
@@ -127,8 +133,8 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
     };
     if (reduce) { paint(start); return undefined; }
 
-    // Arah melayang tetap per stiker (sudut emas: tersebar rata, tanpa acak).
-    const drift = items.map((_, i) => ({ x: Math.cos(i * 2.39996), y: Math.sin(i * 2.39996) }));
+    // Arah melayang = arah letusannya (tetap di dalam kerucut V).
+    const drift = cone.map((c) => ({ x: c.dx, y: c.dy }));
     const cruise = compact ? 16 : 22;
     let last = start, raf = 0;
 
@@ -154,13 +160,18 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
             b.vx += drift[i]!.x * cruise; b.vy += drift[i]!.y * cruise;
           }
         } else {
-          // Melayang: kecepatan pelan-pelan kembali ke kecepatan jelajah,
-          // jadi lemparan keras melambat dan stiker diam mulai bergerak lagi.
+          // Melayang di sekitar titik mendaratnya (bentuk V tetap terbaca):
+          // kecepatan pelan-pelan menuju "kembali ke titik + goyangan kecil",
+          // jadi lemparan keras melambat. Stiker yang dilempar pindah rumah ke
+          // tempat ia berhenti.
           const sp = Math.hypot(b.vx, b.vy);
-          const dir = sp < 1 ? drift[i]! : { x: b.vx / sp, y: b.vy / sp };
-          const relax = 1 - Math.exp(-dt / 1.1);
-          b.vx += (dir.x * cruise - b.vx) * relax;
-          b.vy += (dir.y * cruise - b.vy) * relax;
+          if (b.rehome && sp < 40) { b.tx = b.x; b.ty = b.y; b.rehome = false; }
+          const phase = (t / 1000) * 0.55 + i * 1.7;
+          const wantX = b.rehome ? 0 : (b.tx - b.x) * 1.4 + Math.cos(phase) * cruise + drift[i]!.x * cruise * 0.4;
+          const wantY = b.rehome ? 0 : (b.ty - b.y) * 1.4 + Math.sin(phase * 0.8) * cruise + drift[i]!.y * cruise * 0.4;
+          const relax = 1 - Math.exp(-dt / (b.rehome ? 0.9 : 0.7));
+          b.vx += (wantX - b.vx) * relax;
+          b.vy += (wantY - b.vy) * relax;
           // Putaran: pegas lembut kembali ke kemiringan asal.
           const dr = ((b.tr - b.r + 540) % 360) - 180;
           b.vr += dr * 5 * dt;
@@ -248,6 +259,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
     if (sp > THROW_MAX) { b.vx *= THROW_MAX / sp; b.vy *= THROW_MAX / sp; }
     b.vr = b.vx * 0.08;
     b.held = undefined;
+    b.rehome = true;
     delete e.currentTarget.dataset.held;
   };
 
@@ -269,6 +281,27 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
       ))}
     </>
   );
+}
+
+/**
+ * Titik mendarat letusan: kerucut V terbuka ke atas dari gelembung (seperti
+ * gunung meletus). Sudut dalam +-36 derajat dari vertikal, jarak dari tepi
+ * gelembung sampai dekat tepi atas panggung; urutan sudut emas supaya
+ * tersebar rata tanpa acak. dx, dy = arah satuan dari pusat gelembung.
+ */
+function veeCone(n: number, O: { x: number; y: number }, R: number, B: StageBox) {
+  const half = (36 * Math.PI) / 180;
+  const near = R + 64, far = Math.max(near + 40, O.y - 40);
+  return Array.from({ length: n }, (_, i) => {
+    const u = ((i * 0.618034) % 1) * 2 - 1;
+    const a = -Math.PI / 2 + u * half;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    // Jarak tersebar rata sepanjang kerucut, tidak melewati batas atas.
+    const reach = near + (far - near) * ((i * 0.381966 + 0.1) % 1);
+    const d = Math.min(reach, far / Math.max(0.35, -dy));
+    const tx = Math.max(24, Math.min(B.width - 24, O.x + dx * d));
+    return { tx, ty: O.y + dy * d, dx, dy };
+  });
 }
 
 /** Jari-jari tabrakan: sisi pendek stiker (stiker panjang boleh sedikit tumpang). */

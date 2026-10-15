@@ -1,6 +1,6 @@
 /**
  * Intro layar mulai (referensi: onboarding "kaca cair" ala Wabi), dalam tema
- * DICHROIC: wordmark krom di atas hitam, kubah kaca dikroik di tepi bawah
+ * gammā: wordmark balon krom di atas hitam, kubah kaca dikroik di tepi bawah
  * ("Swipe up to enter"), lalu kubah naik menyusut jadi gelembung lalu tombol
  * "+" (buka foto); stiker film ada di StickerField.
  *
@@ -11,7 +11,7 @@ import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from
 import { useRef } from 'react';
 import { Icon } from './Icon';
 import { useGlassFilter } from './LiquidGlass';
-import { DichroicWordmark } from './DichroicWordmark';
+import gammaWordmark from '../assets/gamma-wordmark.webp';
 
 export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
@@ -162,44 +162,23 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
   );
 }
 
-/**
- * Wordmark: kaca dikroik menggembung (shader WebGL, DichroicWordmark); tanpa
- * WebGL, krom SVG dengan kilap specular dari tepi huruf yang diburamkan.
- */
-export function ChromeWordmark({ visible, reduce }: { visible: boolean; reduce: boolean }) {
+/** Wordmark: huruf balon krom "gammā" (gambar, latar transparan). */
+export function ChromeWordmark({ visible }: { visible: boolean; reduce: boolean }) {
   return (
     <div className="intro-wordmark">
     <AnimatePresence>
       {visible && (
-        <motion.div
+        <motion.img
           key="wordmark"
-          initial={{ opacity: 0, filter: 'blur(10px)', y: 10 }}
-          animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+          src={gammaWordmark}
+          alt="gammā"
+          className="intro-wordmark-img"
+          draggable={false}
+          initial={{ opacity: 0, filter: 'blur(10px)', y: 10, scale: 0.96 }}
+          animate={{ opacity: 1, filter: 'blur(0px)', y: 0, scale: 1 }}
           exit={{ opacity: 0, filter: 'blur(12px)', y: -16, transition: { duration: 0.45, ease: EASE } }}
           transition={{ duration: 0.9, ease: EASE }}
-        >
-          <DichroicWordmark reduce={reduce} fallback={
-          <svg viewBox="0 0 640 140" role="img" aria-label="DICHROIC">
-            <defs>
-              <linearGradient id="chrome-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" style={{ stopColor: "var(--chrome-1)" }} />
-                <stop offset="0.48" style={{ stopColor: "var(--chrome-2)" }} />
-                <stop offset="0.52" style={{ stopColor: "var(--chrome-3)" }} />
-                <stop offset="1" style={{ stopColor: "var(--chrome-4)" }} />
-              </linearGradient>
-              <filter id="chrome-bevel" x="-10%" y="-30%" width="120%" height="160%">
-                <feGaussianBlur in="SourceAlpha" stdDeviation="3.2" result="soft" />
-                <feSpecularLighting in="soft" surfaceScale="7" specularConstant="1.15" specularExponent="26" lightingColor="#ffffff" result="spec">
-                  <fePointLight x="120" y="-220" z="300" />
-                </feSpecularLighting>
-                <feComposite in="spec" in2="SourceAlpha" operator="in" result="shine" />
-                <feComposite in="SourceGraphic" in2="shine" operator="arithmetic" k1="0" k2="1" k3="0.85" k4="0" result="lit" />
-                <feDropShadow dx="0" dy="6" stdDeviation="10" floodColor="rgba(0, 120, 255, 0.35)" />
-              </filter>
-            </defs>
-            <text x="320" y="102" textAnchor="middle" className="intro-wordmark-text" fill="url(#chrome-fill)" filter="url(#chrome-bevel)">DICHROIC</text>
-          </svg>} />
-        </motion.div>
+        />
       )}
     </AnimatePresence>
     </div>

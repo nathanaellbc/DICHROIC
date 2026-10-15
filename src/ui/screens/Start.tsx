@@ -260,7 +260,7 @@ export function UnsupportedScreen() {
         <span style={{ color: 'var(--orange)' }}><Icon name="warning" size={40} strokeWidth={1.8} /></span>
         <h1 className="t-title2" style={{ margin: 0 }}>WebGPU Isn’t Available</h1>
         <p className="t-body secondary" style={{ margin: 0 }}>
-          DICHROIC develops every photo on your GPU. Open it in Safari on iOS 26 or later, or in a current version of Chrome, Edge or Firefox.
+          gammā develops every photo on your GPU. Open it in Safari on iOS 26 or later, or in a current version of Chrome, Edge or Firefox.
         </p>
       </div>
     </div>

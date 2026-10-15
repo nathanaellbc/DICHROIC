@@ -42,7 +42,7 @@ extension EditorView {
                 Spacer()
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("DICHROIC").font(.system(size: 13, weight: .bold)).tracking(1.56)
+                    Text("gammā").font(.system(size: 15, weight: .bold)).tracking(0.2)
                     Text(model.fileName ?? "No photo").font(.system(size: 13)).foregroundStyle(Color.secondaryText).lineLimit(1).truncationMode(.tail)
                 }
                 .frame(minWidth: 120, maxWidth: 380, alignment: .leading)

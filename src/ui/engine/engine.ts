@@ -203,7 +203,7 @@ export function describeError(error: unknown, fileName?: string): AppError {
       return { title, message: 'This file format isn’t supported. Export it as JPEG or TIFF, or open the camera’s original RAW file.' };
     }
     if (error.format === 'raw' && /COOP|cross-origin/i.test(error.reason)) {
-      return { title, message: 'RAW files need this page to be served with cross-origin isolation. Open DICHROIC from its installed address.' };
+      return { title, message: 'RAW files need this page to be served with cross-origin isolation. Open gammā from its installed address.' };
     }
     if (/memory limit|decoding memory|melebihi batas/i.test(error.reason)) {
       return { title, message: 'This photo exceeds the decoding memory limit. Open a smaller version of the photo.' };
