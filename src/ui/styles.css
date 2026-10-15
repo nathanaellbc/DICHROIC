@@ -570,10 +570,13 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 :root[data-theme="light"] .intro-sky { background: radial-gradient(ellipse 70% 34% at 50% 104%, rgba(0, 145, 255, 0.16), transparent 70%); }
 
 .intro-wordmark {
-  position: absolute; left: 50%; top: 30%; width: min(340px, 62%); transform: translate(-50%, -50%);
-  pointer-events: none; z-index: 1;
+  position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%);
+  pointer-events: none; z-index: 1; text-align: center;
 }
-.intro-wordmark-img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.intro-wordmark-text {
+  margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(56px, 18vw, 96px);
+  line-height: 1; letter-spacing: -0.03em; color: var(--label); white-space: nowrap; user-select: none;
+}
 
 /* Kaca: bola transparan dengan pinggiran terang dan kilap; pembiasan dari
    filter SVG (Chromium) atau blur biasa. Bentuk akhir lewat scale. */
@@ -652,7 +655,7 @@ html[data-size="regular"] .intro-title { font-size: 40px; }
 .intro-footnote { margin: 0; }
 @media (prefers-reduced-motion: reduce) { .intro-strike::after { animation: none; } }
 @media (max-height: 520px) and (orientation: landscape) {
-  .intro-wordmark { top: 27%; width: min(280px, 64%); }
+  .intro-wordmark { top: 27%; }
 }
 
 @media (prefers-reduced-motion: reduce) { .start-glow { animation: none; } }

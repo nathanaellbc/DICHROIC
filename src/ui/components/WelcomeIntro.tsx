@@ -1,6 +1,6 @@
 /**
  * Intro layar mulai (referensi: onboarding "kaca cair" ala Wabi), dalam tema
- * gammā: wordmark balon krom di atas hitam, kubah kaca dikroik di tepi bawah
+ * gammā: wordmark teks SF Pro, kubah kaca dikroik di tepi bawah
  * ("Swipe up to enter"), lalu kubah naik menyusut jadi gelembung lalu tombol
  * "+" (buka foto); stiker film ada di StickerField.
  *
@@ -11,7 +11,6 @@ import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from
 import { useRef } from 'react';
 import { Icon } from './Icon';
 import { useGlassFilter } from './LiquidGlass';
-import gammaWordmark from '../assets/gamma-wordmark.webp';
 
 export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 
@@ -162,23 +161,22 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce }: {
   );
 }
 
-/** Wordmark: huruf balon krom "gammā" (gambar, latar transparan). */
+/** Wordmark: "gammā" dalam SF Pro, teks biasa. */
 export function ChromeWordmark({ visible }: { visible: boolean; reduce: boolean }) {
   return (
     <div className="intro-wordmark">
     <AnimatePresence>
       {visible && (
-        <motion.img
+        <motion.div
           key="wordmark"
-          src={gammaWordmark}
-          alt="gammā"
-          className="intro-wordmark-img"
-          draggable={false}
+          className="intro-wordmark-text"
           initial={{ opacity: 0, filter: 'blur(10px)', y: 10, scale: 0.96 }}
           animate={{ opacity: 1, filter: 'blur(0px)', y: 0, scale: 1 }}
           exit={{ opacity: 0, filter: 'blur(12px)', y: -16, transition: { duration: 0.45, ease: EASE } }}
           transition={{ duration: 0.9, ease: EASE }}
-        />
+        >
+          gammā
+        </motion.div>
       )}
     </AnimatePresence>
     </div>
