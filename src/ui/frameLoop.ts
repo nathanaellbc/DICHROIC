@@ -27,4 +27,4 @@ export function onFrame(callback: (now: number) => void, order: number) {
 }
 
 /** Urutan di layar intro. */
-export const FRAME_ORDER = { stickers: 0, backdrop: 1, bloom: 2 } as const;
+export const FRAME_ORDER = { orb: -1, stickers: 0, backdrop: 1, bloom: 2 } as const;
