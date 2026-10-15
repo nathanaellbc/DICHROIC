@@ -21,8 +21,11 @@ export type IntroPhase = 'splash' | 'lift' | 'bubble' | 'ready';
 const ORB = 720;
 /** Lebar cahaya tepi kaca (px layar). */
 const GLOW = 14;
-/** Stabilisasi tarikan kubah (s): posisi/regang mengejar jari dengan konstanta waktu ini. */
-const DOME_SMOOTHING = 0.14;
+/**
+ * Stabilisasi tarikan kubah (s): posisi mengejar jari lewat tiga filter eksponensial
+ * berderet (masing-masing sepertiganya; halus tanpa memantul), regang lewat satu.
+ */
+const DOME_SMOOTHING = 0.15;
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 export interface StageBox { width: number; height: number }
@@ -96,23 +99,48 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
       rx: r * (1 + k), ry: r / Math.max(0.5, 1 + k), angle: angle.get(),
     };
   }), [dx, dy, stretch, angle]);
-  // Stabilisasi tarikan kubah (seperti smooth scroll): selama ditekan, sumber pegas
-  // mengejar target jari secara eksponensial, jadi kubah mengikuti sedikit tertunda
-  // dan halus, bukan 1:1. Dilepas: kembali ke pegas goyang seperti biasa.
-  const goal = useRef<{ x: number; y: number; k: number } | undefined>(undefined);
+  // Stabilisasi tarikan kubah (seperti smooth scroll): selama ditekan, posisi mengejar
+  // target jari secara eksponensial, dan regangan mengikuti kecepatan jari yang
+  // dihaluskan per frame -- sebagai vektor sudut ganda (sumbu regang tak berarah), jadi
+  // sumbunya tidak meloncat-loncat. Pegas goyang dilewati (jump) selama ditekan supaya
+  // tidak bergetar; saat dilepas pegas itu yang membawa kubah kembali.
+  const goal = useRef<{ x: number; y: number; fx: number; fy: number } | undefined>(undefined);
   useEffect(() => {
     let last = performance.now();
+    const drag = { x1: 0, y1: 0, x2: 0, y2: 0, x: 0, y: 0, vx: 0, vy: 0, px: 0, py: 0, sx: 0, sy: 0, fresh: true };
     return onFrame((now) => {
-      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      const dt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
       last = now;
       const g = goal.current;
-      if (!g) return;
-      const a = 1 - Math.exp(-dt / DOME_SMOOTHING);
-      dxRaw.set(dxRaw.get() + (g.x - dxRaw.get()) * a);
-      dyRaw.set(dyRaw.get() + (g.y - dyRaw.get()) * a);
-      stretchRaw.set(stretchRaw.get() + (g.k - stretchRaw.get()) * a);
+      if (!g) { drag.fresh = true; return; }
+      if (drag.fresh) {
+        // Awal tekan: mulai dari keadaan sekarang; remas sedikit (regang mendatar).
+        const x = dx.get(), y = dy.get();
+        Object.assign(drag, { x1: x, y1: y, x2: x, y2: y, x, y, vx: 0, vy: 0, px: g.fx, py: g.fy, sx: 0.12, sy: 0, fresh: false });
+      }
+      const follow = 1 - Math.exp(-dt / DOME_SMOOTHING);
+      const stage = 1 - Math.exp(-dt / (DOME_SMOOTHING / 3));
+      drag.x1 += (g.x - drag.x1) * stage; drag.y1 += (g.y - drag.y1) * stage;
+      drag.x2 += (drag.x1 - drag.x2) * stage; drag.y2 += (drag.y1 - drag.y2) * stage;
+      drag.x += (drag.x2 - drag.x) * stage; drag.y += (drag.y2 - drag.y) * stage;
+      // Kecepatan jari per frame, dihaluskan (0.08 s); berhenti -> mereda ke nol.
+      const blend = 1 - Math.exp(-dt / 0.08);
+      drag.vx += ((g.fx - drag.px) / dt - drag.vx) * blend;
+      drag.vy += ((g.fy - drag.py) / dt - drag.vy) * blend;
+      drag.px = g.fx; drag.py = g.fy;
+      const speed = Math.hypot(drag.vx, drag.vy);
+      const k = Math.min(0.08, speed / 9000), theta = Math.atan2(drag.vy, drag.vx);
+      // Target regang = remas tekan (0.12 mendatar) + regang searah gerak, dalam sudut ganda.
+      const tx = 0.12 + k * Math.cos(2 * theta), ty = k * Math.sin(2 * theta);
+      drag.sx += (tx - drag.sx) * follow;
+      drag.sy += (ty - drag.sy) * follow;
+      const amount = Math.hypot(drag.sx, drag.sy);
+      dxRaw.set(drag.x); dx.jump(drag.x);
+      dyRaw.set(drag.y); dy.jump(drag.y);
+      stretchRaw.set(amount); stretch.jump(amount);
+      angle.set(Math.atan2(drag.sy, drag.sx) / 2);
     }, FRAME_ORDER.orb);
-  }, [dxRaw, dyRaw, stretchRaw]);
+  }, [dx, dy, stretch, dxRaw, dyRaw, stretchRaw, angle]);
   const press = useRef<{ x: number; y: number; t: number; lx: number; ly: number; lt: number; moved: number; id: number } | undefined>(undefined);
   /** Gesekan karet: makin jauh makin berat (seperti tarikan berlebih iOS). */
   const band = (v: number, r: number) => Math.sign(v) * r * (1 - 1 / (Math.abs(v) / r + 1));
@@ -122,10 +150,10 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* synthetic or ended pointer */ }
     const now = performance.now();
     press.current = { x: e.clientX, y: e.clientY, t: now, lx: e.clientX, ly: e.clientY, lt: now, moved: 0, id: e.pointerId };
-    // Tekan = remas sedikit.
+    // Tekan = remas sedikit (kubah: lewat stabilisasi di loop frame).
+    if (dome) { goal.current = { x: dx.get(), y: dy.get(), fx: 0, fy: 0 }; return; }
     angle.set(Math.PI / 2);
-    if (dome) goal.current = { x: dxRaw.get(), y: dyRaw.get(), k: -0.12 };
-    else stretchRaw.set(-0.12);
+    stretchRaw.set(-0.12);
   };
   const onMove = (e: React.PointerEvent) => {
     const p = press.current;
@@ -140,18 +168,21 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint, backdrop
     const now = performance.now();
     const ox = e.clientX - p.x, oy = e.clientY - p.y;
     const reach = dome ? 200 : 90;
-    const g = goal.current;
-    if (g) { g.x = band(ox, reach * 0.4); g.y = band(oy, reach); }
-    else { dxRaw.set(band(ox, reach)); dyRaw.set(band(oy, reach)); }
     p.moved = Math.max(p.moved, Math.hypot(ox, oy));
+    const g = goal.current;
+    if (g) {
+      // Kubah: hanya catat jari; posisi dan regang dihitung halus di loop frame.
+      g.x = band(ox, reach * 0.4); g.y = band(oy, reach); g.fx = ox; g.fy = oy;
+      return;
+    }
+    dxRaw.set(band(ox, reach)); dyRaw.set(band(oy, reach));
     // Regang searah gerak, sebanding kecepatan.
     const dt = Math.max(1, now - p.lt);
     const vx = ((e.clientX - p.lx) / dt) * 1000, vy = ((e.clientY - p.ly) / dt) * 1000;
     const speed = Math.hypot(vx, vy);
     if (speed > 40) {
       angle.set(Math.atan2(vy, vx));
-      const k = Math.min(dome ? 0.08 : 0.32, speed / (dome ? 9000 : 2600));
-      if (g) g.k = k; else stretchRaw.set(k);
+      stretchRaw.set(Math.min(0.32, speed / 2600));
     }
     p.lx = e.clientX; p.ly = e.clientY; p.lt = now;
   };
