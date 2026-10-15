@@ -12,6 +12,7 @@ import type { UiIconName } from './Icon';
 import type { StageBox } from './WelcomeIntro';
 import HoloCard from './reactbits/HoloCard';
 import { addBackdropLayer } from './IntroBackdrop';
+import { FRAME_ORDER, onFrame } from '../frameLoop';
 import type { HoloPreset } from './reactbits/HoloCard';
 
 type Sticker =
@@ -335,7 +336,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
     // Arah melayang = arah letusannya (tetap di dalam kerucut V).
     const drift = cone.map((c) => ({ x: c.dx, y: c.dy }));
     const cruise = compact ? 16 : 22;
-    let last = start, raf = 0;
+    let last = start;
 
     const step = (t: number) => {
       const dt = Math.min(0.033, Math.max(0, (t - last) / 1000));
@@ -422,10 +423,10 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
       });
 
       paint(t);
-      raf = requestAnimationFrame(step);
     };
-    raf = requestAnimationFrame(step);
-    return () => { cancelAnimationFrame(raf); unpaint(); };
+    // Lewat frameLoop: jalan sebelum kanvas latar kaca menggambar posisi stiker frame ini.
+    const off = onFrame(step, FRAME_ORDER.stickers);
+    return () => { off(); unpaint(); };
     // Simulasi dimulai sekali per kemunculan; ukuran/posisi terbaru dibaca dari `live`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce, compact]);

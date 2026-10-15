@@ -10,6 +10,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { STARS } from './StarField';
+import { FRAME_ORDER, onFrame } from '../frameLoop';
 
 /** Jarak di luar kaca yang ikut digambar (px): sampel pembiasan di tepi dan jangkauan bloom cincin (RingBloom). */
 const MARGIN = 64;
@@ -39,11 +40,11 @@ export function IntroBackdrop({ canvasRef }: { canvasRef: RefObject<HTMLCanvasEl
     const stage = canvas?.parentElement;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !stage || !ctx) return undefined;
-    let raf = 0, frame = 0, version = 0;
+    let frame = 0, version = 0;
     let background = '', star = '', dark = false, placed = '', drawn = '';
 
+    // Setelah simulasi stiker di frame yang sama (frameLoop).
     const draw = () => {
-      raf = requestAnimationFrame(draw);
       const w = stage.clientWidth, h = stage.clientHeight;
       const glass = stage.querySelector('.intro-glass');
       if (!w || !h || !glass) return;
@@ -100,8 +101,7 @@ export function IntroBackdrop({ canvasRef }: { canvasRef: RefObject<HTMLCanvasEl
       // Versi baru -> GlassSurface mengunggah tekstur dan menggambar kaca ulang.
       canvas.dataset.frame = String(++version);
     };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    return onFrame(draw, FRAME_ORDER.backdrop);
   }, [canvasRef]);
 
   return <canvas ref={canvasRef} className="intro-backdrop" aria-hidden="true" />;
