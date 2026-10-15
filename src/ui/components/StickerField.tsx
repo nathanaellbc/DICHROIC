@@ -10,6 +10,8 @@ import type { ReactNode } from 'react';
 import { Icon } from './Icon';
 import type { UiIconName } from './Icon';
 import type { StageBox } from './WelcomeIntro';
+import HoloCard from './reactbits/HoloCard';
+import type { HoloPreset } from './reactbits/HoloCard';
 
 type Sticker =
   | { kind: 'stock'; label: string; sub: string; tone: string }
@@ -47,17 +49,106 @@ const STICKERS: ReadonlyArray<{ s: Sticker; r: number; small?: boolean }> = [
   { s: { kind: 'frame', hue: 330 }, r: 4, small: true },
 ];
 
-function StickerFace({ s }: { s: Sticker }): ReactNode {
+/** Pola foil HoloCard bergiliran per stiker. */
+const HOLO_PRESETS: readonly HoloPreset[] = ['bursts', 'stars', 'cosmos', 'shards', 'glitter', 'rainbow'];
+
+function StickerFace({ s, index }: { s: Sticker; index: number }): ReactNode {
   switch (s.kind) {
     case 'stock':
-      return <span className="sticker sticker-stock" style={{ ['--tone' as string]: s.tone }}><b>{s.label}</b><small>{s.sub}</small></span>;
+    case 'frame': {
+      // Kotak film dan bingkai: kartu foil holografik (HoloCard, React Bits).
+      const art = stickerArt(s);
+      if (!art) break;
+      return (
+        <HoloCard
+          image={art.src}
+          alt=""
+          width={art.width}
+          radius={art.radius}
+          preset={s.kind === 'frame' ? 'rainbow' : HOLO_PRESETS[index % HOLO_PRESETS.length]!}
+          intensity={0.6}
+          scale={1.6}
+          frame={art.frame}
+          edgeSparkle={0.9}
+          glare={0.45}
+          tiltMax={18}
+          hoverScale={1.06}
+          shadow={false}
+          className="sticker-holo"
+          // Rasio diketahui sejak awal (bukan rasio kartu bawaan sebelum gambar dimuat),
+          // supaya ukuran tabrakan stiker benar.
+          style={{ ['--hc-ratio' as string]: art.width / art.height }}
+        />
+      );
+    }
     case 'icon':
       return <span className="sticker sticker-icon"><Icon name={s.icon} size={20} strokeWidth={2} /></span>;
     case 'quote':
       return <span className="sticker sticker-quote">{s.text}</span>;
-    case 'frame':
-      return <span className="sticker sticker-frame" style={{ ['--hue' as string]: s.hue }} />;
   }
+  // Tanpa kanvas 2D: stiker CSS biasa.
+  return s.kind === 'stock'
+    ? <span className="sticker sticker-stock" style={{ ['--tone' as string]: s.tone }}><b>{s.label}</b><small>{s.sub}</small></span>
+    : s.kind === 'frame' ? <span className="sticker sticker-frame" style={{ ['--hue' as string]: (s as { hue: number }).hue }} /> : null;
+}
+
+const ART_SCALE = 3;
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", system-ui, sans-serif';
+const artCache = new Map<string, { src: string; width: number; height: number; radius: number; frame: number }>();
+
+/**
+ * Gambar muka stiker untuk HoloCard (tekstur WebGL): kotak film berwarna
+ * dengan nama stok, atau bingkai foto bergradien, berpinggiran putih seperti
+ * stiker CSS sebelumnya. Digambar sekali per stiker (resolusi 3x) lalu
+ * di-cache sebagai data URL (satu origin, aman untuk tekstur).
+ */
+function stickerArt(s: Extract<Sticker, { kind: 'stock' | 'frame' }>) {
+  const key = s.kind === 'stock' ? `stock|${s.label}|${s.sub}|${s.tone}` : `frame|${s.hue}`;
+  const cached = artCache.get(key);
+  if (cached) return cached;
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : undefined;
+  const ctx = canvas?.getContext('2d');
+  if (!canvas || !ctx) return undefined;
+  const k = ART_SCALE;
+  const round = (x: number, y: number, w: number, h: number, r: number, fill: string | CanvasGradient) => {
+    ctx.beginPath();
+    ctx.roundRect(x * k, y * k, w * k, h * k, r * k);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  };
+  let w: number, h: number, radius: number;
+  if (s.kind === 'stock') {
+    ctx.font = `700 ${14 * k}px ${FONT}`;
+    const label = ctx.measureText(s.label).width / k;
+    ctx.font = `600 ${10 * k}px ${FONT}`;
+    const sub = ctx.measureText(s.sub.toUpperCase()).width / k + s.sub.length * 0.6;
+    w = Math.ceil(Math.max(label, sub) + 30); h = 44; radius = 12;
+    canvas.width = w * k; canvas.height = h * k;
+    round(0, 0, w, h, radius, '#ffffff');
+    round(3, 3, w - 6, h - 6, radius - 3, s.tone);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `700 ${14 * k}px ${FONT}`;
+    ctx.fillText(s.label, (w / 2) * k, 21 * k);
+    ctx.globalAlpha = 0.85;
+    ctx.font = `600 ${10 * k}px ${FONT}`;
+    if ('letterSpacing' in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${0.6 * k}px`;
+    ctx.fillText(s.sub.toUpperCase(), (w / 2) * k, 34 * k);
+    ctx.globalAlpha = 1;
+  } else {
+    w = 62; h = 48; radius = 7;
+    canvas.width = w * k; canvas.height = h * k;
+    round(0, 0, w, h, radius, '#ffffff');
+    round(2, 2, w - 4, h - 4, radius - 1, '#111111');
+    const g = ctx.createLinearGradient(6 * k, 6 * k, (w - 6) * k, (h - 6) * k);
+    g.addColorStop(0, `hsl(${s.hue} 70% 70%)`);
+    g.addColorStop(1, `hsl(${s.hue + 40} 55% 38%)`);
+    round(6, 6, w - 12, h - 12, 3, g);
+  }
+  // Pinggiran berkilau HoloCard (persen lebar) = pinggiran putih 3 px.
+  const art = { src: canvas.toDataURL('image/png'), width: w, height: h, radius, frame: (3 / w) * 100 };
+  artCache.set(key, art);
+  return art;
 }
 
 /** Satu stiker dalam simulasi (px panggung, kecepatan px/s, rotasi derajat). */
@@ -67,6 +158,8 @@ interface Body {
   w: number; h: number; born: number; free: boolean;
   /** Baru dilempar: titik mendarat pindah ke tempat ia berhenti. */
   rehome?: boolean;
+  /** Pernah dilempar pengguna: boleh berada di bawah gelembung. */
+  thrown?: boolean;
   held?: { id: number; ox: number; oy: number; lx: number; ly: number; lt: number };
 }
 
@@ -190,7 +283,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           const b = list[j]!;
           if (!b.free) continue;
           collide(a, b, ra + radius(b) + 4);
-          spread(a, b, SPREAD * (compact ? 0.75 : 1), dt);
+          spread(a, b, SPREAD * (compact ? 0.6 : 0.85), dt);
         }
         if (a.held) continue;
         const dx = a.x - O.x, dy = a.y - O.y, dist = Math.hypot(dx, dy) || 1e-6, min = R + ra + 6;
@@ -201,6 +294,13 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           if (vn < 0) { a.vx -= 1.8 * vn * nx; a.vy -= 1.8 * vn * ny; a.vr += (a.vx * ny - a.vy * nx) * 0.05; }
         }
       }
+
+      // Letusan tetap di atas: lantai lunak setinggi gelembung (kecuali yang dilempar).
+      list.forEach((b) => {
+        if (!b.free || b.held || b.thrown) return;
+        const floor = O.y - R * 0.6;
+        if (b.y > floor) { b.vy -= (b.y - floor) * 30 * dt; if (b.vy > 0) b.vy *= 0.85; }
+      });
 
       // Dinding = tepi layar: pantul dengan sedikit kehilangan energi + putaran.
       list.forEach((b) => {
@@ -260,6 +360,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
     b.vr = b.vx * 0.08;
     b.held = undefined;
     b.rehome = true;
+    b.thrown = true;
     delete e.currentTarget.dataset.held;
   };
 
@@ -276,7 +377,7 @@ function StickerField({ origin, orbRadius, box, compact, reduce }: {
           onPointerUp={up(i)}
           onPointerCancel={up(i)}
         >
-          <StickerFace s={item.s} />
+          <StickerFace s={item.s} index={i} />
         </div>
       ))}
     </>

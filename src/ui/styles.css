@@ -552,22 +552,25 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
    yang berubah dari kubah ke gelembung ke tombol "+", stiker film. */
 .intro-stage { touch-action: pan-x; user-select: none; -webkit-user-select: none; }
 .intro-sky { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-/* Gelap: debu bintang halus dan cahaya biru di bawah kubah. */
-.intro-sky {
-  background:
-    radial-gradient(ellipse 70% 38% at 50% 104%, rgba(0, 120, 255, 0.34), transparent 70%),
-    radial-gradient(1px 1px at 12% 22%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1px 1px at 78% 14%, rgba(255, 255, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 63% 41%, rgba(255, 255, 255, 0.3), transparent),
-    radial-gradient(1px 1px at 28% 63%, rgba(255, 255, 255, 0.25), transparent),
-    radial-gradient(1px 1px at 88% 58%, rgba(255, 255, 255, 0.3), transparent),
-    radial-gradient(1px 1px at 41% 9%, rgba(255, 255, 255, 0.35), transparent),
-    radial-gradient(1px 1px at 7% 47%, rgba(255, 255, 255, 0.28), transparent);
+/* Gelap: cahaya biru di bawah kubah; bintang kecil di StarField. */
+.intro-sky { --intro-star: 255, 255, 255; background: radial-gradient(ellipse 70% 38% at 50% 104%, rgba(0, 120, 255, 0.34), transparent 70%); }
+.intro-stars { position: absolute; inset: 0; overflow: hidden; }
+/* Bintang: titik kecil berkelip pelan (redup -> terang -> redup), sedikit membesar saat terang. */
+.intro-star {
+  position: absolute; border-radius: 50%; background: rgb(var(--intro-star));
+  opacity: var(--star-dim); transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px rgba(var(--intro-star), 0.6);
+  animation: intro-twinkle ease-in-out infinite;
 }
+@keyframes intro-twinkle {
+  0%, 100% { opacity: calc(var(--star-dim) * 0.35); transform: translate(-50%, -50%) scale(0.7); }
+  50% { opacity: var(--star-dim); transform: translate(-50%, -50%) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) { .intro-star { animation: none; } }
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .intro-sky { background: radial-gradient(ellipse 70% 34% at 50% 104%, rgba(0, 145, 255, 0.16), transparent 70%); }
+  :root:not([data-theme="dark"]) .intro-sky { --intro-star: 70, 86, 120; background: radial-gradient(ellipse 70% 34% at 50% 104%, rgba(0, 145, 255, 0.16), transparent 70%); }
 }
-:root[data-theme="light"] .intro-sky { background: radial-gradient(ellipse 70% 34% at 50% 104%, rgba(0, 145, 255, 0.16), transparent 70%); }
+:root[data-theme="light"] .intro-sky { --intro-star: 70, 86, 120; background: radial-gradient(ellipse 70% 34% at 50% 104%, rgba(0, 145, 255, 0.16), transparent 70%); }
 
 .intro-wordmark {
   position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%);
@@ -584,20 +587,13 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 .intro-orb {
   position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; margin: 0; border: 0; border-radius: 50%;
   transform-origin: 50% 50%; cursor: grab; overflow: hidden; color: var(--label); pointer-events: auto; touch-action: none;
-  will-change: transform;
-  /* Nyaris bening: pinggiran tipis terang, kilap atas samar, biru di dasar. */
-  background:
-    radial-gradient(ellipse 60% 14% at 50% 3%, rgba(255, 255, 255, 0.16), transparent 70%),
-    radial-gradient(circle at 50% 108%, rgba(0, 145, 255, 0.26), transparent 52%);
-  box-shadow:
-    inset 0 0 0 2px var(--intro-glass-rim),
-    inset 0 6px 14px rgba(255, 255, 255, 0.10),
-    inset 0 -40px 90px rgba(0, 145, 255, 0.14),
-    0 -10px 80px rgba(0, 120, 255, 0.16);
+  will-change: transform; background: transparent;
+  box-shadow: 0 -10px 80px rgba(0, 120, 255, 0.14);
 }
-.intro-orb:not([data-refract]) { -webkit-backdrop-filter: blur(16px) saturate(1.6); backdrop-filter: blur(16px) saturate(1.6); }
+/* Kaca: GlassSurface (React Bits) memenuhi tombol; isi (halo, petunjuk, "+") di atasnya. */
+.intro-glass { position: absolute; inset: 0; }
+.intro-glass > .glass-surface__content { padding: 0; }
 .intro-orb:focus-visible { outline: none; box-shadow: inset 0 0 0 8px rgba(0, 145, 255, 0.7); }
-.intro-orb[data-phase="ready"] { box-shadow: inset 0 0 0 10px var(--intro-glass-rim), inset 0 60px 120px rgba(255, 255, 255, 0.2), inset 0 -80px 160px rgba(0, 145, 255, 0.22); }
 /* Halo dikroik: elips biru dengan inti putih yang menyapu kubah. */
 .intro-halo {
   position: absolute; left: 50%; top: 0; width: 420px; height: 300px; margin-left: -210px; border-radius: 50%;
@@ -606,10 +602,21 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 }
 .intro-plus { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
 
-.intro-swipe {
-  position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom, 0px) + min(13%, 120px)); z-index: 3;
-  text-align: center; font-size: 13px; letter-spacing: -0.01em; color: var(--start-sub); pointer-events: none;
+.intro-halo, .intro-plus { z-index: 2; }
+/* Petunjuk di dalam kubah: tipis dan kecil, chevron mengambang, kilau lewat teks. */
+.intro-hint {
+  position: absolute; left: 50%; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transform-origin: 50% 0; pointer-events: none; white-space: nowrap; color: var(--start-sub);
 }
+.intro-hint-chevron { display: grid; place-items: center; }
+.intro-hint-text {
+  font-size: 13px; font-weight: 300; letter-spacing: 0.04em;
+  background: linear-gradient(90deg, var(--start-sub) 0%, var(--start-sub) 35%, var(--label) 50%, var(--start-sub) 65%, var(--start-sub) 100%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: intro-hint-shine 3.2s ease-in-out infinite;
+}
+@keyframes intro-hint-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@media (prefers-reduced-motion: reduce) { .intro-hint-text { animation: none; color: var(--start-sub); background: none; } }
 
 .intro-stickers { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .intro-sticker {
@@ -618,6 +625,8 @@ html[data-size="regular"] .start-cta { min-height: 40px; font-size: 15px; paddin
 }
 .intro-sticker[data-held] { cursor: grabbing; z-index: 1; }
 .intro-sticker > .sticker { transition: box-shadow 0.2s; }
+.sticker-holo { display: block; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.28)); transition: filter 0.2s; }
+.intro-sticker[data-held] > .sticker-holo { filter: drop-shadow(0 16px 26px rgba(0, 0, 0, 0.4)); }
 .intro-sticker[data-held] > .sticker { box-shadow: 0 16px 34px rgba(0, 0, 0, 0.45); }
 .intro-sticker[data-held] > .sticker-frame { box-shadow: 0 0 0 2px #fff, 0 16px 34px rgba(0, 0, 0, 0.45); }
 .sticker {
