@@ -138,12 +138,11 @@ export function GlassOrb({ phase, box, onEnter, onChoose, reduce, hint }: {
             width={ORB}
             height={ORB}
             borderRadius={ORB / 2}
-            borderWidth={0.09}
-            // Kubah lebih lebar dari layar: pembiasan lemah supaya tepi layar tidak ikut terpantul.
-            distortionScale={dome ? -40 : -150}
-            displace={0.6}
-            backgroundOpacity={0.06}
-            saturation={1.5}
+            // Props contoh asli React Bits; kubah (lebih lebar dari layar) pembiasannya dilemahkan
+            // supaya tepi layar tidak ikut terpantul.
+            distortionScale={dome ? -40 : -180}
+            displace={0.5}
+            backgroundOpacity={0.1}
           />
           {/* Halo dikroik yang menyapu kubah saat masuk (cincin biru, inti putih). */}
           <AnimatePresence>
