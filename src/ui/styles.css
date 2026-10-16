@@ -1551,22 +1551,16 @@ html[data-size="regular"] .recent-slot { max-height: 460px; }
 .recent-tray {
   position: absolute; left: 0; right: 0; bottom: 0; height: 92px; z-index: 0;
   display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; padding: 0 6px;
-  background: rgba(var(--ink), 0.06);
 }
 .recent-action {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 0; border: 0; background: none;
-  color: var(--label); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; border: 0; background: none;
+  color: var(--label-2); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s, transform 0.12s;
 }
-.recent-action-icon {
-  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--fill-strong); transition: transform 0.12s, filter 0.12s;
-}
-.recent-action:active .recent-action-icon { transform: scale(0.92); }
-.recent-action:hover .recent-action-icon { filter: brightness(1.15); }
-.recent-action:focus-visible { outline: none; }
-.recent-action:focus-visible .recent-action-icon { outline: 2px solid var(--blue); outline-offset: 2px; }
-.recent-action[data-destructive] { color: var(--red-text); }
-.recent-action[data-destructive] .recent-action-icon { background: color-mix(in srgb, var(--red) 22%, transparent); }
+.recent-action-icon { display: grid; place-items: center; height: 22px; }
+.recent-action:hover { color: var(--label); }
+.recent-action:active { transform: scale(0.92); }
+.recent-action:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
 .recent-rename {
   font: inherit; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--label);
   background: var(--fill); border: 0; border-radius: 8px; padding: 0 6px; margin: 0 -6px; outline: 2px solid var(--blue); min-width: 0;
