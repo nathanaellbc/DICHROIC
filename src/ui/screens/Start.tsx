@@ -190,7 +190,6 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
               </motion.div>
               <motion.h1 className="welcome-title" variants={rise}>
                 Welcome back.
-                <span>Pick up a roll.</span>
               </motion.h1>
             </>
           ) : over ? (
@@ -213,6 +212,9 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
                 onOpen={openProject}
                 onRelink={relink}
                 onMenu={(card, anchor) => setMenu({ card, anchor })}
+                onRename={(card, name) => void projects.rename(card.id, name)}
+                onDuplicate={(card) => void projects.duplicate(card.id)}
+                onDelete={(card) => projects.remove(card.id)}
               />
             </motion.div>
           )}

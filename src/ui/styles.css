@@ -1542,6 +1542,35 @@ html[data-size="regular"] .recent-slot { max-height: 460px; }
   transition: filter 0.4s ease, transform 0.6s cubic-bezier(0.32, 1.2, 0.42, 1);
 }
 .recent-slat[data-open] .recent-photo { filter: none; transform: none; }
+/* Foto bilah terbuka yang bisa diangkat (RecentStrip); baki aksi di bawahnya. */
+.recent-lift { position: absolute; inset: 0; z-index: 1; border-radius: inherit; overflow: hidden; background: var(--fill-soft); will-change: transform; }
+.recent-grabber {
+  position: absolute; left: 50%; bottom: 8px; width: 36px; height: 5px; margin-left: -18px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.72); box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25); pointer-events: none;
+}
+.recent-tray {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 92px; z-index: 0;
+  display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; padding: 0 6px;
+  background: rgba(var(--ink), 0.06);
+}
+.recent-action {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 0; border: 0; background: none;
+  color: var(--label); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.recent-action-icon {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--fill-strong); transition: transform 0.12s, filter 0.12s;
+}
+.recent-action:active .recent-action-icon { transform: scale(0.92); }
+.recent-action:hover .recent-action-icon { filter: brightness(1.15); }
+.recent-action:focus-visible { outline: none; }
+.recent-action:focus-visible .recent-action-icon { outline: 2px solid var(--blue); outline-offset: 2px; }
+.recent-action[data-destructive] { color: var(--red-text); }
+.recent-action[data-destructive] .recent-action-icon { background: color-mix(in srgb, var(--red) 22%, transparent); }
+.recent-rename {
+  font: inherit; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--label);
+  background: var(--fill); border: 0; border-radius: 8px; padding: 0 6px; margin: 0 -6px; outline: 2px solid var(--blue); min-width: 0;
+}
 .recent-num {
   position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; pointer-events: none;
   font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; color: rgba(255, 255, 255, 0.7); transition: opacity 0.2s;
