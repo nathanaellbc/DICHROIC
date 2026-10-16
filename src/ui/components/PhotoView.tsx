@@ -122,6 +122,7 @@ export function PhotoView({
   brush,
   fitInsets,
   reveal,
+  eyedropper,
 }: {
   frame?: Frame;
   original?: Frame;
@@ -144,6 +145,15 @@ export function PhotoView({
    * kembali dari Remove Object, yang memperlihatkan foto asli tanpa grading.
    */
   reveal?: number;
+  /**
+   * Pipet white balance: selama aktif, ketukan (tanpa geser) di foto memilih
+   * titik uv itu. Geser dan pinch tetap menggeser/memperbesar foto.
+   */
+  eyedropper?: {
+    active: boolean;
+    onPick: (x: number, y: number) => void;
+    onCancel: () => void;
+  };
   brush?: {
     enabled: boolean;
     onStart: (point: Point, displayedWidth: number) => void;
@@ -392,6 +402,7 @@ export function PhotoView({
   const splitAt = (clientX: number) => clamp01(toPhoto(local(clientX, 0).x, 0).x);
 
   const picking = focus?.picking === true;
+  const dropping = eyedropper?.active === true && !picking;
   const cancelFocusUpdate = () => {
     cancelAnimationFrame(focusFrame.current);
     focusFrame.current = 0;
@@ -428,6 +439,11 @@ export function PhotoView({
   }, [picking]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (dropping && e.key === 'Escape') {
+      e.preventDefault();
+      eyedropper!.onCancel();
+      return;
+    }
     if (!focus?.show) return;
     const point = cursor ?? focus;
     const step = e.shiftKey ? 0.1 : 0.02;
@@ -494,7 +510,7 @@ export function PhotoView({
     }
     gesture.current = { kind: 'pan', x: p.x, y: p.y, view: dragOrigin(), moved: false, t: performance.now() };
     window.clearTimeout(holdTimer.current);
-    if (!brush) holdTimer.current = window.setTimeout(() => setPeek(true), 220);
+    if (!brush && !dropping) holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!pointers.current.has(e.pointerId)) return;
@@ -550,10 +566,14 @@ export function PhotoView({
         setAim(null);
       }
     }
+    const tapped = tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0;
+    if (tapped && dropping) {
+      const uv = toPhoto(g.x, g.y);
+      if (uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1) eyedropper!.onPick(uv.x, uv.y);
+    }
     // Ketukan singkat tanpa geser membuka layar penuh, ditunda sebentar supaya
     // ketuk/klik dua kali tetap berarti zoom.
-    if (tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0
-        && performance.now() - g.t < TAP_MAX_MS && canFullscreen) {
+    else if (tapped && performance.now() - g.t < TAP_MAX_MS && canFullscreen) {
       window.clearTimeout(tapTimer.current);
       tapTimer.current = window.setTimeout(() => setFullscreen(true), DOUBLE_TAP_MS);
     }
@@ -580,7 +600,7 @@ export function PhotoView({
   const sy = (v: number) => view.ty + v * view.s * rect.height;
 
   const showOriginal = !!original && !picking && (compare || peek);
-  const canFullscreen = !!frame && !content && !brush && !compare && !picking;
+  const canFullscreen = !!frame && !content && !brush && !compare && !picking && !dropping;
   /** Posisi foto di layar sekarang (ikut zoom/geser): titik awal/akhir animasi layar penuh. */
   const photoBox = (): Box | null => {
     const box = areaRef.current?.getBoundingClientRect();
@@ -597,7 +617,7 @@ export function PhotoView({
       role={picking ? 'application' : undefined}
       aria-label={picking ? 'Focus point. Hold and drag to select. Arrow keys move it, Enter picks the subject, Escape cancels.' : undefined}
       onKeyDown={onKeyDown}
-      style={{ position: 'absolute', inset: 0, overflow: brush ? 'hidden' : 'visible', outline: 'none', touchAction: 'none', cursor: picking || brush?.enabled ? 'crosshair' : shown && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: brush ? 'hidden' : 'visible', outline: 'none', touchAction: 'none', cursor: picking || brush?.enabled || dropping ? 'crosshair' : shown && !compare ? 'grab' : undefined, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
@@ -683,6 +703,11 @@ export function PhotoView({
             {picking && (
               <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Hold & drag to focus · grey is outside focus
+              </span>
+            )}
+            {dropping && (
+              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Tap something white or grey
               </span>
             )}
             {peek && !compare && !picking && (

@@ -85,7 +85,7 @@ describe('alat UI == permukaan parameter engine', () => {
     for (const group of GROUPS) {
       for (const tool of group.tools) {
         if (tool.kind === 'locked') continue;
-        const fields: Array<keyof typeof FIELD_STATUS> = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : [tool.field];
+        const fields: Array<keyof typeof FIELD_STATUS> = tool.kind === 'diffusion' ? [tool.enabledBy, tool.familyField, tool.strengthField] : tool.kind === 'whiteBalance' ? [...tool.fields] : [tool.field];
         if (tool.kind === 'slider' && tool.enabledBy) fields.push(tool.enabledBy);
         // Ekstensi di luar spektrafilm (tanpa oracle Python) hanya di grup yang
         // menyatakannya: Camera Raw dan Lens blur.

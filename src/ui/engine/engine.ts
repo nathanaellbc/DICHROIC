@@ -716,6 +716,21 @@ export class Engine {
     return (Object.keys(params) as Array<keyof RenderParams>).some((k) => params[k] !== defaults[k]);
   }
 
+  /**
+   * White balance dari foto: `at` = titik uv yang seharusnya putih/abu-abu
+   * (pipet), tanpa `at` = Auto. Temp dan Tint dipasang sebagai satu langkah
+   * undo, jadi slider ikut bergeser. `false` bila titik itu tidak bisa dipakai.
+   */
+  async whiteBalance(at?: { x: number; y: number }): Promise<boolean> {
+    const client = this.#client;
+    if (!client || this.#state.phase !== 'editing') return false;
+    const result = await client.whiteBalance(at);
+    if (!result || client !== this.#client || this.#state.phase !== 'editing') return false;
+    this.#lastEditAt = 0;
+    this.setParams(result);
+    return true;
+  }
+
   /** `record: false` untuk undo/redo sendiri (tidak menambah langkah). */
   setParams(patch: Partial<RenderParams>, record = true): void {
     const client = this.#client;

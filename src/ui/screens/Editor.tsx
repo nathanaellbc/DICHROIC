@@ -119,7 +119,7 @@ export interface EditorProps {
 
 export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }: EditorProps) {
   const [group, setGroup] = useState<GroupId>('film');
-  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ camera: 'cameraWhiteBalanceK', lens: 'lensBlur', film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
+  const [toolByGroup, setToolByGroup] = useState<Record<GroupId, string>>({ camera: 'whiteBalance', lens: 'lensBlur', film: 'printExposureEv', color: 'filterC', darkroom: 'dirCouplersAmount', texture: 'halationAmount' });
   const [compare, setCompare] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [removalPreview, setRemovalPreview] = useState<HTMLDivElement | null>(null);
@@ -146,12 +146,34 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const hasPhoto = !!state.frame;
   const [scope, setScope] = useScopePrefs(wide);
 
+  // Pipet white balance: aktif sampai satu ketukan di foto, hanya di grup Camera.
+  const [pickingWb, setPickingWb] = useState(false);
+  const [wbBusy, setWbBusy] = useState(false);
+  useEffect(() => setPickingWb(false), [group, state.fileName]);
+  const runWhiteBalance = async (at?: { x: number; y: number }) => {
+    setWbBusy(true);
+    try {
+      const ok = await engine.whiteBalance(at);
+      if (!ok) onToast(at ? 'Pick something white or grey that isn’t blown out' : 'No neutral colour found for Auto');
+    } catch (error) {
+      onError(error);
+    } finally {
+      setWbBusy(false);
+    }
+  };
+
   const ctx: ToolContext = {
     params: previewParams,
     defaults: state.defaults,
     onPatch: (patch) => engine.setParams(normalizePatch(state.params, patch)),
     onInteractionChange: engine.setInteracting,
     onOpenList: (tool) => setSheet({ kind: 'list', toolId: tool.id }),
+    whiteBalance: {
+      picking: pickingWb,
+      busy: wbBusy,
+      onPick: () => setPickingWb((on) => !on),
+      onAuto: () => { setPickingWb(false); void runWhiteBalance(); },
+    },
     lens: {
       depth: state.depth,
       aspect: state.frame ? state.frame.width / state.frame.height : 1.5,
@@ -258,6 +280,11 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       label={photoLabel}
       sourceSize={engine.imageSize}
       onResolutionChange={engine.setPreviewLongEdge}
+      eyedropper={{
+        active: pickingWb && group === 'camera',
+        onPick: (x, y) => { setPickingWb(false); void runWhiteBalance({ x, y }); },
+        onCancel: () => setPickingWb(false),
+      }}
       focus={{
         x: state.params.lensFocusX,
         y: state.params.lensFocusY,
@@ -641,7 +668,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
               </motion.h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {(tool.kind === 'slider' || tool.kind === 'stepper') && (
+              {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'whiteBalance') && (
                 <span className="t-title3 tabular mobile-tool-value">{valueText(tool, state.params)}</span>
               )}
               <ResetButton tool={tool} ctx={ctx} />
@@ -910,7 +937,6 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
                 {tool.section && tool.section !== tools[index - 1]?.section && (
                   <div className="camera-section">
                     <h3>{tool.section}</h3>
-                    {tool.section === 'White Balance' && <PressButton className="capsule plain" onClick={() => ctx.onPatch({ cameraWhiteBalanceK: state.defaults.cameraWhiteBalanceK, cameraTint: state.defaults.cameraTint })}>Reset WB</PressButton>}
                   </div>
                 )}
                 <InspectorTool tool={tool} ctx={ctx} />

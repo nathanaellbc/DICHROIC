@@ -315,3 +315,109 @@ export function hsvSaturationPixel(rgb: readonly [number, number, number], gain:
   const scale = Math.min(Math.max(gain, 0), value / chroma);
   return rgb.map((c) => Math.max(value - (value - c) * scale, 0)) as [number, number, number];
 }
+
+/**
+ * White balance dari warna yang seharusnya netral: suhu dan tint yang membuat
+ * `neutral` (RGB linear di primer input, sesudah decode) keluar dari
+ * `whiteBalanceRgb` dengan R = G = B. Ini kebalikan operator di atas, sama
+ * dengan "camera neutral -> white balance" di DNG Specification (Adobe,
+ * "Translating Camera Neutral Coordinates to White Balance xy Coordinates"):
+ * temp/tint dicari ulang lewat operator maju itu sendiri, jadi hasilnya persis
+ * netral di model yang dirender, bukan di pendekatan lokus yang lain.
+ *
+ * Pencarian: kisi kasar mired x tint, lalu Gauss-Newton dua dimensi pada
+ * log(R/G), log(B/G). Di luar rentang slider hasilnya dijepit ke tepi (warna
+ * yang terlalu jenuh untuk dijadikan putih). `undefined` bila tidak ada sinyal.
+ */
+export function solveWhiteBalance(
+  rgbToXyz: ArrayLike<number>,
+  neutral: readonly [number, number, number],
+): { whiteBalanceK: number; tint: number } | undefined {
+  if (!neutral.every((c) => Number.isFinite(c) && c > 1e-6)) return undefined;
+  const { min: kMin, max: kMax } = CAMERA_LIMITS.whiteBalanceK;
+  const { min: tMin, max: tMax } = CAMERA_LIMITS.tint;
+  const mMin = 1e6 / kMax, mMax = 1e6 / kMin;
+  const residual = (mired: number, tint: number): [number, number] => {
+    const m = whiteBalanceRgb(rgbToXyz, 1e6 / mired, tint);
+    const c = [0, 1, 2].map((r) => m[r * 3]! * neutral[0] + m[r * 3 + 1]! * neutral[1] + m[r * 3 + 2]! * neutral[2]);
+    const g = Math.max(c[1]!, 1e-12);
+    return [Math.log(Math.max(c[0]!, 1e-12) / g), Math.log(Math.max(c[2]!, 1e-12) / g)];
+  };
+  const cost = (r: [number, number]) => r[0] * r[0] + r[1] * r[1];
+  let best = { mired: 1e6 / REFERENCE_TEMP_K, tint: 0, cost: Infinity };
+  for (let i = 0; i <= 32; i += 1) {
+    const mired = mMin + ((mMax - mMin) * i) / 32;
+    for (let j = 0; j <= 16; j += 1) {
+      const tint = tMin + ((tMax - tMin) * j) / 16;
+      const c = cost(residual(mired, tint));
+      if (c < best.cost) best = { mired, tint, cost: c };
+    }
+  }
+  let { mired, tint } = best;
+  for (let iter = 0; iter < 30; iter += 1) {
+    const r = residual(mired, tint);
+    if (cost(r) < 1e-14) break;
+    const hm = 0.5, ht = 0.002;
+    const rm1 = residual(mired + hm, tint), rm0 = residual(mired - hm, tint);
+    const rt1 = residual(mired, tint + ht), rt0 = residual(mired, tint - ht);
+    const j00 = (rm1[0] - rm0[0]) / (2 * hm), j10 = (rm1[1] - rm0[1]) / (2 * hm);
+    const j01 = (rt1[0] - rt0[0]) / (2 * ht), j11 = (rt1[1] - rt0[1]) / (2 * ht);
+    const det = j00 * j11 - j01 * j10;
+    if (!(Math.abs(det) > 1e-18)) break;
+    const dm = (j11 * r[0] - j01 * r[1]) / det;
+    const dt = (-j10 * r[0] + j00 * r[1]) / det;
+    // Langkah teredam: mundur separuh sampai biaya turun (Gauss-Newton dengan line search).
+    let step = 1;
+    let moved = false;
+    while (step > 1 / 64) {
+      const nm = Math.min(mMax, Math.max(mMin, mired - step * dm));
+      const nt = Math.min(tMax, Math.max(tMin, tint - step * dt));
+      if (cost(residual(nm, nt)) < cost(r)) {
+        mired = nm;
+        tint = nt;
+        moved = true;
+        break;
+      }
+      step /= 2;
+    }
+    if (!moved) break;
+  }
+  return {
+    whiteBalanceK: Math.min(kMax, Math.max(kMin, Math.round(1e6 / mired))),
+    tint: Math.min(tMax, Math.max(tMin, Math.round(tint * 1000) / 1000)) || 0,
+  };
+}
+
+/**
+ * Warna iluminan perkiraan untuk Auto WB: "Shades of Gray" (Finlayson &
+ * Trezzi, "Shades of Gray and Colour Constancy", IS&T CIC 12, 2004) -- rata-rata
+ * Minkowski orde p per kanal, e_c = (mean c^p)^(1/p). p = 1 adalah Grey-World,
+ * p -> tak hingga adalah Max-RGB; p = 6 memberi galat terkecil di data uji
+ * mereka, dan termasuk metode statis yang dibandingkan Gijsenij, Gevers & van
+ * de Weijer ("Computational Color Constancy: Survey and Experiments", IEEE
+ * TIP 20(9), 2011). Piksel terpotong (salah satu kanal dekat puncak gambar)
+ * dan piksel sangat gelap (didominasi derau) tidak dihitung.
+ *
+ * `rgb`: piksel linear RGB berurutan (stride 3), primer input.
+ */
+export function shadesOfGray(rgb: Float32Array, p = 6): [number, number, number] | undefined {
+  let peak = 0;
+  for (let i = 0; i < rgb.length; i += 1) if (rgb[i]! > peak) peak = rgb[i]!;
+  if (!(peak > 0)) return undefined;
+  const clip = 0.97 * peak;
+  const dark = 0.002 * peak;
+  const sum = [0, 0, 0];
+  let count = 0;
+  for (let i = 0; i + 2 < rgb.length; i += 3) {
+    const r = rgb[i]!, g = rgb[i + 1]!, b = rgb[i + 2]!;
+    const hi = Math.max(r, g, b);
+    if (hi >= clip || hi <= dark || !(Math.min(r, g, b) >= 0)) continue;
+    // Dinormalisasi ke puncak supaya c^6 tidak underflow/overflow.
+    sum[0]! += (r / peak) ** p;
+    sum[1]! += (g / peak) ** p;
+    sum[2]! += (b / peak) ** p;
+    count += 1;
+  }
+  if (count < 16) return undefined;
+  return sum.map((s) => peak * (s / count) ** (1 / p)) as [number, number, number];
+}

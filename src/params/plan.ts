@@ -352,6 +352,30 @@ function cameraFrame(
   return cameraFrameValues(settings, rgbToXyz, pivot);
 }
 
+/**
+ * Yang dilihat white balance "Camera Raw" dari gambar ini: matriks RGB input
+ * -> XYZ dan fungsi encoded -> linear persis seperti shader (decode CCTF
+ * dengan pengali auto-exposure, atau identitas untuk input linear). Dipakai
+ * pemilih putih dan Auto WB (`solveWhiteBalance`, `shadesOfGray`).
+ * `measure`: gambar kecil (<= 256 px) untuk mengukur auto-exposure.
+ */
+export function cameraWhiteInput(
+  params: RenderParams,
+  bundle: AssetBundle,
+  measure: PlanImage,
+): { rgbToXyz: number[]; decode: (value: number) => number } {
+  const inputColorSpace = validateInputColorSpace(bundle, params.inputColorSpace, params.inputCctfDecoding);
+  const all = bundle.staticTable('inputMeterXyzMatrices');
+  const rgbToXyz = Array.from({ length: 9 }, (_, i) => all[inputColorSpace * 9 + i]!);
+  if (!params.inputCctfDecoding) return { rgbToXyz, decode: (v) => v };
+  const decode = inputDecoder(bundle, inputColorSpace);
+  const autoEv = params.autoExposure
+    ? measureAutoExposureEv(measure.rgba, measure.width, measure.height, all, inputColorSpace, decode)
+    : 0;
+  const scale = 2 ** autoEv;
+  return { rgbToXyz, decode: scale === 1 ? decode : (v) => decode(v * scale) };
+}
+
 /** Rentang lens blur (`host/lens.ts`). */
 export function validateLens(params: RenderParams): void {
   const check = (field: keyof RenderParams, ok: boolean, range: string) => {

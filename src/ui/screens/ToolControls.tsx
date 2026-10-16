@@ -32,7 +32,8 @@ import {
   valueText,
   visibleTools,
 } from '../model/tools';
-import type { ChoiceTool, LensTool, StepperTool, Tool, ToolGroup } from '../model/tools';
+import { WB_TEMP, WB_TINT } from '../model/tools';
+import type { ChoiceTool, LensTool, SliderTool, StepperTool, Tool, ToolGroup } from '../model/tools';
 
 /** Status peta kedalaman dan aksi lens blur (grup Lens). */
 export interface LensContext {
@@ -56,6 +57,16 @@ export interface LensContext {
   onRefine: () => void;
 }
 
+/** Pemilih putih dan Auto di alat White Balance (grup Camera). */
+export interface WhiteBalanceContext {
+  /** Mode pipet aktif: ketukan berikutnya di foto memilih warna netral. */
+  picking: boolean;
+  /** Sedang menghitung (pipet atau Auto). */
+  busy: boolean;
+  onPick: () => void;
+  onAuto: () => void;
+}
+
 export interface ToolContext {
   params: RenderParams;
   defaults: RenderParams;
@@ -64,6 +75,7 @@ export interface ToolContext {
   /** Daftar pilihan panjang (colour space input) dibuka di sheet terpisah. */
   onOpenList: (tool: ChoiceTool) => void;
   lens?: LensContext;
+  whiteBalance?: WhiteBalanceContext;
 }
 
 /** Pilihan > 10 tidak muat sebagai kapsul; tampil sebagai tombol yang membuka daftar. */
@@ -91,7 +103,7 @@ export function ToolSwitch({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
 }
 
 export function ResetButton({ tool, ctx, compact }: { tool: Tool; ctx: ToolContext; compact?: boolean }) {
-  const show = (tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion') && isModified(tool, ctx.params, ctx.defaults);
+  const show = (tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'diffusion' || tool.kind === 'whiteBalance') && isModified(tool, ctx.params, ctx.defaults);
   return (
     <motion.span
       initial={false}
@@ -242,9 +254,67 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
     }
     case 'lens':
       return <LensCard tool={tool} ctx={ctx} />;
+    case 'whiteBalance':
+      return <WhiteBalanceCard note={tool.note} ctx={ctx} dense={dense} />;
     case 'locked':
       return <p className="t-subhead secondary" style={{ margin: 0 }}>{tool.note}</p>;
   }
+}
+
+/**
+ * White Balance: pipet dan Auto di atas, Temp dan Tint di bawahnya. Pipet
+ * dan Auto hanya mengisi kedua field, jadi slider ikut bergeser ke hasilnya
+ * dan tetap bisa disetel halus sesudahnya.
+ */
+function WhiteBalanceCard({ note, ctx, dense }: { note: string; ctx: ToolContext; dense?: boolean }) {
+  const wb = ctx.whiteBalance;
+  const row = (tool: SliderTool) => {
+    const range = sliderRange(tool, ctx.params);
+    return (
+      <div key={tool.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+          <span className="t-footnote secondary">{tool.title}</span>
+          <span className="t-footnote secondary tabular">{valueText(tool, ctx.params)}</span>
+        </span>
+        <Slider
+          label={tool.title}
+          value={sliderPosition(tool, ctx.params)}
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          defaultValue={sliderPosition(tool, { ...ctx.params, [tool.field]: ctx.defaults[tool.field] })}
+          valueText={valueText(tool, ctx.params)}
+          onChange={(v) => ctx.onPatch(positionPatch(tool, v, ctx.params))}
+          onInteractionChange={ctx.onInteractionChange}
+        />
+      </div>
+    );
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: dense ? 6 : 10, width: '100%' }}>
+      {wb && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <PressButton
+            className={`capsule${wb.picking ? ' prominent' : ''}`}
+            aria-pressed={wb.picking}
+            disabled={wb.busy}
+            onClick={wb.onPick}
+            style={{ flex: 1 }}
+          >
+            <Icon name="pipette" size={dense ? 14 : 16} />
+            {wb.picking ? 'Tap white or grey' : 'Pick White'}
+          </PressButton>
+          <PressButton className="capsule" disabled={wb.busy} onClick={wb.onAuto} style={{ flex: 1 }}>
+            {wb.busy ? <Spinner size={14} /> : <Icon name="auto" size={dense ? 14 : 16} />}
+            Auto
+          </PressButton>
+        </div>
+      )}
+      {row(WB_TEMP)}
+      {row(WB_TINT)}
+      {!dense && <p className="t-footnote secondary" style={{ margin: 0 }}>{note}</p>}
+    </div>
+  );
 }
 
 function megabytes(bytes: number): string {
@@ -421,7 +491,7 @@ export function InspectorTool({ tool, ctx }: { tool: Tool; ctx: ToolContext }) {
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {stepper && <span className="t-body secondary tabular" style={{ whiteSpace: 'nowrap' }}>{stepper.text}</span>}
-          {(tool.kind === 'slider' || tool.kind === 'diffusion') && <span className="t-body secondary tabular" style={{ whiteSpace: 'nowrap' }}>{valueText(tool, ctx.params)}</span>}
+          {(tool.kind === 'slider' || tool.kind === 'diffusion' || tool.kind === 'whiteBalance') && <span className="t-body secondary tabular" style={{ whiteSpace: 'nowrap' }}>{valueText(tool, ctx.params)}</span>}
           <ResetButton tool={tool} ctx={ctx} compact />
           {stepper && (
             <span style={{ display: 'inline-flex', gap: 2, marginLeft: 2 }}>

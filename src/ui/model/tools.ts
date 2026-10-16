@@ -150,7 +150,18 @@ export interface LensTool extends ToolBase {
   note: string;
 }
 
-export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | DiffusionTool | LockedTool | LensTool;
+/**
+ * White balance "Camera Raw": Temp dan Tint dalam satu alat, plus pemilih
+ * putih (ketuk warna yang seharusnya netral) dan Auto. Keduanya hanya
+ * mengisi dua field ini, jadi slider ikut bergeser ke hasilnya.
+ */
+export interface WhiteBalanceTool extends ToolBase {
+  kind: 'whiteBalance';
+  fields: readonly ['cameraWhiteBalanceK', 'cameraTint'];
+  note: string;
+}
+
+export type Tool = SliderTool | ToggleTool | StepperTool | ChoiceTool | DiffusionTool | LockedTool | LensTool | WhiteBalanceTool;
 
 export interface ToolGroup {
   id: GroupId;
@@ -219,14 +230,17 @@ export const DIFFUSION_FAMILIES: readonly ChoiceOption<DiffusionFilterFamily>[] 
  */
 const LENS_NOTE = 'Beyond spektrafilm.';
 
+/** Dua slider di dalam alat White Balance (tidak tampil sendiri di deretan alat). */
+export const WB_TEMP: SliderTool = { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', relativeCenter: 5500, label: 'Temp', title: 'Temperature', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, note: 'Cooler ← → warmer.' };
+export const WB_TINT: SliderTool = { kind: 'slider', id: 'cameraTint', field: 'cameraTint', relativeCenter: 0, label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 0, note: 'Green ← → magenta.' };
+
 export const GROUPS: readonly ToolGroup[] = [
   {
     id: 'camera',
     label: 'Camera',
     icon: 'camera',
     tools: [
-      { kind: 'slider', id: 'cameraWhiteBalanceK', field: 'cameraWhiteBalanceK', section: 'White Balance', relativeCenter: 5500, label: 'Temp', title: 'Temperature', icon: 'temperature', min: 2000, max: 12000, step: 50, digits: 0, note: 'Cooler ← → warmer. Relative to the decoded white balance.' },
-      { kind: 'slider', id: 'cameraTint', field: 'cameraTint', section: 'White Balance', relativeCenter: 0, label: 'Tint', title: 'Tint', icon: 'tint', min: -1, max: 1, step: 0.01, digits: 0, note: 'Green ← → magenta.' },
+      { kind: 'whiteBalance', id: 'whiteBalance', fields: ['cameraWhiteBalanceK', 'cameraTint'], label: 'White Bal.', title: 'White Balance', icon: 'temperature', note: 'Tap the eyedropper, then something white or grey in the photo. Auto neutralizes the whole scene. Relative to the decoded white balance.' },
       { kind: 'slider', id: 'cameraExposureEv', field: 'cameraExposureEv', section: 'Light', label: 'Exposure', title: 'Exposure', icon: 'exposure', min: -5, max: 5, step: 0.05, digits: 2, unit: ' EV', note: 'Linear exposure before film. +1 EV doubles the light.' },
       { kind: 'slider', id: 'cameraContrast', field: 'cameraContrast', section: 'Light', relativeCenter: 0, label: 'Contrast', title: 'Contrast', icon: 'contrast', min: -0.75, max: 0.75, step: 0.01, digits: 0, note: 'Less ← → more contrast around the scene midtone.' },
       { kind: 'slider', id: 'cameraHighlights', field: 'cameraHighlights', section: 'Light', relativeCenter: 0, label: 'Highlights', title: 'Highlights', icon: 'highlights', min: -1.5, max: 1.5, step: 0.05, digits: 0, note: 'Darkens or lifts bright tones; cannot restore clipped sensor data.' },
@@ -411,6 +425,10 @@ export function valueText(tool: Tool, params: RenderParams): string {
     }
     case 'lens':
       return params.lensBlurEnabled ? 'On' : 'Off';
+    case 'whiteBalance':
+      return params.cameraWhiteBalanceK === WB_TEMP.relativeCenter && params.cameraTint === 0
+        ? 'As Shot'
+        : `${valueText(WB_TEMP, params)} · ${valueText(WB_TINT, params)}`;
     case 'locked':
       return '';
   }
@@ -425,6 +443,8 @@ export function isModified(tool: Tool, params: RenderParams, defaults: RenderPar
     case 'choice':
     case 'lens':
       return params[tool.field] !== defaults[tool.field];
+    case 'whiteBalance':
+      return tool.fields.some((f) => params[f] !== defaults[f]);
     case 'diffusion':
       return (
         params[tool.enabledBy] !== defaults[tool.enabledBy] ||
@@ -447,6 +467,8 @@ export function resetPatch(tool: Tool, defaults: RenderParams): Partial<RenderPa
     case 'choice':
     case 'lens':
       return { [tool.field]: defaults[tool.field] };
+    case 'whiteBalance':
+      return { cameraWhiteBalanceK: defaults.cameraWhiteBalanceK, cameraTint: defaults.cameraTint };
     case 'diffusion':
       return {
         [tool.enabledBy]: defaults[tool.enabledBy],

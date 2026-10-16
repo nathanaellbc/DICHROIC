@@ -33,7 +33,8 @@ import { CANVAS_FORMATS, offscreenCanvasEncoder } from '../io/canvasEncode';
 import type { CanvasEncoder, CanvasFormat } from '../io/canvasEncode';
 import { formatCube, identityLattice } from '../io/cube';
 import { DICHROIC_VERSION } from '../version';
-import { buildRenderPlan, validateStocks } from '../params/plan';
+import { buildRenderPlan, cameraWhiteInput, validateStocks } from '../params/plan';
+import { shadesOfGray, solveWhiteBalance } from '../host/cameraDevelop';
 import type { PlanImage } from '../params/plan';
 import type { ArenaInputs, RenderMode, RenderPlan } from '../params/plan';
 import type { DepthMap } from '../host/lens';
@@ -406,6 +407,49 @@ export class Session {
     const { pixels, ...meta } = image;
     void pixels;
     return buildGuide({ ...meta, width, height, rgba }, maxEdge);
+  }
+
+  /**
+   * White balance "Camera Raw" dari foto: `at` = titik uv yang seharusnya
+   * putih/abu-abu (rata-rata kotak kecil di sekitarnya), tanpa `at` = Auto
+   * (Shades of Gray). Hasilnya temp/tint yang menetralkan warna itu, siap
+   * dipasang ke slider; `null` bila tidak ada warna yang bisa dipakai
+   * (titik hitam pekat atau terpotong).
+   */
+  whiteBalance(at?: { x: number; y: number }): { cameraWhiteBalanceK: number; cameraTint: number } | null {
+    this.assertAlive();
+    const image = this.#image;
+    if (!image) throw new SessionStateError('Open a photo first.');
+    const measure = measurementImage(image.pixels, image.width, image.height, image.width, image.height);
+    const { rgbToXyz, decode } = cameraWhiteInput(this.#params, this.bundle, measure);
+    let neutral: [number, number, number] | undefined;
+    if (at) {
+      const r = Math.max(2, Math.round(0.004 * Math.max(image.width, image.height)));
+      const cx = Math.round(Math.min(1, Math.max(0, at.x)) * (image.width - 1));
+      const cy = Math.round(Math.min(1, Math.max(0, at.y)) * (image.height - 1));
+      const { data, lut } = image.pixels;
+      const sum = [0, 0, 0];
+      let n = 0;
+      for (let y = Math.max(0, cy - r); y <= Math.min(image.height - 1, cy + r); y += 1) {
+        for (let x = Math.max(0, cx - r); x <= Math.min(image.width - 1, cx + r); x += 1) {
+          const i = (y * image.width + x) * 4;
+          for (let c = 0; c < 3; c += 1) sum[c]! += decode(lut ? lut[data[i + c]!]! : (data as Float32Array)[i + c]!);
+          n += 1;
+        }
+      }
+      neutral = [sum[0]! / n, sum[1]! / n, sum[2]! / n];
+    } else {
+      const { rgba } = measure;
+      const linear = new Float32Array((rgba.length / 4) * 3);
+      for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+        linear[j] = decode(rgba[i]!);
+        linear[j + 1] = decode(rgba[i + 1]!);
+        linear[j + 2] = decode(rgba[i + 2]!);
+      }
+      neutral = shadesOfGray(linear);
+    }
+    const solved = neutral && solveWhiteBalance(rgbToXyz, neutral);
+    return solved ? { cameraWhiteBalanceK: solved.whiteBalanceK, cameraTint: solved.tint } : null;
   }
 
   prepareRemoval(selection: RemovalMask): RemovalCrop {

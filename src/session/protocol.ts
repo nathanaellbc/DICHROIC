@@ -16,6 +16,7 @@ import type { ExportFormat, ExportOptions, ExportProgress, ExportRenderInfo, Exp
 /** Permukaan publik `Session` yang dilayani lewat RPC. */
 export interface SessionLike {
   open(image: DecodedImage): void;
+  whiteBalance(at?: { x: number; y: number }): { cameraWhiteBalanceK: number; cameraTint: number } | null;
   prepareRemoval(selection: RemovalMask): RemovalCrop;
   refineSource(rect: { x: number; y: number; w: number; h: number }, maxEdge: number): Guide;
   applyRemoval(crop: RemovalCrop, output: Float32Array, replay?: boolean): Promise<{ original: Frame; guide: Guide }>;
