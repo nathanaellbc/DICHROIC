@@ -6,6 +6,8 @@
  *   semua alat, berapa pun rentangnya). Dilempar: meluncur dengan inersia
  *   dan memantul lembut di ujung rentang.
  * - Detent + haptic di nilai bawaan; ketuk dua kali kembali ke bawaan.
+ * - Tik haptic tiap melewati garis skala (seperti roda pemilih iOS), saat
+ *   diseret maupun meluncur; paling rapat TICK_HAPTIC_MS.
  * - Pergeseran penggaris di motion value (tanpa render React per frame);
  *   nilai dikirim sekali per frame seperti `Slider`.
  * - API sama dengan `Slider` (role="slider", panah/Page/Home/End).
@@ -28,6 +30,8 @@ const DETENT = 0.012;
 /** Kecepatan lempar minimum (px/s) untuk meluncur, dan konstanta perlambatannya (s). */
 const FLICK = 260;
 const GLIDE_TIME = 0.325;
+/** Jeda minimum antar tik haptic (ms): geser cepat tidak menjadi dengung. */
+const TICK_HAPTIC_MS = 45;
 
 /** Jarak garis "bagus" (1, 2, 2.5, 5 x 10^n) supaya ~RULER_SPAN/TICK_TARGET garis. */
 function tickValue(range: number): number {
@@ -51,6 +55,22 @@ export function RulerSlider({ value, min, max, step, onChange, onInteractionChan
   callbacks.current = { onChange, onInteractionChange };
   const pending = useRef<number | null>(null);
   const frame = useRef(0);
+  // Garis skala (px) dan titik awalnya -- juga dipakai untuk tik haptic.
+  const tick = (tickValue(range) / range) * RULER_SPAN;
+  const anchor = at(defaultValue ?? (min < 0 && max > 0 ? 0 : min));
+  const lastTick = useRef<{ index: number; at: number }>({ index: 0, at: 0 });
+  /** Garis skala di bawah penunjuk untuk pergeseran `off`. */
+  const tickIndex = (off: number) => Math.round((-off - anchor) / tick);
+  /** Tik haptic bila penunjuk melewati garis baru (di dalam rentang). */
+  const tickHaptic = (off: number) => {
+    if (off > 0 || off < -RULER_SPAN) return;
+    const index = tickIndex(off), now = performance.now(), last = lastTick.current;
+    if (index === last.index) return;
+    last.index = index;
+    if (now - last.at < TICK_HAPTIC_MS) return;
+    last.at = now;
+    haptic();
+  };
 
   const emit = useCallback((v: number) => {
     pending.current = v;
@@ -108,6 +128,7 @@ export function RulerSlider({ value, min, max, step, onChange, onInteractionChan
     glide.current = null;
     offset.stop();
     begin();
+    lastTick.current.index = tickIndex(offset.get());
     drag.current = { x0: e.clientX, off0: offset.get(), samples: [{ x: e.clientX, t: e.timeStamp }], inDetent: false };
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -118,6 +139,7 @@ export function RulerSlider({ value, min, max, step, onChange, onInteractionChan
     const lo = -RULER_SPAN;
     const shown = off > 0 ? rubberBand(off, 60) : off < lo ? lo + rubberBand(off - lo, 60) : off;
     offset.set(shown);
+    tickHaptic(off);
     const { v, detent } = valueAt(off);
     if (detent && !d.inDetent) haptic();
     d.inDetent = detent;
@@ -168,6 +190,7 @@ export function RulerSlider({ value, min, max, step, onChange, onInteractionChan
         return;
       }
       offset.set(off);
+      tickHaptic(off);
       emit(valueAt(off).v);
       if (Math.abs(vel) < 12) { stop(); return; }
       raf = requestAnimationFrame(step);
@@ -190,10 +213,8 @@ export function RulerSlider({ value, min, max, step, onChange, onInteractionChan
     }
   };
 
-  const tick = (tickValue(range) / range) * RULER_SPAN;
   const major = tick * MAJOR_EVERY;
-  // Garis mulai tepat di nilai bawaan (atau 0 / min), jadi bawaan selalu di garis besar.
-  const anchor = at(defaultValue ?? (min < 0 && max > 0 ? 0 : min));
+  // Garis mulai tepat di nilai bawaan (atau 0 / min), jadi bawaan selalu di garis besar (anchor).
   const phase = (n: number) => `${(((anchor % n) + n) % n).toFixed(2)}px`;
   const here = at(value);
   const base = defaultValue !== undefined ? at(defaultValue) : here;
