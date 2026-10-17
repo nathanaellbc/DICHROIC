@@ -209,13 +209,13 @@ export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array,
 }
 
 /**
- * Lebar peralihan di tepi dalam pita (bagian sisi panjang foto). Di sana alfa
- * dan kedua lapis kedalaman dibaurkan ke "satu lapis" (alfa 1, lapis =
- * kedalaman asli) -- yang identik dengan render tanpa Refine Edge, seperti di
- * luar pita. Tanpa ini pita tampil sebagai kotak bertepi lurus di mana pun
- * ViTMatte tidak sepakat dengan peta kedalaman.
+ * Lebar peralihan di tepi dalam pita (bagian sisi panjang foto). Di sana kedua
+ * lapis kedalaman dibaurkan ke kedalaman asli (`layeredDepth`); dengan depan =
+ * belakang = kedalaman, render identik dengan tanpa Refine Edge berapa pun
+ * alfanya, seperti di luar pita. Tanpa ini pita tampil sebagai kotak bertepi
+ * lurus di mana pun ViTMatte tidak sepakat dengan peta kedalaman.
  */
-export const BAND_FEATHER = 0.006;
+export const BAND_FEATHER = 0.01;
 
 /** Jarak (px, chamfer 3-4) tiap piksel pita ke piksel terdekat di luar pita. */
 export function distanceToBandEdge(band: Uint8Array, width: number, height: number): Float32Array {

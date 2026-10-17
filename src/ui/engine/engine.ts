@@ -985,8 +985,12 @@ export class Engine {
     const refine = this.#refine;
     if (!refine) return map;
     const threshold = edgeThreshold(map, refine.rect, refine.width, refine.height);
-    // Tepi dalam pita beralih halus ke satu lapis (identik dengan di luar pita).
-    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height, BAND_FEATHER);
+    // Tepi dalam pita: kedua lapis beralih halus ke kedalaman asli -- dengan
+    // depan = belakang = kedalaman, hasilnya identik dengan di luar pita berapa
+    // pun alfanya. Alfa JANGAN didorong ke 1 di sana: di sisi latar itu memberi
+    // lapis depan berkedalaman subjek bobot penuh, dan latar di tepi pita keluar
+    // kurang blur -- garis potong lurus sejajar tepi subjek.
+    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height);
     const feather = BAND_FEATHER * Math.max(map.width, map.height);
     return { ...map, layers: layeredDepth(map, refine.rect, refine.band, refine.width, refine.height, threshold, feather), matte };
   }
