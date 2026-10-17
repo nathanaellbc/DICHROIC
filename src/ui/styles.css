@@ -1874,3 +1874,17 @@ html[data-flight="close"] .bento-tile[data-flying] { visibility: hidden; }
 :root[data-theme="light"] .bento-new { background: rgba(255, 255, 255, 0.62); color: #000; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14), inset 0 0.5px 0 rgba(255, 255, 255, 0.8); }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .bento-new { background: rgba(255, 255, 255, 0.62); color: #000; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14), inset 0 0.5px 0 rgba(255, 255, 255, 0.8); } }
 @media (prefers-reduced-motion: reduce) { .bento-photo { transition: none; } }
+
+/* Lup pipet putih (Loupe) */
+.loupe {
+  position: absolute; z-index: 6; pointer-events: none; border-radius: 50%; corner-shape: round; overflow: hidden;
+  box-shadow: 0 0 0 4px var(--loupe-ring, #fff), 0 0 0 5px rgba(0, 0, 0, 0.35), 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+.loupe canvas { display: block; width: 100%; height: 100%; }
+.loupe-point {
+  position: absolute; z-index: 6; width: 22px; height: 22px; margin: -11px 0 0 -11px; pointer-events: none;
+  background:
+    linear-gradient(#fff, #fff) center / 1.5px 100% no-repeat,
+    linear-gradient(#fff, #fff) center / 100% 1.5px no-repeat;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}

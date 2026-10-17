@@ -29,6 +29,8 @@ import { PhotoLightbox } from './PhotoLightbox';
 import type { Box } from './PhotoLightbox';
 import { previewPixelBudget } from '../../io/budget';
 import { LookLayer } from './LookLayer';
+import { Loupe } from './Loupe';
+import type { LoupeTarget } from './Loupe';
 import { boxToImage, cropLayerStyle, imageToBox, isIdentityCrop } from '../../io/geometry';
 import type { Crop } from '../../io/geometry';
 
@@ -79,6 +81,8 @@ export interface FocusOverlay {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 const MAX_ZOOM = 8;
+/** Layar sentuh utama (petunjuk pipet: seret dengan lup vs klik). */
+const COARSE_POINTER = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 const DOUBLE_CLICK_ZOOM = 2.5;
 /** Gerak (px) sebelum ketukan dianggap seretan. */
 const DRAG_SLOP = 4;
@@ -189,6 +193,8 @@ export function PhotoView({
   const [peek, setPeek] = useState(false);
   const [slow, setSlow] = useState(false);
   const [aim, setAim] = useState<{ x: number; y: number } | null>(null);
+  /** Pipet putih: lup yang mengikuti jari/kursor (dipilih saat dilepas/klik). */
+  const [loupe, setLoupe] = useState<LoupeTarget | null>(null);
   const [view, setView] = useState<View>(FIT);
   const [fullscreen, setFullscreen] = useState(false);
   /** Zoom di layar penuh (1 = pas layar), untuk meminta render lebih tajam. */
@@ -230,6 +236,7 @@ export function PhotoView({
     | { kind: 'pinch'; dist: number; mid: Point; view: View }
     | { kind: 'tap'; x: number; y: number; moved: boolean }
     | { kind: 'brush'; pointerId: number }
+    | { kind: 'drop'; pointerId: number }
     | null
   >(null);
 
@@ -506,6 +513,7 @@ export function PhotoView({
     pointers.current.set(e.pointerId, p);
     if (pointers.current.size === 2) {
       if (gesture.current?.kind === 'brush') brush?.onEnd(true);
+      setLoupe(null);
       cancelFocusUpdate();
       focus?.onPreviewCancel?.();
       setAim(null);
@@ -519,6 +527,13 @@ export function PhotoView({
       return;
     }
     if (pointers.current.size > 2) return;
+    if (dropping && e.button === 0) {
+      // Pipet: tekan, seret dengan lup, lepas untuk memilih (ketuk tetap memilih).
+      window.clearTimeout(holdTimer.current);
+      gesture.current = { kind: 'drop', pointerId: e.pointerId };
+      aimLoupe(p, e.pointerType !== 'mouse');
+      return;
+    }
     if (brush?.enabled && e.button === 0) {
       const uv = toImage(toPhoto(p.x, p.y));
       if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
@@ -549,10 +564,18 @@ export function PhotoView({
     if (!brush && !dropping) holdTimer.current = window.setTimeout(() => setPeek(true), 220);
   };
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!pointers.current.has(e.pointerId)) return;
+    if (!pointers.current.has(e.pointerId)) {
+      // Mouse tanpa tombol: lup mengikuti kursor selama memilih putih.
+      if (dropping && e.pointerType === 'mouse') aimLoupe(local(e.clientX, e.clientY), false);
+      return;
+    }
     const p = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, p);
     const g = gesture.current;
+    if (g?.kind === 'drop' && g.pointerId === e.pointerId) {
+      aimLoupe(p, e.pointerType !== 'mouse');
+      return;
+    }
     if (g?.kind === 'brush' && g.pointerId === e.pointerId) {
       const uv = toImage(toPhoto(p.x, p.y));
       brush?.onMove({ x: clamp01(uv.x), y: clamp01(uv.y) });
@@ -602,14 +625,18 @@ export function PhotoView({
         setAim(null);
       }
     }
-    const tapped = tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0;
-    if (tapped && dropping) {
-      const uv = toImage(toPhoto(g.x, g.y));
-      if (uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1) eyedropper!.onPick(uv.x, uv.y);
+    if (tracked && g?.kind === 'drop' && g.pointerId === e.pointerId) {
+      if (e.pointerType !== 'mouse') setLoupe(null);
+      if (e.type === 'pointerup' && dropping) {
+        const p = local(e.clientX, e.clientY);
+        const uv = toImage(toPhoto(p.x, p.y));
+        if (uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1) eyedropper!.onPick(uv.x, uv.y);
+      }
     }
+    const tapped = tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0;
     // Ketukan singkat tanpa geser membuka layar penuh, ditunda sebentar supaya
     // ketuk/klik dua kali tetap berarti zoom.
-    else if (tapped && performance.now() - g.t < TAP_MAX_MS && canFullscreen) {
+    if (tapped && performance.now() - g.t < TAP_MAX_MS && canFullscreen) {
       window.clearTimeout(tapTimer.current);
       tapTimer.current = window.setTimeout(() => setFullscreen(true), DOUBLE_TAP_MS);
     }
@@ -630,6 +657,13 @@ export function PhotoView({
     const p = local(e.clientX, e.clientY);
     animateView(view.s > 1.01 ? clampView(FIT) : zoomAt(view, DOUBLE_CLICK_ZOOM, p.x, p.y));
   };
+  /** Arahkan lup pipet ke titik area `p`. */
+  function aimLoupe(p: Point, touch: boolean) {
+    const uv = toImage(toPhoto(p.x, p.y));
+    setLoupe({ x: p.x, y: p.y, u: uv.x, v: uv.y, touch });
+  }
+  // Pipet selesai/dibatalkan: lup hilang.
+  useEffect(() => { if (!dropping) setLoupe(null); }, [dropping]);
   const zoomed = view.s > 1.01;
   /** Posisi (px, relatif kotak foto pas) dari koordinat foto 0..1. */
   const sx = (u: number) => view.tx + u * view.s * rect.width;
@@ -660,6 +694,7 @@ export function PhotoView({
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
       onLostPointerCapture={onPointerEnd}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse' && pointers.current.size === 0) setLoupe(null); }}
       onDoubleClick={onDoubleClick}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -748,7 +783,7 @@ export function PhotoView({
             )}
             {dropping && (
               <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                Tap something white or grey
+                {loupe?.touch ? 'Release on something white or grey' : COARSE_POINTER ? 'Touch and drag onto something white or grey' : 'Click something white or grey'}
               </span>
             )}
             {peek && !compare && !picking && (
@@ -757,6 +792,7 @@ export function PhotoView({
           </motion.div>
         )}
       </AnimatePresence>
+      {dropping && loupe && <Loupe frame={shown} target={loupe} area={area} />}
       {/* Status di kanan atas: Developing di sebelah zoom; geser mulus saat zoom muncul/hilang. */}
       <div className="photo-status" style={fitInsets?.right ? { right: fitInsets.right + 10 } : undefined}>
         <AnimatePresence initial={false} mode="popLayout">
