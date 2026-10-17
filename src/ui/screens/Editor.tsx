@@ -45,6 +45,8 @@ import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
 import { FilmCarousel } from './FilmCarousel';
+import { useLookPreview } from '../components/LookLayer';
+import { hasLook, lookFor } from '../engine/looks';
 import { describeChange } from '../model/history';
 import { haptic } from '../haptics';
 import { projects } from '../projects/projects';
@@ -57,7 +59,7 @@ type Stocks = Pick<RenderParams, 'film' | 'filmEnabled' | 'paper' | 'process'>;
 
 type SheetState =
   /** `before`: stok saat sheet dibuka (Cancel). `swap`: sisi lain A/B. */
-  | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks; list?: boolean }
+  | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks; list?: boolean; /** Mode LUT: resep dipilih, belum dikembangkan (Done). */ pending?: Stocks }
   | { kind: 'export' }
   | { kind: 'remove' }
   | { kind: 'refine' }
@@ -74,6 +76,12 @@ const UNDO_KEYS = 'Meta+Z Control+Z';
 const REDO_KEYS = 'Meta+Shift+Z Control+Y';
 
 const stocksOf = (p: RenderParams): Stocks => ({ film: p.film, filmEnabled: p.filmEnabled, paper: p.paper, process: p.process });
+/** Patch dari resep engine ke resep stok `to` (hanya field yang berbeda). */
+const diffStocks = (from: Stocks, to: Stocks): Partial<RenderParams> => {
+  const patch: Partial<RenderParams> = {};
+  for (const k of ['filmEnabled', 'film', 'paper', 'process'] as const) if (from[k] !== to[k]) (patch as Record<string, unknown>)[k] = to[k];
+  return patch;
+};
 const sameStocks = (a: Stocks, b: Stocks) => a.filmEnabled === b.filmEnabled && a.film === b.film && a.paper === b.paper && a.process === b.process;
 const offOutput = (s: Stocks) => isPrintLut(s.paper) ? 'on ' + stockInfo(s.paper).short : 'Neutral negative';
 
@@ -269,12 +277,16 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     () => focusOverlay?.(previewParams),
     [focusOverlay, previewParams],
   );
+  // Mode LUT pemilih film: resep tertunda tampil sebagai look di atas foto.
+  const pendingStocks = sheet?.kind === 'stocks' ? sheet.pending : undefined;
+  const lookImage = useLookPreview(state, pendingStocks ?? stocksOf(state.params));
   const photo = removing ? <div ref={setRemovalPreview} className="remove-preview-slot" /> : !hasPhoto ? (
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
   ) : (
     <PhotoView
       reveal={revealCount}
       frame={state.frame}
+      look={lookImage}
       focusMask={focusMask}
       // Pembanding/intip asli: `original` ikut resolusi render (tajam saat zoom).
       // Setelah hapus objek, `before` (sebelum retouch, resolusi pembukaan) supaya
@@ -329,16 +341,38 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     { label: 'Close Photo', icon: 'close', onSelect: () => { setMenuAnchor(null); onClose(); } },
   ];
 
-  const current = stocksOf(state.params);
+  // Resep yang dipilih di sheet: tertunda (mode LUT) atau milik engine.
+  const viewParams: RenderParams = { ...state.params, ...pendingStocks };
+  const current = stocksOf(viewParams);
   // HP: carousel foto per stok; daftar lengkap lewat tombol List, dan selalu di layar lebar.
   const carousel = !wide && sheet?.kind === 'stocks' && !sheet.list && !!state.original;
+  /** Kirim resep tertunda ke engine (Done, tutup sheet, pindah ke List). */
+  const commitPending = () => {
+    if (sheet?.kind === 'stocks' && sheet.pending) engine.setParams(diffStocks(state.params, sheet.pending));
+  };
+  /**
+   * Pilih stok/kertas/proses. Di carousel, resep yang punya look LUT hanya
+   * dipratinjau (tanpa engine) sampai Done; tanpa look (Film Off, LUT cetak),
+   * engine langsung mengembangkan seperti biasa.
+   */
+  const chooseStocks = (patch: Partial<RenderParams>) => {
+    if (sheet?.kind !== 'stocks') return;
+    const next: Stocks = { ...current, ...stocksOf({ ...viewParams, ...patch }) };
+    if (carousel && hasLook(lookFor(next))) {
+      setSheet({ ...sheet, pending: sameStocks(next, stocksOf(state.params)) ? undefined : next });
+      return;
+    }
+    setSheet({ ...sheet, pending: undefined });
+    engine.setParams(diffStocks(state.params, next));
+  };
   const swapAction = sheet?.kind !== 'stocks' || sameStocks(sheet.swap, current)
     ? undefined
     : {
         label: recipe(sheet.swap),
         onSwap: () => {
-          engine.setParams(sheet.swap);
-          setSheet({ ...sheet, swap: current });
+          const back = sheet.swap;
+          setSheet({ ...sheet, swap: current, pending: undefined });
+          engine.setParams(diffStocks(state.params, back));
         },
       };
 
@@ -354,7 +388,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         title="Film & Paper"
         detents={['medium', 'large']}
         mediumFraction={carousel ? 0.62 : 0.56}
-        onClose={() => setSheet(null)}
+        // Seret-tutup = Done.
+        onClose={() => { commitPending(); setSheet(null); }}
         leading={
           <PressButton
             className="icon-btn"
@@ -368,7 +403,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           </PressButton>
         }
         trailing={
-          <PressButton className="icon-btn prominent" aria-label="Done" onClick={() => setSheet(null)}>
+          <PressButton className="icon-btn prominent" aria-label="Done" onClick={() => { commitPending(); setSheet(null); }}>
             <Icon name="check" size={18} strokeWidth={2.8} />
           </PressButton>
         }
@@ -376,10 +411,11 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         {sheet?.kind === 'stocks' && carousel && (
           <FilmCarousel
             state={state}
-            onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
-            onProcess={onProcess}
-            scan={scan}
-            onList={() => setSheet({ ...sheet, list: true, stockKind: 'film' })}
+            view={viewParams}
+            onPick={(kind, id) => chooseStocks(stockPatch(kind, id, viewParams))}
+            onProcess={(process) => chooseStocks(choicePatch(findTool('process') as ChoiceTool, process, viewParams))}
+            scan={isScanMode(viewParams)}
+            onList={() => { commitPending(); setSheet({ ...sheet, list: true, stockKind: 'film', pending: undefined }); }}
             previous={swapAction}
           />
         )}

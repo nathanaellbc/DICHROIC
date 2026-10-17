@@ -78,7 +78,24 @@ dari mockup "gammā editor revamp" (artifact privat pemilik) dikerjakan:
 | Render saat menggeser | Sudah ada di engine: selama gesture `#renderLongEdge` = 256 px dan "Developing" disembunyikan (terukur: 1024x660 -> 256x165 -> 1024x660) | `engine.ts` |
 | Tab kategori bawah | Dipertahankan (belum ada keputusan pemilik untuk digabung) | -- |
 
-Catatan: gambar kartu carousel diambil dari frame pratinjau; frame yang
+**Look LUT (mode LUT pemilih film).** `public/data/looks/looks.{bin,json}`:
+148 look (16 negatif x 8 kertas foto/bioskop untuk print, 20 film untuk scan),
+masing-masing `.cube` engine sendiri 17^3 RGB8 (input sRGB ter-encode ->
+keluaran sRGB, parameter bawaan), total 2,1 MB, ikut precache PWA. Dipanggang
+`node tools/run_ts.mjs tools/bake_looks.ts` (~3 menit di RTX 3060 Ti; satu
+proses per look karena arena harus dipra-hitung sebelum device Dawn hidup).
+Wajib dipanggang ulang bila stok, kertas, atau rantai warna engine berubah.
+Terukur pada foto JPEG 1024 px, Portra 800 / Portra Endura, dibanding render
+penuh (grain + halation menyala): selisih rata-rata 1,7/255, 88 % kanal < 4
+level, maks. 72 di halo lampu (efek spasial tidak ada di LUT).
+Pemakaian (`engine/looks.ts`, WebGL2, LUT sebagai tekstur 3D): semua kartu
+carousel diisi look; memilih film/kertas/proses di carousel hanya menyimpan
+resep tertunda (`sheet.pending`) dan foto menampilkan look-nya
+(`LookLayer`) -- engine tidak bekerja sampai Done/seret-tutup; Cancel
+membuang. Setelah Done look tetap tampil sampai render sungguhan selesai,
+lalu memudar. Film Off dan LUT cetak (2383/3513) tidak dipanggang: tetap live.
+
+Catatan: gambar kartu carousel (kombinasi tanpa look) diambil dari frame pratinjau; frame yang
 tampil saat resep berganti ditandai basi (`params` berubah seketika,
 `rendering` baru menyala setelah worker menerima patch).
 

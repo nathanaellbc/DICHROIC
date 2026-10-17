@@ -28,6 +28,7 @@ import { ImageCompare, compareCut, useImageCompare } from './ImageCompare';
 import { PhotoLightbox } from './PhotoLightbox';
 import type { Box } from './PhotoLightbox';
 import { previewPixelBudget } from '../../io/budget';
+import { LookLayer } from './LookLayer';
 
 function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -119,6 +120,7 @@ export function PhotoView({
   sourceSize,
   onResolutionChange,
   content,
+  look,
   brush,
   fitInsets,
   reveal,
@@ -137,6 +139,8 @@ export function PhotoView({
   onResolutionChange?: (longEdge: number) => void;
   /** Source retouching shares the same zoom/pan transform as the main preview. */
   content?: ReactNode;
+  /** Pratinjau look LUT di atas frame (LookLayer), selagi render resepnya belum ada. */
+  look?: ImageBitmap;
   /** Keep the fitted photo centered in the unobscured part of an overlay viewport. */
   fitInsets?: { bottom?: number; right?: number };
   /**
@@ -645,6 +649,7 @@ export function PhotoView({
           >
             <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
               {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
+              {!content && <LookLayer image={look} />}
               {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
               {showOriginal && original && (
                 <motion.div

@@ -1822,3 +1822,7 @@ html[data-flight="open"] .intro-content { opacity: 0; pointer-events: none; }
 .mobile-title-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-title-name > svg { flex-shrink: 0; color: var(--label-2); }
 .mobile-title-sub { max-width: 100%; font-size: 12px; font-weight: 500; color: var(--label-2); line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Pratinjau look (LUT) di atas foto: muncul seketika, memudar ke render sungguhan */
+.look-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.25s ease; }
+.look-layer[data-on] { opacity: 1; transition: none; }

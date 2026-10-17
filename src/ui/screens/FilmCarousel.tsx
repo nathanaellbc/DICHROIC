@@ -7,8 +7,14 @@
  * belum pernah dikembangkan. Daftar lengkap (cari, semua detail) tetap ada di
  * balik tombol List.
  *
- * Engine hanya punya satu resep aktif, jadi gambar kartu diambil dari frame
- * pratinjau yang sudah tampil (tanpa render tambahan) dan diingat per foto.
+ * Gambar kartu = look LUT yang dipanggang (`engine/looks.ts`) diterapkan ke
+ * foto asli -- semua kartu langsung terisi tanpa engine. Kombinasi tanpa LUT
+ * (Film Off, LUT cetak) memakai frame pratinjau engine yang sudah tampil,
+ * diingat per foto.
+ *
+ * Mode LUT: memilih kartu/kertas hanya mengubah `view` (resep tertunda di
+ * Editor) dan foto editor menampilkan look-nya; engine baru mengembangkan
+ * saat Done.
  */
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +28,7 @@ import { Icon } from '../components/Icon';
 import { PressButton, Segmented } from '../components/controls';
 import { haptic } from '../haptics';
 import type { StockKind } from './Stocks';
+import { hasLook, loadLooks, lookFor, lookRenderer } from '../engine/looks';
 
 /** Sisi panjang gambar kartu (px). */
 const CARD_EDGE = 560;
@@ -46,6 +53,18 @@ const PAPERS = [...PAPER_SECTIONS.filter((s) => !s.locked && !s.title.startsWith
 
 /** Gambar kartu per foto (Frame asli sebagai identitas foto), per resep. */
 const snapshots = new WeakMap<Frame, Map<string, string>>();
+/** Gambar kartu dari look LUT, per foto, per kunci look. */
+const lookCards = new WeakMap<Frame, Map<string, string>>();
+
+async function bitmapUrl(bitmap: ImageBitmap): Promise<string | undefined> {
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  return blob ? URL.createObjectURL(blob) : undefined;
+}
 const placeholders = new WeakMap<Frame, string>();
 
 /** Kunci resep kartu film: film + apa yang membentuk tampilannya di sekitarnya. */
@@ -72,15 +91,18 @@ async function frameUrl(frame: Frame): Promise<string | undefined> {
   return blob ? URL.createObjectURL(blob) : undefined;
 }
 
-export function FilmCarousel({ state, onPick, onProcess, scan, previous, onList }: {
+export function FilmCarousel({ state, view, onPick, onProcess, scan, previous, onList }: {
   state: EngineState;
+  /** Resep yang dipilih di sheet (boleh belum dikirim ke engine). */
+  view: RenderParams;
   onPick: (kind: StockKind, id: string) => void;
   onProcess: (process: string) => void;
   scan: boolean;
   previous?: { label: string; onSwap: () => void };
   onList: () => void;
 }) {
-  const { params, original, frame } = state;
+  const { original, frame } = state;
+  const params = view;
   const selected = params.filmEnabled ? params.film : 'off';
   const [, bump] = useState(0);
   const strip = useRef<HTMLDivElement>(null);
@@ -104,7 +126,7 @@ export function FilmCarousel({ state, onPick, onProcess, scan, previous, onList 
   // Frame pratinjau yang selesai (bukan frame ringan saat gesture) menjadi gambar kartunya.
   // `params` berganti seketika tetapi `rendering` baru menyala setelah worker
   // menerima patch: frame yang tampil saat resep berganti milik resep lama.
-  const keyNow = keyOf(params);
+  const keyNow = keyOf(state.params);
   const lastKey = useRef(keyNow);
   const staleFrame = useRef<Frame | undefined>(undefined);
   if (lastKey.current !== keyNow) {
@@ -126,6 +148,40 @@ export function FilmCarousel({ state, onPick, onProcess, scan, previous, onList 
     });
     return () => { live = false; };
   }, [original, frame, state.rendering, state.interacting, keyNow]);
+
+  // Kartu look: semua kartu diisi dari LUT, mulai dari yang di tengah lalu
+  // tetangganya, satu per frame supaya gulir tetap mulus.
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  useEffect(() => {
+    if (!original) return undefined;
+    let live = true;
+    void (async () => {
+      const r = lookRenderer();
+      if (!(await loadLooks()) || !r || !live) return;
+      r.setSource(original);
+      const map = lookCards.get(original) ?? new Map<string, string>();
+      lookCards.set(original, map);
+      const scale = Math.min(1, CARD_EDGE / Math.max(original.width, original.height));
+      const w = Math.round(original.width * scale), h = Math.round(original.height * scale);
+      const at = focusedRef.current;
+      const order = CARDS.map((c, i) => ({ c, d: Math.abs(i - at) })).sort((a, b) => a.d - b.d).map((x) => x.c);
+      for (const card of order) {
+        const look = lookFor(params, card.id);
+        if (!look || !hasLook(look) || map.has(look)) continue;
+        r.setSource(original);
+        const bitmap = await r.apply(look, w, h);
+        const url = bitmap ? await bitmapUrl(bitmap) : undefined;
+        if (url) map.set(look, url);
+        if (!live) return;
+        bump((n) => n + 1);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    })();
+    return () => { live = false; };
+    // Kertas/proses yang dipilih menentukan look tiap kartu film.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [original, params.paper, params.process]);
 
   const scrollTo = (index: number, smooth: boolean) => {
     const el = strip.current?.children[index] as HTMLElement | undefined;
@@ -210,7 +266,8 @@ export function FilmCarousel({ state, onPick, onProcess, scan, previous, onList 
       >
         {CARDS.map((card, i) => {
           const key = card.id === 'off' ? cardKey('off', params) : cardKey(card.id, params);
-          const url = map?.get(key);
+          const look = lookFor(params, card.id);
+          const url = (look && original ? lookCards.get(original)?.get(look) : undefined) ?? map?.get(key);
           const isSelected = card.id === selected;
           return (
             <button
