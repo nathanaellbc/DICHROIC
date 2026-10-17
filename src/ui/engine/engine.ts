@@ -28,7 +28,7 @@ import { decodeWithBrowser, isBrowserImage } from './browserDecode';
 import { finishExportEncode, finishExportTiles, noteExportStage, rememberExportTiles, startExportEncode, startExportTiles } from './exportTiles';
 import { DepthEstimator, DepthCancelledError } from '../../depth/estimate';
 import type { DepthProgress } from '../../depth/estimate';
-import { bandBounds, bandInCrop, buildTrimap, edgeThreshold, layeredDepth, shaderMatte } from '../../depth/refineEdge';
+import { bandBounds, bandInCrop, buildTrimap, edgeThreshold, layeredDepth, shaderMatte, BAND_FEATHER } from '../../depth/refineEdge';
 import type { BrushMask, UvRect } from '../../depth/refineEdge';
 import { DEPTH_MODELS, availableModels, depthProfile, firstDownloadBytes, isDepthModelId, isExperimental, modelBackend } from '../../depth/model';
 import type { DepthMap } from '../../host/lens';
@@ -132,6 +132,9 @@ function isDeviceLoss(error: Error): boolean {
 /** Perubahan beruntun yang lebih rapat dari ini (satu seretan slider) jadi satu langkah undo. */
 const HISTORY_GAP_MS = 600;
 const HISTORY_LIMIT = 100;
+
+/** Pinggiran konteks Refine Edge di sekitar sapuan (bagian sisi pendek foto). */
+const REFINE_CONTEXT = 0.06;
 
 /** Sisi panjang pratinjau browser saat membuka (cukup untuk layar HP, murah di-decode). */
 const QUICK_PREVIEW_EDGE = 1600;
@@ -981,9 +984,11 @@ export class Engine {
   #withRefine(map: DepthMap): DepthMap {
     const refine = this.#refine;
     if (!refine) return map;
-    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height);
     const threshold = edgeThreshold(map, refine.rect, refine.width, refine.height);
-    return { ...map, layers: layeredDepth(map, refine.rect, refine.band, refine.width, refine.height, threshold), matte };
+    // Tepi dalam pita beralih halus ke satu lapis (identik dengan di luar pita).
+    const matte = shaderMatte(refine.rect, refine.alpha, refine.band, refine.trimap, refine.width, refine.height, BAND_FEATHER);
+    const feather = BAND_FEATHER * Math.max(map.width, map.height);
+    return { ...map, layers: layeredDepth(map, refine.rect, refine.band, refine.width, refine.height, threshold, feather), matte };
   }
 
   /**
@@ -996,7 +1001,8 @@ export class Engine {
     const depth = this.#depthMap;
     const client = this.#client;
     if (!depth || !client) throw new Error('Lens blur needs a depth map first.');
-    const rect = bandBounds(mask);
+    // Konteks lebar di sekitar sapuan: ViTMatte butuh contoh subjek dan latar (dari peta kedalaman).
+    const rect = bandBounds(mask, REFINE_CONTEXT);
     if (!rect) throw new Error('Brush over the edge first.');
     const photoId = this.#photoId;
     const profile = await this.#profile();

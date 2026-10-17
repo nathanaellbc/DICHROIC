@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MATTE_TILE, bandBounds, bandInCrop, buildTrimap, computeMatte, edgeThreshold, layeredDepth, shaderMatte } from '../../src/depth/refineEdge';
+import { MATTE_TILE, bandBounds, bandInCrop, buildTrimap, computeMatte, distanceToBandEdge, edgeThreshold, featherBandEdge, layeredDepth, shaderMatte } from '../../src/depth/refineEdge';
 import type { DepthMap } from '../../src/host/lens';
 
 // Subjek dekat di kiri (d = 1), latar jauh di kanan (d = 0); sapuan vertikal di tepi x = 0,5.
@@ -90,5 +90,30 @@ describe('Refine Edge', () => {
     }
     // Di luar pita: tidak berubah.
     expect(foreground[24 * 64 + 62]).toBeCloseTo(0.1, 6);
+  });
+
+  it('tepi pita beralih ke satu lapis: alfa 1 dan lapis = kedalaman di tepi, penuh di dalam', () => {
+    // Pita x = 10..49 pada baris 20 px; kedalaman: kiri subjek (0,8), kanan latar (0,1).
+    const W = 60, H = 20;
+    const band = new Uint8Array(W * H);
+    for (let y = 0; y < H; y += 1) for (let x = 10; x < 50; x += 1) band[y * W + x] = 1;
+    const dist = distanceToBandEdge(band, W, H);
+    expect(dist[10 * W + 10]).toBeCloseTo(1, 6);
+    expect(dist[10 * W + 30]).toBeGreaterThan(9);
+    const alpha = new Float32Array(W * H).fill(0);
+    featherBandEdge(alpha, band, W, H, 6);
+    expect(alpha[10 * W + 5]).toBe(0); // di luar pita: tidak disentuh
+    expect(alpha[10 * W + 10]).toBeGreaterThan(0.9); // tepi: hampir satu lapis
+    expect(alpha[10 * W + 30]).toBe(0); // dalam: alfa ViTMatte
+    const depth: DepthMap = { width: W, height: H, data: new Float32Array(W * H) };
+    for (let y = 0; y < H; y += 1) for (let x = 0; x < W; x += 1) depth.data[y * W + x] = x < 30 ? 0.8 : 0.1;
+    const rect = { x: 0, y: 0, w: 1, h: 1 };
+    const soft = layeredDepth(depth, rect, band, W, H, 0.45, 6);
+    // Tepi pita (texel 9 sudah menyentuh pita): kedua lapis = kedalaman sendiri.
+    expect(soft.foreground[10 * W + 9]).toBeCloseTo(0.8, 6);
+    expect(soft.background[10 * W + 9]).toBeGreaterThan(0.7); // bobot peralihan kecil (~7 %) di tepi
+    // Sisi sendiri selalu kedalaman sendiri; sisi seberang = rata-rata seberang di dalam pita.
+    expect(soft.foreground[10 * W + 40]).toBeCloseTo(0.8, 6);
+    expect(soft.background[10 * W + 40]).toBeCloseTo(0.1, 6);
   });
 });

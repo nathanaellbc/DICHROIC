@@ -201,20 +201,69 @@ export async function computeMatte(
  * latar dirender dari lapis belakang; di tempat lapis depan = belakang
  * hasilnya identik dengan satu lapis.
  */
-export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array, trimap: Uint8Array, width: number, height: number): EdgeMatte {
+export function shaderMatte(rect: UvRect, alpha: Float32Array, band: Uint8Array, trimap: Uint8Array, width: number, height: number, feather = 0): EdgeMatte {
   const out = new Float32Array(width * height);
   for (let i = 0; i < out.length; i += 1) out[i] = band[i] ? alpha[i]! : trimap[i]! / 255;
+  if (feather > 0) featherBandEdge(out, band, width, height, Math.max(1, (feather / Math.max(rect.w, rect.h)) * Math.max(width, height)));
   return { ...rect, width, height, alpha: out };
+}
+
+/**
+ * Lebar peralihan di tepi dalam pita (bagian sisi panjang foto). Di sana alfa
+ * dan kedua lapis kedalaman dibaurkan ke "satu lapis" (alfa 1, lapis =
+ * kedalaman asli) -- yang identik dengan render tanpa Refine Edge, seperti di
+ * luar pita. Tanpa ini pita tampil sebagai kotak bertepi lurus di mana pun
+ * ViTMatte tidak sepakat dengan peta kedalaman.
+ */
+export const BAND_FEATHER = 0.006;
+
+/** Jarak (px, chamfer 3-4) tiap piksel pita ke piksel terdekat di luar pita. */
+export function distanceToBandEdge(band: Uint8Array, width: number, height: number): Float32Array {
+  const big = 1e9, d = new Float32Array(width * height);
+  for (let i = 0; i < d.length; i += 1) d[i] = band[i] ? big : 0;
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= width || y >= height ? 0 : d[y * width + x]!);
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    const i = y * width + x;
+    if (!d[i]) continue;
+    d[i] = Math.min(d[i]!, at(x - 1, y) + 3, at(x, y - 1) + 3, at(x - 1, y - 1) + 4, at(x + 1, y - 1) + 4);
+  }
+  for (let y = height - 1; y >= 0; y -= 1) for (let x = width - 1; x >= 0; x -= 1) {
+    const i = y * width + x;
+    if (!d[i]) continue;
+    d[i] = Math.min(d[i]!, at(x + 1, y) + 3, at(x, y + 1) + 3, at(x + 1, y + 1) + 4, at(x - 1, y + 1) + 4);
+  }
+  for (let i = 0; i < d.length; i += 1) d[i] = d[i]! / 3;
+  return d;
+}
+
+/** Bobot peralihan 0 (tepi pita) .. 1 (`feather` px ke dalam), smoothstep. */
+function featherWeight(dist: number, feather: number): number {
+  const t = Math.min(1, dist / feather);
+  return t * t * (3 - 2 * t);
+}
+
+/** Alfa di tepi dalam pita dibaurkan ke 1 (satu lapis), selebar `feather` px. */
+export function featherBandEdge(alpha: Float32Array, band: Uint8Array, width: number, height: number, feather: number): void {
+  const dist = distanceToBandEdge(band, width, height);
+  for (let i = 0; i < alpha.length; i += 1) {
+    if (!band[i]) continue;
+    alpha[i] = 1 + (alpha[i]! - 1) * featherWeight(dist[i]!, feather);
+  }
 }
 
 /**
  * Lapis depan/belakang di resolusi kedalaman. Di piksel kedalaman yang
  * menyentuh PITA SAPUAN (bukan alfa < 1: helai yang matte-nya pasti subjek
- * punya alfa 1 dan tetap harus memakai kedalaman subjek), lapis depan =
- * rata-rata kedalaman sisi subjek (> ambang) dan lapis belakang = rata-rata
- * sisi latar di jendela `radius` px; tanpa tetangga di sisi itu, kedalaman
- * khas sisi itu di seluruh kotak (helai yang mencuat jauh dari tubuh di peta
- * kedalaman). Di tempat lain keduanya = kedalaman.
+ * punya alfa 1 dan tetap harus memakai kedalaman subjek), lapis SISI PIKSEL
+ * ITU SENDIRI (menurut ambang) = kedalamannya sendiri, dan lapis seberang =
+ * rata-rata kedalaman sisi seberang di jendela `radius` px; tanpa tetangga di
+ * sisi itu, kedalaman khas sisi itu di seluruh kotak (helai yang mencuat jauh
+ * dari tubuh di peta kedalaman). Di tempat lain keduanya = kedalaman.
+ *
+ * Kedalaman sendiri (bukan rata-rata) untuk sisinya sendiri: piksel yang
+ * matte dan kedalaman sepakat dirender persis seperti tanpa Refine Edge, jadi
+ * pita tidak tampil sebagai kotak berkabut bertepi lurus (dulu: kabel/tepi
+ * berkedalaman sedang di dalam pita didorong ke rata-rata latar yang jauh).
  */
 export function layeredDepth(
   depth: DepthMap,
@@ -223,6 +272,7 @@ export function layeredDepth(
   bandWidth: number,
   bandHeight: number,
   threshold: number,
+  feather = 0,
 ): { foreground: Float32Array; background: Float32Array } {
   const { width: w, height: h, data } = depth;
   const foreground = data.slice();
@@ -272,13 +322,21 @@ export function layeredDepth(
     const ya = Math.max(ay0, y - radius) - ay0, yb = Math.min(ay1, y + radius) - ay0 + 1;
     return t[yb * sw + xb]! - t[ya * sw + xb]! - t[yb * sw + xa]! + t[ya * sw + xa]!;
   };
+  // Texel yang menyentuh pita, lalu jaraknya ke tepi pita (peralihan ke satu lapis).
+  const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+  const inBand = new Uint8Array(bw * bh);
+  for (let y = y0; y <= y1; y += 1) for (let x = x0; x <= x1; x += 1) inBand[(y - y0) * bw + (x - x0)] = touches(x, y) ? 1 : 0;
+  const dist = feather > 0 ? distanceToBandEdge(inBand, bw, bh) : undefined;
   for (let y = y0; y <= y1; y += 1) {
     for (let x = x0; x <= x1; x += 1) {
-      if (!touches(x, y)) continue;
+      const k = (y - y0) * bw + (x - x0);
+      if (!inBand[k]) continue;
       const fn = box(fCnt, x, y), bn = box(bCnt, x, y);
       const i = y * w + x;
-      foreground[i] = fn > 0 ? box(fSum, x, y) / fn : fgTypical;
-      background[i] = bn > 0 ? box(bSum, x, y) / bn : bgTypical;
+      const d = data[i]!;
+      const wgt = dist ? featherWeight(dist[k]!, feather) : 1;
+      if (d > threshold) background[i] = d + ((bn > 0 ? box(bSum, x, y) / bn : bgTypical) - d) * wgt;
+      else foreground[i] = d + ((fn > 0 ? box(fSum, x, y) / fn : fgTypical) - d) * wgt;
     }
   }
   return { foreground, background };
