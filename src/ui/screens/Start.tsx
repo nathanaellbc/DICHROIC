@@ -14,8 +14,7 @@ import { RingBloom } from '../components/RingBloom';
 import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
 import { ActionSheet, Spinner } from '../components/Overlays';
-import { RecentStrip } from '../components/RecentStrip';
-import { isClosingFlight } from '../components/PhotoFlight';
+import { RecentGrid } from '../components/RecentGrid';
 import { Sheet } from '../components/Sheet';
 import { PressButton } from '../components/controls';
 import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
@@ -172,32 +171,26 @@ export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => v
       {/* Glow cincin kaca: ikut bola "+", jadi tidak tampil di atas Recent. */}
       {box.width > 0 && !showRecent && <RingBloom backdrop={backdrop} />}
 
-      {ready && (
+      {ready && showRecent && (
+        <RecentGrid
+          cards={proj.list}
+          onOpen={openProject}
+          onRelink={relink}
+          onMenu={(card, anchor) => setMenu({ card, anchor })}
+          onNew={onChoose}
+          hint={touch ? undefined : 'drop a photo anywhere'}
+        />
+      )}
+      {ready && !showRecent && (
         <motion.div
           className="photo-dropzone intro-content"
-          data-recent={showRecent || undefined}
-          style={{ paddingTop: showRecent ? (regular ? 32 : 'calc(max(var(--safe-top, 0px), 12px) + 8px)') : orbCenter.y + (compact ? 48 : 56) }}
+          style={{ paddingTop: orbCenter.y + (compact ? 48 : 56) }}
           data-drag-over={over}
-          // Foto sedang terbang kembali ke bilahnya: Recent sudah di tempat, tanpa animasi naik.
-          initial={isClosingFlight() ? false : 'hidden'}
+          initial="hidden"
           animate="shown"
           variants={{ shown: { transition: { staggerChildren: 0.09, delayChildren: reduce ? 0 : 0.1 } } }}
         >
-          {showRecent ? (
-            <>
-              <motion.div className="welcome-bar" variants={rise}>
-                <span className="welcome-word">gammā</span>
-                {proj.list.length > 1 && (
-                  <motion.button type="button" className="welcome-chip" onClick={() => setAllOpen(true)} {...ctaPress}>
-                    All · {proj.list.length}
-                  </motion.button>
-                )}
-              </motion.div>
-              <motion.h1 className="welcome-title" variants={rise}>
-                Welcome back.
-              </motion.h1>
-            </>
-          ) : over ? (
+          {over ? (
             <h1 className="start-title intro-title" key="drop">
               <BlurWords text="Drop to develop." />
               <span className="start-title-tail"><BlurWords text="Let go anywhere." delay={0.12} /></span>
@@ -210,22 +203,9 @@ export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => v
               <span className="start-title-tail" aria-hidden="true"><BlurWords key={line} text={TAIL_LINES[line]!} delay={line === 0 ? 0.3 : 0} /></span>
             </h1>
           )}
-          {showRecent && (
-            <motion.div className="recent-slot" variants={rise}>
-              <RecentStrip
-                cards={recent}
-                onOpen={openProject}
-                onRelink={relink}
-                onMenu={(card, anchor) => setMenu({ card, anchor })}
-                onRename={(card, name) => void projects.rename(card.id, name)}
-                onDuplicate={(card) => void projects.duplicate(card.id)}
-                onDelete={(card) => projects.remove(card.id)}
-              />
-            </motion.div>
-          )}
           <motion.div className="start-actions intro-actions" variants={rise}>
-            <motion.button type="button" className="start-cta intro-cta" data-secondary={showRecent || undefined} onClick={onChoose} {...ctaPress}>
-              {showRecent ? 'New Photo' : 'Choose Photo'}
+            <motion.button type="button" className="start-cta intro-cta" onClick={onChoose} {...ctaPress}>
+              Choose Photo
             </motion.button>
             <p className="start-footnote intro-footnote">
               {touch ? 'RAW, JPEG, PNG, TIFF and OpenEXR.' : 'Or drop a file anywhere. RAW, JPEG, PNG, TIFF and OpenEXR.'} Nothing is uploaded.

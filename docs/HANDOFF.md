@@ -46,9 +46,12 @@ peta jalan untuk melanjutkan.
 - Layar pembuka iOS dua tema dari `tools/gen_icons.mjs`
   (`public/icons/splash-{dark,light}-*.png`).
 
-**Recent / proyek** (`src/ui/components/RecentStrip.tsx`, `src/ui/projects/`)
--- dibangun di sesi lain: strip akordeon, baki aksi geser ke atas (Edit,
-Rename, Duplicate, Delete), IndexedDB `gamma.projects`.
+**Welcome back / proyek** (`src/ui/components/RecentGrid.tsx`, `src/ui/projects/`):
+grid bento (masonry, kolom terpendek; 2 kolom di HP, s.d. 5 di layar lebar),
+ubin bersudut kontinu dengan label kaca buram, judul "Welcome back" / gammā di
+tengah tanpa tombol kembali, "New photo" kaca buram melayang di bawah. Ketuk =
+buka (PhotoFlight), tekan lama / klik kanan = menu proyek. Menggantikan strip
+akordeon `RecentStrip` (dihapus). IndexedDB `gamma.projects`.
 
 **Revamp editor HP, tahap 1 (PR #48)**
 

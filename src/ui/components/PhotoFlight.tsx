@@ -45,10 +45,9 @@ function photoElement(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-photo-box]');
 }
 
-/** Bilah proyek di Recent (bagian fotonya). */
+/** Ubin proyek di Welcome back (RecentGrid). */
 function slatElement(projectId: string): HTMLElement | null {
-  const slat = document.getElementById(`recent-${projectId}`);
-  return slat?.querySelector<HTMLElement>('.recent-lift') ?? slat;
+  return document.getElementById(`recent-${projectId}`);
 }
 
 /**
@@ -93,6 +92,12 @@ export function launchClose(projectId: string | undefined): void {
   current = { key: nextKey++, mode: 'close', projectId, snapshot, from, aspect: source.width / Math.max(1, source.height) };
   setStage('close');
   emit();
+}
+
+/** Proyek yang fotonya sedang terbang kembali ke ubinnya (ubin itu disembunyikan sampai mendarat). */
+export function useClosingProject(): string | undefined {
+  const f = useSyncExternalStore(subscribe, getFlight, getFlight);
+  return f?.mode === 'close' ? f.projectId : undefined;
 }
 
 /** Ada penerbangan buka: dialog "Opening" tidak perlu tampil. */
@@ -260,6 +265,8 @@ export function PhotoFlight() {
   // membuka: proyek dimuat dari IndexedDB dulu).
   const landing = useRef(0);
   const sawOpening = useRef(0);
+  /** Galat yang sudah ada saat penerbangan dimulai (galat baru = gagal membuka). */
+  const errorAtLaunch = useRef<{ key: number; error: unknown }>({ key: 0, error: undefined });
   useEffect(() => {
     const outer = outerRef.current, inner = innerRef.current;
     if (flight?.mode !== 'open' || !outer || !inner || landing.current === flight.key) return;
@@ -270,8 +277,13 @@ export function PhotoFlight() {
     // engine menyusul di bawahnya. Tanpa itu (RAW): tunggu render resep proyek.
     const opened = (engineState.phase === 'opening' && !!engineState.preview)
       || (projectsState.currentId === flight.projectId && engineState.phase === 'editing' && !!engineState.frame && !engineState.rendering);
-    const failed = sawOpening.current === key && engineState.phase !== 'opening' && projectsState.currentId !== flight.projectId
-      && (engineState.phase === 'idle' || !!engineState.error);
+    if (errorAtLaunch.current.key !== key) errorAtLaunch.current = { key, error: engineState.error };
+    // Gagal: engine sempat membuka lalu berhenti tanpa proyek ini, atau galat baru muncul
+    // (mis. worker/GPU gagal sebelum sempat membuka sama sekali).
+    const failed = engineState.phase !== 'opening' && projectsState.currentId !== flight.projectId && (
+      (sawOpening.current === key && (engineState.phase === 'idle' || !!engineState.error))
+      || engineState.engine === 'failed'
+      || (!!engineState.error && engineState.error !== errorAtLaunch.current.error));
     // Berkas asli ternyata hilang (tanpa membuka engine): kartu jadi "missing".
     const missing = projectsState.list.find((c) => c.id === flight.projectId)?.missing;
     if (!opened && !failed && !missing) return;
