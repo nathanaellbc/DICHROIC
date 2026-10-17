@@ -63,24 +63,30 @@ Rename, Duplicate, Delete), IndexedDB `gamma.projects`.
   muat).
 - Tahan foto untuk melihat asli sudah ada di `PhotoView` (tidak diubah).
 
-**Rencana berikutnya** (mockup: artifact canvas "gammā editor revamp",
-privat milik pemilik)
+**Revamp editor HP, tahap 2 (2026-10-17, langsung ke main)** -- rencana
+dari mockup "gammā editor revamp" (artifact privat pemilik) dikerjakan:
 
-| Urutan | Bagian | Sekarang | Diganti jadi |
-|---|---|---|---|
-| 1 | Recent: thumbnail | 640 px, buram di bilah besar | Sisi pendek ~1300 px |
-| 1 | Recent: saat dimuat | Kartu kosong; baki aksi dan "+" intro tembus | Placeholder gelap pekat |
-| 1 | Recent: kaca intro | Tetap jalan (WebGL, glow) di belakang galeri | Tidak dipasang saat mode Recent |
-| 1 | Buka/tutup proyek | Dialog "Opening …", layar berganti | Foto terbang dari kartu ke editor dan kembali (shared element) |
-| 2 | Pemilih film | Sheet daftar nama stok | Carousel kartu foto pengguna per stok, crossfade, baris kertas cetak |
-| 3 | Bar atas editor | Pill kaca besar | Tombol bulat kecil melayang, nama film di tengah |
-| 3 | Undo | Ketuk = 1 langkah | Tekan lama = riwayat |
-| ? | Tab kategori bawah | Baris ikon terpisah | Pertahankan atau gabung ke strip alat (keputusan pemilik) |
-| ? | Render saat menggeser | Indikator "Developing" | Preview cepat resolusi rendah saat jari bergerak (cek dulu engine) |
+| Bagian | Jadi | Di mana |
+|---|---|---|
+| Recent: thumbnail | Sisi pendek ~1300 px (maks. 2600); frame gesture 256 px tidak dipakai | `projects.ts` `THUMB_SHORT` |
+| Recent: saat dimuat | Placeholder pekat `--recent-placeholder`; baki aksi baru terlihat saat foto terangkat; foto memudar masuk | `RecentStrip.tsx` |
+| Recent: kaca intro | GlassOrb + IntroBackdrop tidak dipasang selama Recent | `Start.tsx` |
+| Buka/tutup proyek | `PhotoFlight`: foto terbang bilah -> kotak foto editor (pil status + Cancel menggantikan dialog Opening; mendarat setelah render resep proyek), dan kembali saat Close Photo | `components/PhotoFlight.tsx`, `[data-photo-box]` di PhotoView |
+| Pemilih film (HP) | Carousel kartu foto pengguna per stok + baris kertas; kartu di tengah dipratinjau, gambar kartu = frame yang sudah tampil (diingat per foto), crossfade di atas placeholder hitam-putih; tombol List ke daftar lama | `screens/FilmCarousel.tsx` |
+| Bar atas editor (HP) | Tombol bulat kaca 40 px melayang (More; Undo, Export), nama film + kertas di tengah | `.mobile-toolbar.is-floating` |
+| Undo | Ketuk = 1 langkah; tekan lama/klik kanan = riwayat berlabel alat + nilai; `engine.undoTo()`, Redo tetap per langkah | `model/history.ts`, `UndoButton` |
+| Render saat menggeser | Sudah ada di engine: selama gesture `#renderLongEdge` = 256 px dan "Developing" disembunyikan (terukur: 1024x660 -> 256x165 -> 1024x660) | `engine.ts` |
+| Tab kategori bawah | Dipertahankan (belum ada keputusan pemilik untuk digabung) | -- |
+
+Catatan: gambar kartu carousel diambil dari frame pratinjau; frame yang
+tampil saat resep berganti ditandai basi (`params` berubah seketika,
+`rendering` baru menyala setelah worker menerima patch).
 
 **Masalah diketahui**
 
-- Tiga baris Recent di tabel di atas (terlihat di Chromium dengan 3 proyek).
+- Panel browser Claude yang tersembunyi membatasi rAF ke ~0,5 Hz: animasi
+  PhotoFlight hanya bisa diperiksa logikanya di sana; rasa geraknya perlu
+  dicoba di HP.
 - Chromium headless: emulasi mouse/sentuh di kubah intro memicu masuk fase
   berikutnya; gesture kubah diverifikasi lewat simulasi logika atau di HP.
 - Rasa haptic dan luncuran penggaris belum diuji di perangkat.
