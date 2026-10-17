@@ -574,16 +574,24 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     // mereka sebagai lapis depan (tajam, tidak disebar) dan medan jauh di sana
     // berisi warna subjek -- lapis belakang di piksel campuran jadi gelap/tajam.
     // Ambil latar blur dari sel latar di sekitar.
-    if (a > 0.0 && rBack >= GRID_MIN_RADIUS / lens.gridScale) {
-      back = backgroundFill(uv, rBack, back);
+    // Hanya untuk piksel campuran: latar murni (alfa ~0, ViTMatte jarang
+    // persis 0) tetap memakai medan biasa -- isian ini blur tambahan, dan di
+    // seluruh latar pita ia membuat intensitas blur berbeda dari luar pita.
+    let fillWeight = smoothstep(0.02, 0.35, a);
+    if (fillWeight > 0.0 && rBack >= GRID_MIN_RADIUS / lens.gridScale) {
+      back = mix(back, backgroundFill(uv, rBack, back), fillWeight);
     }
     var fore = base;
     // Piksel campuran yang lapis depannya tajam: warna adegan di sini adalah
     // a*F + (1-a)*latar TAJAM. Mencampurnya apa adanya meninggalkan latar tajam
     // berbobot a(1-a) -- cincin tipis yang tidak blur di sepanjang tepi subjek.
     // Ganti dengan warna lapis depan murni (dekontaminasi).
-    if (a > 0.0 && abs(front) * 0.5 < 0.5) {
-      fore = foregroundColor(p, source.rgb);
+    // Hanya piksel yang benar-benar campuran: piksel (hampir) murni subjek
+    // memakai warna tajamnya sendiri -- rata-rata 7x7 dekontaminasi mengaburkan
+    // detail subjek di sepanjang pita.
+    let decontaminate = 1.0 - smoothstep(0.9, 0.99, a);
+    if (decontaminate > 0.0 && abs(front) * 0.5 < 0.5) {
+      fore = mix(fore, foregroundColor(p, source.rgb), decontaminate);
     }
     base = mix(back, fore, a);
   }
