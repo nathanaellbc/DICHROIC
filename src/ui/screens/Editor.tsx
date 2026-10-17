@@ -45,6 +45,8 @@ import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
 import { FilmCarousel } from './FilmCarousel';
+import { describeChange } from '../model/history';
+import { haptic } from '../haptics';
 import { projects } from '../projects/projects';
 import { RemoveContent } from './Remove';
 import { RefineEdgeContent } from './RefineEdge';
@@ -502,11 +504,71 @@ function PreviewNote({ state }: { state: EngineState }) {
   );
 }
 
+/** Tekan lama Undo (ms) untuk riwayat, dan gerak yang membatalkannya (px). */
+const HISTORY_HOLD_MS = 450;
+const HISTORY_SLOP = 10;
+/** Langkah riwayat yang ditampilkan (terbaru dulu). */
+const HISTORY_ROWS = 10;
+
+/**
+ * Ketuk = mundur satu langkah; tekan lama (atau klik kanan) = riwayat: tiap
+ * langkah dinamai alat yang diubahnya, pilih satu untuk kembali ke sebelum
+ * langkah itu. Langkah yang dilewati tetap bisa di-Redo.
+ */
 function UndoButton({ state, className, size = 20 }: { state: EngineState; className: string; size?: number }) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const hold = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
+  const cancelHold = () => {
+    if (hold.current) window.clearTimeout(hold.current.timer);
+  };
+  const openHistory = (el: HTMLElement) => {
+    if (!state.history.canUndo) return;
+    haptic();
+    setAnchor(el.getBoundingClientRect());
+  };
+  const past = anchor ? engine.historyPast : [];
+  const actions: SheetAction[] = [];
+  for (let i = past.length - 1; i >= 0 && actions.length < HISTORY_ROWS; i--) {
+    const { label, value } = describeChange(past[i]!, past[i + 1] ?? state.params);
+    const index = i;
+    actions.push({ label, shortcut: value, icon: 'undo', onSelect: () => { setAnchor(null); engine.undoTo(index); } });
+  }
+  if (past.length > HISTORY_ROWS) actions.push({ label: `Back to start · ${past.length} steps`, icon: 'reset', onSelect: () => { setAnchor(null); engine.undoTo(0); } });
   return (
-    <PressButton className={className} aria-label="Undo" aria-keyshortcuts={UNDO_KEYS} title={`Undo (${MOD}Z)`} disabled={!state.history.canUndo} onClick={() => engine.undo()}>
-      <Icon name="undo" size={size} strokeWidth={2.2} />
-    </PressButton>
+    <>
+      <PressButton
+        className={className}
+        aria-label="Undo"
+        aria-keyshortcuts={UNDO_KEYS}
+        aria-haspopup="dialog"
+        title={`Undo (${MOD}Z) · hold for history`}
+        disabled={!state.history.canUndo}
+        onPointerDown={(e) => {
+          const el = e.currentTarget;
+          cancelHold();
+          hold.current = { x: e.clientX, y: e.clientY, fired: false, timer: window.setTimeout(() => {
+            if (hold.current) hold.current.fired = true;
+            openHistory(el);
+          }, HISTORY_HOLD_MS) };
+        }}
+        onPointerMove={(e) => {
+          const h = hold.current;
+          if (h && !h.fired && Math.hypot(e.clientX - h.x, e.clientY - h.y) > HISTORY_SLOP) cancelHold();
+        }}
+        onPointerUp={cancelHold}
+        onPointerCancel={cancelHold}
+        onPointerLeave={cancelHold}
+        onContextMenu={(e) => { e.preventDefault(); cancelHold(); openHistory(e.currentTarget); }}
+        onClick={() => {
+          if (hold.current?.fired) { hold.current = null; return; }
+          hold.current = null;
+          engine.undo();
+        }}
+      >
+        <Icon name="undo" size={size} strokeWidth={2.2} />
+      </PressButton>
+      <ActionSheet open={anchor !== null && actions.length > 0} anchor={anchor} label="Undo history" actions={actions} onCancel={() => setAnchor(null)} />
+    </>
   );
 }
 
@@ -572,7 +634,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
       <div style={{ ...photoStyle, zIndex: 0 }}>{photo}</div>
 
       <div
-        className={!hasPhoto && !removing ? 'mobile-toolbar is-bare' : 'mobile-toolbar glass'}
+        className={!hasPhoto && !removing ? 'mobile-toolbar is-bare' : removing ? 'mobile-toolbar glass' : 'mobile-toolbar is-floating'}
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
@@ -580,23 +642,28 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
         }}
       >
         {removing ? <div className="mobile-brand"><span>gammā</span><span className="secondary">Original · grading paused</span></div> : !hasPhoto ? null : <>
-        <PressButton className="icon-btn plain" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
-          <Icon name="more" size={20} strokeWidth={2.4} />
-        </PressButton>
+        {/* Tombol bulat kecil melayang di kiri/kanan, nama film di tengah. */}
+        <span className="mobile-toolbar-side">
+          <PressButton className="icon-btn glass float-btn" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
+            <Icon name="more" size={19} strokeWidth={2.4} />
+          </PressButton>
+        </span>
         <PressButton
-          className="capsule plain mobile-recipe"
+          className="mobile-title"
           aria-label={`Stocks: ${state.params.filmEnabled ? film.name : 'Film Off'}, ${!state.params.filmEnabled ? offOutput(state.params) : scan ? 'scanned' : `printed on ${paper.name}`}. Change`}
           disabled={!hasPhoto}
           onClick={() => openStocks('film')}
         >
-          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left' }}>
-            <span className="t-subhead" style={{ fontWeight: 600, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.params.filmEnabled ? film.short : 'Film Off'}</span>
-            <span className="t-caption secondary" style={{ fontWeight: 500, lineHeight: 1.15, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!state.params.filmEnabled ? offOutput(state.params) : scan ? 'Scanned' : `on ${paper.short}`}</span>
+          <span className="mobile-title-name">
+            <span>{state.params.filmEnabled ? film.short : 'Film Off'}</span>
+            <Icon name="chevronDown" size={13} strokeWidth={2.6} />
           </span>
-          <span className="secondary" style={{ display: 'inline-flex', flexShrink: 0 }}><Icon name="upDown" size={14} strokeWidth={2.4} /></span>
+          <span className="mobile-title-sub">{!state.params.filmEnabled ? offOutput(state.params) : scan ? 'Scanned' : `on ${paper.short}`}</span>
         </PressButton>
-        <UndoButton state={state} className="icon-btn plain" />
-        <PressButton className="icon-btn mobile-export" aria-label="Export" aria-keyshortcuts="E" title="Export (E)" onClick={() => setSheet({ kind: 'export' })}><Icon name="share" size={20} /></PressButton>
+        <span className="mobile-toolbar-side is-end">
+          <UndoButton state={state} className="icon-btn glass float-btn" size={18} />
+          <PressButton className="icon-btn float-btn mobile-export" aria-label="Export" aria-keyshortcuts="E" title="Export (E)" onClick={() => setSheet({ kind: 'export' })}><Icon name="share" size={18} /></PressButton>
+        </span>
         </>}
       </div>
 

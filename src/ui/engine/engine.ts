@@ -699,6 +699,26 @@ export class Engine {
     this.setParams(diffParams(this.#state.params, target), false);
   }
 
+  /** Resep sebelumnya, terlama di depan (riwayat Undo; resep sekarang = `params`). */
+  get historyPast(): readonly RenderParams[] {
+    return this.#past;
+  }
+
+  /**
+   * Kembali ke resep `historyPast[index]` sekaligus (tekan lama Undo). Langkah
+   * yang dilewati masuk ke Redo berurutan, jadi Redo mengulanginya satu per satu.
+   */
+  undoTo(index: number): void {
+    const target = this.#past[index];
+    if (!target) return;
+    const skipped = this.#past.splice(index);
+    skipped.shift();
+    this.#future.push(this.#state.params, ...skipped.reverse());
+    this.#lastEditAt = 0;
+    this.setParams(diffParams(this.#state.params, target), false);
+    this.#set({ history: this.#historyState() });
+  }
+
   redo(): void {
     const target = this.#future.pop();
     if (!target) return;
