@@ -632,6 +632,7 @@ export function PhotoView({
         {shown && (
           <motion.div
             key={photoKey}
+            data-photo-box=""
             role="img"
             aria-label={label}
             initial={{ opacity: 0, scale: 0.985 }}

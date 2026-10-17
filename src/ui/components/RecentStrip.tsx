@@ -20,6 +20,7 @@ import type { ProjectCard } from '../projects/projects';
 import { recipeParts, relativeTime } from '../projects/format';
 import { haptic } from '../haptics';
 import { Icon } from './Icon';
+import { launchOpen } from './PhotoFlight';
 
 /** Tekan lama untuk menu (ms), dan gerak yang membatalkannya (px). */
 const HOLD_MS = 480;
@@ -50,6 +51,9 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink, onRename, onDupli
   /** Seret vertikal barusan: klik yang menyusul bukan "buka proyek". */
   const dragged = useRef(false);
   const grabberOpacity = useTransform(lift, [-LIFT_AT, 0], [0, 1]);
+  // Baki aksi baru terlihat saat foto mulai terangkat (tidak tembus saat dimuat).
+  const trayOpacity = useTransform(lift, [0, -LIFT_AT], [0, 1]);
+  const trayVisibility = useTransform(lift, (v) => (v < -1 ? 'visible' : 'hidden'));
   const slats = useRef<Array<HTMLDivElement | null>>([]);
   const hold = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null);
   /** The press opened a closed slat: its click must not open the project too. */
@@ -90,7 +94,13 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink, onRename, onDupli
     hold.current = null;
   };
 
-  const open = (c: ProjectCard) => (c.missing ? onRelink(c) : onOpen(c));
+  const open = (c: ProjectCard) => {
+    if (c.missing) { onRelink(c); return; }
+    // Foto terbang dari bilah ke editor (PhotoFlight).
+    const el = slats.current[cards.indexOf(c)]?.querySelector('.recent-lift');
+    if (el) launchOpen(c.id, c.thumb, el, c.width / Math.max(1, c.height));
+    onOpen(c);
+  };
 
   const actions: Array<{ label: string; icon: UiIconName; destructive?: boolean; run: (c: ProjectCard) => void }> = [
     { label: 'Edit', icon: 'rename', run: open },
@@ -187,7 +197,7 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink, onRename, onDupli
               }}
             >
               {isOpen && (
-                <div className="recent-tray" role="group" aria-label={`${c.name} actions`} aria-hidden={!lifted}>
+                <motion.div className="recent-tray" style={{ opacity: trayOpacity, visibility: trayVisibility }} role="group" aria-label={`${c.name} actions`} aria-hidden={!lifted}>
                   {actions.map((a) => (
                     <button
                       key={a.label}
@@ -207,7 +217,7 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink, onRename, onDupli
                       {a.label}
                     </button>
                   ))}
-                </div>
+                </motion.div>
               )}
               <motion.div
                 className="recent-lift"
@@ -225,7 +235,17 @@ export function RecentStrip({ cards, onOpen, onMenu, onRelink, onRename, onDupli
                   setLift(next);
                 }}
               >
-                {c.thumb && !c.missing && <img className="recent-photo" src={c.thumb} alt="" draggable={false} />}
+                {c.thumb && !c.missing && (
+                  <img
+                    className="recent-photo"
+                    src={c.thumb}
+                    alt=""
+                    draggable={false}
+                    decoding="async"
+                    onLoad={(e) => { e.currentTarget.dataset.loaded = ''; }}
+                    ref={(el) => { if (el?.complete && el.naturalWidth > 0) el.dataset.loaded = ''; }}
+                  />
+                )}
                 {c.missing && <span className="recent-warn" aria-hidden="true"><Icon name="warning" size={22} /></span>}
                 <span className="recent-num tabular" aria-hidden="true">{c.missing ? '!' : pad(i + 1)}</span>
                 {isOpen && <motion.span className="recent-grabber" aria-hidden="true" style={{ opacity: grabberOpacity }} />}

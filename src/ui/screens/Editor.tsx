@@ -23,6 +23,7 @@ import type { TabItem } from '../components/controls';
 import { ActionSheet } from '../components/Overlays';
 import type { SheetAction } from '../components/Overlays';
 import { PhotoView } from '../components/PhotoView';
+import { launchClose } from '../components/PhotoFlight';
 import { Vectorscope } from '../components/Vectorscope';
 import { Waveform } from '../components/Waveform';
 import { DEFAULT_SCOPE_PREFS, SCOPE_KINDS } from '../model/vectorscope';
@@ -198,6 +199,8 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
 
   // Proyek tersimpan otomatis: menutup foto tidak membuang apa pun.
   const onClose = () => {
+    // Foto terbang kembali ke bilahnya di Recent (PhotoFlight).
+    launchClose(projects.getState().currentId);
     void projects.close();
   };
 

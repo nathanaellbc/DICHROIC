@@ -155,13 +155,14 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
 
   return (
     <div ref={stage} className="empty-photo start-stage intro-stage" data-drag-over={over} data-phase={phase}>
-      <IntroBackdrop canvasRef={backdrop} />
+      {/* Kaca intro (WebGL) dan latarnya tidak dipasang selama Recent tampil. */}
+      {!showRecent && <IntroBackdrop canvasRef={backdrop} />}
       <div className="intro-sky" aria-hidden="true"><StarField /></div>
       <div className="start-dropframe" aria-hidden="true" />
       <ChromeWordmark visible={phase === 'splash'} progress={progress} />
       <StickerBurst show={ready && !over && !showRecent} origin={orbCenter} orbRadius={32} box={box} compact={compact} reduce={reduce} />
-      {box.width > 0 && (
-        <div className="intro-orb-slot" data-hidden={showRecent || undefined} aria-hidden={showRecent || undefined}>
+      {box.width > 0 && !showRecent && (
+        <div className="intro-orb-slot">
           <GlassOrb phase={phase} progress={progress} box={box} onCommit={commit} onChoose={onChoose} reduce={reduce} backdrop={backdrop} hint={touch ? 'Swipe up to continue' : 'Scroll or drag up to continue'} />
         </div>
       )}

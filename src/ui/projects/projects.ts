@@ -55,11 +55,13 @@ export const HAS_PROJECTS_KEY = 'gamma.hasProjects';
 export const SAVE_DELAY_MS = 800;
 /** Lama Undo setelah menghapus proyek. */
 export const UNDO_MS = 5000;
-const THUMB_EDGE = 640;
+/** Thumbnail: sisi pendek ~1300 px (tajam di bilah Recent terbuka), sisi panjang maks. 2600 px. */
+const THUMB_SHORT = 1300;
+const THUMB_LONG = 2600;
 
 type Listener = () => void;
 
-/** Thumbnail JPEG dari pratinjau yang tampil (sisi panjang 640 px). */
+/** Thumbnail JPEG dari pratinjau yang tampil (lihat THUMB_SHORT/THUMB_LONG; tidak diperbesar). */
 export async function frameThumbnail(frame: Frame): Promise<Blob | undefined> {
   if (typeof document === 'undefined') return undefined;
   const source = document.createElement('canvas');
@@ -68,7 +70,7 @@ export async function frameThumbnail(frame: Frame): Promise<Blob | undefined> {
   const ctx = source.getContext('2d', { colorSpace: frame.colorSpace });
   if (!ctx) return undefined;
   ctx.putImageData(new ImageData(new Uint8ClampedArray(frame.pixels), frame.width, frame.height, { colorSpace: frame.colorSpace }), 0, 0);
-  const scale = Math.min(1, THUMB_EDGE / Math.max(frame.width, frame.height));
+  const scale = Math.min(1, THUMB_SHORT / Math.min(frame.width, frame.height), THUMB_LONG / Math.max(frame.width, frame.height));
   const out = document.createElement('canvas');
   out.width = Math.max(1, Math.round(frame.width * scale));
   out.height = Math.max(1, Math.round(frame.height * scale));
@@ -348,7 +350,7 @@ export class Projects {
     }
     if (state.phase !== 'editing') return;
     const changed = state.params !== this.#saved.params || state.retouches !== this.#saved.retouches
-      || (!state.rendering && state.frame !== this.#saved.frame);
+      || (!state.rendering && !state.interacting && state.frame !== this.#saved.frame);
     if (changed) this.#scheduleSave();
   }
 
@@ -367,7 +369,8 @@ export class Projects {
     if (!record || state.phase !== 'editing') return;
     const paramsChanged = state.params !== this.#saved.params;
     const removalsChanged = state.retouches !== this.#saved.retouches;
-    const frame = !state.rendering ? state.frame : undefined;
+    // Frame ringan selama gesture (256 px) tidak dijadikan thumbnail.
+    const frame = !state.rendering && !state.interacting ? state.frame : undefined;
     const thumbChanged = !!frame && frame !== this.#saved.frame;
     if (!paramsChanged && !removalsChanged && !thumbChanged) return;
     if (removalsChanged) {

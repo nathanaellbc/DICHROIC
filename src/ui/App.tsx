@@ -7,9 +7,11 @@ import { describeError, engine } from './engine/engine';
 import { ACCEPTED_FILES, useEngineState, useFilePicker, useProjects, useSizeClass } from './hooks';
 import { Editor } from './screens/Editor';
 import { OpeningCard, UnsupportedScreen } from './screens/Start';
+import { PhotoFlight, useOpenFlight } from './components/PhotoFlight';
 
 export function App() {
   const state = useEngineState();
+  const openFlight = useOpenFlight();
   const project = useProjects();
   const size = useSizeClass();
   const wide = size.width === 'regular';
@@ -100,7 +102,8 @@ export function App() {
           onError={(e) => setLocalError(describeError(e))}
         />
       </main>
-      <OpeningCard opening={state.phase === 'opening' ? state.opening : undefined} onCancel={() => engine.cancelOpening()} />
+      <OpeningCard opening={state.phase === 'opening' && !openFlight ? state.opening : undefined} onCancel={() => engine.cancelOpening()} />
+      <PhotoFlight />
       <Alert
         open={!!error}
         title={error?.title ?? ''}
