@@ -1,11 +1,102 @@
 # DICHROIC — Handoff Fase 2
 
-Ditulis 2026-09-28, diperbarui 2026-09-29 di akhir 2C. Ledger
+Ditulis 2026-09-28, diperbarui 2026-09-29 di akhir 2C, dan 2026-10-17
+(gammā: intro, Recent, revamp editor HP). Ledger
 kerja (`.superpowers/`) sengaja di-ignore git, jadi isinya yang penting
 dipindah ke sini. Sumber otoritatif tetap di spec dan rencana; dokumen ini
 peta jalan untuk melanjutkan.
 
-## Posisi sekarang (diperbarui 2026-09-29, fitur gaya EMULSION — SELESAI)
+## Posisi sekarang (2026-10-17): gammā — intro, Recent, revamp editor HP
+
+**Nama dan deploy**
+
+- App bernama **gammā** (rebrand dari DICHROIC). Nama repo dan kunci
+  penyimpanan lama (`dichroic.*`) tetap.
+- Deploy di **Vercel**: otomatis tiap push ke `main` (Production) dan tiap PR
+  (Preview); URL ada di status deployment GitHub (Production terakhir
+  `577da34`, PR #48). GitHub Pages (`deploy.yml`) sudah dihapus (commit
+  63935e7), jadi link `github.io` di catatan lama tidak berlaku.
+- Container cloud tidak bisa menjangkau domain Vercel/github.io (proxy);
+  verifikasi lewat dev server lokal + Chromium headless (lihat bawah).
+
+**Layar mulai / intro** (`src/ui/components/WelcomeIntro.tsx`, `src/ui/screens/Start.tsx`)
+
+- Kubah kaca -> tombol "+" sepenuhnya mengikuti gesture, tanpa timer: satu
+  MotionValue `progress` (0 = kubah, 1 = "+") menentukan pusat dan diameter
+  kaca. Swipe di mana saja mengisinya sebanding jarak (`swipeLength` =
+  min(360 px, 45 % tinggi)); ditahan di tengah = diam di tengah; dilepas
+  menetap ke ujung terdekat dengan memperhitungkan kecepatan.
+- Saat mendarat jadi "+" (`impact()`): pegas membal, gelombang kejut,
+  `flareGlow()`, isi muncul di momen yang sama; haptic di
+  `src/ui/haptics.ts` (Vibration API; iOS 18+ lewat sakelar
+  `<input type="checkbox" switch>` tersembunyi).
+- `src/ui/frameLoop.ts`: satu rAF berurutan (orb -> stiker -> kanvas latar
+  -> glow), jadi kanvas latar dan glow memakai posisi frame yang sama dengan
+  DOM. Transform kaca ditulis di loop ini, bukan oleh motion.
+- Kaca: port React Bits GlassSurface (`reactbits/GlassSurface.tsx`), mode
+  WebGL di semua browser, membiaskan `IntroBackdrop.tsx` (kanvas tersembunyi
+  yang menggambar ulang latar, bintang, teks, dan stiker di area kaca; hanya
+  bila isinya berubah).
+- Cincin: garis SVG vektor (`.intro-ring-line`, tebal dalam px layar lewat
+  `--orb-px`) + glow `RingBloom.tsx` (WebGL2, mode gelap): H =
+  softThreshold(C_in), B = sum w_i (G_sigma_i * H) lima skala di piramida mip,
+  C_out = C_in + 2^0.1 k B; horizon bloom (matahari membungkus tepi, atmosfer
+  biru). Angka di `GLOW`, `SUN`, `ATMOSPHERE`. Sesi lain sesudahnya mengubah
+  kubah dan blend glow (lihat `git log`) -- kode adalah sumber kebenaran.
+- Layar pembuka iOS dua tema dari `tools/gen_icons.mjs`
+  (`public/icons/splash-{dark,light}-*.png`).
+
+**Recent / proyek** (`src/ui/components/RecentStrip.tsx`, `src/ui/projects/`)
+-- dibangun di sesi lain: strip akordeon, baki aksi geser ke atas (Edit,
+Rename, Duplicate, Delete), IndexedDB `gamma.projects`.
+
+**Revamp editor HP, tahap 1 (PR #48)**
+
+- `src/ui/components/RulerSlider.tsx`: penggaris ganti slider. Rentang penuh
+  = 520 px jari untuk semua alat; dilempar meluncur (peluruhan eksponensial,
+  tau 325 ms) dan memantul di ujung; detent + haptic di nilai bawaan; ketuk
+  dua kali reset; pita biru dari bawaan ke nilai. Dipakai lewat
+  `<ToolControl ruler>` hanya di panel HP; inspector layar lebar tetap
+  `Slider`.
+- `ToolChips` jadi pill satu baris (titik biru = diubah); catatan alat di
+  balik tombol info; `COMPACT_CONTROL_MAX_HEIGHT` 156 -> 204 (White Balance
+  muat).
+- Tahan foto untuk melihat asli sudah ada di `PhotoView` (tidak diubah).
+
+**Rencana berikutnya** (mockup: artifact canvas "gammā editor revamp",
+privat milik pemilik)
+
+| Urutan | Bagian | Sekarang | Diganti jadi |
+|---|---|---|---|
+| 1 | Recent: thumbnail | 640 px, buram di bilah besar | Sisi pendek ~1300 px |
+| 1 | Recent: saat dimuat | Kartu kosong; baki aksi dan "+" intro tembus | Placeholder gelap pekat |
+| 1 | Recent: kaca intro | Tetap jalan (WebGL, glow) di belakang galeri | Tidak dipasang saat mode Recent |
+| 1 | Buka/tutup proyek | Dialog "Opening …", layar berganti | Foto terbang dari kartu ke editor dan kembali (shared element) |
+| 2 | Pemilih film | Sheet daftar nama stok | Carousel kartu foto pengguna per stok, crossfade, baris kertas cetak |
+| 3 | Bar atas editor | Pill kaca besar | Tombol bulat kecil melayang, nama film di tengah |
+| 3 | Undo | Ketuk = 1 langkah | Tekan lama = riwayat |
+| ? | Tab kategori bawah | Baris ikon terpisah | Pertahankan atau gabung ke strip alat (keputusan pemilik) |
+| ? | Render saat menggeser | Indikator "Developing" | Preview cepat resolusi rendah saat jari bergerak (cek dulu engine) |
+
+**Masalah diketahui**
+
+- Tiga baris Recent di tabel di atas (terlihat di Chromium dengan 3 proyek).
+- Chromium headless: emulasi mouse/sentuh di kubah intro memicu masuk fase
+  berikutnya; gesture kubah diverifikasi lewat simulasi logika atau di HP.
+- Rasa haptic dan luncuran penggaris belum diuji di perangkat.
+
+**Cara verifikasi yang dipakai**
+
+- `node_modules/.bin/tsc --noEmit -p .`, `node_modules/.bin/eslint src/ui`,
+  `node_modules/.bin/vitest run test/ui` (152 tes).
+- Dev server `node_modules/.bin/vite --port 5199 --strictPort`; Chromium
+  `/opt/pw-browsers/chromium-1194/chrome-linux/chrome --headless=new
+  --enable-unsafe-webgpu` lewat CDP (390x844 @2x/@3x, emulasi
+  `prefers-color-scheme`). Foto dibuka dengan `DOM.setFileInputFiles` pada
+  `input[type=file]` memakai `docs/mockups/img/*.jpg`; muat ulang = pengguna
+  yang kembali (Recent).
+
+## Posisi sebelumnya (2026-09-29, fitur gaya EMULSION — SELESAI)
 
 Permintaan pemilik: "untuk implementasi save gunakan cara dari aplikasi
 EMULSION, tambahkan juga menu camera raw control seperti EMULSION beserta lens
@@ -84,8 +175,9 @@ ulang, tidak diimpor.
 - **PWA selesai:** `src/sw.ts` (vite-plugin-pwa `injectManifest`) mem-precache
   seluruh aplikasi termasuk `data/` (~9,7 MB) dan menambahkan header
   COOP/COEP/CORP ke setiap respons, jadi RAW jalan juga di GitHub Pages.
-  Deploy: `.github/workflows/deploy.yml` (Pages, base `/<repo>/`), situs di
-  https://nathanaellbc.github.io/DICHROIC/.
+  Deploy saat itu: `.github/workflows/deploy.yml` (Pages, base `/<repo>/`),
+  https://nathanaellbc.github.io/DICHROIC/ -- sudah diganti Vercel (lihat
+  Posisi sekarang).
 - **Foto HP:** Orientation EXIF, saran colour space dari ICC, HEIC/AVIF/WebP
   lewat decoder browser. **Prewarm** shader setelah `init`.
 - **Arah kontrol (PR #7):** Exposure utama dan filter C/M/Y dibalik di UI
@@ -259,6 +351,8 @@ Belum diuji di iPhone fisik.
 - Komunikasi dan dokumen dalam Bahasa Indonesia. Eksekusi rencana inline
   (skill executing-plans), satu commit per task, commit diakhiri baris
   `Co-Authored-By`.
+- (2026-10) PR dibuat dan langsung di-merge tanpa minta izin; CI tidak perlu
+  ditunggu. Branch kerja di-reset ke `origin/main` di awal tiap tugas.
 
 ## Ringkasan 2B (detail di spec §5.1)
 
