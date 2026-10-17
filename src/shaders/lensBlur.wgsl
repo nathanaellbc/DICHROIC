@@ -577,7 +577,7 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Hanya untuk piksel campuran: latar murni (alfa ~0, ViTMatte jarang
     // persis 0) tetap memakai medan biasa -- isian ini blur tambahan, dan di
     // seluruh latar pita ia membuat intensitas blur berbeda dari luar pita.
-    let fillWeight = smoothstep(0.02, 0.35, a);
+    let fillWeight = smoothstep(0.01, 0.1, a);
     if (fillWeight > 0.0 && rBack >= GRID_MIN_RADIUS / lens.gridScale) {
       back = mix(back, backgroundFill(uv, rBack, back), fillWeight);
     }
