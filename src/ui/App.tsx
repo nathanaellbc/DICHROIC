@@ -12,6 +12,15 @@ import { PhotoFlight, useOpenFlight } from './components/PhotoFlight';
 export function App() {
   const state = useEngineState();
   const openFlight = useOpenFlight();
+  // Dialog "Opening" hanya untuk pembukaan yang lambat tanpa pratinjau browser (RAW, EXR):
+  // foto biasa tampil seketika, jadi dialog tidak sempat berkedip.
+  const slowOpen = state.phase === 'opening' && !openFlight && !state.preview;
+  const [showOpening, setShowOpening] = useState(false);
+  useEffect(() => {
+    if (!slowOpen) { setShowOpening(false); return undefined; }
+    const t = window.setTimeout(() => setShowOpening(true), 300);
+    return () => window.clearTimeout(t);
+  }, [slowOpen]);
   const project = useProjects();
   const size = useSizeClass();
   const wide = size.width === 'regular';
@@ -102,7 +111,7 @@ export function App() {
           onError={(e) => setLocalError(describeError(e))}
         />
       </main>
-      <OpeningCard opening={state.phase === 'opening' && !openFlight ? state.opening : undefined} onCancel={() => engine.cancelOpening()} />
+      <OpeningCard opening={slowOpen && showOpening ? state.opening : undefined} onCancel={() => engine.cancelOpening()} />
       <PhotoFlight />
       <Alert
         open={!!error}

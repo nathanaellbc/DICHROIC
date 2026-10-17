@@ -49,6 +49,13 @@ export interface EngineState {
   engine: EngineStatus;
   phase: Phase;
   opening?: { name: string; stage: string };
+  /**
+   * Selama membuka: foto yang di-decode browser seketika (JPEG/PNG/HEIC/WebP,
+   * sisi panjang maks. 1600 px, sRGB) dan resep yang akan dipakai, supaya
+   * editor langsung menampilkan foto (dengan look LUT) sementara engine
+   * mengembangkan di belakang.
+   */
+  preview?: { frame: Frame; params: RenderParams };
   fileName?: string;
   params: RenderParams;
   /** Nilai "reset" untuk foto ini: baseline + saran input dari decoder. */
@@ -121,6 +128,35 @@ function isDeviceLoss(error: Error): boolean {
 /** Perubahan beruntun yang lebih rapat dari ini (satu seretan slider) jadi satu langkah undo. */
 const HISTORY_GAP_MS = 600;
 const HISTORY_LIMIT = 100;
+
+/** Sisi panjang pratinjau browser saat membuka (cukup untuk layar HP, murah di-decode). */
+const QUICK_PREVIEW_EDGE = 1600;
+
+/**
+ * Decode browser seketika untuk pratinjau saat membuka; `undefined` untuk
+ * format yang tidak dikenal browser (RAW, EXR, TIFF) -- itu menunggu engine.
+ * Orientation EXIF diterapkan (`from-image`), sama dengan decoder engine.
+ */
+async function quickPreview(file: File): Promise<Frame | undefined> {
+  if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') return undefined;
+  try {
+    const probe = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, QUICK_PREVIEW_EDGE / Math.max(probe.width, probe.height));
+    const width = Math.max(1, Math.round(probe.width * scale)), height = Math.max(1, Math.round(probe.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
+    if (!ctx) { probe.close(); return undefined; }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(probe, 0, 0, width, height);
+    probe.close();
+    const data = ctx.getImageData(0, 0, width, height);
+    return { width, height, pixels: new Uint8ClampedArray(data.data.buffer), colorSpace: 'srgb' } as Frame;
+  } catch {
+    return undefined;
+  }
+}
 
 function diffParams(from: RenderParams, to: RenderParams): Partial<RenderParams> {
   const patch: Partial<RenderParams> = {};
@@ -522,7 +558,12 @@ export class Engine {
     const stillCurrent = () => token === this.#openToken;
     const previousPhase = this.#state.fileName && this.#state.frame ? 'editing' : 'idle';
     this.#dirty = false;
-    this.#set({ phase: 'opening', opening: { name: file.name, stage: 'Reading…' }, error: undefined });
+    this.#set({ phase: 'opening', opening: { name: file.name, stage: 'Reading…' }, error: undefined, preview: undefined });
+    // Paralel dengan decode dan persiapan engine: pratinjau browser seketika.
+    const previewParams = restore ? { ...this.#state.params, ...restore.params } : this.#state.params;
+    void quickPreview(file).then((frame) => {
+      if (frame && stillCurrent() && this.#state.phase === 'opening') this.#set({ preview: { frame, params: previewParams } });
+    });
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const format = detectFormat(bytes);
@@ -542,7 +583,8 @@ export class Engine {
       if (!stillCurrent()) return false;
       // Tampilan (film, kertas, penyesuaian, lensa) dibawa ke foto berikutnya;
       // colour space input, auto exposure, dan titik fokus milik berkas.
-      const fileParams = { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
+      // Proyek: resepnya ikut ke render pertama (tanpa render ulang dan kedip sesudahnya).
+      const fileParams = restore ? { ...restore.params } : { ...input, lensFocusX: 0.5, lensFocusY: 0.5 };
       this.#set({ opening: { name: file.name, stage: 'Developing…' } });
       const prepared = await client.stageOpen(token, image, fileParams, profile.guideMaxEdge);
       if (!stillCurrent()) { await client.discardOpen(token); return false; }
@@ -572,7 +614,7 @@ export class Engine {
         fileName: file.name,
         frame: { width: preview.width, height: preview.height,
           pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
-        phase: 'editing', opening: undefined,
+        phase: 'editing', opening: undefined, preview: undefined,
         interacting: false,
         retouches: 0,
       });
@@ -583,7 +625,7 @@ export class Engine {
     } catch (error) {
       void client.discardOpen(token).catch(() => {});
       if (!stillCurrent()) return false;
-      this.#set({ phase: previousPhase, opening: undefined, error: describeError(error, file.name) });
+      this.#set({ phase: previousPhase, opening: undefined, preview: undefined, error: describeError(error, file.name) });
       if (previousPhase === 'editing') this.requestRender();
       return false;
     }
@@ -620,7 +662,7 @@ export class Engine {
   cancelOpening(): void {
     void this.#client?.discardOpen(this.#openToken).catch(() => {});
     this.#openToken += 1;
-    this.#set({ phase: this.#state.fileName && this.#state.frame ? 'editing' : 'idle', opening: undefined });
+    this.#set({ phase: this.#state.fileName && this.#state.frame ? 'editing' : 'idle', opening: undefined, preview: undefined });
     if (this.#state.phase === 'editing') this.requestRender();
   }
 

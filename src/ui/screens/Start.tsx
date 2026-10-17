@@ -19,6 +19,7 @@ import { isClosingFlight } from '../components/PhotoFlight';
 import { Sheet } from '../components/Sheet';
 import { PressButton } from '../components/controls';
 import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
+import { engine } from '../engine/engine';
 import type { ProjectCard } from '../projects/projects';
 import { ProjectsContent } from './Projects';
 import { dayGroup } from '../projects/format';
@@ -32,12 +33,14 @@ import { useDialogKeys, useProjects } from '../hooks';
  * membuka pemilih berkas bila diketuk. Lepasnya ditangani pendengar `drop`
  * di jendela (App); di sini hanya sorotan saat berkas diseret di atasnya.
  */
-export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePaused }: { onChoose: () => void; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
+export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => void; engineReady: boolean; engineFailed?: boolean; enginePaused?: boolean }) {
   const [over, setOver] = useState(false);
   const proj = useProjects();
   // Pemilih berkas biasa: bukan memilih ulang foto proyek.
   const onChoose = useCallback(() => {
     projects.requestRelink(undefined);
+    // Darkroom disiapkan selagi pengguna memilih foto (paralel dengan pemilih berkas).
+    engine.start();
     choose();
   }, [choose]);
   const [menu, setMenu] = useState<{ card: ProjectCard; anchor: DOMRect } | null>(null);
@@ -137,9 +140,8 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
   }, [phase, reduce, over]);
 
   // Status darkroom hanya sebagai teks kecil; tanpa titik berdenyut.
-  const status = engineFailed ? 'Darkroom stopped. Choose a photo to retry.'
-    : enginePaused ? 'Darkroom resting until you choose a photo.'
-      : engineReady ? null : 'Preparing the darkroom…';
+  // Persiapan engine berjalan diam-diam (foto tampil seketika saat dibuka); hanya kegagalan yang disebut.
+  const status = engineFailed ? 'Darkroom stopped. Choose a photo to retry.' : null;
   const ready = phase === 'ready';
   // Narrow or short stages: fewer, smaller stickers.
   const compact = box.width < 560 || box.height < 600;

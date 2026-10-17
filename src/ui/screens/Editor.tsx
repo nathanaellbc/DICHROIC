@@ -155,7 +155,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
     () => picking && focusPreview ? { ...state.params, lensFocusX: focusPreview.x, lensFocusY: focusPreview.y } : state.params,
     [picking, focusPreview, state.params],
   );
-  const hasPhoto = !!state.frame;
+  // Membuka: foto hasil decode browser tampil seketika (dengan look LUT) selagi engine mengembangkan.
+  const provisional = state.phase === 'opening' ? state.preview : undefined;
+  const hasPhoto = !!state.frame || !!provisional;
   const [scope, setScope] = useScopePrefs(wide);
 
   // Pipet white balance: aktif sampai satu ketukan di foto, hanya di grup Camera.
@@ -279,22 +281,23 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   );
   // Mode LUT pemilih film: resep tertunda tampil sebagai look di atas foto.
   const pendingStocks = sheet?.kind === 'stocks' ? sheet.pending : undefined;
-  const lookImage = useLookPreview(state, pendingStocks ?? stocksOf(state.params));
+  const lookImage = useLookPreview(state, pendingStocks ?? stocksOf(provisional?.params ?? state.params), provisional);
   const photo = removing ? <div ref={setRemovalPreview} className="remove-preview-slot" /> : !hasPhoto ? (
     <DropZone onChoose={onOpenFile} engineReady={state.engine === 'ready'} engineFailed={state.engine === 'failed'} enginePaused={state.engine === 'paused'} />
   ) : (
     <PhotoView
       reveal={revealCount}
-      frame={state.frame}
+      frame={provisional?.frame ?? state.frame}
       look={lookImage}
       focusMask={focusMask}
       // Pembanding/intip asli: `original` ikut resolusi render (tajam saat zoom).
       // Setelah hapus objek, `before` (sebelum retouch, resolusi pembukaan) supaya
       // pembanding tetap memperlihatkan foto aslinya.
-      original={engine.canUndoRemoval ? (state.before ?? state.original) : (state.original ?? state.before)}
+      original={provisional?.frame ?? (engine.canUndoRemoval ? (state.before ?? state.original) : (state.original ?? state.before))}
       compare={compare}
-      rendering={state.rendering && !state.interacting}
-      photoKey={state.fileName ?? 'photo'}
+      rendering={!!provisional || (state.rendering && !state.interacting)}
+      // Nama berkas yang sedang dibuka = kunci yang sama setelah terbuka: foto tidak dipasang ulang, hanya frame-nya berganti.
+      photoKey={(provisional ? state.opening?.name : state.fileName) ?? 'photo'}
       label={photoLabel}
       sourceSize={engine.imageSize}
       onResolutionChange={engine.setPreviewLongEdge}
@@ -671,6 +674,8 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
 
       <div
         className={!hasPhoto && !removing ? 'mobile-toolbar is-bare' : removing ? 'mobile-toolbar glass' : 'mobile-toolbar is-floating'}
+        // Kontrol menunggu engine selesai membuka (foto sudah tampil).
+        inert={state.phase === 'opening' || undefined}
         style={{
           position: 'absolute', top: topBarTop,
           left: 'calc(var(--safe-left) + 12px)',
@@ -776,7 +781,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
         aria-label={removing ? 'Object removal controls' : 'Adjustments'}
         className="panel editor-frost mobile-adjustments"
         hidden={!hasPhoto}
-        inert={!hasPhoto}
+        inert={!hasPhoto || state.phase === 'opening'}
         style={{
           position: 'absolute',
           opacity: hasPhoto ? 1 : EMPTY_OPACITY,
@@ -968,7 +973,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
     setSidebarKind(kind);
     setReveal((n) => n + 1);
   };
-  const inert = !hasPhoto || removing;
+  const inert = !hasPhoto || removing || state.phase === 'opening';
   const dim: React.CSSProperties = { opacity: hasPhoto ? 1 : EMPTY_OPACITY, transition: 'opacity 0.2s' };
   return (
     <div
@@ -1054,7 +1059,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
         </div>
       </main>
 
-      <aside aria-label={removing ? 'Object removal controls' : 'Parameters'} className="panel editor-frost" inert={!hasPhoto} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <aside aria-label={removing ? 'Object removal controls' : 'Parameters'} className="panel editor-frost" inert={!hasPhoto || state.phase === 'opening'} style={{ ...dim, borderLeft: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {removing ? <div ref={removalControlsRef} className="remove-controls-slot scroll-y" style={{ padding: 12 }} /> : <><div style={{ borderBottom: '1px solid var(--hairline)', padding: '0 4px', flexShrink: 0 }}>
           <GroupTabs label="Parameter group" idPrefix="wide-groups" items={groupItems} value={group} onChange={setGroup} small />
         </div>

@@ -21,8 +21,10 @@ const keyOf = (s: Stocks) => `${s.filmEnabled ? s.film : 'off'}|${s.paper}|${s.p
  * (\`params\` berganti seketika, \`rendering\` baru menyala setelah worker
  * menerima patch).
  */
-export function useLookPreview(state: EngineState, wanted: Stocks): ImageBitmap | undefined {
-  const { original, frame } = state;
+export function useLookPreview(state: EngineState, wanted: Stocks, provisional?: { frame: Frame }): ImageBitmap | undefined {
+  // Membuka: look diterapkan ke foto hasil decode browser, selalu tampil.
+  const original = provisional?.frame ?? state.original;
+  const { frame } = state;
   const engineKey = keyOf(state.params);
   const lastKey = useRef(engineKey);
   const staleFrame = useRef<Frame | undefined>(undefined);
@@ -33,7 +35,7 @@ export function useLookPreview(state: EngineState, wanted: Stocks): ImageBitmap 
   const pending = keyOf(wanted) !== engineKey;
   const waiting = !!frame && frame === staleFrame.current;
   const look = lookFor(wanted);
-  const show = !!original && !!look && hasLook(look) && (pending || waiting);
+  const show = !!original && !!look && hasLook(look) && (!!provisional || pending || waiting);
 
   const [bitmap, setBitmap] = useState<{ key: string; image: ImageBitmap } | undefined>();
   const [, setLoaded] = useState(false);

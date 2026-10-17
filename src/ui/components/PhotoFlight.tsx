@@ -266,8 +266,10 @@ export function PhotoFlight() {
     const key = flight.key;
     const alive = () => current?.key === key;
     if (engineState.phase === 'opening') sawOpening.current = key;
-    const opened = projectsState.currentId === flight.projectId
-      && engineState.phase === 'editing' && !!engineState.frame && !engineState.rendering;
+    // Foto hasil decode browser (dengan look) sudah tampil di editor: mendarat sekarang;
+    // engine menyusul di bawahnya. Tanpa itu (RAW): tunggu render resep proyek.
+    const opened = (engineState.phase === 'opening' && !!engineState.preview)
+      || (projectsState.currentId === flight.projectId && engineState.phase === 'editing' && !!engineState.frame && !engineState.rendering);
     const failed = sawOpening.current === key && engineState.phase !== 'opening' && projectsState.currentId !== flight.projectId
       && (engineState.phase === 'idle' || !!engineState.error);
     // Berkas asli ternyata hilang (tanpa membuka engine): kartu jadi "missing".
