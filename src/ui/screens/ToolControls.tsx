@@ -343,84 +343,88 @@ function LensCard({ tool, ctx }: { tool: LensTool; ctx: ToolContext }) {
   const note = <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>;
   if (!params.lensBlurEnabled || !lens) return note;
 
-  const readout = <p className="t-footnote secondary tabular" style={{ margin: 0 }}>{lensReadoutText(params, lens.aspect)}</p>;
-  // Pemilih jaringan kedalaman: hanya muncul bila perangkat punya pilihan.
-  // Pemilih jaringan kedalaman dan sakelar GPU dalam satu baris: kartu Lens
-  // harus muat di panel HP tanpa scroll. Di HP (ada sakelar GPU) labelnya
-  // pendek supaya keduanya muat.
-  const short = lens.gpuOption;
-  const picker = lens.models.length > 1 || lens.gpuOption ? (
-    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-      {short ? null : <span className="t-footnote secondary">Depth model</span>}
+  const { depth } = lens;
+  // Daftar berkelompok ala iOS: model kedalaman, GPU (bila ada pilihannya),
+  // Refine Edge sebagai baris tautan -- tanpa tombol kapsul yang menggantung.
+  const modelRow = lens.models.length > 1 ? (
+    <div className="lens-row">
+      <span>Depth model</span>
       <PopUp
         label="Depth model"
         options={lens.models.map((id) => ({
           value: id,
-          label: `${DEPTH_MODELS[id].label}${short ? '' : ` · ${DEPTH_MODELS[id].name}`}${lens.experimental.includes(id) ? (short ? ' (exp.)' : ' (experimental)') : ''}`,
+          label: `${DEPTH_MODELS[id].label}${lens.experimental.includes(id) ? ' (exp.)' : ''}`,
         }))}
         value={lens.model}
         onChange={(value) => { if (isDepthModelId(value)) lens.onModel(value); }}
       />
-      {lens.gpuOption ? (
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="t-footnote secondary">GPU</span>
-          <Switch label="Measure depth on the GPU" checked={lens.gpu} onChange={lens.onGpu} />
-        </span>
-      ) : null}
-    </span>
+    </div>
   ) : null;
-  const { depth } = lens;
-  let status: React.ReactNode;
+  const gpuRow = lens.gpuOption ? (
+    <div className="lens-row">
+      <span>Measure on GPU</span>
+      <Switch label="Measure depth on the GPU" checked={lens.gpu} onChange={lens.onGpu} />
+    </div>
+  ) : null;
+  let status: React.ReactNode = null;
   switch (depth.status) {
     case 'idle':
     case 'working': {
       const phase = depth.status === 'working' ? depth.phase : 'runtime';
       const pct = depth.status === 'working' && depth.total > 0 ? ` ${Math.round((100 * depth.loaded) / depth.total)}%` : '';
       status = (
-        <span className="t-subhead" role="status" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Spinner size={16} />
-          {DEPTH_PHASE[phase]}…{pct}
-        </span>
+        <div className="lens-row" role="status">
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Spinner size={16} />{DEPTH_PHASE[phase]}…</span>
+          <span className="secondary tabular">{pct.trim()}</span>
+        </div>
       );
       break;
     }
     case 'needs-download':
       status = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <p className="t-subhead" style={{ margin: 0 }}>One-time download of {DEPTH_MODELS[lens.model].name}. It stays on this device; photos never leave it.</p>
-          <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onDownload}>
-            Download · {megabytes(depth.bytes)}
-          </PressButton>
+        <div className="lens-row is-tall">
+          <span className="lens-row-text">
+            <span>Depth map</span>
+            <span className="secondary">One-time download. Stays on this device.</span>
+          </span>
+          <PressButton className="capsule prominent lens-row-action" onClick={lens.onDownload}>Download · {megabytes(depth.bytes)}</PressButton>
         </div>
       );
       break;
     case 'error':
       status = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <p className="t-subhead" role="alert" style={{ margin: 0 }}>Couldn’t measure depth: {depth.message}</p>
-          <PressButton className="capsule bordered" style={{ alignSelf: 'flex-start' }} onClick={lens.onRetry}>
-            Try Again
-          </PressButton>
+        <div className="lens-row is-tall" role="alert">
+          <span className="lens-row-text">
+            <span>Couldn’t measure depth</span>
+            <span className="secondary">{depth.message}</span>
+          </span>
+          <PressButton className="capsule bordered lens-row-action" onClick={lens.onRetry}>Try Again</PressButton>
         </div>
       );
       break;
     case 'ready':
       status = (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span className="t-footnote secondary">
-            Depth ready · {DEPTH_MODELS[depth.model].label} · {depth.backend === 'webgpu' ? 'GPU' : 'CPU'} · {(depth.ms / 1000).toFixed(1)} s
+        <button type="button" className="lens-row is-link" onClick={lens.onRefine}>
+          <span>Refine Edge</span>
+          <span className="secondary lens-row-value">
+            {lens.refined ? 'On' : 'Hair and fine edges'}
+            <Icon name="chevronRight" size={16} strokeWidth={2.4} />
           </span>
-          <PressButton className="capsule bordered" onClick={lens.onRefine}>{lens.refined ? 'Refine Edge · On' : 'Refine Edge…'}</PressButton>
-        </div>
+        </button>
       );
       break;
   }
   return (
     <div className="lens-status" style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-      {picker}
-      {status}
+      <div className="lens-list">
+        {modelRow}
+        {gpuRow}
+        {status}
+      </div>
       {/* Kedalaman ruang baru berarti setelah ada peta; tanpa ini kartu unduh/galat tidak muat di panel HP. */}
-      {(depth.status === 'ready' || depth.status === 'working') && readout}
+      {(depth.status === 'ready' || depth.status === 'working') && (
+        <p className="t-footnote secondary tabular" style={{ margin: '0 4px' }}>{lensReadoutText(params, lens.aspect)}</p>
+      )}
     </div>
   );
 }
