@@ -15,6 +15,7 @@ import type { IntroPhase, StageBox } from '../components/WelcomeIntro';
 import { Icon } from '../components/Icon';
 import { ActionSheet, Spinner } from '../components/Overlays';
 import { RecentStrip } from '../components/RecentStrip';
+import { isClosingFlight } from '../components/PhotoFlight';
 import { Sheet } from '../components/Sheet';
 import { PressButton } from '../components/controls';
 import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
@@ -175,7 +176,8 @@ export function DropZone({ onChoose: choose, engineReady, engineFailed, enginePa
           data-recent={showRecent || undefined}
           style={{ paddingTop: showRecent ? (regular ? 32 : 'calc(max(var(--safe-top, 0px), 12px) + 8px)') : orbCenter.y + (compact ? 48 : 56) }}
           data-drag-over={over}
-          initial="hidden"
+          // Foto sedang terbang kembali ke bilahnya: Recent sudah di tempat, tanpa animasi naik.
+          initial={isClosingFlight() ? false : 'hidden'}
           animate="shown"
           variants={{ shown: { transition: { staggerChildren: 0.09, delayChildren: reduce ? 0 : 0.1 } } }}
         >
