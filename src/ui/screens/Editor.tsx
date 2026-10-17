@@ -470,8 +470,11 @@ interface LayoutProps {
 /** Tanpa foto, panel tetap terlihat sebagai pratinjau fungsinya, tapi jelas belum aktif. */
 const EMPTY_OPACITY = 0.6;
 
-/** Status panjang tetap bisa digulir tanpa memenuhi viewport foto. */
-const COMPACT_CONTROL_MAX_HEIGHT = 156;
+/**
+ * Status panjang tetap bisa digulir tanpa memenuhi viewport foto. Cukup untuk
+ * White Balance (Pick/Auto + dua penggaris); alat lain jauh lebih pendek.
+ */
+const COMPACT_CONTROL_MAX_HEIGHT = 204;
 /** Perubahan tinggi panel bawah: lembut, tanpa pantulan (tidak lompat). */
 const panelResize = { type: 'spring' as const, duration: 0.38, bounce: 0 };
 
@@ -535,6 +538,10 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
   const film = stockInfo(state.params.film);
   const paper = stockInfo(state.params.paper);
   const scan = isScanMode(state.params);
+  // Catatan alat yang tampil sebagai penggaris (slider, difusi, white balance): di balik tombol info.
+  const note = tool.kind === 'slider' || tool.kind === 'diffusion' || tool.kind === 'whiteBalance' ? tool.note : undefined;
+  const [showNote, setShowNote] = useState(false);
+  useEffect(() => setShowNote(false), [tool.id]);
 
   const topBarTop = 'max(var(--safe-top), 12px)';
   const photoTop = 'calc(max(var(--safe-top), 12px) + 68px)';
@@ -671,10 +678,17 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
               {(tool.kind === 'slider' || tool.kind === 'stepper' || tool.kind === 'whiteBalance') && (
                 <span className="t-title3 tabular mobile-tool-value">{valueText(tool, state.params)}</span>
               )}
+              {note && (
+                <PressButton className="icon-btn plain" style={{ width: 32, height: 32 }} aria-label={`About ${tool.title}`} aria-expanded={showNote} onClick={() => setShowNote(!showNote)}>
+                  <Icon name="info" size={18} color={showNote ? 'var(--blue-text)' : undefined} />
+                </PressButton>
+              )}
               <ResetButton tool={tool} ctx={ctx} />
               <ToolSwitch tool={tool} ctx={ctx} />
             </div>
           </div>
+          {/* Catatan alat: hanya bila diminta (tombol info), supaya foto tetap besar. */}
+          {note && showNote && <p className="tool-note secondary">{note}</p>}
 
           {/*
             Tinggi mengikuti isi kontrol, termasuk status Lens yang berubah.
@@ -688,7 +702,7 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
             style={{ display: 'flex', flexDirection: 'column' }}
           >
             <div ref={controlContentRef} style={{ width: '100%', flexShrink: 0 }}>
-              <ToolControl key={tool.id} tool={tool} ctx={ctx} />
+              <ToolControl key={tool.id} tool={tool} ctx={ctx} ruler />
             </div>
           </motion.div>
 

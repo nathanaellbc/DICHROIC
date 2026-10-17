@@ -426,7 +426,15 @@ html[data-size="regular"] .segmented.dense .segment { font-size: 11px; }
 .mobile-tool-value { font-size: 18px; white-space: nowrap; }
 .mobile-adjustments .lens-status .t-subhead { font-size: 13px; line-height: 1.4; }
 .mobile-tools { margin: 0 -16px; padding: 2px 16px; scroll-padding-inline: 16px; touch-action: manipulation; overscroll-behavior-x: contain; user-select: none; }
-.mobile-tools-track { display: flex; gap: 4px; width: max-content; min-width: 100%; }
+.mobile-tools-track { display: flex; gap: 6px; width: max-content; min-width: 100%; }
+/* Alat sebagai pill satu baris (ikon kecil + nama): panel lebih pendek, foto lebih besar. */
+.tool-pill {
+  position: relative; flex-shrink: 0; height: 34px; padding: 0 12px 0 10px; border: 0; border-radius: 17px;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.tool-pill-dot { width: 5px; height: 5px; border-radius: 3px; background: var(--blue); margin-left: 1px; }
+.tool-note { margin: 0; font-size: 13px; line-height: 1.4; }
 .mobile-adjustments .tabs {
   background: transparent; border-radius: 0; padding: 8px 0 0;
   border-top: 1px solid var(--hairline); gap: 4px; flex-shrink: 0;
@@ -793,6 +801,32 @@ html[data-size="regular"] .switch { --switch-width: 24px; --switch-height: 14px;
 }
 
 /* Slider */
+/*
+ * Penggaris (RulerSlider, panel HP): garis bergeser di bawah penunjuk Signal
+ * Blue di tengah; pita biru di kaki = jarak dari nilai bawaan (titik kecil).
+ * Tepi kiri/kanan memudar seperti tepi film keluar dari jendela.
+ */
+.ruler {
+  --ruler-major: rgba(var(--ink), 0.55); --ruler-minor: rgba(var(--ink), 0.22);
+  position: relative; height: 44px; width: 100%; overflow: hidden; touch-action: none; cursor: ew-resize;
+  outline: none; -webkit-user-select: none; user-select: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+.ruler[data-disabled] { opacity: 0.38; cursor: default; }
+.ruler:focus-visible .ruler-needle { box-shadow: 0 0 0 3px var(--blue-wash), 0 0 8px rgba(0, 145, 255, 0.5); }
+.ruler-track { position: absolute; left: 50%; top: 0; bottom: 0; will-change: transform; }
+.ruler-ticks {
+  position: absolute; left: 0; right: 0; bottom: 9px; height: 18px;
+  background-repeat: repeat-x; background-size: 100% 18px, 100% 10px;
+}
+.ruler-fill { position: absolute; bottom: 4px; height: 2px; border-radius: 1px; background: var(--blue); }
+.ruler-home { position: absolute; bottom: 32px; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: rgba(var(--ink), 0.65); }
+.ruler-needle {
+  position: absolute; left: 50%; top: 5px; bottom: 2px; width: 2px; margin-left: -1px; border-radius: 1px;
+  background: var(--blue); box-shadow: 0 0 6px rgba(0, 145, 255, 0.45);
+}
+@media (prefers-reduced-motion: reduce) { .ruler-track { will-change: auto; } }
 .slider {
   position: relative; height: 44px; width: 100%; touch-action: none; cursor: grab;
   outline: none; -webkit-user-select: none; user-select: none;

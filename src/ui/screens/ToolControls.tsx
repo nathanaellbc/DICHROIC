@@ -8,6 +8,8 @@ import type { RenderParams } from '../../params/renderParams';
 import { Icon } from '../components/Icon';
 import { useElasticScroll } from '../components/useElasticScroll';
 import { OptionRow, PopUp, PressButton, Slider, Stepper, Switch, centerInScroller } from '../components/controls';
+import type { SliderProps } from '../components/controls';
+import { RulerSlider } from '../components/RulerSlider';
 import { Spinner } from '../components/Overlays';
 import type { DepthState } from '../engine/depthController';
 import { DEPTH_MODELS, isDepthModelId } from '../../depth/model';
@@ -153,14 +155,19 @@ const randomSeed = () => ({ grainSeed: 1 + Math.floor(Math.random() * 9999) });
  * baris inspector layar lebar -- pilihan pendek dan stepper hidup di baris
  * label (pop-up, −/+), di sini hanya catatannya.
  */
-export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext; dense?: boolean }) {
+/**
+ * `ruler`: panel HP -- slider jadi penggaris (RulerSlider) dan catatan alat
+ * tidak ditampilkan di bawahnya (dibuka lewat tombol info di judul alat).
+ */
+export function ToolControl({ tool, ctx, dense, ruler }: { tool: Tool; ctx: ToolContext; dense?: boolean; ruler?: boolean }) {
   const { params, defaults, onPatch } = ctx;
+  const SliderControl = ruler ? RulerSlider : Slider;
   switch (tool.kind) {
     case 'slider': {
       // Posisi, bukan nilai: slider berskala log (lensa) bergerak di log10/log2.
       const range = sliderRange(tool, params);
       const slider = (
-        <Slider
+        <SliderControl
           label={tool.title}
           value={sliderPosition(tool, params)}
           min={range.min}
@@ -173,7 +180,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
           onInteractionChange={ctx.onInteractionChange}
         />
       );
-      if (!tool.note || (dense && tool.section)) return slider;
+      if (!tool.note || ruler || (dense && tool.section)) return slider;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {slider}
@@ -232,7 +239,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
           ) : (
             <OptionRow label={`${tool.title} type`} options={DIFFUSION_FAMILIES} value={params[tool.familyField]} onChange={onFamily} />
           )}
-          <Slider
+          <SliderControl
             label={`${tool.title} strength`}
             value={params[tool.strengthField]}
             min={DIFFUSION_STRENGTH.min}
@@ -244,7 +251,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
             onChange={(v) => onPatch({ [tool.strengthField]: v })}
             onInteractionChange={ctx.onInteractionChange}
           />
-          <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>
+          {!ruler && <p className="t-footnote secondary" style={{ margin: 0 }}>{tool.note}</p>}
         </div>
       );
     }
@@ -255,7 +262,7 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
     case 'lens':
       return <LensCard tool={tool} ctx={ctx} />;
     case 'whiteBalance':
-      return <WhiteBalanceCard note={tool.note} ctx={ctx} dense={dense} />;
+      return <WhiteBalanceCard note={tool.note} ctx={ctx} dense={dense} ruler={ruler} />;
     case 'locked':
       return <p className="t-subhead secondary" style={{ margin: 0 }}>{tool.note}</p>;
   }
@@ -266,8 +273,9 @@ export function ToolControl({ tool, ctx, dense }: { tool: Tool; ctx: ToolContext
  * dan Auto hanya mengisi kedua field, jadi slider ikut bergeser ke hasilnya
  * dan tetap bisa disetel halus sesudahnya.
  */
-function WhiteBalanceCard({ note, ctx, dense }: { note: string; ctx: ToolContext; dense?: boolean }) {
+function WhiteBalanceCard({ note, ctx, dense, ruler }: { note: string; ctx: ToolContext; dense?: boolean; ruler?: boolean }) {
   const wb = ctx.whiteBalance;
+  const SliderControl: (props: SliderProps) => React.ReactNode = ruler ? RulerSlider : Slider;
   const row = (tool: SliderTool) => {
     const range = sliderRange(tool, ctx.params);
     return (
@@ -276,7 +284,7 @@ function WhiteBalanceCard({ note, ctx, dense }: { note: string; ctx: ToolContext
           <span className="t-footnote secondary">{tool.title}</span>
           <span className="t-footnote secondary tabular">{valueText(tool, ctx.params)}</span>
         </span>
-        <Slider
+        <SliderControl
           label={tool.title}
           value={sliderPosition(tool, ctx.params)}
           min={range.min}
@@ -312,7 +320,7 @@ function WhiteBalanceCard({ note, ctx, dense }: { note: string; ctx: ToolContext
       )}
       {row(WB_TEMP)}
       {row(WB_TINT)}
-      {!dense && <p className="t-footnote secondary" style={{ margin: 0 }}>{note}</p>}
+      {!dense && !ruler && <p className="t-footnote secondary" style={{ margin: 0 }}>{note}</p>}
     </div>
   );
 }
@@ -442,31 +450,22 @@ export function ToolChips({ group, selected, onSelect, ctx }: { group: ToolGroup
               else refs.current.delete(tool.id);
             }}
             type="button"
+            className="tool-pill"
             aria-pressed={isSelected}
             aria-label={`${tool.title}${modified ? ', edited' : ''}${tool.kind === 'locked' ? ', not yet available' : ''}`}
             onClick={() => onSelect(tool.id)}
             whileTap={{ scale: pressScale }}
+            initial={false}
+            animate={{
+              backgroundColor: isSelected ? 'rgba(var(--ink), 0.92)' : 'rgba(var(--ink), 0.06)',
+              color: isSelected ? 'var(--bg)' : dimmed ? 'var(--label-3)' : 'var(--label-2)',
+            }}
             transition={snappy}
-            style={{ width: 66, flexShrink: 0, border: 0, background: 'transparent', padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer' }}
           >
-            <motion.span
-              initial={false}
-              animate={{
-                backgroundColor: isSelected ? 'rgba(0,145,255,0.16)' : 'rgba(var(--ink), 0.04)',
-                boxShadow: modified ? 'inset 0 0 0 2px #0091ff' : 'inset 0 0 0 0px #0091ff',
-              }}
-              transition={snappy}
-              style={{ position: 'relative', width: 46, height: 46, borderRadius: 'var(--r-list)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Icon name={tool.icon} size={22} color={isSelected ? 'var(--blue-text)' : tool.tint ?? (dimmed ? 'var(--label-3)' : 'var(--label-2)')} />
-              {tool.kind === 'locked' && (
-                <span aria-hidden="true" style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 'var(--r-control)', background: 'var(--bg-elevated-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="lock" size={10} strokeWidth={2.8} />
-                </span>
-              )}
-            </motion.span>
-            {/* Selalu setinggi dua baris: label panjang (Flash Magenta) tidak menaikkan panel. */}
-            <span className="t-caption2" style={{ color: isSelected ? 'var(--label)' : 'var(--label-2)', height: '2.36em', textAlign: 'center' }}>{tool.label}</span>
+            <Icon name={tool.kind === 'locked' ? 'lock' : tool.icon} size={15} strokeWidth={2.2} color={isSelected ? 'currentColor' : tool.tint ?? 'currentColor'} />
+            {tool.label}
+            {/* Sudah diubah: titik Signal Blue (dulu cincin biru di ikon). */}
+            {modified && <span className="tool-pill-dot" aria-hidden="true" />}
           </motion.button>
         );
       })}
