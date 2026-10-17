@@ -1747,3 +1747,52 @@ html[data-size="regular"] .recent-slot { max-height: 460px; }
 .photo-flight-cancel { height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--fill); color: var(--label); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .intro-content { transition: opacity 0.25s ease; }
 html[data-flight="open"] .intro-content { opacity: 0; pointer-events: none; }
+
+/* Pemilih film HP: carousel foto per stok (FilmCarousel) */
+.film-carousel { display: flex; flex-direction: column; gap: 14px; min-height: 0; flex-grow: 1; padding-bottom: calc(var(--safe-bottom, 0px) + 16px); }
+.film-carousel-top { display: flex; align-items: center; gap: 8px; padding: 2px 16px 0; }
+.film-carousel-process { width: 150px; flex-shrink: 0; margin-right: auto; }
+.film-carousel-chip { height: 32px; padding: 0 12px; font-size: 0.85rem; gap: 6px; }
+.film-strip {
+  display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
+  padding: 4px 50% 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; outline: none;
+}
+.film-strip::-webkit-scrollbar { display: none; }
+.film-card {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 0; border: 0; background: none; color: var(--label);
+  font: inherit; text-align: left; cursor: pointer; scroll-snap-align: center; -webkit-tap-highlight-color: transparent;
+  transform: scale(0.9); opacity: 0.55; transform-origin: 50% 40%;
+  transition: transform 0.35s cubic-bezier(0.32, 1.2, 0.42, 1), opacity 0.3s ease;
+}
+.film-card[data-focused] { transform: none; opacity: 1; }
+.film-card:focus-visible { outline: none; }
+.film-card:focus-visible .film-card-photo { outline: 2px solid var(--blue); outline-offset: 3px; }
+.film-card-photo {
+  /* Kartu tetangga selalu mengintip: lebar maks. 68 % layar. */
+  position: relative; display: block; aspect-ratio: var(--card-aspect, 1.5);
+  width: min(68vw, 360px, calc(clamp(140px, 28vh, 260px) * var(--card-aspect, 1.5)));
+  border-radius: 14px; overflow: hidden; background: var(--recent-placeholder);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+.film-card[aria-checked="true"] .film-card-photo { box-shadow: 0 0 0 2px var(--blue), 0 10px 28px rgba(0, 0, 0, 0.28); }
+.film-card-placeholder, .film-card-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.film-card-placeholder { filter: grayscale(1) brightness(0.5) contrast(1.05); }
+.film-card-developing {
+  position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 3px 10px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.film-card-label { display: flex; flex-direction: column; gap: 1px; padding: 0 2px; min-width: 0; max-width: min(68vw, 360px); }
+.film-card-brand { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--blue-text); }
+.film-card-name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.film-card-detail { font-size: 13px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.film-papers { display: flex; flex-direction: column; gap: 8px; }
+.film-papers-title { padding: 0 20px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+.film-paper-row { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 2px; scrollbar-width: none; overscroll-behavior-x: contain; }
+.film-paper-row::-webkit-scrollbar { display: none; }
+.film-paper {
+  flex: 0 0 auto; height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--fill-soft); color: var(--label);
+  font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color 0.2s, color 0.2s;
+}
+.film-paper[aria-checked="true"] { background: var(--blue); color: #fff; }
+.film-paper:disabled { opacity: 0.4; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .film-card { transition: none; } }

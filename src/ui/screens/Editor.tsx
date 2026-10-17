@@ -44,6 +44,7 @@ import { ExportContent, ListPickerContent } from './Export';
 import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
+import { FilmCarousel } from './FilmCarousel';
 import { projects } from '../projects/projects';
 import { RemoveContent } from './Remove';
 import { RefineEdgeContent } from './RefineEdge';
@@ -54,7 +55,7 @@ type Stocks = Pick<RenderParams, 'film' | 'filmEnabled' | 'paper' | 'process'>;
 
 type SheetState =
   /** `before`: stok saat sheet dibuka (Cancel). `swap`: sisi lain A/B. */
-  | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks }
+  | { kind: 'stocks'; stockKind: StockKind; before: Stocks; swap: Stocks; list?: boolean }
   | { kind: 'export' }
   | { kind: 'remove' }
   | { kind: 'refine' }
@@ -327,6 +328,17 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   ];
 
   const current = stocksOf(state.params);
+  // HP: carousel foto per stok; daftar lengkap lewat tombol List, dan selalu di layar lebar.
+  const carousel = !wide && sheet?.kind === 'stocks' && !sheet.list && !!state.original;
+  const swapAction = sheet?.kind !== 'stocks' || sameStocks(sheet.swap, current)
+    ? undefined
+    : {
+        label: recipe(sheet.swap),
+        onSwap: () => {
+          engine.setParams(sheet.swap);
+          setSheet({ ...sheet, swap: current });
+        },
+      };
 
   return (
     <>
@@ -339,7 +351,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
         centered={wide}
         title="Film & Paper"
         detents={['medium', 'large']}
-        mediumFraction={0.56}
+        mediumFraction={carousel ? 0.62 : 0.56}
         onClose={() => setSheet(null)}
         leading={
           <PressButton
@@ -359,7 +371,17 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
           </PressButton>
         }
       >
-        {sheet?.kind === 'stocks' && (
+        {sheet?.kind === 'stocks' && carousel && (
+          <FilmCarousel
+            state={state}
+            onPick={(kind, id) => engine.setParams(stockPatch(kind, id, state.params))}
+            onProcess={onProcess}
+            scan={scan}
+            onList={() => setSheet({ ...sheet, list: true, stockKind: 'film' })}
+            previous={swapAction}
+          />
+        )}
+        {sheet?.kind === 'stocks' && !carousel && (
           <StockBrowser
             film={state.params.film}
           filmEnabled={state.params.filmEnabled}
@@ -370,17 +392,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
             scan={scan}
             process={state.params.process}
             onProcess={onProcess}
-            previous={
-              sameStocks(sheet.swap, current)
-                ? undefined
-                : {
-                    label: recipe(sheet.swap),
-                    onSwap: () => {
-                      engine.setParams(sheet.swap);
-                      setSheet({ ...sheet, swap: current });
-                    },
-                  }
-            }
+            previous={swapAction}
           />
         )}
       </Sheet>
