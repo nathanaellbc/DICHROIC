@@ -406,6 +406,15 @@ export class Engine {
     return this.#state.depthGpu && profile.backend === 'wasm' && profile.gpuF16 ? { ...profile, backend: 'webgpu' } : profile;
   }
 
+  /**
+   * Profil kedalaman yang berlaku di perangkat ini (dengan sakelar GPU) --
+   * Settings memakainya untuk tahu berkas model dan runtime mana yang perlu
+   * diunduh. Memanggilnya juga mengisi pilihan model (`depthModels`).
+   */
+  async depthRunProfile(): Promise<DepthProfile> {
+    return this.#runProfile(await this.#profile());
+  }
+
   /** Pilihan model (dan sakelar GPU) untuk profil dan sakelar sekarang. */
   #refreshDepthChoices(): void {
     const profile = this.#profileValue;

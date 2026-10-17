@@ -21,6 +21,7 @@ import { HAS_PROJECTS_KEY, projects } from '../projects/projects';
 import { engine } from '../engine/engine';
 import type { ProjectCard } from '../projects/projects';
 import { ProjectsContent } from './Projects';
+import { SettingsContent } from './Settings';
 import { dayGroup } from '../projects/format';
 import { overlay, pressRelease, pressScale, scrimMotion } from '../motion';
 import { useEffect } from 'react';
@@ -44,6 +45,7 @@ export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => v
   }, [choose]);
   const [menu, setMenu] = useState<{ card: ProjectCard; anchor: DOMRect } | null>(null);
   const [allOpen, setAllOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [renaming, setRenaming] = useState<string | undefined>();
   const relink = (card: ProjectCard) => {
     projects.requestRelink(card.id);
@@ -178,6 +180,7 @@ export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => v
           onRelink={relink}
           onMenu={(card, anchor) => setMenu({ card, anchor })}
           onNew={onChoose}
+          onSettings={() => setSettingsOpen(true)}
           hint={touch ? undefined : 'drop a photo anywhere'}
         />
       )}
@@ -227,6 +230,21 @@ export function DropZone({ onChoose: choose, engineFailed }: { onChoose: () => v
         ] : []}
         onCancel={() => setMenu(null)}
       />
+
+      <Sheet
+        open={settingsOpen}
+        centered={regular}
+        title="Settings"
+        detents={['large']}
+        onClose={() => setSettingsOpen(false)}
+        trailing={
+          <PressButton className="icon-btn prominent" aria-label="Done" onClick={() => setSettingsOpen(false)}>
+            <Icon name="check" size={18} strokeWidth={2.8} />
+          </PressButton>
+        }
+      >
+        <SettingsContent />
+      </Sheet>
 
       <Sheet
         open={allOpen}

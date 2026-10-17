@@ -1862,17 +1862,42 @@ html[data-flight="close"] .bento-tile[data-flying] { visibility: hidden; }
   padding: 28px 16px calc(var(--safe-bottom, 0px) + 18px); pointer-events: none;
   background: linear-gradient(to top, color-mix(in srgb, var(--bg) 70%, transparent), transparent);
 }
-.bento-new {
-  pointer-events: auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 52px; padding: 0 26px; min-width: 200px; border-radius: 26px; corner-shape: round;
-  background: rgba(28, 28, 30, 0.5); color: #fff; font: inherit; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; cursor: pointer;
-  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
-  border: 0.5px solid rgba(255, 255, 255, 0.22); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 0.5px 0 rgba(255, 255, 255, 0.25);
+/* Dock Welcome back: kamera | + (kaca biru signature) | Settings */
+.dock-bar { pointer-events: auto; display: flex; align-items: center; gap: 22px; }
+.dock-side {
+  display: grid; place-items: center; width: 46px; height: 46px; padding: 0; border-radius: 50%; corner-shape: round; cursor: pointer;
+  color: #fff; background: rgba(28, 28, 30, 0.42); border: 0.5px solid rgba(255, 255, 255, 0.18);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28); -webkit-tap-highlight-color: transparent;
+}
+.dock-plus {
+  /* Kaca biru translucent: isian biru setengah tembus + blur, tepi atas menangkap cahaya, cahaya biru di bawah. */
+  display: grid; place-items: center; width: 64px; height: 64px; padding: 0; border-radius: 50%; corner-shape: round; cursor: pointer;
+  color: #fff; background: radial-gradient(120% 120% at 30% 20%, rgba(90, 185, 255, 0.78), rgba(0, 120, 255, 0.58) 55%, rgba(0, 92, 230, 0.62));
+  border: 0.5px solid rgba(190, 228, 255, 0.55);
+  -webkit-backdrop-filter: blur(22px) saturate(190%); backdrop-filter: blur(22px) saturate(190%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -8px 16px rgba(0, 60, 160, 0.35), 0 10px 26px rgba(0, 120, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
   -webkit-tap-highlight-color: transparent;
 }
-.bento-new:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-:root[data-theme="light"] .bento-new { background: rgba(255, 255, 255, 0.62); color: #000; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14), inset 0 0.5px 0 rgba(255, 255, 255, 0.8); }
-@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .bento-new { background: rgba(255, 255, 255, 0.62); color: #000; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14), inset 0 0.5px 0 rgba(255, 255, 255, 0.8); } }
+.dock-side:focus-visible, .dock-plus:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.dock-soon {
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom, 0px) + 98px); translate: -50% 0; pointer-events: none;
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+  font-size: 14px; font-weight: 600; color: #fff; background: rgba(28, 28, 30, 0.6);
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  border: 0.5px solid rgba(255, 255, 255, 0.16); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme="light"] .dock-side { color: #000; background: rgba(255, 255, 255, 0.6); border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .dock-side { color: #000; background: rgba(255, 255, 255, 0.6); border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); } }
+@media (prefers-reduced-transparency: reduce) {
+  .dock-side { background: #2c2c2e; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .dock-plus { background: var(--blue); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* Settings */
+.settings-chip { height: 30px; padding: 0 12px; font-size: 0.82rem; flex-shrink: 0; white-space: nowrap; }
+.settings-ready { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.settings-remove { --icon-btn: 32px; color: var(--label-2); }
 @media (prefers-reduced-motion: reduce) { .bento-photo { transition: none; } }
 
 /* Lup pipet putih (Loupe) */

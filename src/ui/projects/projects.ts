@@ -307,6 +307,19 @@ export class Projects {
     this.#undoTimer = setTimeout(() => this.#commitDelete(), UNDO_MS);
   }
 
+  /** Hapus semua proyek dari perangkat sekarang (Settings), tanpa Undo. */
+  async removeAll(): Promise<void> {
+    clearTimeout(this.#undoTimer);
+    this.#pendingDelete = undefined;
+    const ids = [...this.#records.keys()];
+    await Promise.all(ids.map((id) => this.store.remove(id).catch(() => {})));
+    for (const url of this.#thumbs.values()) URL.revokeObjectURL?.(url);
+    this.#records.clear();
+    this.#thumbs.clear();
+    this.#set({ deleted: undefined, currentId: undefined });
+    this.#publish();
+  }
+
   undoRemove(): void {
     if (!this.#pendingDelete) return;
     clearTimeout(this.#undoTimer);
