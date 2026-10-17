@@ -45,6 +45,7 @@ import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
 import { FilmCarousel } from './FilmCarousel';
+import type { Frame } from '../engine/display';
 import { CropEditor } from './CropEditor';
 import { useLookPreview } from '../components/LookLayer';
 import { hasLook, lookFor } from '../engine/looks';
@@ -274,15 +275,38 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const photoLabel = !state.params.filmEnabled ? `${state.fileName ?? 'Photo'}, Neutral negative` : scan
     ? `${state.fileName ?? 'Photo'}, shot on ${film.name}, scanned directly`
     : `${state.fileName ?? 'Photo'}, developed on ${film.name}, printed on ${paper.name}`;
-  // Mode fokus menampilkan cek fokus: di luar kedalaman ruang jadi abu-abu gelap.
+  // Cek fokus (di luar kedalaman ruang jadi abu-abu gelap): saat memilih titik
+  // fokus, dan selama/sesaat setelah mengubah apa pun yang menggeser rentang
+  // tajam (jarak fokus, bukaan, panjang fokus, Keep Sharp).
   const depthMap = state.depth.status === 'ready' ? engine.depthMap : undefined;
+  const dofKey = `${state.params.lensFocusDistanceM}|${state.params.lensFNumber}|${state.params.lensFocalLengthMm}|${state.params.lensNearSharpM}`;
+  const [dofShow, setDofShow] = useState(false);
+  /** Foto saat rentang tajam terakhir berubah: perubahan karena foto baru terbuka bukan penyesuaian. */
+  const dofLast = useRef({ file: state.fileName, key: dofKey });
+  useEffect(() => {
+    const last = dofLast.current;
+    dofLast.current = { file: state.fileName, key: dofKey };
+    if (last.file !== state.fileName || last.key === dofKey || group !== 'lens' || !state.params.lensBlurEnabled) return undefined;
+    setDofShow(true);
+    const t = window.setTimeout(() => setDofShow(false), DOF_PREVIEW_MS);
+    return () => window.clearTimeout(t);
+    // Hanya saat nilai rentang tajam (atau fotonya) berubah.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dofKey, state.fileName]);
+  useEffect(() => setDofShow(false), [group]);
+  const showFocusCheck = picking || ((dofShow || (!!state.interacting && group === 'lens')) && state.params.lensBlurEnabled && !!depthMap);
+  // Foto dasar cek fokus dibekukan selama penyesuaian: tanpa ini tiap frame
+  // ringan saat menggeser (256 px) menghitung ulang masker.
+  const focusBase = useRef<Frame | undefined>(undefined);
+  if (!showFocusCheck || !focusBase.current) focusBase.current = state.frame;
+  const focusFrame = showFocusCheck ? focusBase.current : undefined;
   const focusOverlay = useMemo(
-    () => (picking && state.frame && depthMap ? prepareFocusOverlay(state.frame, depthMap) : undefined),
-    [picking, state.frame, depthMap],
+    () => (focusFrame && depthMap ? prepareFocusOverlay(focusFrame, depthMap) : undefined),
+    [focusFrame, depthMap],
   );
   const focusMask = useMemo(
-    () => focusOverlay?.(previewParams),
-    [focusOverlay, previewParams],
+    () => (showFocusCheck ? focusOverlay?.(previewParams) : undefined),
+    [showFocusCheck, focusOverlay, previewParams],
   );
   // Mode LUT pemilih film: resep tertunda tampil sebagai look di atas foto.
   const pendingStocks = sheet?.kind === 'stocks' ? sheet.pending : undefined;
@@ -564,6 +588,8 @@ const HISTORY_HOLD_MS = 450;
 const HISTORY_SLOP = 10;
 /** Langkah riwayat yang ditampilkan (terbaru dulu). */
 const HISTORY_ROWS = 10;
+/** Lama cek fokus tetap tampil setelah penyesuaian rentang tajam terakhir (ms). */
+const DOF_PREVIEW_MS = 1100;
 
 /**
  * Ketuk = mundur satu langkah; tekan lama (atau klik kanan) = riwayat: tiap

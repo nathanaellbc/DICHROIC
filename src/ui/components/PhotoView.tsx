@@ -719,7 +719,7 @@ export function PhotoView({
               <CropLayer crop={activeCrop} a={aspectA}>
                 {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
                 {!content && <LookLayer image={look} />}
-                {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
+                {focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
               </CropLayer>
               {showOriginal && original && (
                 <motion.div
@@ -779,6 +779,11 @@ export function PhotoView({
             {picking && (
               <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Hold & drag to focus · grey is outside focus
+              </span>
+            )}
+            {!picking && focusMask && (
+              <span className="glass-clear t-footnote" role="status" style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: 'var(--r-control)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                Grey is outside focus
               </span>
             )}
             {dropping && (
