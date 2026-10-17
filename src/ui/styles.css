@@ -1846,15 +1846,20 @@ html[data-flight="open"] .intro-content { opacity: 0; pointer-events: none; }
   /* Foto di luar potongan tetap terlihat, redup. */
   box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.62);
 }
-.crop-grid {
+.crop-grid { position: absolute; inset: 0; opacity: 0.45; transition: opacity 0.2s; }
+.crop-grid > b { position: absolute; background: rgba(255, 255, 255, 0.85); box-shadow: 0 0 1px rgba(0, 0, 0, 0.5); }
+.crop-grid > .v1, .crop-grid > .v2 { top: 0; bottom: 0; width: 1px; margin-left: -0.5px; }
+.crop-grid > .h1, .crop-grid > .h2 { left: 0; right: 0; height: 1px; margin-top: -0.5px; }
+.crop-grid > .v1 { left: 33.333%; } .crop-grid > .v2 { left: 66.667%; }
+.crop-grid > .h1 { top: 33.333%; } .crop-grid > .h2 { top: 66.667%; }
+.crop-fine {
   position: absolute; inset: 0; opacity: 0; transition: opacity 0.2s;
-  background:
-    linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px),
-      transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
-    linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px),
-      transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.3) 1px, transparent 1px), linear-gradient(to bottom, rgba(255, 255, 255, 0.3) 1px, transparent 1px);
+  background-size: 11.111% 11.111%; background-position: -0.5px -0.5px;
 }
+.crop-box[data-fine] .crop-fine { opacity: 1; }
 .crop-box[data-active] .crop-grid { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .crop-grid, .crop-fine { transition: none; } }
 .crop-corner { position: absolute; width: 20px; height: 20px; border: 0 solid #fff; }
 .crop-corner.tl { left: -4px; top: -4px; border-left-width: 4px; border-top-width: 4px; }
 .crop-corner.tr { right: -4px; top: -4px; border-right-width: 4px; border-top-width: 4px; }

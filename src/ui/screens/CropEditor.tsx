@@ -87,6 +87,8 @@ export function CropEditor({ frame, sourceWidth, initial, onCancel, onDone }: {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   /** Potongan saat penggaris luruskan mulai diseret: meluruskan bisa dibalik tanpa menyusutkan permanen. */
   const straightenBase = useRef<Crop | null>(null);
+  /** Penggaris luruskan sedang diseret: grid halus seperti Photos. */
+  const [straightening, setStraightening] = useState(false);
 
   useLayoutEffect(() => {
     const el = areaRef.current;
@@ -267,8 +269,10 @@ export function CropEditor({ frame, sourceWidth, initial, onCancel, onDone }: {
         }}
       >
         <canvas ref={canvasRef} className="crop-image" style={imageStyle} />
-        <div className="crop-box" data-active={frozenK === undefined ? undefined : ''} style={boxStyle}>
-          <i className="crop-grid" />
+        <div className="crop-box" data-active={frozenK === undefined && !straightening ? undefined : ''} data-fine={straightening || undefined} style={boxStyle}>
+          {/* Rule of thirds: selalu tampil tipis, tegas saat menyeret; grid halus saat meluruskan. */}
+          <i className="crop-fine" />
+          <i className="crop-grid"><b className="v1" /><b className="v2" /><b className="h1" /><b className="h2" /></i>
           <span className="crop-corner tl" /><span className="crop-corner tr" /><span className="crop-corner bl" /><span className="crop-corner br" />
         </div>
       </div>
@@ -285,7 +289,7 @@ export function CropEditor({ frame, sourceWidth, initial, onCancel, onDone }: {
             label="Straighten"
             valueText={`${crop.angle.toFixed(1)} degrees`}
             onChange={straighten}
-            onInteractionChange={(active) => { straightenBase.current = active ? crop : null; }}
+            onInteractionChange={(active) => { straightenBase.current = active ? crop : null; setStraightening(active); }}
           />
         </div>
         <div className="crop-aspects" role="radiogroup" aria-label="Aspect ratio">
