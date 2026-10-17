@@ -12,6 +12,8 @@
  * mempra-hitung lebih dulu (`test/parity/run.ts::sharedResources`).
  */
 
+import { applyCrop, cropOutputSize, isIdentityCrop } from '../io/geometry';
+import type { Crop } from '../io/geometry';
 import { acquireDevice } from '../engine/device';
 import type { EngineDevice } from '../engine/device';
 import { GpuMemoryError, RenderGraph, ScratchPool, returnFreedMemory } from '../engine/graph';
@@ -96,6 +98,8 @@ export interface ExportOptions {
   longEdge?: number;
   /** Kualitas format lossy, (0, 1]; bawaan 1. Diabaikan format lossless. */
   quality?: number;
+  /** Crop & rotate (`io/geometry.ts`), diterapkan pada piksel render sebelum encode. */
+  crop?: Crop;
 }
 
 /**
@@ -1037,25 +1041,30 @@ export class Session {
     const exif = this.#image?.exif;
     const result = await this.renderForExport(options.longEdge, exportTarget(format, this.#params.outputColorSpace));
     if (imageId !== this.#imageId) throw new RenderSupersededError();
-    const { width, height } = result;
     const outputColorSpace = result.outputColorSpace ?? this.#params.outputColorSpace;
+    // Crop & rotate pada larik yang dipakai format ini saja (render penuh, lalu dipotong).
+    const crop = options.crop && !isIdentityCrop(options.crop, result.height / result.width) ? options.crop : undefined;
+    const pick = <T extends Uint8Array | Uint8ClampedArray | Uint16Array>(data: T, channels: number) =>
+      crop ? applyCrop(data, result.width, result.height, channels, crop) : { data, width: result.width, height: result.height };
+    const size = crop ? cropOutputSize(crop, result.width) : { width: result.width, height: result.height };
+    const { width, height } = size;
     if (canvasFormat) {
       const colorSpace = outputColorSpace === 'Display P3' ? 'display-p3' : 'srgb';
-      return this.canvasEncoder!.encode(result.canvas(), width, height, canvasFormat, options.quality ?? 1, colorSpace);
+      return this.canvasEncoder!.encode(pick(result.canvas(), 4).data, width, height, canvasFormat, options.quality ?? 1, colorSpace);
     }
     const icc = this.iccFor(outputColorSpace);
     const exifOptions = { width, height, srgb: outputColorSpace === 'sRGB' };
     if (format === 'jpeg') {
       const quality = Math.min(100, Math.max(1, Math.round((options.quality ?? 1) * 100)));
       const app1 = exif && rewriteExif(exif, { ...exifOptions, maxBytes: EXIF_APP1_MAX_BYTES });
-      return encodeJpeg(result.rgb8, width, height, { quality, ...(icc ? { icc } : {}), ...(app1 ? { exif: app1 } : {}) });
+      return encodeJpeg(pick(result.rgb8, 3).data, width, height, { quality, ...(icc ? { icc } : {}), ...(app1 ? { exif: app1 } : {}) });
     }
     if (format === 'tiff16') {
       const tiffExif = exif && exifForTiff(exif, exifOptions);
-      return encodeTiff16(result.rgb16, width, height, { ...(icc ? { icc } : {}), ...(tiffExif ? { exif: tiffExif } : {}) });
+      return encodeTiff16(pick(result.rgb16, 3).data, width, height, { ...(icc ? { icc } : {}), ...(tiffExif ? { exif: tiffExif } : {}) });
     }
     const pngExif = exif && rewriteExif(exif, exifOptions);
-    return encodePng(format === 'png8' ? result.rgb8 : result.rgb16, width, height, format === 'png8' ? 8 : 16, {
+    return encodePng(format === 'png8' ? pick(result.rgb8, 3).data : pick(result.rgb16, 3).data, width, height, format === 'png8' ? 8 : 16, {
       ...(icc ? { icc, iccName: outputColorSpace } : {}),
       ...(pngExif ? { exif: pngExif } : {}),
     });

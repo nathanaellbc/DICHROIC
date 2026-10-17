@@ -1826,3 +1826,58 @@ html[data-flight="open"] .intro-content { opacity: 0; pointer-events: none; }
 /* Pratinjau look (LUT) di atas foto: muncul seketika, memudar ke render sungguhan */
 .look-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; opacity: 0; transition: opacity 0.25s ease; }
 .look-layer[data-on] { opacity: 1; transition: none; }
+
+/* Crop & Rotate (CropEditor) */
+.crop-editor {
+  position: fixed; inset: 0; z-index: 45; display: flex; flex-direction: column; background: #000; color: #fff;
+  padding: max(var(--safe-top, 0px), 8px) var(--safe-right, 0px) 0 var(--safe-left, 0px);
+}
+.crop-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 48px; padding: 0 8px; }
+.crop-top > :last-child { justify-self: end; }
+.crop-title { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+.crop-text-btn { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: #fff; font: inherit; font-size: 16px; cursor: pointer; justify-self: start; }
+.crop-text-btn.is-done { color: #ffd60a; font-weight: 650; }
+.crop-text-btn:disabled { opacity: 0.35; cursor: default; }
+.crop-area { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.crop-area:active { cursor: grabbing; }
+.crop-image { display: block; pointer-events: none; }
+.crop-box {
+  position: absolute; box-sizing: border-box; border: 1px solid rgba(255, 255, 255, 0.9); pointer-events: none;
+  /* Foto di luar potongan tetap terlihat, redup. */
+  box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.62);
+}
+.crop-grid {
+  position: absolute; inset: 0; opacity: 0; transition: opacity 0.2s;
+  background:
+    linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px),
+      transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.55) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px),
+      transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.55) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+}
+.crop-box[data-active] .crop-grid { opacity: 1; }
+.crop-corner { position: absolute; width: 20px; height: 20px; border: 0 solid #fff; }
+.crop-corner.tl { left: -4px; top: -4px; border-left-width: 4px; border-top-width: 4px; }
+.crop-corner.tr { right: -4px; top: -4px; border-right-width: 4px; border-top-width: 4px; }
+.crop-corner.bl { left: -4px; bottom: -4px; border-left-width: 4px; border-bottom-width: 4px; }
+.crop-corner.br { right: -4px; bottom: -4px; border-right-width: 4px; border-bottom-width: 4px; }
+.crop-controls { display: flex; flex-direction: column; gap: 12px; padding: 10px 0 calc(var(--safe-bottom, 0px) + 14px); }
+.crop-straighten { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 16px; }
+.crop-straighten > :last-child { width: 100%; max-width: 520px; }
+.crop-angle { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.75); }
+.crop-aspects { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; overscroll-behavior-x: contain; justify-content: safe center; }
+.crop-aspects::-webkit-scrollbar { display: none; }
+.crop-aspect {
+  flex: 0 0 auto; height: 32px; padding: 0 13px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.crop-aspect[aria-checked="true"] { background: #fff; color: #000; }
+.crop-actions { display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+.crop-readout { flex: 1; text-align: center; font-size: 13px; color: rgba(255, 255, 255, 0.6); font-variant-numeric: tabular-nums; }
+.crop-editor .float-btn { color: #fff; background: rgba(255, 255, 255, 0.12); border: 0; box-shadow: none; }
+.crop-editor .float-btn[aria-pressed="true"] { background: #fff; color: #000; }
+/* Crop selalu gelap (seperti galeri): token label/isian versi gelap. */
+.crop-editor {
+  color-scheme: dark;
+  --label: #fff; --label-2: rgba(235, 235, 245, 0.6); --label-3: rgba(235, 235, 245, 0.3);
+  --fill: rgba(120, 120, 128, 0.36); --fill-soft: rgba(255, 255, 255, 0.08); --hairline: rgba(255, 255, 255, 0.16);
+}

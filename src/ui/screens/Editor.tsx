@@ -45,6 +45,7 @@ import { StockBrowser } from './Stocks';
 import type { StockKind } from './Stocks';
 import { DropZone } from './Start';
 import { FilmCarousel } from './FilmCarousel';
+import { CropEditor } from './CropEditor';
 import { useLookPreview } from '../components/LookLayer';
 import { hasLook, lookFor } from '../engine/looks';
 import { describeChange } from '../model/history';
@@ -63,6 +64,7 @@ type SheetState =
   | { kind: 'export' }
   | { kind: 'remove' }
   | { kind: 'refine' }
+  | { kind: 'crop' }
   | { kind: 'list'; toolId: string }
   | null;
 
@@ -220,9 +222,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const onProcess = (process: string) => engine.setParams(choicePatch(findTool('process') as ChoiceTool, process, state.params));
 
   // Pintasan keyboard. Nilai terbaru lewat ref supaya pendengar dipasang sekali.
-  const keys = useRef({ hasPhoto, removing, onOpenFile, toggleCompare: () => {}, openExport: () => {}, toggleScope: () => {} });
+  const keys = useRef({ hasPhoto, removing, onOpenFile, toggleCompare: () => {}, openExport: () => {}, toggleScope: () => {}, openCrop: () => {} });
   useEffect(() => {
-    keys.current = { hasPhoto, removing, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }), toggleScope: () => setScope({ open: !scope.open }) };
+    keys.current = { hasPhoto, removing, onOpenFile, toggleCompare: () => setCompare(!compare), openExport: () => setSheet({ kind: 'export' }), toggleScope: () => setScope({ open: !scope.open }), openCrop: () => { if (state.phase === 'editing') setSheet({ kind: 'crop' }); } };
   });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -256,6 +258,9 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       } else if (k.hasPhoto && key === 'v') {
         e.preventDefault();
         k.toggleScope();
+      } else if (k.hasPhoto && key === 'c') {
+        e.preventDefault();
+        k.openCrop();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -289,6 +294,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
       reveal={revealCount}
       frame={provisional?.frame ?? state.frame}
       look={lookImage}
+      crop={state.crop}
       focusMask={focusMask}
       // Pembanding/intip asli: `original` ikut resolusi render (tajam saat zoom).
       // Setelah hapus objek, `before` (sebelum retouch, resolusi pembukaan) supaya
@@ -335,6 +341,7 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   const layoutProps = { scope, setScope, state, hasPhoto, ctx, group, setGroup, groupItems, toolByGroup, setToolByGroup, compare, setCompare, openStocks, onClose, photo, onOpenFile, setSheet, sidebarKind, setSidebarKind, onProcess, onMenu: setMenuAnchor, theme, setTheme, removing, modeTitle, removalControlsRef: setRemovalControls };
 
   const menuActions: SheetAction[] = [
+    { label: 'Crop & Rotate', icon: 'crop', shortcut: HAS_KEYBOARD ? 'C' : undefined, onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'crop' }); } },
     { label: 'Remove Object…', icon: 'erase', onSelect: () => { setMenuAnchor(null); setSheet({ kind: 'remove' }); } },
     { label: 'Open Photo…', icon: 'open', shortcut: HAS_KEYBOARD ? 'O' : undefined, onSelect: () => { setMenuAnchor(null); onOpenFile(); } },
     ...(state.history.canRedo ? [{ label: 'Redo', icon: 'redo' as const, shortcut: HAS_KEYBOARD ? (APPLE ? '⇧⌘Z' : 'Ctrl+Y') : undefined, onSelect: () => { setMenuAnchor(null); engine.redo(); } }] : []),
@@ -382,6 +389,15 @@ export function Editor({ state, wide, landscape, onOpenFile, onToast, onError }:
   return (
     <>
       {wide ? <WideLayout {...layoutProps} /> : <CompactLayout {...layoutProps} landscape={landscape} />}
+      {sheet?.kind === 'crop' && state.frame && (
+        <CropEditor
+          frame={state.frame}
+          sourceWidth={engine.imageSize?.width ?? state.frame.width}
+          initial={state.crop}
+          onCancel={() => setSheet(null)}
+          onDone={(crop) => { engine.setCrop(crop); setSheet(null); }}
+        />
+      )}
       {refining && state.original && removalPreview && removalControls && <RefineEdgeContent original={state.original} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => setSheet(null)} />}
       {removingObject && state.original && engine.imageSize && removalPreview && removalControls && <RemoveContent original={state.original} sourceSize={engine.imageSize} previewTarget={removalPreview} controlsTarget={removalControls} compact={!wide} landscape={!wide && landscape} onClose={() => { setSheet(null); setRevealCount((n) => n + 1); }} />}
 
@@ -687,6 +703,9 @@ function CompactLayout({ scope, setScope, state, hasPhoto, ctx, group, setGroup,
         <span className="mobile-toolbar-side">
           <PressButton className="icon-btn glass float-btn" aria-label="More" aria-haspopup="dialog" onClick={(e) => onMenu(e.currentTarget.getBoundingClientRect())}>
             <Icon name="more" size={19} strokeWidth={2.4} />
+          </PressButton>
+          <PressButton className="icon-btn glass float-btn" aria-label="Crop & Rotate" aria-pressed={!!state.crop} onClick={() => setSheet({ kind: 'crop' })}>
+            <Icon name="crop" size={18} />
           </PressButton>
         </span>
         <PressButton
@@ -1015,6 +1034,7 @@ function WideLayout({ theme, setTheme, scope, setScope, state, hasPhoto, ctx, gr
 <PressButton className="icon-btn plain" aria-label="Scopes" aria-keyshortcuts="V" title="Scopes (V)" aria-pressed={scope.open} disabled={!hasPhoto} onClick={() => setScope({ open: !scope.open })}>
           <Icon name="scope" size={17} />
         </PressButton>
+                <PressButton className="icon-btn plain" aria-label="Crop & Rotate" aria-keyshortcuts="C" title="Crop & Rotate (C)" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'crop' })}><Icon name="crop" size={17} /></PressButton>
                 <PressButton className="icon-btn plain" aria-label="Remove Object" title="Remove Object" disabled={!hasPhoto} onClick={() => setSheet({ kind: 'remove' })}><Icon name="erase" size={17} /></PressButton>
         <PressButton className="icon-btn plain" aria-label={`Appearance: ${THEME_LABEL[theme]}`} title={`Appearance: ${THEME_LABEL[theme]} (click to switch)`} onClick={() => setTheme(nextTheme(theme))}>
           <Icon name={THEME_ICON[theme]} size={17} />

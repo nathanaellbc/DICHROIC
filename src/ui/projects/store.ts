@@ -3,6 +3,7 @@
  * `projects`, berkas asli, thumbnail, dan penghapusan objek di `blobs`.
  * Tidak ada yang keluar dari perangkat. `MemoryProjectStore` untuk test.
  */
+import type { Crop } from '../../io/geometry';
 import type { RenderParams } from '../../params/renderParams';
 import type { SavedRemoval } from '../engine/engine';
 
@@ -21,6 +22,8 @@ export interface ProjectRecord {
   /** Berkas asli tersimpan (gagal bila kuota penuh; proyek tetap ada). */
   hasFile: boolean;
   removals: number;
+  /** Crop & rotate (`io/geometry.ts`); tidak ada = utuh. */
+  crop?: Crop;
 }
 
 export interface ProjectStore {

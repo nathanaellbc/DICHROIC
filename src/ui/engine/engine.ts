@@ -36,6 +36,7 @@ import type { DepthModelId, DepthProfile } from '../../depth/model';
 import { DepthController } from './depthController';
 import type { DepthState } from './depthController';
 import { canvasColorSpaceFor, rgbToPixels, type Frame } from './display';
+import type { Crop } from '../../io/geometry';
 
 export type EngineStatus = 'connecting' | 'ready' | 'unsupported' | 'failed' | 'paused';
 export type Phase = 'idle' | 'opening' | 'editing';
@@ -89,6 +90,8 @@ export interface EngineState {
   history: { canUndo: boolean; canRedo: boolean };
   /** Penghapusan objek yang terpasang di foto terbuka (disimpan bersama proyek). */
   retouches: number;
+  /** Crop & rotate foto terbuka (`io/geometry.ts`); `undefined` = utuh. */
+  crop?: Crop;
 }
 
 /** Satu Remove Object yang di-Apply: cukup untuk memasangnya lagi saat proyek dibuka. */
@@ -101,6 +104,7 @@ export interface SavedRemoval {
 export interface OpenRestore {
   params: RenderParams;
   removals: readonly SavedRemoval[];
+  crop?: Crop;
 }
 
 function copyRemoval({ crop, output }: SavedRemoval): SavedRemoval {
@@ -615,6 +619,7 @@ export class Engine {
         frame: { width: preview.width, height: preview.height,
           pixels: rgbToPixels(preview.rgb, preview.width, preview.height, params.outputColorSpace), colorSpace: canvasColorSpaceFor(params.outputColorSpace) },
         phase: 'editing', opening: undefined, preview: undefined,
+        crop: restore?.crop,
         interacting: false,
         retouches: 0,
       });
@@ -719,7 +724,7 @@ export class Engine {
     if (client) void client.close().then(() => client.dispose()).catch((error: unknown) =>
       client.shutdown(error instanceof Error ? error : new Error(String(error)), false));
     this.#interactionChanged = false;
-    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, before: undefined, fileName: undefined, opening: undefined, retouches: 0 });
+    this.#set({ engine: 'paused', phase: 'idle', rendering: false, interacting: false, frame: undefined, original: undefined, before: undefined, fileName: undefined, opening: undefined, retouches: 0, crop: undefined });
   }
 
   #clearHistory(): void {
@@ -1087,7 +1092,8 @@ export class Engine {
     startExportEncode(format);
     let bytes: Uint8Array;
     try {
-      bytes = await this.#client!.exportImage(format, options);
+      // Crop & rotate ikut ke setiap ekspor (render penuh, dipotong di worker).
+      bytes = await this.#client!.exportImage(format, this.#state.crop ? { ...options, crop: this.#state.crop } : options);
     } finally {
       finishExportEncode();
     }
@@ -1101,6 +1107,12 @@ export class Engine {
       this.lastExportLimited = size && full && size.width < full.width ? size : undefined;
     }
     return new File([bytes as Uint8Array<ArrayBuffer>], name, { type: EXPORT_MIME[format] });
+  }
+
+  /** Crop & rotate baru untuk foto terbuka (`undefined` = utuh). */
+  setCrop(crop: Crop | undefined): void {
+    if (this.#state.phase !== 'editing') return;
+    this.#set({ crop });
   }
 
   /** Lembar Ekspor ditutup: worker melepas render penuh dan scratch GPU-nya. */

@@ -29,6 +29,22 @@ import { PhotoLightbox } from './PhotoLightbox';
 import type { Box } from './PhotoLightbox';
 import { previewPixelBudget } from '../../io/budget';
 import { LookLayer } from './LookLayer';
+import { boxToImage, cropLayerStyle, imageToBox, isIdentityCrop } from '../../io/geometry';
+import type { Crop } from '../../io/geometry';
+
+/**
+ * Crop & rotate tampilan: kotak (`overflow: hidden`) menampilkan potongan;
+ * lapisan foto penuh di dalamnya diputar/digeser lewat transform CSS
+ * (`io/geometry.ts`), jadi pratinjau tidak dirender ulang.
+ */
+function CropLayer({ crop, a, children }: { crop: Crop | undefined; a: number; children: ReactNode }) {
+  if (!crop) return <>{children}</>;
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', ...cropLayerStyle(crop, a) }}>{children}</div>
+    </div>
+  );
+}
 
 function FrameCanvas({ frame, style }: { frame: Frame; style?: React.CSSProperties }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -121,6 +137,7 @@ export function PhotoView({
   onResolutionChange,
   content,
   look,
+  crop,
   brush,
   fitInsets,
   reveal,
@@ -141,6 +158,8 @@ export function PhotoView({
   content?: ReactNode;
   /** Pratinjau look LUT di atas frame (LookLayer), selagi render resepnya belum ada. */
   look?: ImageBitmap;
+  /** Crop & rotate yang ditampilkan (`undefined` = utuh). */
+  crop?: Crop;
   /** Keep the fitted photo centered in the unobscured part of an overlay viewport. */
   fitInsets?: { bottom?: number; right?: number };
   /**
@@ -241,11 +260,21 @@ export function PhotoView({
   const shown = frame ?? original;
   const fitWidth = Math.max(1, area.width - (fitInsets?.right ?? 0));
   const fitHeight = Math.max(1, area.height - (fitInsets?.bottom ?? 0));
+  /** Rasio tinggi/lebar foto penuh, dan crop yang berlaku (kotak foto = potongannya). */
+  const aspectA = shown ? shown.height / shown.width : 1;
+  const activeCrop = crop && shown && !content && !isIdentityCrop(crop, aspectA) ? crop : undefined;
+  const toImage = (b: Point): Point => {
+    if (!activeCrop) return b;
+    const { u, v } = boxToImage(activeCrop, aspectA, b.x, b.y);
+    return { x: u, y: v };
+  };
+  const toBoxPoint = (uv: Point): Point => (activeCrop ? imageToBox(activeCrop, aspectA, uv.x, uv.y) : uv);
   let rect = { left: 0, top: 0, width: 0, height: 0 };
   if (shown && area.width > 0 && area.height > 0) {
-    const scale = Math.min(fitWidth / shown.width, fitHeight / shown.height);
-    const width = Math.round(shown.width * scale);
-    const height = Math.round(shown.height * scale);
+    const dispW = activeCrop ? activeCrop.w : 1, dispH = activeCrop ? activeCrop.h : aspectA;
+    const scale = Math.min(fitWidth / dispW, fitHeight / dispH);
+    const width = Math.round(dispW * scale);
+    const height = Math.round(dispH * scale);
     rect = { left: Math.round((fitWidth - width) / 2), top: Math.round((fitHeight - height) / 2), width, height };
   }
 
@@ -254,7 +283,9 @@ export function PhotoView({
     if (!onResolutionChange || !sourceSize || rect.width === 0) return;
     const nativeEdge = Math.max(sourceSize.width, sourceSize.height);
     const dpr = window.devicePixelRatio || 1;
-    let shownEdge = Math.max(rect.width, rect.height) * view.s;
+    // Foto penuh di layar (crop memperbesarnya): lebar penuh = lebar kotak / lebar potongan.
+    const fullWidth = rect.width / (activeCrop?.w ?? 1);
+    let shownEdge = Math.max(fullWidth, fullWidth * aspectA) * view.s;
     // Layar penuh: render ulang setajam layar (sisi panjang kotak layar penuh x DPR).
     if (fullscreen) {
       const fit = Math.min(window.innerWidth / sourceSize.width, window.innerHeight / sourceSize.height);
@@ -265,7 +296,7 @@ export function PhotoView({
     const memoryEdge = Math.floor(Math.sqrt(maxPixels * nativeEdge / Math.min(sourceSize.width, sourceSize.height)));
     const timer = window.setTimeout(() => onResolutionChange(Math.min(nativeEdge, needed, memoryEdge)), fullscreen ? FULLSCREEN_RENDER_DELAY_MS : 180);
     return () => window.clearTimeout(timer);
-  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey, fullscreen, fullscreenZoom]);
+  }, [onResolutionChange, sourceSize, rect.width, rect.height, view.s, photoKey, fullscreen, fullscreenZoom, activeCrop?.w, aspectA]);
 
   useEffect(() => {
     stopReturn();
@@ -420,7 +451,7 @@ export function PhotoView({
   const pickAt = (p: Point) => {
     if (!focus) return;
     const offset = gesture.current?.kind === 'focus' ? gesture.current.offset : { x: 0, y: 0 };
-    const uv = toPhoto(p.x - offset.x, p.y - offset.y);
+    const uv = toImage(toPhoto(p.x - offset.x, p.y - offset.y));
     const point = { x: Number(clamp01(uv.x).toFixed(4)), y: Number(clamp01(uv.y).toFixed(4)) };
     setAim(point);
     // Coalesce pointer samples: depth selection and render parameters update
@@ -489,18 +520,19 @@ export function PhotoView({
     }
     if (pointers.current.size > 2) return;
     if (brush?.enabled && e.button === 0) {
-      const uv = toPhoto(p.x, p.y);
+      const uv = toImage(toPhoto(p.x, p.y));
       if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1) return;
       gesture.current = { kind: 'brush', pointerId: e.pointerId };
-      brush.onStart(uv, rect.width * view.s);
+      brush.onStart(uv, (rect.width * view.s) / (activeCrop?.w ?? 1));
       return;
     }
     if (focus?.show && (e.target as HTMLElement).closest('[data-focus-pin]')) {
       window.clearTimeout(holdTimer.current);
       setPeek(false);
+      const pin = toBoxPoint(focus);
       gesture.current = { kind: 'focus', pointerId: e.pointerId, offset: {
-        x: p.x - rect.left - view.tx - focus.x * view.s * rect.width,
-        y: p.y - rect.top - view.ty - focus.y * view.s * rect.height,
+        x: p.x - rect.left - view.tx - pin.x * view.s * rect.width,
+        y: p.y - rect.top - view.ty - pin.y * view.s * rect.height,
       } };
       setAim({ x: focus.x, y: focus.y });
       focus.onStart();
@@ -522,7 +554,7 @@ export function PhotoView({
     pointers.current.set(e.pointerId, p);
     const g = gesture.current;
     if (g?.kind === 'brush' && g.pointerId === e.pointerId) {
-      const uv = toPhoto(p.x, p.y);
+      const uv = toImage(toPhoto(p.x, p.y));
       brush?.onMove({ x: clamp01(uv.x), y: clamp01(uv.y) });
       return;
     }
@@ -572,7 +604,7 @@ export function PhotoView({
     }
     const tapped = tracked && e.type === 'pointerup' && g?.kind === 'pan' && !g.moved && pointers.current.size === 0;
     if (tapped && dropping) {
-      const uv = toPhoto(g.x, g.y);
+      const uv = toImage(toPhoto(g.x, g.y));
       if (uv.x >= 0 && uv.x <= 1 && uv.y >= 0 && uv.y <= 1) eyedropper!.onPick(uv.x, uv.y);
     }
     // Ketukan singkat tanpa geser membuka layar penuh, ditunda sebentar supaya
@@ -604,7 +636,8 @@ export function PhotoView({
   const sy = (v: number) => view.ty + v * view.s * rect.height;
 
   const showOriginal = !!original && !picking && (compare || peek);
-  const canFullscreen = !!frame && !content && !brush && !compare && !picking && !dropping;
+  // Layar penuh menampilkan foto utuh: tidak untuk foto ber-crop.
+  const canFullscreen = !!frame && !content && !brush && !compare && !picking && !dropping && !activeCrop;
   /** Posisi foto di layar sekarang (ikut zoom/geser): titik awal/akhir animasi layar penuh. */
   const photoBox = (): Box | null => {
     const box = areaRef.current?.getBoundingClientRect();
@@ -648,9 +681,11 @@ export function PhotoView({
             style={{ position: 'absolute', left: rect.left, top: rect.top, width: rect.width, height: rect.height, visibility: fullscreen ? 'hidden' : undefined }}
           >
             <div style={{ position: 'absolute', inset: 0, transformOrigin: '0 0', transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` }}>
-              {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
-              {!content && <LookLayer image={look} />}
-              {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
+              <CropLayer crop={activeCrop} a={aspectA}>
+                {content ?? (frame && <FrameCanvas key={frame.colorSpace} frame={frame} />)}
+                {!content && <LookLayer image={look} />}
+                {picking && focusMask && <FrameCanvas frame={focusMask} style={{ pointerEvents: 'none' }} />}
+              </CropLayer>
               {showOriginal && original && (
                 <motion.div
                   initial={{ opacity: compare ? 1 : 0 }}
@@ -658,7 +693,7 @@ export function PhotoView({
                   transition={{ duration: 0.12 }}
                   style={{ position: 'absolute', inset: 0, clipPath: clip }}
                 >
-                  <FrameCanvas frame={original} />
+                  <CropLayer crop={activeCrop} a={aspectA}><FrameCanvas frame={original} /></CropLayer>
                 </motion.div>
               )}
               {sweep > 0 && original && (
@@ -671,7 +706,7 @@ export function PhotoView({
                     className="photo-reveal-cover"
                     onAnimationEnd={(e) => { if (e.target === e.currentTarget) setSweep(0); }}
                   >
-                    <div className="photo-reveal-photo"><FrameCanvas frame={original} /></div>
+                    <div className="photo-reveal-photo"><CropLayer crop={activeCrop} a={aspectA}><FrameCanvas frame={original} /></CropLayer></div>
                   </div>
                   {!reducedMotion && <div className="photo-reveal-scan"><div className="photo-reveal-line" /></div>}
                 </div>
@@ -694,7 +729,7 @@ export function PhotoView({
                 aria-label="Focus point. Drag to focus, or use arrow keys."
                 onKeyDown={(e) => { e.stopPropagation(); onKeyDown(e); }}
                 initial={false}
-                animate={{ transform: `translate(${sx((cursor ?? focus).x) - 22}px, ${sy((cursor ?? focus).y) - 22}px)` }}
+                animate={{ transform: `translate(${sx(toBoxPoint(cursor ?? focus).x) - 22}px, ${sy(toBoxPoint(cursor ?? focus).y) - 22}px)` }}
                 transition={{ duration: 0 }}
                 style={{
                   position: 'absolute', left: 0, top: 0, width: 44, height: 44, borderRadius: '50%',

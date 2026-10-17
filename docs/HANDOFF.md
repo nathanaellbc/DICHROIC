@@ -95,6 +95,25 @@ resep tertunda (`sheet.pending`) dan foto menampilkan look-nya
 membuang. Setelah Done look tetap tampil sampai render sungguhan selesai,
 lalu memudar. Film Off dan LUT cetak (2383/3513) tidak dipanggang: tetap live.
 
+**Buka seketika.** `engine.openFile` men-decode berkas di browser secara
+paralel (`quickPreview`: createImageBitmap, 1600 px, Orientation EXIF) ->
+`state.preview`; editor langsung menampilkan foto + look LUT resepnya dengan
+kontrol `inert` sampai engine selesai. Resep proyek ikut ke `stageOpen`
+(render pertama sudah benar). Status "Preparing the darkroom" dihapus;
+darkroom disiapkan saat pemilih berkas dibuka; dialog Opening hanya untuk
+format tanpa decoder browser (RAW/EXR/TIFF), setelah 300 ms. Terukur: foto
+tampil ~0,1-0,2 s, engine siap ~0,4-0,5 s (JPEG 664-1024 px, RTX 3060 Ti).
+
+**Crop & Rotate.** `io/geometry.ts` (satuan lebar sumber = 1; rasio, luruskan
++-45, putar 90, cermin; tes `test/geometry.test.ts`). Pratinjau = transform
+CSS (`CropLayer` di PhotoView; koordinat fokus/pipet/kuas dipetakan lewat
+`boxToImage`/`imageToBox`), ekspor = `applyCrop` di worker sebelum encode
+(`ExportOptions.crop`, diisi `engine.exportImage`). `engine.state.crop`,
+disimpan di proyek (`ProjectRecord.crop`) dan thumbnail ikut terpotong.
+Editor: `screens/CropEditor.tsx` (tombol crop di bar atas HP, toolbar layar
+lebar, menu More, tombol C). Layar penuh dimatikan untuk foto ber-crop.
+Belum: crop tidak masuk riwayat Undo (Cancel/Reset di editornya).
+
 Catatan: gambar kartu carousel (kombinasi tanpa look) diambil dari frame pratinjau; frame yang
 tampil saat resep berganti ditandai basi (`params` berubah seketika,
 `rendering` baru menyala setelah worker menerima patch).

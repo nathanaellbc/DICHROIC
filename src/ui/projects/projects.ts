@@ -8,6 +8,8 @@ import type { RenderParams } from '../../params/renderParams';
 import { engine } from '../engine/engine';
 import type { EngineState, OpenRestore, SavedRemoval } from '../engine/engine';
 import type { Frame } from '../engine/display';
+import { applyCrop, cropOutputSize, isIdentityCrop } from '../../io/geometry';
+import type { Crop } from '../../io/geometry';
 import { IndexedDbProjectStore, MemoryProjectStore, isQuotaError } from './store';
 import type { ProjectRecord, ProjectStore } from './store';
 
@@ -61,9 +63,10 @@ const THUMB_LONG = 2600;
 
 type Listener = () => void;
 
-/** Thumbnail JPEG dari pratinjau yang tampil (lihat THUMB_SHORT/THUMB_LONG; tidak diperbesar). */
-export async function frameThumbnail(frame: Frame): Promise<Blob | undefined> {
+/** Thumbnail JPEG dari pratinjau yang tampil, dengan crop-nya (lihat THUMB_SHORT/THUMB_LONG; tidak diperbesar). */
+export async function frameThumbnail(input: Frame, crop?: Crop): Promise<Blob | undefined> {
   if (typeof document === 'undefined') return undefined;
+  const frame = crop && !isIdentityCrop(crop, input.height / input.width) ? croppedFrame(input, crop) : input;
   const source = document.createElement('canvas');
   source.width = frame.width;
   source.height = frame.height;
@@ -79,6 +82,11 @@ export async function frameThumbnail(frame: Frame): Promise<Blob | undefined> {
   octx.imageSmoothingQuality = 'high';
   octx.drawImage(source, 0, 0, out.width, out.height);
   return new Promise((resolve) => out.toBlob((blob) => resolve(blob ?? undefined), 'image/jpeg', 0.82));
+}
+
+function croppedFrame(frame: Frame, crop: Crop): Frame {
+  const { data, width, height } = applyCrop(frame.pixels as Uint8ClampedArray, frame.width, frame.height, 4, crop);
+  return { ...frame, pixels: data, width, height };
 }
 
 function baseName(fileName: string): string {
@@ -100,7 +108,7 @@ export class Projects {
   #undoTimer: ReturnType<typeof setTimeout> | undefined;
   #pendingDelete: ProjectRecord | undefined;
   /** Yang terakhir tersimpan untuk proyek terbuka. */
-  #saved: { params?: RenderParams; retouches: number; frame?: Frame } = { retouches: 0 };
+  #saved: { params?: RenderParams; retouches: number; frame?: Frame; crop?: Crop } = { retouches: 0 };
   #persistAsked = false;
   /** Proyek yang fotonya sedang dipilih ulang (pemilih berkas dibuka untuknya). */
   #relinkId: string | undefined;
@@ -108,7 +116,7 @@ export class Projects {
   constructor(
     private readonly engine: ProjectEngine,
     private readonly store: ProjectStore,
-    private readonly thumbnail: (frame: Frame) => Promise<Blob | undefined> = frameThumbnail,
+    private readonly thumbnail: (frame: Frame, crop?: Crop) => Promise<Blob | undefined> = frameThumbnail,
     private readonly objectUrl: (blob: Blob) => string = (blob) => URL.createObjectURL(blob),
   ) {}
 
@@ -249,9 +257,9 @@ export class Projects {
   async #openRecord(record: ProjectRecord, file: File): Promise<void> {
     this.#set({ currentId: undefined });
     const removals = await this.store.removals(record.id).catch(() => [] as SavedRemoval[]);
-    if (!(await this.engine.openFile(file, { params: record.params, removals }))) return;
+    if (!(await this.engine.openFile(file, { params: record.params, removals, crop: record.crop }))) return;
     const state = this.engine.getState();
-    this.#saved = { params: state.params, retouches: state.retouches, frame: undefined };
+    this.#saved = { params: state.params, retouches: state.retouches, frame: undefined, crop: state.crop };
     record.updatedAt = Date.now();
     this.#set({ currentId: record.id });
     this.#publish();
@@ -349,7 +357,7 @@ export class Projects {
       return;
     }
     if (state.phase !== 'editing') return;
-    const changed = state.params !== this.#saved.params || state.retouches !== this.#saved.retouches
+    const changed = state.params !== this.#saved.params || state.retouches !== this.#saved.retouches || state.crop !== this.#saved.crop
       || (!state.rendering && !state.interacting && state.frame !== this.#saved.frame);
     if (changed) this.#scheduleSave();
   }
@@ -371,14 +379,15 @@ export class Projects {
     const removalsChanged = state.retouches !== this.#saved.retouches;
     // Frame ringan selama gesture (256 px) tidak dijadikan thumbnail.
     const frame = !state.rendering && !state.interacting ? state.frame : undefined;
-    const thumbChanged = !!frame && frame !== this.#saved.frame;
-    if (!paramsChanged && !removalsChanged && !thumbChanged) return;
+    const cropChanged = state.crop !== this.#saved.crop;
+    const thumbChanged = !!frame && (frame !== this.#saved.frame || cropChanged);
+    if (!paramsChanged && !removalsChanged && !thumbChanged && !cropChanged) return;
     if (removalsChanged) {
       await this.store.putRemovals(record.id, this.engine.removals).catch(() => {});
       record.removals = this.engine.removals.length;
     }
     if (thumbChanged && frame) {
-      const blob = await this.thumbnail(frame).catch(() => undefined);
+      const blob = await this.thumbnail(frame, state.crop).catch(() => undefined);
       if (blob) {
         await this.store.putThumb(record.id, blob).catch(() => {});
         const old = this.#thumbs.get(record.id);
@@ -387,10 +396,13 @@ export class Projects {
       }
     }
     record.params = state.params;
-    record.width = frame?.width ?? record.width;
-    record.height = frame?.height ?? record.height;
-    if (paramsChanged || removalsChanged) record.updatedAt = Date.now();
-    this.#saved = { params: state.params, retouches: state.retouches, frame: frame ?? this.#saved.frame };
+    record.crop = state.crop;
+    // Ukuran tampilan (setelah crop): rasio kartu Recent dan foto terbang.
+    const shown = frame && state.crop ? cropOutputSize(state.crop, frame.width) : frame;
+    record.width = shown?.width ?? record.width;
+    record.height = shown?.height ?? record.height;
+    if (paramsChanged || removalsChanged || cropChanged) record.updatedAt = Date.now();
+    this.#saved = { params: state.params, retouches: state.retouches, frame: frame ?? this.#saved.frame, crop: state.crop };
     await this.#storeRecord(record);
     this.#publish();
   }
